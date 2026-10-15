@@ -20,11 +20,14 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
+import net.seilent.funecomp.artist.ArtCache
+import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -50,6 +53,7 @@ class Shot(
     val link: LinkView = LinkView(Phase.LIVE, "AP80", everLive = true),
     val backdrop: Boolean = false,
     val after: Long = 1000,
+    val credits: List<ArtCache.Entry> = emptyList(),
     val prep: (SimControl) -> Unit = {},
     val act: ShotsBase.(Shell) -> Unit = {},
 )
@@ -81,6 +85,12 @@ private fun custom(c: SimControl) {
         if (i == 0) b.copy(type = Enums.BandType.lowShelf, gain10 = 55, q100 = 70) else b
     }))
 }
+
+private val CREDITS = listOf(
+    ArtCache.Entry("0de4d19f-05c8-4562-a3c0-7abdc144f1d5", "Barack Obama", null, "commons", Credit("Official White House Photo by Pete Souza", "Public domain", "https://commons.wikimedia.org/"), "", 0),
+    ArtCache.Entry("a74b1b7f-71a5-4011-9441-d0b5e4122711", "Radiohead", null, "commons", Credit("Raph_PH", "CC BY 4.0", "https://commons.wikimedia.org/"), "", 0),
+    ArtCache.Entry("b539e453-c4fe-47e3-8a07-8517eac74429", "Utada Hikaru", null, "commons", Credit("Goldnrush Podcast", "CC BY 4.0", "https://commons.wikimedia.org/"), "", 0),
+)
 
 val SHOTS = listOf(
     Shot("home", pages = HOME, prep = ::playing),
@@ -149,6 +159,11 @@ val SHOTS = listOf(
     Shot("connection-permission", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "AP80", permission = false)),
     Shot("connection-device", pages = HOME + Page.Connection) { rule.onNodeWithTag("conn.device").performClick() },
     Shot("artistart", pages = HOME + Page.ArtistArt),
+    Shot("artistart-credits", pages = HOME + Page.ArtistArt, credits = CREDITS) {
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.credit.2"))
+        rule.mainClock.autoAdvance = false
+    },
 )
 
 @RunWith(RobolectricTestRunner::class)
@@ -181,7 +196,7 @@ abstract class ShotsBase {
             val c = control ?: return@setContent
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
-                    App(c.device, f.first.link, c, shell, Sources(), {}, f.third, if (f.first.backdrop) backdrop else null)
+                    App(c.device, f.first.link, c, shell, Sources(), {}, f.third, if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits)
                 }
             }
         }

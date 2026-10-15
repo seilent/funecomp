@@ -9,10 +9,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
+import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
@@ -49,7 +49,9 @@ fun App(
     sources: Sources = Sources(),
     onSources: (Sources) -> Unit = {},
     scale: Scale = Scale.MICRODAP,
-    art: ImageBitmap? = null,
+    art: BackdropArt? = null,
+    credits: List<ArtCache.Entry> = emptyList(),
+    onCredit: (ArtCache.Entry) -> Unit = {},
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Black)) {
         val density = LocalDensity.current.density
@@ -77,7 +79,7 @@ fun App(
                     Page.Playlists -> Playlists(ctx)
                     Page.Settings -> SettingsPage(ctx)
                     Page.Connection -> ConnectionPage(ctx, link)
-                    Page.ArtistArt -> ArtistArtPage(ctx, sources, onSources)
+                    Page.ArtistArt -> ArtistArtPage(ctx, sources, onSources, credits, onCredit)
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
                     is Page.Eq -> EqPage(ctx, page)

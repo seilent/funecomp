@@ -2,6 +2,8 @@ package net.seilent.funecomp
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
+import android.content.ActivityNotFoundException
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
@@ -84,12 +86,18 @@ class Main : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
-        sources = loadSources()
+        sources = sources(this)
+        Remote.artist(this)
         remember(intent)
         setContent {
             Box(Modifier.fillMaxSize().background(Black).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
                 val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board)
-                App(Remote.device, link, control, shell, sources, { saveSources(it) }, scale)
+                App(Remote.device, link, control, shell, sources, { saveSources(it) }, scale, Remote.backdrop, Remote.credits) { e ->
+                    try {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
+                    } catch (_: ActivityNotFoundException) {
+                    }
+                }
             }
         }
     }
@@ -180,18 +188,6 @@ class Main : ComponentActivity() {
         return control.bonded().firstOrNull { it.address.equals(addr, ignoreCase = true) }?.name ?: addr
     }
 
-    private fun loadSources(): Sources {
-        val p = getSharedPreferences(ART_PREFS, MODE_PRIVATE)
-        return Sources(
-            p.getBoolean("theaudiodb", false),
-            p.getBoolean("discogs", false),
-            p.getBoolean("fanarttv", false),
-            p.getString("fanarttvKey", "") ?: "",
-            p.getBoolean("deezer", false),
-            p.getBoolean("youtube", false),
-        )
-    }
-
     private fun saveSources(s: Sources) {
         sources = s
         getSharedPreferences(ART_PREFS, MODE_PRIVATE).edit()
@@ -202,6 +198,7 @@ class Main : ComponentActivity() {
             .putBoolean("deezer", s.deezer)
             .putBoolean("youtube", s.youtube)
             .apply()
+        Remote.sourcesChanged()
     }
 
     private fun missing() = buildList {
@@ -232,5 +229,17 @@ class Main : ComponentActivity() {
         const val EXTRA_SCALE = "scale"
         const val PREFS = "link"
         const val ART_PREFS = "art"
+
+        fun sources(context: Context): Sources {
+            val p = context.getSharedPreferences(ART_PREFS, MODE_PRIVATE)
+            return Sources(
+                p.getBoolean("theaudiodb", false),
+                p.getBoolean("discogs", false),
+                p.getBoolean("fanarttv", false),
+                p.getString("fanarttvKey", "") ?: "",
+                p.getBoolean("deezer", false),
+                p.getBoolean("youtube", false),
+            )
+        }
     }
 }

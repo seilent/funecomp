@@ -15,12 +15,20 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import kotlin.math.roundToInt
+import net.seilent.funecomp.artist.Crop
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.runtime.key
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
@@ -44,6 +52,7 @@ private const val BACKDROP_PAN_MS = 26000
 private const val BACKDROP_SCALE_MS = 20000
 private const val BACKDROP_SCALE_MAX = 1.06f
 private const val BACKDROP_PAN_U = 8f
+private const val BACKDROP_FADE_MS = 2000
 
 fun formatTime(ms: Long): String {
     val total = maxOf(0L, ms / 1000)
@@ -51,9 +60,46 @@ fun formatTime(ms: Long): String {
     return "${total / 60}:${if (s < 10) "0" else ""}$s"
 }
 
+class BackdropArt(val image: ImageBitmap, val face: Pair<Double, Double>? = null)
+
 @Composable
-fun Backdrop(art: ImageBitmap?, running: Boolean) {
-    if (art == null) return
+fun Backdrop(art: BackdropArt?, running: Boolean) {
+    var shown by remember { mutableStateOf(art) }
+    var old by remember { mutableStateOf<BackdropArt?>(null) }
+    var oldFrom by remember { mutableFloatStateOf(1f) }
+    val fade = remember { Animatable(1f) }
+    LaunchedEffect(art) {
+        if (art === shown) return@LaunchedEffect
+        val f = fade.value
+        if (old != null && f < 0.5f) {
+            oldFrom *= 1f - f
+        } else {
+            oldFrom = if (old == null) 1f else f
+            old = shown
+        }
+        shown = art
+        fade.snapTo(0f)
+        fade.animateTo(1f, tween(BACKDROP_FADE_MS, easing = LinearEasing))
+        old = null
+    }
+    if (shown == null && old == null) return
+    Box(Modifier.fillMaxSize().clipToBounds().testTag("backdrop")) {
+        old?.let { o -> key(o) { BackdropLayer(o, running, oldFrom * (1f - fade.value)) } }
+        shown?.let { n -> key(n) { BackdropLayer(n, running, fade.value) } }
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    Tok.backdrop_stop0_pos to Black.copy(alpha = Tok.backdrop_stop0_alpha),
+                    Tok.backdrop_stop1_pos to Black.copy(alpha = Tok.backdrop_stop1_alpha),
+                    Tok.backdrop_stop2_pos to Black.copy(alpha = Tok.backdrop_stop2_alpha),
+                ),
+            ),
+        )
+    }
+}
+
+@Composable
+private fun BackdropLayer(art: BackdropArt, running: Boolean, alpha: Float) {
     val ui = LocalUi.current
     val amp = ui.px(BACKDROP_PAN_U)
     val pan = remember { Animatable(-amp) }
@@ -73,27 +119,24 @@ fun Backdrop(art: ImageBitmap?, running: Boolean) {
             to = if (to == 1f) BACKDROP_SCALE_MAX else 1f
         }
     }
-    Box(Modifier.fillMaxSize().clipToBounds().testTag("backdrop")) {
-        Image(
-            art,
-            null,
-            Modifier.at(-amp, 0f, unbounded = true).requiredSize((ui.px(ui.w) + 2 * amp).dp(), ui.px(ui.h).dp()).graphicsLayer {
-                translationX = pan.value
-                scaleX = scale.value
-                scaleY = scale.value
-            },
-            contentScale = ContentScale.Crop,
-        )
-        Box(
-            Modifier.fillMaxSize().background(
-                Brush.verticalGradient(
-                    Tok.backdrop_stop0_pos to Black.copy(alpha = Tok.backdrop_stop0_alpha),
-                    Tok.backdrop_stop1_pos to Black.copy(alpha = Tok.backdrop_stop1_alpha),
-                    Tok.backdrop_stop2_pos to Black.copy(alpha = Tok.backdrop_stop2_alpha),
-                ),
-            ),
-        )
+    val w = ui.px(ui.w) + 2 * amp
+    val h = ui.px(ui.h)
+    val img = art.image
+    val painter = remember(art, w.roundToInt(), h.roundToInt()) {
+        val r = Crop.rect(img.width, img.height, w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1), art.face?.let { it.first * img.width }, art.face?.let { it.second * img.height })
+        BitmapPainter(img, IntOffset(r.x, r.y), IntSize(r.w, r.h))
     }
+    Image(
+        painter,
+        null,
+        Modifier.at(-amp, 0f, unbounded = true).requiredSize(w.dp(), h.dp()).graphicsLayer {
+            translationX = pan.value
+            scaleX = scale.value
+            scaleY = scale.value
+            this.alpha = alpha
+        },
+        contentScale = ContentScale.FillBounds,
+    )
 }
 
 @Composable
@@ -108,7 +151,7 @@ fun BackRing(onBack: () -> Unit) {
 }
 
 @Composable
-fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueue: () -> Unit, art: ImageBitmap? = null) {
+fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueue: () -> Unit, art: BackdropArt? = null) {
     val ui = LocalUi.current
     val s = device.playback.state
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }

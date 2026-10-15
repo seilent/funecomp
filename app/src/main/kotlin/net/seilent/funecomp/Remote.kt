@@ -7,6 +7,13 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asImageBitmap
+import net.seilent.funecomp.art.ArtWorker
+import net.seilent.funecomp.art.BitmapCodec
+import net.seilent.funecomp.artist.ArtCache
+import net.seilent.funecomp.artist.ArtPusher
+import net.seilent.funecomp.artist.ArtistArt
+import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.link.Link
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
@@ -21,13 +28,21 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
+import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LIB_PAGE
 import net.seilent.funecomp.ui.Phase
+import java.io.File
+import java.io.IOException
 
 object Remote : Control {
     const val TAG = "Funecomp"
+    private const val BACKDROP_SIDE = 2048
+    private const val FETCH_W = 384
+    private const val FETCH_H = 480
+    private val codec = BitmapCodec { Log.i(TAG, it) }
 
     var device by mutableStateOf(DeviceState())
         private set
@@ -44,12 +59,22 @@ object Remote : Control {
     var board by mutableStateOf<String?>(null)
         private set
 
+    var backdrop by mutableStateOf<BackdropArt?>(null)
+        private set
+
+    var credits by mutableStateOf<List<ArtCache.Entry>>(emptyList())
+        private set
+
     private val lock = Any()
     private val stateLock = Any()
     @Volatile private var link: Link? = null
     @Volatile private var generation = 0
     private var spec: String? = null
     private val asked = HashSet<String>()
+    private var artist: ArtistArt? = null
+    @Volatile private var art: ArtWorker? = null
+    @Volatile private var artKey: Pair<List<String>, Int?>? = null
+    @Volatile private var backdropFor: List<String>? = null
 
     fun debuggable(context: Context) = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
@@ -67,11 +92,16 @@ object Remote : Control {
             }
             this.spec = spec
             update { DeviceState() }
+            backdrop = null
+            backdropFor = null
             phase = Phase.CONNECTING
             bye = null
             everLive = false
             Log.i(TAG, "link $spec")
-            link = Link(connect, listener(generation), clock = SystemClock::elapsedRealtime).also { it.start() }
+            val l = Link(connect, listener(generation), clock = SystemClock::elapsedRealtime)
+            link = l
+            art = worker(context, l)
+            l.start()
             return true
         }
     }
@@ -85,10 +115,74 @@ object Remote : Control {
 
     fun userAction() = link?.userAction()
 
+    fun artist(context: Context): ArtistArt = synchronized(lock) {
+        artist ?: run {
+            val c = context.applicationContext
+            val version = c.packageManager.getPackageInfo(c.packageName, 0).versionName ?: "0"
+            ArtistArt(UrlHttp(), codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version).also {
+                artist = it
+                Thread({ credits = it.credits() }, "art-credits").apply { isDaemon = true }.start()
+            }
+        }
+    }
+
+    fun sourcesChanged() = art?.want()
+
+    private fun worker(context: Context, l: Link): ArtWorker {
+        val a = artist(context)
+        return ArtWorker(
+            { l.session },
+            { s -> ArtPusher(s, a::get) { PushGate.open(device, SystemClock.elapsedRealtime()) }.run(ArtPusher.order(device.playback.state)) },
+            { final -> showBackdrop(a, final) },
+            { fetch(a) },
+        ) { r, e ->
+            try {
+                if (r != null) Log.i(TAG, "art ${r.stop} pushed=${r.pushed} stored=${r.stored} missing=${r.missing} failed=${r.failed}")
+                if (e != null) Log.w(TAG, "art: $e")
+                credits = a.credits()
+            } catch (t: Throwable) {
+                Log.w(TAG, "art done: $t")
+            }
+        }
+    }
+
+    private fun fetch(a: ArtistArt) {
+        val h = device.hello
+        val w = h?.backdropW ?: FETCH_W
+        val hh = h?.backdropH ?: FETCH_H
+        for ((name, mbid) in ArtPusher.order(device.playback.state)) {
+            try {
+                if (a.get(name, mbid, w, hh) != null) return
+            } catch (e: IOException) {
+                Log.w(TAG, "art fetch $name: $e")
+            }
+        }
+    }
+
+    private fun showBackdrop(a: ArtistArt, final: Boolean): Boolean {
+        val s = device.playback.state
+        if (s.artists == backdropFor && backdrop != null) return true
+        val src = s.artists.withIndex().firstNotNullOfOrNull { (i, n) -> a.cached(n, s.mbids.getOrNull(i)) }
+        if (src == null) {
+            if (final) {
+                backdropFor = s.artists
+                backdrop = null
+            }
+            return false
+        }
+        val (bmp, face) = codec.faced(src, BACKDROP_SIDE) ?: return false
+        backdropFor = s.artists
+        backdrop = BackdropArt(bmp.asImageBitmap(), face?.let { it.first / bmp.width to it.second / bmp.height })
+        return true
+    }
+
     private fun drop() {
         generation++
         spec = null
         synchronized(asked) { asked.clear() }
+        art?.stop()
+        art = null
+        artKey = null
         val old = link ?: return
         link = null
         Log.i(TAG, "link stop")
@@ -185,6 +279,7 @@ object Remote : Control {
 
         override fun onHello(hello: HelloReply) {
             if (!live) return
+            artKey = null
             update { it.withHello(hello) }
             synchronized(asked) { asked.clear() }
             phase = Phase.LIVE
@@ -207,6 +302,11 @@ object Remote : Control {
             val s = State.from(body)
             Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
+            val key = s.artists to s.output
+            if (key != artKey) {
+                artKey = key
+                art?.want()
+            }
         }
 
         override fun onRtt(ms: Long) {

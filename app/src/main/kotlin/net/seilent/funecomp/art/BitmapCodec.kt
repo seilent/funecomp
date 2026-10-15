@@ -9,7 +9,7 @@ import net.seilent.funecomp.artist.Picture
 import net.seilent.funecomp.artist.Rect
 import java.io.ByteArrayOutputStream
 
-class BitmapCodec : Codec {
+class BitmapCodec(private val log: (String) -> Unit = {}) : Codec {
     override fun decode(bytes: ByteArray, maxSide: Int): Picture? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
@@ -22,14 +22,19 @@ class BitmapCodec : Codec {
         }
         val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
         val side = maxOf(decoded.width, decoded.height)
-        if (side <= maxSide) return BitmapPicture(decoded)
+        if (side <= maxSide) return BitmapPicture(decoded, log)
         val scaled = Bitmap.createScaledBitmap(decoded, maxOf(1, decoded.width * maxSide / side), maxOf(1, decoded.height * maxSide / side), true)
         if (scaled !== decoded) decoded.recycle()
-        return BitmapPicture(scaled)
+        return BitmapPicture(scaled, log)
+    }
+
+    fun faced(bytes: ByteArray, maxSide: Int): Pair<Bitmap, Pair<Double, Double>?>? {
+        val p = decode(bytes, maxSide) as? BitmapPicture ?: return null
+        return p.bmp to p.face()
     }
 }
 
-private class BitmapPicture(private val bmp: Bitmap) : Picture {
+private class BitmapPicture(val bmp: Bitmap, private val log: (String) -> Unit) : Picture {
     override val w: Int get() = bmp.width
     override val h: Int get() = bmp.height
 
@@ -49,10 +54,16 @@ private class BitmapPicture(private val bmp: Bitmap) : Picture {
             val n = FaceDetector(dw, dh, MAX_FACES).findFaces(rgb, faces)
             val best = faces.take(n).filterNotNull()
                 .filter { it.confidence() >= FaceDetector.Face.CONFIDENCE_THRESHOLD }
-                .maxByOrNull { it.eyesDistance() } ?: return null
+                .maxByOrNull { it.eyesDistance() }
+            if (best == null) {
+                log("face none of $n in ${w}x$h")
+                return null
+            }
             val p = PointF()
             best.getMidPoint(p)
-            return p.x / (dw / w.toDouble()) to p.y / (dh / h.toDouble())
+            val at = p.x / (dw / w.toDouble()) to p.y / (dh / h.toDouble())
+            log("face ${at.first.toInt()},${at.second.toInt()} of $n in ${w}x$h")
+            return at
         } finally {
             rgb.recycle()
         }

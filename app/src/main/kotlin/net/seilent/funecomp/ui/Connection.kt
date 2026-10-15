@@ -1,5 +1,7 @@
 package net.seilent.funecomp.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -7,8 +9,16 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import kotlin.math.roundToInt
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.layout.Layout
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.platform.testTag
+import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.gen.Enums
 
 private const val REMEDY = "settings > system > phone app"
@@ -71,7 +81,7 @@ fun ConnectionPage(ctx: Ctx, link: LinkView) {
 private class Toggle(val title: String, val on: Boolean, val tag: String, val flip: (Sources) -> Sources)
 
 @Composable
-fun ArtistArtPage(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit) {
+fun ArtistArtPage(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, credits: List<ArtCache.Entry> = emptyList(), onCredit: (ArtCache.Entry) -> Unit = {}) {
     val ui = LocalUi.current
     var focus by remember { mutableIntStateOf(0) }
     val toggles = listOf(
@@ -99,6 +109,51 @@ fun ArtistArtPage(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit) {
                             onSources(sources.copy(fanartTvKey = k.trim()))
                         }
                     }
+                }
+            }
+            if (credits.isNotEmpty()) {
+                item(key = "credits") {
+                    val above = Tok.detailLabelBaseline - Tok.detailRingTop - Tok.detailRing
+                    Box(Modifier.enter { toggles.size + 1 }.size(ui.px(ui.w).dp(), ui.px(above + Tok.detailLabelDrop).dp())) {
+                        RoleText("credits", Roles.sectionLabel, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(above)))
+                    }
+                }
+                itemsIndexed(credits, key = { _, e -> "credit ${e.key}" }) { j, e ->
+                    val i = toggles.size + 2 + j
+                    val c = e.credit ?: return@itemsIndexed
+                    CreditRow(e.name, listOf(c.author, c.license), Modifier.enter { i }.testTag("art.credit.$j"), focused = focus == i) {
+                        focus = i
+                        if (c.page.startsWith("https://")) onCredit(e)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CreditRow(primary: String, lines: List<String>, modifier: Modifier = Modifier, focused: Boolean = false, onTap: () -> Unit) {
+    val ui = LocalUi.current
+    val rowW = ui.px(ui.w)
+    val textX = ui.px(Tok.hubEdge)
+    val textW = (rowW - 2 * textX).roundToInt().coerceAtLeast(0)
+    val inset = ui.px(Tok.rowTextInset).roundToInt()
+    val c by animateColorAsState(white(if (focused) Roles.listPrimary.alpha else Roles.listPrimary.dim), tween(Tok.motion_focusAlpha.toInt()), label = "credit")
+    val secondary = textStyle(Roles.listSecondary, white(Roles.listSecondary.alpha))
+    Pressable({ onTap() }, modifier) {
+        Layout(
+            content = {
+                RoleText(primary, Roles.listPrimary, Modifier, color = c)
+                lines.forEach { BasicText(shown(it, Roles.listSecondary.case), style = secondary) }
+            },
+        ) { m, _ ->
+            val ps = m.map { it.measure(Constraints(maxWidth = textW)) }
+            val h = maxOf(ui.px(Tok.rowHeight).roundToInt(), 2 * inset + ps.sumOf { it.height })
+            layout(rowW.roundToInt(), h) {
+                var y = inset
+                ps.forEach {
+                    it.place(textX.roundToInt(), y)
+                    y += it.height
                 }
             }
         }
