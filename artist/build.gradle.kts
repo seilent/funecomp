@@ -14,5 +14,7 @@ kotlin {
 }
 
 dependencies {
+    api(project(":link"))
+    testImplementation(project(":sim"))
     testImplementation(libs.junit)
 }
