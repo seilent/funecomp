@@ -92,6 +92,13 @@ class Session(
             close("connect: ${e.message}")
             return closedReason!!
         }
+        closedReason?.let {
+            try {
+                transport.close()
+            } catch (_: Exception) {
+            }
+            return it
+        }
         synchronized(lock) { rxAt = clock() }
         val writer = Thread({ writeLoop() }, "session-write").apply { isDaemon = true }
         synchronized(own) { own += writer }
@@ -104,6 +111,7 @@ class Session(
         }
         ticker = t
         t.scheduleAtFixedRate({ tick() }, config.tickMs, config.tickMs, TimeUnit.MILLISECONDS)
+        if (closedReason != null) t.shutdownNow()
         enqueueRequest(Msg.HELLO, Hello(Proto.major, Proto.minor, config.appVersion).encode(), config.helloTimeoutMs) { r ->
             when (r) {
                 is Result.Ok -> {

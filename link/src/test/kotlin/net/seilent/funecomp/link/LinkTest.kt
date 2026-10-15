@@ -28,6 +28,7 @@ import java.net.Socket
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.zip.CRC32
 
 class LinkTest {
@@ -440,5 +441,36 @@ class LinkTest {
         assertTrue(rec.pushes.none { it == Msg.SCHEMA || it == Msg.SETTINGS || it == Msg.EQ })
         assertNotNull(s.hello)
         s.close("done")
+    }
+
+    @Test
+    fun closeDuringOpenClosesTransport() {
+        val opening = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val closes = AtomicInteger()
+        val t = object : Transport {
+            override fun open() {
+                opening.countDown()
+                release.await()
+            }
+
+            override fun read(buf: ByteArray): Int = -1
+
+            override fun write(bytes: ByteArray) {}
+
+            override fun close() {
+                closes.incrementAndGet()
+            }
+        }
+        val s = Session(t, object : Session.Listener {})
+        var out: String? = null
+        val runner = Thread { out = s.run() }
+        runner.start()
+        assertTrue(opening.await(5, TimeUnit.SECONDS))
+        s.close("stopped")
+        release.countDown()
+        runner.join(5000)
+        assertEquals("stopped", out)
+        assertEquals(2, closes.get())
     }
 }
