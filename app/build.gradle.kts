@@ -24,6 +24,21 @@ android {
     buildFeatures {
         compose = true
     }
+
+    testOptions {
+        unitTests {
+            isIncludeAndroidResources = true
+            all {
+                it.systemProperty("roborazzi.test.record", "true")
+                it.systemProperty("shots.dir", layout.buildDirectory.dir("shots").get().asFile.path)
+                it.systemProperty("shots.run", providers.gradleProperty("shots").getOrElse("false"))
+                it.systemProperty("shots.only", providers.gradleProperty("shotsOnly").getOrElse(""))
+                it.systemProperty("shots.backdrop", providers.gradleProperty("shotsBackdrop").getOrElse(""))
+                it.maxHeapSize = "4g"
+                it.maxParallelForks = 3
+            }
+        }
+    }
 }
 
 dependencies {
@@ -35,6 +50,14 @@ dependencies {
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.runtime.compose)
     testImplementation(libs.junit)
+    testImplementation(project(":sim"))
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(platform(libs.compose.bom))
+    testImplementation(libs.compose.ui.test.junit4)
+    debugImplementation(platform(libs.compose.bom))
+    debugImplementation(libs.compose.ui.test.manifest)
     androidTestImplementation(platform(libs.compose.bom))
     androidTestImplementation(libs.compose.ui.test.junit4)
     androidTestImplementation(libs.androidx.test.runner)
