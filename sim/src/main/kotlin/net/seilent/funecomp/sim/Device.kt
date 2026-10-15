@@ -521,6 +521,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
                 val id = b.long(Tags.Action.track) ?: return Answer.Fail(Err.badValue, "no track")
                 if (id !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
                 if (!lib.favorites.add(id)) lib.favorites.remove(id)
+                lib.rev++
             }
             else -> return Answer.Fail(Err.badValue, "no cmd")
         }

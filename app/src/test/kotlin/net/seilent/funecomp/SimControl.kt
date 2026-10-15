@@ -24,6 +24,7 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
     val sim = Device(Options(Board.of(board)), lib, now)
     var device by mutableStateOf(DeviceState())
     val sent = ArrayList<String>()
+    val failed = ArrayList<Int>()
 
     private val out = object : Out {
         override fun push(type: Int, payload: ByteArray) {
@@ -38,7 +39,7 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
 
     private fun req(type: Int, payload: ByteArray): Answer {
         sent += Msg.info.getValue(type).name
-        return sim.request(type, Node.decode(Msg.info.getValue(type).name, payload), out)
+        return sim.request(type, Node.decode(Msg.info.getValue(type).name, payload), out).also { if (it is Answer.Fail) failed += it.code }
     }
 
     override fun transport(cmd: Int, seekMs: Long?, on: Boolean?, repeat: Int?) {
