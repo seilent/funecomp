@@ -5,6 +5,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
+import java.io.File
 
 class Board(
     val name: String,
@@ -76,4 +77,5 @@ class Options(
     val busyMs: Long = Proto.keepaliveBusyMs.toLong(),
     val helloTimeoutMs: Long = Proto.helloTimeoutMs.toLong(),
     val log: (String) -> Unit = {},
+    val imgDir: File? = null,
 )

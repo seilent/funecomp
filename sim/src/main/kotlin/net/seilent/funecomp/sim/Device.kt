@@ -25,6 +25,7 @@ import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.util.zip.CRC32
 
 interface Out {
@@ -35,6 +36,8 @@ sealed class Answer {
     class Ok(val payload: ByteArray = ByteArray(0)) : Answer()
     class Fail(val code: Int, val text: String, val refused: List<String> = emptyList()) : Answer()
 }
+
+private const val FULL_VOLUME = 255
 
 class Device(private val opts: Options, val lib: Library, private val clock: () -> Long) {
     private val board = opts.board
@@ -70,8 +73,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private var shuffle = false
     private var repeat = Enums.Repeat.off
     private var volume = 60
-    private val fullVolume = 120
-    private val maxVolume: Int get() = fullVolume * (prefs.getValue("maxVolume").toIntOrNull() ?: 100) / 100
+    private val maxVolume: Int get() = percentVolume(prefs.getValue("maxVolume").toIntOrNull() ?: 100)
     private var queueRev = 1L
     private var lastStateAt = 0L
 
@@ -270,12 +272,23 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         return changed(out)
     }
 
+    private fun volumePercent(v: Int) = (v.coerceIn(0, FULL_VOLUME) * 100 + FULL_VOLUME / 2) / FULL_VOLUME
+
+    private fun percentVolume(pct: Int) = (pct.coerceIn(0, 100) * FULL_VOLUME + 50) / 100
+
+    private fun stepVolume(v: Int, detents: Int, pct: Int): Int {
+        var n = percentVolume(volumePercent(v) + detents * pct)
+        if (detents > 0 && n <= v) n = v + 1
+        if (detents < 0 && n >= v) n = v - 1
+        return n.coerceIn(0, FULL_VOLUME)
+    }
+
     private fun volume(b: Node, out: Out): Answer {
         val set = b.int(Tags.Volume.set)
         val step = b.int(Tags.Volume.step)
         volume = when {
             set != null -> set
-            step != null -> volume + step
+            step != null -> stepVolume(volume, step, prefs.getValue("volumeStep").toIntOrNull() ?: 5)
             else -> return Answer.Fail(Err.badValue, "no set or step")
         }.coerceIn(0, maxVolume)
         return changed(out)
@@ -584,6 +597,11 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         }
         partials.remove(key)
         images[key] = Stored(p.name, pushMbid, p.crc, bytes)
+        opts.imgDir?.let { dir ->
+            val f = File(dir.apply { mkdirs() }, "%08x.jpg".format(p.crc))
+            f.writeBytes(bytes)
+            opts.log("stored name=${p.name} mbid=${pushMbid ?: ""} ${p.w}x${p.h} bytes=${bytes.size} file=${f.path}")
+        }
         return Answer.Ok()
     }
 

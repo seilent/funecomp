@@ -100,6 +100,8 @@ object Remote : Control {
 
     override fun volume(detents: Int) = send(Msg.VOLUME, Req.volume(step = detents), "volume step $detents")
 
+    fun volumeSet(n: Int) = send(Msg.VOLUME, Req.volume(set = n), "volume set $n")
+
     override fun libGet(view: Int, parent: String, offset: Long) {
         val rev = device.lib.rev
         val key = "lib $view $parent $offset $rev"

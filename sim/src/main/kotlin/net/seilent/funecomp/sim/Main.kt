@@ -5,7 +5,7 @@ import java.time.LocalTime
 import kotlin.system.exitProcess
 
 private const val USAGE = "usage: sim --board ap80|v1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
-    "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--quiet]"
+    "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -16,6 +16,7 @@ fun main(args: Array<String>) {
     var idle: Long? = null
     var busy: Long? = null
     var quiet = false
+    var imgDir: String? = null
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -30,6 +31,7 @@ fun main(args: Array<String>) {
             "--fault" -> faults += value()
             "--idle-ms" -> idle = value().toLong()
             "--busy-ms" -> busy = value().toLong()
+            "--img-dir" -> imgDir = value()
             "--quiet" -> quiet = true
             else -> {
                 System.err.println(USAGE)
@@ -50,6 +52,7 @@ fun main(args: Array<String>) {
         busy ?: base.busyMs,
         base.helloTimeoutMs,
         if (quiet) ({}) else ({ s -> println("${LocalTime.now()} $s") }),
+        imgDir?.let { File(it) },
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {

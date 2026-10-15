@@ -132,9 +132,11 @@ class LinkTest {
         val first = rec.state.playback.state.track
         assertTrue(s.call(Msg.TRANSPORT, Req.transport(Enums.TransportCmd.next)) is Session.Result.Ok)
         waitFor { rec.state.playback.state.track != first }
-        val vol = rec.state.playback.state.volume!!
+        assertEquals(60, rec.state.playback.state.volume)
         assertTrue(s.call(Msg.VOLUME, Req.volume(step = 3)) is Session.Result.Ok)
-        waitFor { rec.state.playback.state.volume == vol + 3 }
+        waitFor { rec.state.playback.state.volume == 99 }
+        assertTrue(s.call(Msg.VOLUME, Req.volume(step = -1)) is Session.Result.Ok)
+        waitFor { rec.state.playback.state.volume == 87 }
         assertTrue(s.call(Msg.VOLUME, Req.volume(set = 999)) is Session.Result.Ok)
         waitFor { rec.state.playback.state.volume == rec.state.playback.state.maxVolume }
 

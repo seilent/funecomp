@@ -47,27 +47,54 @@ class SliceTest {
             Log.i(TAG, "connected board=${Remote.device.hello?.board} title=$first volume=$v0")
 
             val max = Remote.device.playback.state.maxVolume ?: error("no max")
-            val dir = if (v0 + 2 <= max) 1 else -1
-            val key = if (dir > 0) KeyEvent.KEYCODE_VOLUME_UP else KeyEvent.KEYCODE_VOLUME_DOWN
-            InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(key)
-            compose.waitUntil(5000) { volume() == v0 + dir }
-            Log.i(TAG, "volume key ${volume()}")
+            val pct = Remote.device.settings.values["volumeStep"]?.toIntOrNull() ?: 5
+            val dir = if (detent(detent(v0, 1, pct), 1, pct) <= minOf(max, SAFE)) 1 else -1
+            val v1 = detent(v0, dir, pct)
+            val v2 = detent(v1, dir, pct)
+            var failed = false
+            try {
+                val key = if (dir > 0) KeyEvent.KEYCODE_VOLUME_UP else KeyEvent.KEYCODE_VOLUME_DOWN
+                InstrumentationRegistry.getInstrumentation().sendKeyDownUpSync(key)
+                compose.waitUntil(5000) { volume() == v1 }
+                Log.i(TAG, "volume key ${volume()}")
 
-            val tag = if (dir > 0) "overlay.plus" else "overlay.minus"
-            compose.waitUntil(5000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
-            compose.onNodeWithTag(tag).performClick()
-            compose.waitUntil(5000) { volume() == v0 + 2 * dir }
-            Log.i(TAG, "volume tap ${volume()}")
+                val tag = if (dir > 0) "overlay.plus" else "overlay.minus"
+                compose.waitUntil(5000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
+                compose.onNodeWithTag(tag).performClick()
+                compose.waitUntil(5000) { volume() == v2 }
+                Log.i(TAG, "volume tap ${volume()}")
 
-            compose.onNodeWithTag("overlay.next").performClick()
-            compose.waitUntil(5000) { text("np.title") != first }
-            Log.i(TAG, "next title=${text("np.title")}")
+                compose.onNodeWithTag("overlay.next").performClick()
+                compose.waitUntil(5000) { text("np.title") != first }
+                Log.i(TAG, "next title=${text("np.title")}")
 
-            assertEquals(v0 + 2 * dir, volume())
+                assertEquals(v2, volume())
+            } catch (t: Throwable) {
+                failed = true
+                throw t
+            } finally {
+                try {
+                    Remote.volumeSet(v0)
+                    compose.waitUntil(5000) { volume() == v0 }
+                } catch (t: Throwable) {
+                    if (!failed) throw t
+                    Log.w(TAG, "volume restore: $t")
+                }
+            }
         }
+    }
+
+    private fun detent(v: Int, d: Int, pct: Int): Int {
+        val p = ((v.coerceIn(0, FULL) * 100 + FULL / 2) / FULL + d * pct).coerceIn(0, 100)
+        var n = (p * FULL + 50) / 100
+        if (d > 0 && n <= v) n = v + 1
+        if (d < 0 && n >= v) n = v - 1
+        return n.coerceIn(0, FULL)
     }
 
     private companion object {
         const val TAG = "FunecompTest"
+        const val FULL = 255
+        const val SAFE = 120
     }
 }
