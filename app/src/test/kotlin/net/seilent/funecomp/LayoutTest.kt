@@ -1,16 +1,19 @@
 package net.seilent.funecomp
 
 import net.seilent.funecomp.proto.Band
+import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.ui.Scale
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.balanceText
 import net.seilent.funecomp.ui.bandText
+import net.seilent.funecomp.ui.display
 import net.seilent.funecomp.ui.freqText
 import net.seilent.funecomp.ui.gridHz
 import net.seilent.funecomp.ui.npArt
 import net.seilent.funecomp.ui.npProgressY
 import net.seilent.funecomp.ui.npTitleBaseline
+import net.seilent.funecomp.ui.step
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -46,6 +49,20 @@ class LayoutTest {
         val land = Ui.of(2520f, 1080f, density, Scale.MICRODAP)
         assertTrue(land.landscape)
         assertEquals(minOf(168f, land.h - 106f), land.npArt, 1e-3f)
+    }
+
+    @Test
+    fun rangeRows() {
+        val accent = Row("accentHue", "ACCENT", "display", Enums.RowKind.range, min = 0, max = 350, step = 10)
+        assertEquals("", accent.display("230"))
+        assertEquals("240", accent.step("230", 1))
+        assertEquals("0", accent.step("350", 1))
+        assertEquals("350", accent.step("0", -1))
+        assertEquals("250", accent.step("237", 1))
+        val balance = Row("balance", "BALANCE", "output", Enums.RowKind.range, min = -20, max = 20, step = 1)
+        assertEquals("r 1.5 db", balance.display("3"))
+        assertEquals("20", balance.step("20", 1))
+        assertEquals("-20", balance.step("-20", -1))
     }
 
     @Test

@@ -305,7 +305,15 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
                 val n = value.toIntOrNull() ?: return null
                 r.values.mapNotNull { it.toIntOrNull() }.minByOrNull { kotlin.math.abs(it - n) }?.toString()
             }
-            Enums.RowKind.range -> value.toIntOrNull()?.coerceIn(r.min ?: Int.MIN_VALUE, r.max ?: Int.MAX_VALUE)?.toString()
+            Enums.RowKind.range -> {
+                val n = value.toIntOrNull() ?: return null
+                val lo = r.min ?: 0
+                val st = (r.step ?: 1).coerceAtLeast(1)
+                val snapped = lo + Math.floorDiv(n - lo + st / 2, st) * st
+                val hi = r.max ?: Int.MAX_VALUE
+                if (key == "accentHue" && hi != Int.MAX_VALUE) (lo + Math.floorMod(snapped - lo, hi - lo + st)).toString()
+                else snapped.coerceIn(lo, hi).toString()
+            }
             else -> null
         }
     }

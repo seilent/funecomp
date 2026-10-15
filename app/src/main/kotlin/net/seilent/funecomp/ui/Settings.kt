@@ -84,7 +84,7 @@ fun balanceText(v: Int): String {
 fun Row.display(v: String?): String = when (kind) {
     Enums.RowKind.range -> {
         val n = v?.toIntOrNull() ?: 0
-        if (key == BALANCE_KEY) balanceText(n) else n.toString()
+        if (key == BALANCE_KEY) balanceText(n) else if (key == ACCENT_KEY) "" else n.toString()
     }
     Enums.RowKind.info, Enums.RowKind.action -> words.firstOrNull() ?: ""
     Enums.RowKind.draft -> if (values.isEmpty() || words.size != values.size) words.firstOrNull() ?: "" else word(v ?: values.first())
@@ -99,8 +99,12 @@ fun Row.editable() = !RowRules.readOnly(this) && when (kind) {
 
 fun Row.step(v: String?, dir: Int): String? {
     if (kind == Enums.RowKind.range) {
-        val n = (v?.toIntOrNull() ?: 0) + dir * (step ?: 1)
-        return n.coerceIn(min ?: Int.MIN_VALUE, max ?: Int.MAX_VALUE).toString()
+        val lo = min ?: 0
+        val st = (step ?: 1).coerceAtLeast(1)
+        val at = (((v?.toIntOrNull() ?: lo) - lo).toFloat() / st).roundToInt()
+        val count = max?.let { (it - lo) / st + 1 }
+        val next = if (key == ACCENT_KEY && count != null) ((at + dir) % count + count) % count else at + dir
+        return (lo + next * st).coerceIn(lo, max ?: Int.MAX_VALUE).toString()
     }
     if (values.isEmpty()) return v
     val i = values.indexOf(v).let { if (it < 0) 0 else it }
