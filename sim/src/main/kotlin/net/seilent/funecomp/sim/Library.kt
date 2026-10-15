@@ -13,6 +13,7 @@ class Track(
     val title: String,
     val durationMs: Long,
     val folder: String,
+    val file: String,
 )
 
 class Library(val tracks: List<Track>) {
@@ -59,8 +60,6 @@ class Library(val tracks: List<Track>) {
         else -> null
     }
 
-    private fun fold(s: String) = s.lowercase()
-
     private fun under(parent: String): List<Track> {
         val prefix = if (parent.isEmpty()) "" else "$parent/"
         return tracks.filter { parent.isEmpty() || it.folder == parent || it.folder.startsWith(prefix) }
@@ -69,10 +68,10 @@ class Library(val tracks: List<Track>) {
     private fun subfolders(parent: String): List<String> {
         val prefix = if (parent.isEmpty()) "" else "$parent/"
         return under(parent).filter { it.folder != parent }.map { prefix + it.folder.removePrefix(prefix).substringBefore('/') }
-            .distinct().sortedBy { fold(it.substringAfterLast('/')) }
+            .distinct().sortedWith { a, b -> folderCompare(a.substringAfterLast('/'), b.substringAfterLast('/')) }
     }
 
-    private fun own(parent: String) = tracks.filter { it.folder == parent }.sortedBy { fold(it.title) }
+    private fun own(parent: String) = tracks.filter { it.folder == parent }.sortedWith { a, b -> folderCompare(a.file, b.file) }
 
     private fun folderOrder(parent: String): List<Track> = subfolders(parent).flatMap { folderOrder(it) } + own(parent)
 
@@ -88,6 +87,19 @@ class Library(val tracks: List<Track>) {
     }
 
     companion object {
+        private fun lower(b: Byte): Int = (b.toInt() and 0xFF).let { if (it in 'A'.code..'Z'.code) it + 32 else it }
+
+        fun folderCompare(a: String, b: String): Int {
+            val x = a.toByteArray(Charsets.UTF_8)
+            val y = b.toByteArray(Charsets.UTF_8)
+            for (i in 0 until minOf(x.size, y.size)) {
+                val c = lower(x[i]) - lower(y[i])
+                if (c != 0) return c
+            }
+            if (x.size != y.size) return x.size - y.size
+            return java.util.Arrays.compareUnsigned(x, y)
+        }
+
         fun hash64(s: String): Long {
             var h = -0x340d631b7bdddcdbL
             for (b in s.toByteArray(Charsets.UTF_8)) {
@@ -106,16 +118,18 @@ class Library(val tracks: List<Track>) {
 
         fun track(artist: String, album: String, title: String, no: Int, durationMs: Long, albumArtist: String = artist): Track {
             val folder = "${albumArtist.trim()}/${album.trim()}"
-            val path = "$folder/%02d %s.flac".format(no, title)
-            return Track(hash64(path), artist, split(artist, albumArtist), album, albumArtist, title, durationMs, folder)
+            val file = "%02d %s.flac".format(no, title)
+            return Track(hash64("$folder/$file"), artist, split(artist, albumArtist), album, albumArtist, title, durationMs, folder, file)
         }
 
         fun load(f: File): Library {
-            var no = 0
+            val no = HashMap<Pair<String, String>, Int>()
             val tracks = f.readLines().filter { it.isNotBlank() }.map { line ->
                 val p = line.split('\t')
                 require(p.size >= 4) { "${f.name}: needs artist, album, title, duration ms: $line" }
-                track(p[0], p[1], p[2], ++no, p[3].toLong(), p.getOrElse(4) { p[0] })
+                val albumArtist = p.getOrElse(4) { p[0] }
+                val n = no.merge(albumArtist.trim() to p[1].trim(), 1, Int::plus)!!
+                track(p[0], p[1], p[2], n, p[3].toLong(), albumArtist)
             }
             return Library(tracks)
         }
