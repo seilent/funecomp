@@ -15,8 +15,9 @@
         <activity
             android:name=".Main"
             android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboard|keyboardHidden|navigation|uiMode"
             android:launchMode="singleTask"
-            android:screenOrientation="portrait"
+            android:windowSoftInputMode="adjustNothing"
             android:theme="@android:style/Theme.Material.NoActionBar">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

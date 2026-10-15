@@ -1,0 +1,37 @@
+package net.seilent.funecomp.ui
+
+import androidx.compose.runtime.Immutable
+import net.seilent.funecomp.proto.Profile
+
+enum class Phase { NONE, CONNECTING, LIVE, DOWN, STOPPED }
+
+@Immutable
+data class LinkView(
+    val phase: Phase = Phase.NONE,
+    val device: String? = null,
+    val bye: Int? = null,
+    val permission: Boolean = true,
+    val everLive: Boolean = false,
+    val board: String? = null,
+)
+
+@Immutable
+data class Bonded(val name: String, val address: String)
+
+interface Control {
+    fun transport(cmd: Int, seekMs: Long? = null, on: Boolean? = null, repeat: Int? = null)
+    fun volume(detents: Int)
+    fun libGet(view: Int, parent: String, offset: Long)
+    fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean = false, tracks: List<Long> = emptyList())
+    fun queuePage(offset: Long)
+    fun queueOp(cmd: Int, slot: Long? = null, to: Long? = null, tracks: List<Long> = emptyList())
+    fun set(key: String, value: String)
+    fun draft(kind: Int, value: String? = null, minutes: Long? = null, unixS: Long? = null, zoneS: Int? = null)
+    fun eqSet(output: Int, key: String? = null, ints: Profile? = null)
+    fun action(cmd: Int, track: Long? = null)
+    fun bonded(): List<Bonded> = emptyList()
+    fun choose(address: String) {}
+    fun askPermission() {}
+}
+
+const val LIB_PAGE = 100L

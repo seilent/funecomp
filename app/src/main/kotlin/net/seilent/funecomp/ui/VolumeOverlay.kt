@@ -1,8 +1,6 @@
 package net.seilent.funecomp.ui
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -32,19 +30,7 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
 import kotlin.math.roundToInt
 
-private const val PLUS_Y = 72f
-private const val NUMBER_BASELINE = 160f
-private const val RING_Y = 216f
-private const val MINUS_Y = 372f
 private const val CONTROL_MAX = 255f
-private const val BACK_OVERSHOOT = 1.70158f
-
-private val OutBack = Easing { t ->
-    val x = t - 1f
-    x * x * ((BACK_OVERSHOOT + 1f) * x + BACK_OVERSHOOT) + 1f
-}
-
-private val Decel = CubicBezierEasing(Tok.motion_decel_x1, Tok.motion_decel_y1, Tok.motion_decel_x2, Tok.motion_decel_y2)
 
 class Overlay {
     var shows by mutableIntStateOf(0)
@@ -55,13 +41,8 @@ class Overlay {
     }
 }
 
-interface OverlayActions {
-    fun volume(detents: Int)
-    fun transport(cmd: Int)
-}
-
 @Composable
-fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: OverlayActions) {
+fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     val ui = LocalUi.current
     val d = LocalDensity.current
     val alpha = remember { Animatable(0f) }
@@ -81,8 +62,8 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: OverlayActions
     val s = device.playback.state
     val edge = ui.px(Tok.edge)
     val cx = ui.px(ui.w) / 2
-    val ringY = ui.px(RING_Y)
-    val minusY = ui.px(MINUS_Y)
+    val ringY = ui.px(ui.overlayRingY)
+    val minusY = ui.px(ui.overlayMinusY)
     val off = ui.px(Tok.overlayGlyphOffset)
     val lit = white(Tok.overlayLit)
     val textW = ui.px(ui.w) - 2 * edge
@@ -91,11 +72,11 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: OverlayActions
 
     Box(Modifier.fillMaxSize().alpha(alpha.value).testTag("overlay")) {
         Box(Modifier.fillMaxSize().background(Black.copy(alpha = Tok.scrim_overlay_alpha)))
-        Glyph(GlyphName.PLUS, Tok.overlayGlyph, lit, Modifier.at(cx, ui.px(PLUS_Y), 0.5f, 0.5f))
+        Glyph(GlyphName.PLUS, Tok.overlayGlyph, lit, Modifier.at(cx, ui.px(Tok.overlayPlusY), 0.5f, 0.5f))
         RoleText(
             number.toString(),
             Roles.overlayNumber,
-            Modifier.atBaseline(edge, ui.px(NUMBER_BASELINE)).scale(pop.value).testTag("overlay.number"),
+            Modifier.atBaseline(edge, ui.px(ui.overlayNumberBaseline)).scale(pop.value).testTag("overlay.number"),
             alpha = Tok.overlayLit,
         )
         Box(Modifier.fillMaxSize().alpha(Tok.overlayDim)) {
@@ -114,7 +95,7 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: OverlayActions
                 act()
                 overlay.show()
             }
-        Box(target(cx, ui.px(PLUS_Y), "overlay.plus") { actions.volume(1) })
+        Box(target(cx, ui.px(Tok.overlayPlusY), "overlay.plus") { actions.volume(1) })
         Box(target(cx, minusY, "overlay.minus") { actions.volume(-1) })
         Box(target(cx - off, ringY, "overlay.prev") { actions.transport(Enums.TransportCmd.prev) })
         Box(target(cx, ringY, "overlay.ring") { actions.transport(Enums.TransportCmd.toggle) })
