@@ -229,6 +229,14 @@ class LookupTest {
         assertTrue(http.hosts().none { it in optInHosts })
         assertTrue(http.calls.any { it.startsWith("https://ja.wikipedia.org/") })
         assertTrue(http.missing.isEmpty())
+
+        val n = http.calls.size
+        val lookup = art()
+        assertNotNull(lookup.cached("Utada Hikaru", null))
+        assertNotNull(lookup.cached("宇多田ヒカル", utada))
+        assertNull(lookup.cached("Radiohead", null))
+        assertEquals(listOf("Utada Hikaru" to a.credit), lookup.credits().map { it.name to it.credit })
+        assertEquals(n, http.calls.size)
     }
 
     @Test

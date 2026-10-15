@@ -58,7 +58,10 @@ class ArtPusher(
             if (!gate()) return report(Stop.GATE)
             val a = try {
                 art(name, mbid, w, h)
+            } catch (e: InterruptedException) {
+                throw e
             } catch (e: Exception) {
+                if (Thread.interrupted()) throw InterruptedException(name)
                 failed += name
                 continue
             }

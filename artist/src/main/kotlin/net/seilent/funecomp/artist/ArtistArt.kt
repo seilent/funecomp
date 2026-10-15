@@ -64,6 +64,14 @@ class ArtistArt(
         return Art(jpeg, w, h, name.trim(), id, c.source, c.credit)
     }
 
+    fun cached(name: String, mbid: String?): ByteArray? {
+        val key = (Names.mbid(mbid) ?: cache.mbid(name)?.mbid) ?: "name:${Names.fold(name)}"
+        cache.hit(key)?.takeIf { it.source in sources().enabled } ?: return null
+        return cache.source(key)
+    }
+
+    fun credits(): List<ArtCache.Entry> = cache.entries().filter { it.credit != null }
+
     private fun resolve(name: String, now: Long): String? {
         cache.mbid(name)?.let { l -> if (l.mbid != null || now - l.at < TTL_MS) return l.mbid }
         val id = mb.search(name)

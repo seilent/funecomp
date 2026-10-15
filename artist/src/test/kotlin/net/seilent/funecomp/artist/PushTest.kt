@@ -157,6 +157,31 @@ class PushTest {
     }
 
     @Test
+    fun interruptDuringTheLookupStopsTheRun() {
+        val (sim, port) = sim()
+        val s = session(port)
+        val looked = ArrayList<String>()
+        val time = FakeTime()
+        val lookup = ArtistArt(Fixtures(), AwtCodec(), ArtCache(tmp.newFolder()), { Sources() }, "0.1.0", { time.now }, { throw InterruptedException("sleep") }, { time.now })
+        var thrown: Throwable? = null
+        val t = Thread {
+            try {
+                ArtPusher(s, { n, m, w, h ->
+                    looked += n
+                    lookup.get(n, m, w, h)
+                }) { true }.run(listOf("宇多田ヒカル" to null, "Radiohead" to null))
+            } catch (e: Throwable) {
+                thrown = e
+            }
+        }
+        t.start()
+        t.join(10_000)
+        assertTrue(thrown is InterruptedException)
+        assertEquals(listOf("宇多田ヒカル"), looked)
+        assertTrue(sim.device.stored.isEmpty())
+    }
+
+    @Test
     fun storedSkipIsByExactNameAndTheDeviceAnswersCaseVariants() {
         val (_, port) = sim()
         val s = session(port)
