@@ -22,4 +22,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "funecomp"
-include(":proto", ":state")
+include(":proto", ":state", ":sim")
