@@ -155,9 +155,11 @@ fun Toast(state: ToastState, held: Pair<String, String>? = null) {
     var leaving by remember { mutableStateOf(false) }
     var artist by remember { mutableStateOf(held?.first ?: "") }
     var title by remember { mutableStateOf(held?.second ?: "") }
-    if (held != null) {
-        artist = held.first
-        title = held.second
+    LaunchedEffect(held) {
+        if (held != null) {
+            artist = held.first
+            title = held.second
+        }
     }
     val handled = remember { intArrayOf(state.shows) }
     LaunchedEffect(state.shows, held != null) {
