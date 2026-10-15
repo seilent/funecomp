@@ -64,7 +64,7 @@ class Session(
     private var pingAt = 0L
     private var probeUntil: Long? = null
     private var busySince: Long? = null
-    private var ticker: ScheduledExecutorService? = null
+    @Volatile private var ticker: ScheduledExecutorService? = null
 
     private val outLock = ReentrantLock()
     private val outReady = outLock.newCondition()
