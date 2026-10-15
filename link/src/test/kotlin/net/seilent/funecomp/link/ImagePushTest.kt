@@ -27,10 +27,14 @@ class ImagePushTest {
         private var pending: ByteArray? = null
         val got: MutableList<Int> = Collections.synchronizedList(ArrayList())
         @Volatile private var closed = false
+        @Volatile private var abortRead = false
+        @Volatile private var abortBuf: ByteArray? = null
+        private val abortHandled = CountDownLatch(1)
 
         override fun open() {}
 
         override fun read(buf: ByteArray): Int {
+            if (abortRead && pending == null) abortHandled.countDown()
             var b = pending
             while (b == null) {
                 if (closed) return -1
@@ -39,19 +43,21 @@ class ImagePushTest {
             val n = minOf(buf.size, b.size)
             b.copyInto(buf, 0, 0, n)
             pending = if (n < b.size) b.copyOfRange(n, b.size) else null
+            if (b === abortBuf && pending == null) abortRead = true
             return n
         }
 
         override fun write(bytes: ByteArray) {
             if (closed) throw IOException("closed")
             for (f in reader.feed(bytes)) {
+                if (f.type == Msg.IMG_DATA && abortAfterBegin) abortHandled.await(5, TimeUnit.SECONDS)
                 got += f.type
                 if (!f.wantsReply) continue
                 val r = when (f.type) {
                     Msg.HELLO -> reply(f, HelloReply(Proto.major, Proto.minor, "ap80", "fake", 360, 480, 384, 480, Proto.maxPayload, 30_000, 5_000, Groups.all, 1, 1).encode())
                     Msg.IMG_BEGIN -> {
                         val out = reply(f, ImgBeginReply(0, 0).encode())
-                        if (abortAfterBegin) out + Frame(Msg.IMG_ABORT, 0, 1, ImgAbort("Mili", 0, Enums.AbortCode.noSpace).encode()).encode() else out
+                        if (abortAfterBegin) (out + Frame(Msg.IMG_ABORT, 0, 1, ImgAbort("Mili", 0, Enums.AbortCode.noSpace).encode()).encode()).also { abortBuf = it } else out
                     }
                     else -> Frame(f.type, Proto.flagReply or Proto.flagError, f.seq, ErrorReply(Err.refused, "aborted").encode()).encode()
                 }
@@ -97,6 +103,9 @@ class ImagePushTest {
         val o = ImagePush(s, "Mili", null, ByteArray(100_000) { 1 }, 384, 480) { open-- > 0 }.run()
         assertTrue("got $o", o is ImagePush.Outcome.Gated)
         assertEquals(2, (o as ImagePush.Outcome.Gated).chunks)
+        val end = System.nanoTime() + 2_000_000_000L
+        while (d.got.count { it == Msg.IMG_DATA } < 2 && System.nanoTime() < end) Thread.sleep(10)
+        Thread.sleep(100)
         assertEquals(2, d.got.count { it == Msg.IMG_DATA })
         assertTrue(Msg.IMG_END !in d.got)
         s.close("done")

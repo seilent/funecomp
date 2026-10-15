@@ -203,6 +203,22 @@ class LinkTest {
     }
 
     @Test
+    fun aRequestAfterLongIdleSilenceGetsItsReply() {
+        val rec = Recorder()
+        val t = java.util.concurrent.atomic.AtomicLong(1_000_000)
+        val s = Session(TcpTransport("127.0.0.1", sim("stall-ms=300")), rec, Session.Config(), { t.get() })
+        Thread { s.run() }.apply { isDaemon = true }.start()
+        assertTrue(rec.hello.await(5, TimeUnit.SECONDS))
+        Thread.sleep(300)
+        t.addAndGet(20_000)
+        Thread.sleep(200)
+        assertNull(s.closedReason)
+        assertTrue(s.call(Msg.VOLUME, Req.volume(step = 1)) is Session.Result.Ok)
+        assertNull(s.closedReason)
+        s.close("done")
+    }
+
+    @Test
     fun fullSendBufferStillClosesAsDead() {
         val rec = Recorder()
         val s = session(sim("no-read", idle = 200, busy = 100), rec)
@@ -320,6 +336,32 @@ class LinkTest {
         val rec = Recorder()
         link(sim("bye=shutdown"), rec)
         waitFor { rec.attempts.size >= 3 }
+        assertTrue(rec.stops.isEmpty())
+    }
+
+    @Test
+    fun aConnectThatHangsAfterByeShutdownTimesOutAndRetries() {
+        val port = sim("bye=shutdown")
+        val opened = AtomicInteger()
+        val rec = Recorder()
+        val l = Link({
+            if (opened.incrementAndGet() == 1) {
+                TcpTransport("127.0.0.1", port)
+            } else {
+                object : Transport {
+                    private val release = CountDownLatch(1)
+                    override fun open() = release.await()
+                    override fun read(buf: ByteArray): Int = -1
+                    override fun write(bytes: ByteArray) {}
+                    override fun close() = release.countDown()
+                }
+            }
+        }, rec, Reconnect(listOf(50, 100, 200), 0.0), Session.Config(connectTimeoutMs = 300))
+        links += l
+        l.start()
+        waitFor { rec.byes.isNotEmpty() }
+        waitFor(3000) { rec.attempts.size >= 4 }
+        assertEquals("connectTimeout", rec.reason)
         assertTrue(rec.stops.isEmpty())
     }
 

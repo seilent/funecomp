@@ -30,6 +30,7 @@ class ImagePush(
     }
 
     fun run(): Outcome {
+        session.checkNotOwn("ImagePush.run")
         val abort = AtomicReference<ImgAbort?>()
         val armed = AtomicBoolean(false)
         session.abortListener = { if (armed.get() && it.name == name) abort.set(it) }

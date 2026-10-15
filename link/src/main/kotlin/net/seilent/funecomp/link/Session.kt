@@ -17,6 +17,7 @@ import net.seilent.funecomp.proto.gen.Proto
 import java.util.ArrayDeque
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
@@ -31,6 +32,7 @@ class Session(
     data class Config(
         val appVersion: String = "0.1.0",
         val helloTimeoutMs: Long = Proto.helloTimeoutMs.toLong(),
+        val connectTimeoutMs: Long = Proto.requestTimeoutMs.toLong(),
         val requestTimeoutMs: Long = Proto.requestTimeoutMs.toLong(),
         val busyCapMs: Long = Proto.busyCapMs.toLong(),
         val tickMs: Long = 50,
@@ -64,6 +66,8 @@ class Session(
     private var pingAt = 0L
     private var probeUntil: Long? = null
     private var busySince: Long? = null
+    private var anchorRx: Long? = null
+    private var anchorAt = 0L
     @Volatile private var ticker: ScheduledExecutorService? = null
 
     private val outLock = ReentrantLock()
@@ -86,13 +90,24 @@ class Session(
     fun run(): String {
         synchronized(own) { own += Thread.currentThread() }
         closedReason?.let { return it }
+        val t = Executors.newSingleThreadScheduledExecutor { r ->
+            Thread(r, "session-tick").apply {
+                isDaemon = true
+                synchronized(own) { own += this }
+            }
+        }
+        ticker = t
+        val opening = schedule { t.schedule({ close("connectTimeout") }, config.connectTimeoutMs, TimeUnit.MILLISECONDS) }
         try {
             transport.open()
         } catch (e: Exception) {
             close("connect: ${e.message}")
+            t.shutdownNow()
             return closedReason!!
         }
+        opening?.cancel(false)
         closedReason?.let {
+            t.shutdownNow()
             try {
                 transport.close()
             } catch (_: Exception) {
@@ -103,14 +118,7 @@ class Session(
         val writer = Thread({ writeLoop() }, "session-write").apply { isDaemon = true }
         synchronized(own) { own += writer }
         writer.start()
-        val t = Executors.newSingleThreadScheduledExecutor { r ->
-            Thread(r, "session-tick").apply {
-                isDaemon = true
-                synchronized(own) { own += this }
-            }
-        }
-        ticker = t
-        t.scheduleAtFixedRate({ tick() }, config.tickMs, config.tickMs, TimeUnit.MILLISECONDS)
+        schedule { t.scheduleAtFixedRate({ tick() }, config.tickMs, config.tickMs, TimeUnit.MILLISECONDS) }
         if (closedReason != null) t.shutdownNow()
         enqueueRequest(Msg.HELLO, Hello(Proto.major, Proto.minor, config.appVersion).encode(), config.helloTimeoutMs) { r ->
             when (r) {
@@ -148,6 +156,12 @@ class Session(
         return closedReason!!
     }
 
+    private fun <T> schedule(block: () -> T): T? = try {
+        block()
+    } catch (_: RejectedExecutionException) {
+        null
+    }
+
     fun request(type: Int, payload: ByteArray, timeoutMs: Long = config.requestTimeoutMs, done: (Result) -> Unit) {
         if (closedReason != null) return done(Result.Closed)
         val h = hello ?: return done(Result.NotReady)
@@ -164,7 +178,7 @@ class Session(
     }
 
     fun call(type: Int, payload: ByteArray, timeoutMs: Long = config.requestTimeoutMs): Result {
-        check(synchronized(own) { Thread.currentThread() !in own }) { "Session.call on a session thread" }
+        checkNotOwn("Session.call")
         val latch = CountDownLatch(1)
         var out: Result = Result.Closed
         request(type, payload, timeoutMs) {
@@ -174,6 +188,8 @@ class Session(
         latch.await()
         return out
     }
+
+    internal fun checkNotOwn(what: String) = check(synchronized(own) { Thread.currentThread() !in own }) { "$what on a session thread" }
 
     fun push(type: Int, payload: ByteArray): Boolean {
         val seq = synchronized(lock) { if (closedReason != null) null else seq() } ?: return false
@@ -310,10 +326,19 @@ class Session(
             if (reason == null && probe != null && now > probe) reason = "requestTimeout"
             if (reason == null && h != null) {
                 val busy = pending.values.any { it.type != Msg.PING } || pushActive
-                if (!busy) busySince = null else if (busySince == null) busySince = now
+                if (!busy) {
+                    busySince = null
+                } else if (busySince == null) {
+                    busySince = now
+                    if (anchorRx != rxAt) {
+                        anchorRx = rxAt
+                        anchorAt = now
+                        if (now - rxAt >= h.busyMs && pingSeq == null) ping = true
+                    }
+                }
                 val capped = busySince?.let { now - it > config.busyCapMs } ?: true
                 val interval = if (busy && !capped) h.busyMs else h.idleMs
-                val silence = now - rxAt
+                val silence = now - maxOf(rxAt, anchorAt)
                 if (silence >= Proto.deadIntervals * interval) reason = "dead"
                 else if (silence >= interval && pingSeq == null) ping = true
             }
