@@ -45,29 +45,43 @@ class Library(val tracks: List<Track>) {
         Enums.View.albumTracks -> albumOf(parent)?.map { trackRow(it) }
         Enums.View.playlists -> emptyList()
         Enums.View.folders -> {
-            val prefix = if (parent.isEmpty()) "" else "$parent/"
-            val under = tracks.filter { parent.isEmpty() || it.folder == parent || it.folder.startsWith(prefix) }
+            val under = under(parent)
             if (parent.isNotEmpty() && under.isEmpty()) {
                 null
             } else {
-                val subs = under.filter { it.folder != parent }.map { it.folder.removePrefix(prefix).substringBefore('/') }.distinct()
-                subs.map { s ->
-                    val path = prefix + s
-                    val ts = under.filter { it.folder == path || it.folder.startsWith("$path/") }
-                    LibRow(s, ts.size.toLong(), ts[0].id, path)
-                } + under.filter { it.folder == parent }.map { trackRow(it) }
+                subfolders(parent).map { path ->
+                    val ts = under(path)
+                    LibRow(path.substringAfterLast('/'), ts.size.toLong(), ts[0].id, path)
+                } + own(parent).map { trackRow(it) }
             }
         }
         Enums.View.favorites -> favorites.mapNotNull { byId[it] }.map { trackRow(it) }
         else -> null
     }
 
+    private fun fold(s: String) = s.lowercase()
+
+    private fun under(parent: String): List<Track> {
+        val prefix = if (parent.isEmpty()) "" else "$parent/"
+        return tracks.filter { parent.isEmpty() || it.folder == parent || it.folder.startsWith(prefix) }
+    }
+
+    private fun subfolders(parent: String): List<String> {
+        val prefix = if (parent.isEmpty()) "" else "$parent/"
+        return under(parent).filter { it.folder != parent }.map { prefix + it.folder.removePrefix(prefix).substringBefore('/') }
+            .distinct().sortedBy { fold(it.substringAfterLast('/')) }
+    }
+
+    private fun own(parent: String) = tracks.filter { it.folder == parent }.sortedBy { fold(it.title) }
+
+    private fun folderOrder(parent: String): List<Track> = subfolders(parent).flatMap { folderOrder(it) } + own(parent)
+
     fun tracksOf(view: Int, parent: String): List<Long>? = when (view) {
         Enums.View.artists -> tracks.map { it.id }
         Enums.View.albums, Enums.View.songs -> tracks.map { it.id }
         Enums.View.artistAlbums -> tracks.filter { parent in it.artists }.map { it.id }.takeIf { it.isNotEmpty() }
         Enums.View.albumTracks -> albumOf(parent)?.map { it.id }
-        Enums.View.folders -> tracks.filter { it.folder == parent || it.folder.startsWith("$parent/") || parent.isEmpty() }.map { it.id }
+        Enums.View.folders -> folderOrder(parent).map { it.id }.takeIf { parent.isEmpty() || it.isNotEmpty() }
         Enums.View.favorites -> favorites.toList()
         Enums.View.playlists -> emptyList()
         else -> null
