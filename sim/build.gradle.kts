@@ -25,7 +25,7 @@ application {
 
 tasks.register<Jar>("simJar") {
     group = "funecomp"
-    archiveFileName.set("sim.jar")
+    archiveClassifier.set("all")
     manifest { attributes("Main-Class" to "net.seilent.funecomp.sim.MainKt") }
     from(sourceSets.main.get().output)
     from(configurations.runtimeClasspath.map { cp -> cp.map { if (it.isDirectory) it else zipTree(it) } })
