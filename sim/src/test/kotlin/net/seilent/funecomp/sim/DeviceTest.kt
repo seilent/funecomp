@@ -63,6 +63,8 @@ class DeviceTest {
         assertEquals(8, device("ap80").rows.first { it.key == "digitalFilter" }.values.size)
         assertEquals(4, device("v1").rows.first { it.key == "digitalFilter" }.values.size)
         assertTrue(device("v1").rows.none { it.key == "btCodec" || it.key == "pairPhone" })
+        assertTrue(device("ap80").rows.none { it.key == "dre" } && device("ap80").rows.any { it.key == "playKey" })
+        assertTrue(device("v1").rows.any { it.key == "dre" } && device("v1").rows.none { it.key == "playKey" })
         assertEquals(listOf(Enums.RowFlag.readOnly, Enums.RowFlag.boardOnly), device("v1").rows.first { it.key == "companion" }.flags)
     }
 

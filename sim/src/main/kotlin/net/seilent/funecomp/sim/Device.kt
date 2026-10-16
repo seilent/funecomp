@@ -54,7 +54,9 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         "inlineRemote" to "on", "clock" to "24h", "batteryPercent" to "off", "playThrough" to "off",
         "usbMode" to "storage", "btCodec" to "auto", "btCodecHeadphones" to "auto", "digitalFilter" to "0",
         "balance" to "0", "maxVolume" to "100", "powerOnVolume" to "0", "replaygain" to "off",
-    )
+        "quickplay" to "on", "resume" to "position", "autoNowPlaying" to "off", "playKey" to "nowPlaying",
+        "dre" to "off", "crossfade" to "0",
+    ).apply { keys.retainAll(rows.mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones")) }
     var settingsRev = 1L
         private set
     private var sleepLeftS = 0L
