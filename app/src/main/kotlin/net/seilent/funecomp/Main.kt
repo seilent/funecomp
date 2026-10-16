@@ -199,12 +199,11 @@ class Main : ComponentActivity() {
     }
 
     private fun missing() = buildList {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) add(Manifest.permission.BLUETOOTH_CONNECT)
+        add(Manifest.permission.BLUETOOTH_CONNECT)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
     }.filter { checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED }
 
-    private fun linkAllowed() = Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-        checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
+    private fun linkAllowed() = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
     private fun startLink() {
         val spec = prefs().getString(EXTRA_LINK, null) ?: return

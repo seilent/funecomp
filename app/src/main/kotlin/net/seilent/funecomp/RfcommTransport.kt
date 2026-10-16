@@ -5,7 +5,6 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothSocket
 import android.content.Context
 import android.content.pm.PackageManager
-import android.os.Build
 import net.seilent.funecomp.link.Transport
 import net.seilent.funecomp.proto.gen.Proto
 import java.io.IOException
@@ -16,9 +15,7 @@ class RfcommTransport(private val context: Context, private val address: String)
     @Volatile private var closed = false
 
     override fun open() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
-            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
-        ) {
+        if (context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
             throw IOException("no BLUETOOTH_CONNECT")
         }
         val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter ?: throw IOException("no adapter")
