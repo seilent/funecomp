@@ -13,6 +13,7 @@ import android.os.SystemClock
 import android.util.Log
 import android.widget.ScrollView
 import android.widget.TextView
+import java.lang.reflect.InvocationTargetException
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -25,7 +26,7 @@ class Main : Activity() {
         out = TextView(this)
         setContentView(ScrollView(this).apply { addView(out) })
         val addr = intent.getStringExtra("addr") ?: return say("no addr")
-        val uuid = UUID.fromString(intent.getStringExtra("uuid") ?: return say("no uuid"))
+        val uuid = intent.getStringExtra("uuid")?.let { UUID.fromString(it) }
         val mode = intent.getStringExtra("mode") ?: "push"
         val n = intent.getIntExtra("n", 0)
         val idle = intent.getIntExtra("idle", 0)
@@ -33,8 +34,10 @@ class Main : Activity() {
         Thread {
             try {
                 when (mode) {
-                    "sdp" -> sdp(dev, uuid)
-                    "push" -> push(dev, uuid, n, idle)
+                    "sdp" -> sdp(dev, requireNotNull(uuid) { "no uuid" })
+                    "push" -> push(dev, requireNotNull(uuid) { "no uuid" }, n, idle)
+                    "bond" -> bond(dev)
+                    "unbond" -> unbond(dev)
                     else -> say("unknown mode $mode")
                 }
             } catch (e: Exception) {
@@ -69,6 +72,50 @@ class Main : Activity() {
         say("fetchUuidsWithSdp ${dev.fetchUuidsWithSdp()}")
         say(if (done.await(30, TimeUnit.SECONDS)) "sdp in ${now() - t0} ms" else "sdp timeout")
         unregisterReceiver(r)
+    }
+
+    private fun bond(dev: BluetoothDevice) {
+        say("bond ${dev.bondState}")
+        val done = CountDownLatch(1)
+        val r = object : BroadcastReceiver() {
+            override fun onReceive(c: Context, i: Intent) {
+                val d = i.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                if (d?.address != dev.address) return
+                when (i.action) {
+                    BluetoothDevice.ACTION_PAIRING_REQUEST -> say(
+                        "pairing request variant ${i.getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, -1)} key ${i.getIntExtra(BluetoothDevice.EXTRA_PAIRING_KEY, -1)}",
+                    )
+                    BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
+                        val from = i.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, -1)
+                        val to = i.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, -1)
+                        say("bond state $from to $to")
+                        if (to == BluetoothDevice.BOND_BONDED || (to == BluetoothDevice.BOND_NONE && from == BluetoothDevice.BOND_BONDING)) done.countDown()
+                    }
+                }
+            }
+        }
+        registerReceiver(r, IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED).apply { addAction(BluetoothDevice.ACTION_PAIRING_REQUEST) }, RECEIVER_EXPORTED)
+        try {
+            val t0 = now()
+            val started = dev.createBond()
+            say("createBond $started")
+            if (!started) return
+            say(if (done.await(BOND_WAIT_S, TimeUnit.SECONDS)) "bond ${dev.bondState} in ${now() - t0} ms" else "bond timeout, state ${dev.bondState}")
+        } finally {
+            unregisterReceiver(r)
+        }
+    }
+
+    private fun unbond(dev: BluetoothDevice) {
+        say("bond ${dev.bondState}")
+        val result = try {
+            dev.javaClass.getMethod("removeBond").invoke(dev)
+        } catch (e: InvocationTargetException) {
+            "threw ${e.cause}"
+        }
+        say("removeBond $result")
+        Thread.sleep(UNBOND_WAIT_MS)
+        say("bond ${dev.bondState}")
     }
 
     private fun push(dev: BluetoothDevice, uuid: UUID, n: Int, idle: Int) {
@@ -110,5 +157,10 @@ class Main : Activity() {
         }
         say("20 byte command echoed $echo bytes in ${now() - t3} ms")
         s.close()
+    }
+
+    companion object {
+        const val BOND_WAIT_S = 90L
+        const val UNBOND_WAIT_MS = 3000L
     }
 }
