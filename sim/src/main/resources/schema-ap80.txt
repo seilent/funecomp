@@ -4,7 +4,7 @@ output	maxVolume	steps	MAX VOLUME	50,55,60,65,70,75,80,85,90,95,100	50,55,60,65,
 output	powerOnVolume	steps	POWER ON VOLUME	0,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	LAST,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-
 output	balance	range	BALANCE	-	-	-20,20,1	-
 output	digitalFilter	choice	DIGITAL FILTER	0,1,2,3,4,5,6,7	LINEAR FAST,LINEAR SLOW,MIN FAST,MIN SLOW,APOD FAST,APOD SLOW,HYBRID FAST,BRICK WALL	-	-
-output	btCodec	draft	BLUETOOTH CODEC	auto,aptx,aac,sbc	AUTO,APTX,AAC,SBC	-	-
+output	btCodec	draft	BLUETOOTH CODEC	auto,aptx,aac,sbc	AUTO,APTX,AAC,SBC	-	restart
 output	sampleRate	info	SAMPLE RATE	-	AUTO	-	readOnly
 output	replaygain	choice	REPLAYGAIN	off,track,album	OFF,TRACK,ALBUM	-	-
 output	eq	info	EQ	-	OFF	-	readOnly
