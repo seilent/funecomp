@@ -58,11 +58,11 @@ class DeviceTest {
             val text = Settings.from(out.of(Msg.SETTINGS).single()).text
             val keys = text.lines().filter { it.isNotEmpty() }.map { it.substringBefore('=') }.toSet()
             val rowKeys = d.rows.mapNotNull { it.key }.toSet()
-            assertTrue((keys - rowKeys) == setOf("btCodecHeadphones"))
+            assertEquals(if (b == "v1") setOf("btCodec", "btCodecHeadphones") else setOf("btCodecHeadphones"), keys - rowKeys)
         }
         assertEquals(8, device("ap80").rows.first { it.key == "digitalFilter" }.values.size)
         assertEquals(4, device("v1").rows.first { it.key == "digitalFilter" }.values.size)
-        assertEquals(listOf("auto", "aptx", "aac", "sbc"), device("v1").rows.first { it.key == "btCodec" }.values)
+        assertTrue(device("v1").rows.none { it.key == "btCodec" || it.key == "pairPhone" })
         assertEquals(listOf(Enums.RowFlag.readOnly, Enums.RowFlag.boardOnly), device("v1").rows.first { it.key == "companion" }.flags)
     }
 
