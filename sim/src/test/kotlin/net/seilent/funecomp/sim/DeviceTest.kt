@@ -97,6 +97,8 @@ class DeviceTest {
         ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "ldac", Enums.BtRole.headphones), out))
         assertTrue("btCodecHeadphones=ldac" in Settings.from(out.of(Msg.SETTINGS).last()).text.lines())
         assertEquals(Err.badValue, fail(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "ldac", Enums.BtRole.receiver))).code)
+        val v1 = device("v1")
+        assertEquals(Err.refused, fail(req(v1, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "aptx", Enums.BtRole.receiver))).code)
         assertEquals(Err.badValue, fail(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.clock, unixS = -86400, zoneS = -18000))).code)
         val sleep = Sink()
         ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, minutes = 30), sleep))

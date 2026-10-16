@@ -352,6 +352,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
                 prefs["usbMode"] = v
             }
             Enums.DraftKind.btCodec -> {
+                if (rows.none { it.key == "btCodec" }) return Answer.Fail(Err.refused, "refused")
                 val role = b.int(Tags.Draft.role) ?: Enums.BtRole.receiver
                 val ok = if (role == Enums.BtRole.receiver) listOf("auto", "aptx", "aac", "sbc") else listOf("auto", "ldac", "aptx", "aac", "sbc")
                 val v = b.str(Tags.Draft.`value`)?.takeIf { it in ok } ?: return Answer.Fail(Err.badValue, "bad codec")
