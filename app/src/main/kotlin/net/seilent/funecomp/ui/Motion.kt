@@ -31,5 +31,3 @@ val EaseIn = Easing { t -> t * t }
 val EaseOut = Easing { t -> t * (2f - t) }
 
 val Sine = Easing { t -> sin(t * PI.toFloat() / 2f) }
-
-val InOutSine = Easing { t -> -(kotlin.math.cos(PI.toFloat() * t) - 1f) / 2f }

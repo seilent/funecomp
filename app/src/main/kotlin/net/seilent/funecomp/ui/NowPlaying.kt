@@ -43,15 +43,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
 
-private const val BACKDROP_PAN_MS = 26000
-private const val BACKDROP_SCALE_MS = 20000
-private const val BACKDROP_SCALE_MAX = 1.06f
-private const val BACKDROP_PAN_U = 8f
 private const val BACKDROP_FADE_MS = 2000
 
 fun formatTime(ms: Long): String {
@@ -63,7 +58,7 @@ fun formatTime(ms: Long): String {
 class BackdropArt(val image: ImageBitmap, val face: Pair<Double, Double>? = null)
 
 @Composable
-fun Backdrop(art: BackdropArt?, running: Boolean) {
+fun Backdrop(art: BackdropArt?) {
     var shown by remember { mutableStateOf(art) }
     var old by remember { mutableStateOf<BackdropArt?>(null) }
     var oldFrom by remember { mutableFloatStateOf(1f) }
@@ -84,8 +79,8 @@ fun Backdrop(art: BackdropArt?, running: Boolean) {
     }
     if (shown == null && old == null) return
     Box(Modifier.fillMaxSize().clipToBounds().testTag("backdrop")) {
-        old?.let { o -> key(o) { BackdropLayer(o, running, oldFrom * (1f - fade.value)) } }
-        shown?.let { n -> key(n) { BackdropLayer(n, running, fade.value) } }
+        old?.let { o -> key(o) { BackdropLayer(o, oldFrom * (1f - fade.value)) } }
+        shown?.let { n -> key(n) { BackdropLayer(n, fade.value) } }
         Box(
             Modifier.fillMaxSize().background(
                 Brush.verticalGradient(
@@ -99,27 +94,9 @@ fun Backdrop(art: BackdropArt?, running: Boolean) {
 }
 
 @Composable
-private fun BackdropLayer(art: BackdropArt, running: Boolean, alpha: Float) {
+private fun BackdropLayer(art: BackdropArt, alpha: Float) {
     val ui = LocalUi.current
-    val amp = ui.px(BACKDROP_PAN_U)
-    val pan = remember { Animatable(-amp) }
-    val scale = remember { Animatable(1f) }
-    LaunchedEffect(running, amp) {
-        if (!running) return@LaunchedEffect
-        launch {
-            var to = if (pan.value < 0f) amp else -amp
-            while (true) {
-                pan.animateTo(to, tween(BACKDROP_PAN_MS, easing = InOutSine))
-                to = -to
-            }
-        }
-        var to = if (scale.value < BACKDROP_SCALE_MAX) BACKDROP_SCALE_MAX else 1f
-        while (true) {
-            scale.animateTo(to, tween(BACKDROP_SCALE_MS, easing = InOutSine))
-            to = if (to == 1f) BACKDROP_SCALE_MAX else 1f
-        }
-    }
-    val w = ui.px(ui.w) + 2 * amp
+    val w = ui.px(ui.w)
     val h = ui.px(ui.h)
     val img = art.image
     val painter = remember(art, w.roundToInt(), h.roundToInt()) {
@@ -129,12 +106,7 @@ private fun BackdropLayer(art: BackdropArt, running: Boolean, alpha: Float) {
     Image(
         painter,
         null,
-        Modifier.at(-amp, 0f, unbounded = true).requiredSize(w.dp(), h.dp()).graphicsLayer {
-            translationX = pan.value
-            scaleX = scale.value
-            scaleY = scale.value
-            this.alpha = alpha
-        },
+        Modifier.requiredSize(w.dp(), h.dp()).graphicsLayer { this.alpha = alpha },
         contentScale = ContentScale.FillBounds,
     )
 }
@@ -209,7 +181,7 @@ fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueu
             }
         }.testTag("np"),
     ) {
-        Backdrop(art, playing)
+        Backdrop(art)
         BackRing(onBack)
         Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
         RoleText(s.artist ?: "", Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))
