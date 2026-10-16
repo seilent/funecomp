@@ -364,7 +364,7 @@ class LookupTest {
 
     @Test
     fun outputFitsBothBoardsUnder256kB() {
-        for ((w, h) in listOf(384 to 480, 256 to 320)) {
+        for ((w, h) in listOf(360 to 480, 240 to 320)) {
             codec.qualities.clear()
             val jpeg = Backdrop.render(codec, Images.png(Images.noise(2000, 1500)), w, h)!!
             assertEquals(w to h, Images.size(jpeg))

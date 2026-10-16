@@ -89,7 +89,7 @@ class PushTest {
             art(n, noise(w, h, 3), w, h)
         }) { true }.run(listOf("Mili" to null))
         assertEquals(ArtPusher.Stop.DONE, r.stop)
-        assertEquals(listOf(256 to 320), sizes)
+        assertEquals(listOf(240 to 320), sizes)
         assertTrue(sim.device.stored.containsKey("mili"))
     }
 
@@ -120,7 +120,7 @@ class PushTest {
     fun gateClosingMidPushStopsAndThePartialResumesLater() {
         val (sim, port) = sim()
         val s = session(port)
-        val img = noise(384, 480, 6)
+        val img = noise(360, 480, 6)
         var chunks = 0
         val lookup = { n: String, _: String?, w: Int, h: Int -> art(n, img, w, h) }
         val r = ArtPusher(s, lookup) { chunks++ < 4 }.run(listOf("Ado" to null))
@@ -185,7 +185,7 @@ class PushTest {
     fun storedSkipIsByExactNameAndTheDeviceAnswersCaseVariants() {
         val (_, port) = sim()
         val s = session(port)
-        val img = noise(384, 480, 8)
+        val img = noise(360, 480, 8)
         var lookups = 0
         val lookup = { n: String, _: String?, w: Int, h: Int ->
             lookups++
@@ -200,7 +200,7 @@ class PushTest {
     @Test
     fun pushResumesAfterTheLinkDropsMidImage() {
         val (sim, port) = sim("drop-after-bytes=131072")
-        val img = noise(384, 480, 5)
+        val img = noise(360, 480, 5)
         assertTrue("${img.size}", img.size > 140_000)
         val lookup = { n: String, _: String?, w: Int, h: Int -> art(n, img, w, h) }
         val first = ArtPusher(session(port), lookup) { true }.run(listOf("Sigur Rós" to null))
@@ -222,16 +222,16 @@ class PushTest {
     @Test
     fun prefixCrcMismatchRestartsAtZero() {
         val (sim, port) = sim()
-        val img = noise(384, 480, 9)
+        val img = noise(360, 480, 9)
         val crc = CRC32().apply { update(img) }.value
         val s = session(port)
-        val begin = s.call(Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, "Ichiko Aoba", null, img.size.toLong(), crc, 384, 480))
+        val begin = s.call(Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, "Ichiko Aoba", null, img.size.toLong(), crc, 360, 480))
         assertTrue(begin is Session.Result.Ok)
         val chunk = s.hello!!.maxPayload - 16
         val junk = ByteArray(chunk * 3) { 0x55 }
         for (i in 0 until 3) assertTrue(s.push(Msg.IMG_DATA, Req.imgData(i.toLong() * chunk, junk.copyOfRange(i * chunk, (i + 1) * chunk))))
         assertTrue(s.call(Msg.IMG_LIST, Req.imgList(0, 10)) is Session.Result.Ok)
-        val r = ImagePush(s, "Ichiko Aoba", null, img, 384, 480).run()
+        val r = ImagePush(s, "Ichiko Aoba", null, img, 360, 480).run()
         assertTrue("got $r", r is ImagePush.Outcome.Done)
         assertEquals(0L, (r as ImagePush.Outcome.Done).from)
         assertEquals(crc, sim.device.stored.getValue("ichiko aoba").crc)

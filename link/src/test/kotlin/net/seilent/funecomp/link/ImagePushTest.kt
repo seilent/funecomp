@@ -54,7 +54,7 @@ class ImagePushTest {
                 got += f.type
                 if (!f.wantsReply) continue
                 val r = when (f.type) {
-                    Msg.HELLO -> reply(f, HelloReply(Proto.major, Proto.minor, "ap80", "fake", 360, 480, 384, 480, Proto.maxPayload, 30_000, 5_000, Groups.all, 1, 1).encode())
+                    Msg.HELLO -> reply(f, HelloReply(Proto.major, Proto.minor, "ap80", "fake", 360, 480, 360, 480, Proto.maxPayload, 30_000, 5_000, Groups.all, 1, 1).encode())
                     Msg.IMG_BEGIN -> {
                         val out = reply(f, ImgBeginReply(0, 0).encode())
                         if (abortAfterBegin) (out + Frame(Msg.IMG_ABORT, 0, 1, ImgAbort("Mili", 0, Enums.AbortCode.noSpace).encode()).encode()).also { abortBuf = it } else out
@@ -87,7 +87,7 @@ class ImagePushTest {
         repeat(20) {
             val d = Device(abortAfterBegin = true)
             val s = session(d)
-            val o = ImagePush(s, "Mili", null, ByteArray(100_000) { 1 }, 384, 480).run()
+            val o = ImagePush(s, "Mili", null, ByteArray(100_000) { 1 }, 360, 480).run()
             assertTrue("run $it got $o", o is ImagePush.Outcome.Aborted)
             assertEquals(Enums.AbortCode.noSpace, (o as ImagePush.Outcome.Aborted).abort.code)
             assertTrue(Msg.IMG_END !in d.got)
@@ -100,7 +100,7 @@ class ImagePushTest {
         val d = Device(abortAfterBegin = false)
         val s = session(d)
         var open = 2
-        val o = ImagePush(s, "Mili", null, ByteArray(100_000) { 1 }, 384, 480) { open-- > 0 }.run()
+        val o = ImagePush(s, "Mili", null, ByteArray(100_000) { 1 }, 360, 480) { open-- > 0 }.run()
         assertTrue("got $o", o is ImagePush.Outcome.Gated)
         assertEquals(2, (o as ImagePush.Outcome.Gated).chunks)
         val end = System.nanoTime() + 2_000_000_000L

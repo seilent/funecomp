@@ -12,6 +12,9 @@ class ArtistTest {
         assertEquals(800, tall.w)
         assertEquals(1000, tall.h)
         assertEquals((2000 / 3.0 - 500).toInt(), tall.y)
+        val screen = Crop.rect(1200, 800, 360, 480)
+        assertEquals(600, screen.w)
+        assertEquals(800, screen.h)
     }
 
     @Test

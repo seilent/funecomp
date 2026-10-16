@@ -120,7 +120,7 @@ class LinkTest {
         assertTrue(rec.hello.await(5, TimeUnit.SECONDS))
         val h = s.hello!!
         assertEquals("ap80", h.board)
-        assertEquals(384, h.backdropW)
+        assertEquals(360, h.backdropW)
         assertTrue(h.has("settings") && h.has("eq") && h.has("library") && h.has("queue") && h.has("image"))
         waitFor { rec.state.schema.rev != null && rec.state.eq.values.count { it.complete } == 2 && rec.state.settings.rev > 0 }
         val filter = rec.state.schema.rows.first { it.key == "digitalFilter" }
@@ -162,7 +162,7 @@ class LinkTest {
         val s = session(sim(board = "v1"), rec)
         assertTrue(rec.hello.await(5, TimeUnit.SECONDS))
         assertEquals("v1", s.hello!!.board)
-        assertEquals(256, s.hello!!.backdropW)
+        assertEquals(240, s.hello!!.backdropW)
         waitFor { rec.state.schema.rev != null }
         assertEquals(4, rec.state.schema.rows.first { it.key == "digitalFilter" }.values.size)
         s.close("done")
@@ -390,7 +390,7 @@ class LinkTest {
         assertEquals(Enums.ByeReason.replaced, a.byes.single().reason)
     }
 
-    private fun jpeg(size: Int, w: Int = 384, h: Int = 480, seed: Int = 1): ByteArray {
+    private fun jpeg(size: Int, w: Int = 360, h: Int = 480, seed: Int = 1): ByteArray {
         val head = byteArrayOf(
             0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xC0.toByte(), 0, 17, 8,
             (h shr 8).toByte(), h.toByte(), (w shr 8).toByte(), w.toByte(), 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1,
@@ -410,7 +410,7 @@ class LinkTest {
         val s = session(port, rec, bps = 400_000)
         assertTrue(rec.hello.await(5, TimeUnit.SECONDS))
         val img = jpeg(200_000)
-        val first = ImagePush(s, "宇多田ヒカル", null, img, 384, 480).run()
+        val first = ImagePush(s, "宇多田ヒカル", null, img, 360, 480).run()
         assertTrue("got $first", first is ImagePush.Outcome.Aborted)
         first as ImagePush.Outcome.Aborted
         assertEquals(Enums.AbortCode.writeError, first.abort.code)
@@ -419,14 +419,14 @@ class LinkTest {
         val sim = sims.single()
         assertTrue("dropped ${sim.device.droppedData}", sim.device.droppedData < first.chunks)
 
-        val second = ImagePush(s, "宇多田ヒカル", null, img, 384, 480).run()
+        val second = ImagePush(s, "宇多田ヒカル", null, img, 360, 480).run()
         assertTrue("got $second", second is ImagePush.Outcome.Done)
         second as ImagePush.Outcome.Done
         assertTrue(second.from > 0 && second.from % chunk == 0L)
         val stored = sim.device.stored.getValue("宇多田ヒカル")
         assertEquals(CRC32().apply { update(img) }.value, stored.crc)
 
-        val again = ImagePush(s, "宇多田ヒカル ", null, img, 384, 480).run()
+        val again = ImagePush(s, "宇多田ヒカル ", null, img, 360, 480).run()
         assertTrue(again is ImagePush.Outcome.Have)
         s.close("done")
     }
@@ -436,9 +436,9 @@ class LinkTest {
         val rec = Recorder()
         val s = session(sim(), rec)
         assertTrue(rec.hello.await(5, TimeUnit.SECONDS))
-        val wrong = ImagePush(s, "Ichiko Aoba", null, jpeg(30_000, w = 360), 384, 480).run()
+        val wrong = ImagePush(s, "Ichiko Aoba", null, jpeg(30_000, w = 384), 360, 480).run()
         assertEquals(Err.badValue, (wrong as ImagePush.Outcome.Failed).error!!.code)
-        val big = ImagePush(s, "Ichiko Aoba", null, jpeg(300_000), 384, 480).run()
+        val big = ImagePush(s, "Ichiko Aoba", null, jpeg(300_000), 360, 480).run()
         assertEquals(Err.tooBig, (big as ImagePush.Outcome.Failed).error!!.code)
         s.close("done")
     }
@@ -450,12 +450,12 @@ class LinkTest {
         val a = Recorder()
         val s1 = session(port, a)
         assertTrue(a.hello.await(5, TimeUnit.SECONDS))
-        assertTrue(ImagePush(s1, "Sigur Rós", null, img, 384, 480).run() is ImagePush.Outcome.Aborted)
+        assertTrue(ImagePush(s1, "Sigur Rós", null, img, 360, 480).run() is ImagePush.Outcome.Aborted)
         s1.close("done")
         val b = Recorder()
         val s2 = session(port, b)
         assertTrue(b.hello.await(5, TimeUnit.SECONDS))
-        val done = ImagePush(s2, "Sigur Rós", null, img, 384, 480).run() as ImagePush.Outcome.Done
+        val done = ImagePush(s2, "Sigur Rós", null, img, 360, 480).run() as ImagePush.Outcome.Done
         assertEquals(0L, done.from)
         s2.close("done")
     }

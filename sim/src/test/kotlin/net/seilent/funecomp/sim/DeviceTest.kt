@@ -174,7 +174,7 @@ class DeviceTest {
     }
 
     private fun jpeg(size: Int): ByteArray {
-        val head = byteArrayOf(-1, -40, -1, -64, 0, 17, 8, 1, -32, 1, -128, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1)
+        val head = byteArrayOf(-1, -40, -1, -64, 0, 17, 8, 1, -32, 1, 104, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1)
         return ByteArray(size).also { head.copyInto(it); it[size - 2] = -1; it[size - 1] = -39 }
     }
 
@@ -186,14 +186,14 @@ class DeviceTest {
         val img = jpeg(50_000)
         val out = Sink()
         fun begin(name: String) = ImgBeginReply.from(Node.decode("IMG_BEGIN.reply",
-            ok(req(d, Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, name, null, img.size.toLong(), crc(img), 384, 480), out))))
+            ok(req(d, Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, name, null, img.size.toLong(), crc(img), 360, 480), out))))
         fun data(off: Int, n: Int) = d.imgData(Node.decode("IMG_DATA", Req.imgData(off.toLong(), img.copyOfRange(off, off + n))), out)
         assertEquals(0L, begin("Ichiko Aoba").offset)
         data(0, 16368)
         data(16368, 100)
         assertEquals(16368L, begin("Ichiko Aoba").offset)
         assertEquals(crc(img.copyOf(16368)), ImgBeginReply.from(Node.decode("IMG_BEGIN.reply",
-            ok(req(d, Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, "Ichiko Aoba", null, img.size.toLong(), crc(img), 384, 480), out)))).crc)
+            ok(req(d, Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, "Ichiko Aoba", null, img.size.toLong(), crc(img), 360, 480), out)))).crc)
         begin("Sigur Rós")
         val superseded = out.of(Msg.IMG_ABORT).map { ImgAbort.from(it) }
         assertEquals(Enums.AbortCode.superseded, superseded.last().code)

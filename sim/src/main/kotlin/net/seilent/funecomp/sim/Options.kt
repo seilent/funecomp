@@ -17,8 +17,8 @@ class Board(
 ) {
     companion object {
         fun of(name: String) = when (name) {
-            "ap80" -> Board("ap80", 360, 480, 384, 480, "schema-ap80.txt")
-            "v1" -> Board("v1", 240, 320, 256, 320, "schema-v1.txt")
+            "ap80" -> Board("ap80", 360, 480, 360, 480, "schema-ap80.txt")
+            "v1" -> Board("v1", 240, 320, 240, 320, "schema-v1.txt")
             else -> throw IllegalArgumentException("board must be ap80 or v1, not $name")
         }
     }

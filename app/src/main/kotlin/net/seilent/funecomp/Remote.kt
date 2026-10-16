@@ -40,7 +40,7 @@ import java.io.IOException
 object Remote : Control {
     const val TAG = "Funecomp"
     private const val BACKDROP_SIDE = 2048
-    private const val FETCH_W = 384
+    private const val FETCH_W = 360
     private const val FETCH_H = 480
     private val codec = BitmapCodec { Log.i(TAG, it) }
 

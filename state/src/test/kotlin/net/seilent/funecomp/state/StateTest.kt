@@ -61,7 +61,7 @@ class StateTest {
 
     @Test
     fun newHelloStartsAFreshMirror() {
-        val h = net.seilent.funecomp.proto.HelloReply(1, 0, "ap80", "x", 360, 480, 384, 480, 16384, 30000, 5000, 31, 7, 1)
+        val h = net.seilent.funecomp.proto.HelloReply(1, 0, "ap80", "x", 360, 480, 360, 480, 16384, 30000, 5000, 31, 7, 1)
         var d = DeviceState().withHello(h).withRtt(40).withSettings(Settings(5, "balance=2\n")).withSetReply(5)
         d = d.withSchema(Schema(3, "output", 0, 1, PageInfo(0, 1, false), listOf(row("a", Enums.RowKind.toggle))))
         d = d.withHello(h)
