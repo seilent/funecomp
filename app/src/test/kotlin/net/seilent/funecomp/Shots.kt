@@ -28,6 +28,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
+import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -70,6 +71,10 @@ val SIZES = listOf(
 private val HOME = listOf(Page.Home)
 private val NP = HOME + Page.NowPlaying
 private val ALBUM_KEY = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim.Library.synthetic().tracks.first().id)
+
+private fun noBond(c: SimControl) {
+    c.bonds = listOf(Bonded("WH-1000XM4", "00:00:00:00:00:02"))
+}
 
 private fun playing(c: SimControl) {
     c.transport(Enums.TransportCmd.next)
@@ -157,6 +162,9 @@ val SHOTS = listOf(
     Shot("connection-refused", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused)),
     Shot("connection-permission", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "AP80", permission = false)),
     Shot("connection-device", pages = HOME + Page.Connection) { rule.onNodeWithTag("conn.device").performClick() },
+    Shot("connection-refused-nobond", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused), prep = ::noBond),
+    Shot("connection-nobond", pages = HOME + Page.Connection, link = LinkView(Phase.NONE), prep = ::noBond),
+    Shot("connection-nobond-device", pages = HOME + Page.Connection, link = LinkView(Phase.NONE), prep = ::noBond) { rule.onNodeWithTag("conn.device").performClick() },
     Shot("artistart", pages = HOME + Page.ArtistArt),
     Shot("artistart-credits", pages = HOME + Page.ArtistArt, credits = CREDITS) {
         rule.mainClock.autoAdvance = true

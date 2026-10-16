@@ -9,6 +9,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
@@ -18,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -41,12 +43,12 @@ class BehaviorTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun start(pages: List<Page>): Pair<SimControl, Shell> {
+    private fun start(pages: List<Page>, link: LinkView = LinkView(Phase.LIVE)): Pair<SimControl, Shell> {
         val c = SimControl("ap80")
         val shell = Shell(Nav(pages))
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, link, c, shell) }
         }
         settle(1000)
         return c to shell
@@ -56,6 +58,69 @@ class BehaviorTest {
         rule.waitForIdle()
         rule.mainClock.advanceTimeBy(ms)
         rule.waitForIdle()
+    }
+
+    @Test
+    fun statusAndRemedyTapsRetryAfterRefused() {
+        val (c, _) = start(listOf(Page.Home, Page.Connection), LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused))
+        rule.onNodeWithTag("conn.status").performClick()
+        settle(300)
+        assertEquals(1, c.retries)
+        rule.onNodeWithTag("conn.remedy").performClick()
+        settle(300)
+        assertEquals(2, c.retries)
+        assertEquals(0, c.asks)
+    }
+
+    @Test
+    fun statusTapWithoutPermissionAsksForIt() {
+        val (c, _) = start(listOf(Page.Home, Page.Connection), LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused, permission = false))
+        rule.onNodeWithTag("conn.status").performClick()
+        settle(300)
+        assertEquals(1, c.asks)
+        assertEquals(0, c.retries)
+    }
+
+    @Test
+    fun pairHintOnlyWithoutACompanionBond() {
+        val (c, _) = start(listOf(Page.Home, Page.Connection), LinkView(Phase.NONE))
+        assertEquals(0, rule.onAllNodesWithTag("conn.pairhint").fetchSemanticsNodes().size)
+        c.bonds = listOf(Bonded("WH-1000XM4", "00:00:00:00:00:02"))
+        rule.onNodeWithTag("conn.device").performClick()
+        settle(300)
+        rule.onNodeWithTag("conn.pairhint").assertIsDisplayed()
+        rule.onNodeWithTag("conn.btsettings").assertIsDisplayed()
+    }
+
+    @Test
+    fun pairHintHiddenWhileLive() {
+        val (c, shell) = start(listOf(Page.Home))
+        c.bonds = listOf(Bonded("WH-1000XM4", "00:00:00:00:00:02"))
+        shell.nav.push(Page.Connection)
+        settle(1500)
+        rule.onNodeWithTag("conn.status").assertIsDisplayed()
+        assertEquals(0, rule.onAllNodesWithTag("conn.pairhint").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun pairHintHiddenOnTheChosenBond() {
+        val (c, shell) = start(listOf(Page.Home), LinkView(Phase.DOWN, "WH-1000XM4"))
+        c.bonds = listOf(Bonded("WH-1000XM4", "00:00:00:00:00:02"))
+        shell.nav.push(Page.Connection)
+        settle(1500)
+        rule.onNodeWithTag("conn.status").assertIsDisplayed()
+        assertEquals(0, rule.onAllNodesWithTag("conn.pairhint").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun refusedWithNoCompanionBondShowsThePathOnce() {
+        val (c, shell) = start(listOf(Page.Home), LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused))
+        c.bonds = listOf(Bonded("WH-1000XM4", "00:00:00:00:00:02"))
+        shell.nav.push(Page.Connection)
+        settle(1500)
+        rule.onNodeWithTag("conn.remedy").assertIsDisplayed()
+        rule.onNodeWithTag("conn.pairhint").assertIsDisplayed()
+        assertEquals(0, rule.onAllNodesWithTag("conn.pairpath").fetchSemanticsNodes().size)
     }
 
     @Test

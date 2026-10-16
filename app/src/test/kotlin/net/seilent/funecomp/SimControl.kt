@@ -82,5 +82,17 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
         req(Msg.ACTION, Req.action(cmd, track))
     }
 
-    override fun bonded() = listOf(Bonded("AP80", "00:00:00:00:00:03"), Bonded("V1", "00:00:00:00:00:01"))
+    var bonds = listOf(Bonded("AP80", "00:00:00:00:00:03", true), Bonded("V1", "00:00:00:00:00:01", true), Bonded("WH-1000XM4", "00:00:00:00:00:02"))
+    var retries = 0
+    var asks = 0
+
+    override fun bonded() = bonds
+
+    override fun retry() {
+        retries++
+    }
+
+    override fun askPermission() {
+        asks++
+    }
 }

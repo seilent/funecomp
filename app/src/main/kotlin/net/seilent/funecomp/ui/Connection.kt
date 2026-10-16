@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -16,12 +17,14 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.platform.testTag
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.gen.Enums
 
-private const val REMEDY = "settings > system > phone app"
+private const val REMEDY = "settings > system > pair phone app"
+private const val PAIR_HINT = "pair on the device"
 
 fun byeText(reason: Int?) = when (reason) {
     Enums.ByeReason.refused -> "refused"
@@ -47,30 +50,43 @@ private class Line(val title: String, val value: String, val info: Boolean = fal
 @Composable
 fun ConnectionPage(ctx: Ctx, link: LinkView) {
     val ui = LocalUi.current
-    var focus by remember { mutableIntStateOf(0) }
+    var focus by remember { mutableStateOf("device") }
+    val read = { ctx.control.bonded().sortedByDescending { it.companion } }
+    var bonded by remember { mutableStateOf(read()) }
+    LifecycleResumeEffect(link.permission) {
+        bonded = read()
+        onPauseOrDispose {}
+    }
     val hello = ctx.device.hello
+    val tryAgain = { if (link.permission) ctx.control.retry() else ctx.control.askPermission() }
     val lines = buildList {
         add(Line("device", link.device ?: "not set", tag = "device") {
             if (!link.permission) {
                 ctx.control.askPermission()
             } else {
-                val bonded = ctx.control.bonded()
-                val at = bonded.indexOfFirst { it.name == link.device || it.address == link.device }.coerceAtLeast(0)
-                ctx.sheet.open("device", bonded.map { it.name }, at) { ctx.control.choose(bonded[it].address) }
+                val list = read()
+                bonded = list
+                val at = list.indexOfFirst { it.name == link.device || it.address == link.device }.coerceAtLeast(0)
+                ctx.sheet.open("device", list.map { it.name }, at) { ctx.control.choose(list[it].address) }
             }
         })
-        add(Line("status", statusText(link), tag = "status") { if (!link.permission) ctx.control.askPermission() })
-        if (link.bye == Enums.ByeReason.refused && link.phase != Phase.LIVE) add(Line(REMEDY, "", info = true, tag = "remedy"))
+        add(Line("status", statusText(link), tag = "status", tap = tryAgain))
+        val remedy = link.bye == Enums.ByeReason.refused && link.phase != Phase.LIVE
+        val hint = link.permission && link.phase != Phase.LIVE && bonded.none { it.companion || it.name == link.device || it.address == link.device }
+        if (hint) add(Line(PAIR_HINT, "", info = true, tag = "pairhint"))
+        if (remedy) add(Line(REMEDY, "", info = true, tag = "remedy", tap = tryAgain)) else if (hint) add(Line(REMEDY, "", info = true, tag = "pairpath"))
+        if (hint) add(Line("bluetooth settings", "", tag = "btsettings") { ctx.control.openBluetoothSettings() })
         if (hello != null) {
             add(Line("board", hello.board ?: "", tag = "board"))
             add(Line("version", hello.version ?: "", tag = "version"))
         }
     }
+    val at = lines.indexOfFirst { it.tag == focus }.coerceAtLeast(0)
     HubPage("connection", { ctx.nav.pop() }, count = statusText(link)) {
-        Rows(ui.contentTop, focus = focus) {
+        Rows(ui.contentTop, focus = at) {
             itemsIndexed(lines, key = { _, l -> l.tag }) { i, l ->
-                SettingsRow(l.title, l.value, Modifier.enter { i }.testTag("conn.${l.tag}"), focused = focus == i, info = l.info) {
-                    focus = i
+                SettingsRow(l.title, l.value, Modifier.enter { i }.testTag("conn.${l.tag}"), focused = at == i, info = l.info) {
+                    focus = l.tag
                     l.tap()
                 }
             }

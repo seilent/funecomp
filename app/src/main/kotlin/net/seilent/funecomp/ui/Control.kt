@@ -16,7 +16,7 @@ data class LinkView(
 )
 
 @Immutable
-data class Bonded(val name: String, val address: String)
+data class Bonded(val name: String, val address: String, val companion: Boolean = false)
 
 interface Control {
     fun transport(cmd: Int, seekMs: Long? = null, on: Boolean? = null, repeat: Int? = null)
@@ -32,6 +32,8 @@ interface Control {
     fun bonded(): List<Bonded> = emptyList()
     fun choose(address: String) {}
     fun askPermission() {}
+    fun retry() {}
+    fun openBluetoothSettings() {}
 }
 
 const val LIB_PAGE = 100L

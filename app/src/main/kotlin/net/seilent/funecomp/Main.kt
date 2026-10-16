@@ -31,6 +31,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Black
 import net.seilent.funecomp.ui.Bonded
@@ -39,6 +40,7 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Shell
+import java.util.UUID
 
 class Main : ComponentActivity() {
     private var started = false
@@ -48,6 +50,7 @@ class Main : ComponentActivity() {
     private var sources by mutableStateOf(Sources())
     private var shell by mutableStateOf(Shell())
     private var name by mutableStateOf<String?>(null)
+    private val companionUuid = UUID.fromString(Proto.uuid)
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         granted = linkAllowed()
         name = deviceName(spec)
@@ -59,7 +62,7 @@ class Main : ComponentActivity() {
             if (!linkAllowed()) return emptyList()
             val adapter = getSystemService(BluetoothManager::class.java)?.adapter ?: return emptyList()
             return try {
-                adapter.bondedDevices.map { Bonded(it.name ?: it.address, it.address) }.sortedBy { it.name }
+                adapter.bondedDevices.map { d -> Bonded(d.name ?: d.address, d.address, d.uuids?.any { it.uuid == companionUuid } == true) }.sortedBy { it.name }
             } catch (_: SecurityException) {
                 emptyList()
             }
@@ -69,6 +72,15 @@ class Main : ComponentActivity() {
             store("rfcomm:$address")
             Remote.userAction()
             startLink()
+        }
+
+        override fun retry() {
+            Remote.userAction()
+            startLink()
+        }
+
+        override fun openBluetoothSettings() {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
         }
 
         override fun askPermission() {
