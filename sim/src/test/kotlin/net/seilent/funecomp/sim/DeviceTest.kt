@@ -62,6 +62,8 @@ class DeviceTest {
         }
         assertEquals(8, device("ap80").rows.first { it.key == "digitalFilter" }.values.size)
         assertEquals(4, device("v1").rows.first { it.key == "digitalFilter" }.values.size)
+        assertEquals(listOf("auto", "aptx", "aac", "sbc"), device("v1").rows.first { it.key == "btCodec" }.values)
+        assertEquals(listOf(Enums.RowFlag.readOnly, Enums.RowFlag.boardOnly), device("v1").rows.first { it.key == "companion" }.flags)
     }
 
     @Test
