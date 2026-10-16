@@ -9,7 +9,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
 import net.seilent.funecomp.artist.ArtCache
@@ -48,14 +47,12 @@ fun App(
     shell: Shell,
     sources: Sources = Sources(),
     onSources: (Sources) -> Unit = {},
-    scale: Scale = Scale.MICRODAP,
     art: BackdropArt? = null,
     credits: List<ArtCache.Entry> = emptyList(),
     onCredit: (ArtCache.Entry) -> Unit = {},
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Black)) {
-        val density = LocalDensity.current.density
-        val ui = Ui.of(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat(), density, scale)
+        val ui = Ui.of(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
         val base = LocalViewConfiguration.current
         val touch = remember(base, ui.u) { Touch(base, ui.px(Tok.touchSlop)) }
         val accent = accentFor(device.settings.values[ACCENT_KEY]?.toIntOrNull())

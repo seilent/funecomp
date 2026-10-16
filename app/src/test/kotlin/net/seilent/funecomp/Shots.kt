@@ -32,7 +32,6 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
-import net.seilent.funecomp.ui.Scale
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.flatBand
 import org.junit.Assume.assumeTrue
@@ -55,7 +54,7 @@ class Shot(
     val after: Long = 1000,
     val credits: List<ArtCache.Entry> = emptyList(),
     val prep: (SimControl) -> Unit = {},
-    val act: ShotsBase.(Shell) -> Unit = {},
+    val act: Shots.(Shell) -> Unit = {},
 )
 
 val SIZES = listOf(
@@ -169,11 +168,11 @@ val SHOTS = listOf(
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w1280dp-h1000dp-420dpi")
-abstract class ShotsBase {
+class Shots {
     @get:Rule
     val rule = createComposeRule()
 
-    private var frame by mutableStateOf<Triple<Shot, Size, Scale>?>(null)
+    private var frame by mutableStateOf<Pair<Shot, Size>?>(null)
     private var control by mutableStateOf<SimControl?>(null)
     private var shell by mutableStateOf(Shell())
 
@@ -187,7 +186,8 @@ abstract class ShotsBase {
         System.getProperty("shots.backdrop")?.let { File(it) }?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
     }
 
-    protected fun run(scale: Scale, sizes: List<Size>) {
+    @Test
+    fun shots() {
         assumeTrue(System.getProperty("shots.run") == "true")
         val dir = File(System.getProperty("shots.dir") ?: "build/shots")
         rule.mainClock.autoAdvance = false
@@ -196,12 +196,12 @@ abstract class ShotsBase {
             val c = control ?: return@setContent
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
-                    App(c.device, f.first.link, c, shell, Sources(), {}, f.third, if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits)
+                    App(c.device, f.first.link, c, shell, Sources(), {}, if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits)
                 }
             }
         }
         val only = System.getProperty("shots.only").orEmpty()
-        for (size in sizes) {
+        for (size in SIZES) {
             for (shot in SHOTS) {
                 if (only.isNotEmpty() && only.split(',').none { "${shot.name}-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue
@@ -209,28 +209,13 @@ abstract class ShotsBase {
                 shot.prep(c)
                 control = c
                 shell = Shell(Nav(shot.pages))
-                frame = Triple(shot, size, scale)
+                frame = shot to size
                 settle(1000)
                 shot.act(this, shell)
                 settle(shot.after)
-                val file = File(dir, "${shot.name}-${size.name}-${scale.name.lowercase()}.png")
+                val file = File(dir, "${shot.name}-${size.name}.png")
                 rule.onNodeWithTag("frame").captureRoboImage(file.path)
             }
         }
     }
-}
-
-class ShotsMicrodap : ShotsBase() {
-    @Test
-    fun shots() = run(Scale.MICRODAP, SIZES)
-}
-
-class ShotsFitWidth : ShotsBase() {
-    @Test
-    fun shots() = run(Scale.FIT_WIDTH, SIZES)
-}
-
-class ShotsFixedDp : ShotsBase() {
-    @Test
-    fun shots() = run(Scale.FIXED_DP, SIZES.filter { it.name == "411x960" || it.name.startsWith("cover") || it.name.startsWith("flip") })
 }

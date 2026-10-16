@@ -21,13 +21,8 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-enum class Scale { MICRODAP, FIT_WIDTH, FIXED_DP }
-
 @Immutable
 class Ui(val u: Float, val w: Float, val h: Float, val landscape: Boolean) {
-    val short: Boolean get() = !landscape && h < MIN_PORTRAIT_H
-    val compact: Boolean get() = landscape || short
-
     fun px(v: Float) = v * u
 
     fun fontPx(v: Float) = max(MIN_TEXT_PX, v * u).roundToInt().toFloat()
@@ -38,21 +33,13 @@ class Ui(val u: Float, val w: Float, val h: Float, val landscape: Boolean) {
         const val PORTRAIT_H = 480f
         const val LANDSCAPE_W = 480f
         const val LANDSCAPE_H = 272f
-        const val MIN_PORTRAIT_H = 420f
-        const val AP80_DPI = 295f
-        const val AP80_U_PX = 1.5f
-        const val DP_DPI = 160f
 
-        fun of(widthPx: Float, heightPx: Float, density: Float = 1f, scale: Scale = Scale.MICRODAP): Ui {
+        fun of(widthPx: Float, heightPx: Float): Ui {
             val landscape = widthPx > heightPx
-            val u = when (scale) {
-                Scale.MICRODAP -> if (landscape) {
-                    min(widthPx / LANDSCAPE_W, heightPx / LANDSCAPE_H)
-                } else {
-                    min(widthPx / PORTRAIT_W, heightPx / PORTRAIT_H)
-                }
-                Scale.FIT_WIDTH -> widthPx / if (landscape) LANDSCAPE_W else Tok.canvasW
-                Scale.FIXED_DP -> density * AP80_U_PX * DP_DPI / AP80_DPI
+            val u = if (landscape) {
+                min(widthPx / LANDSCAPE_W, heightPx / LANDSCAPE_H)
+            } else {
+                min(widthPx / PORTRAIT_W, heightPx / PORTRAIT_H)
             }
             return Ui(u, widthPx / u, heightPx / u, landscape)
         }

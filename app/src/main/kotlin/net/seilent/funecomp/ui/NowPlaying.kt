@@ -188,14 +188,13 @@ fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueu
     val titleBaseline = ui.px(ui.npTitleBaseline)
     val titleTop = titleBaseline - ui.px(Tok.capHeight * Roles.npTitle.size)
     val nextBaseline = ui.px(ui.npNextBaseline)
-    val nextCount = ui.npNextCount
-    val titleBottom = nextBaseline + ui.px(Tok.npNextPitch) * (nextCount - 1)
+    val titleBottom = nextBaseline + ui.px(Tok.npNextPitch) * (NP_NEXT_COUNT - 1)
     val ringY = ui.px(ui.npRingY)
     val duration = s.durationMs ?: 0L
     val position = seekFraction?.let { (it * duration).toLong() } ?: device.positionMs(now)
     val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
     val slot = s.slot
-    val upcoming = if (slot == null) emptyList() else (1..nextCount).mapNotNull { device.queue.items[slot + it]?.title }
+    val upcoming = if (slot == null) emptyList() else (1..NP_NEXT_COUNT).mapNotNull { device.queue.items[slot + it]?.title }
     LaunchedEffect(slot, device.queue.rev, s.queueRev) {
         if (slot == null || !device.has("queue")) return@LaunchedEffect
         val total = s.slots ?: return@LaunchedEffect

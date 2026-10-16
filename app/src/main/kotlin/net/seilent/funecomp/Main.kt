@@ -38,7 +38,6 @@ import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
-import net.seilent.funecomp.ui.Scale
 import net.seilent.funecomp.ui.Shell
 
 class Main : ComponentActivity() {
@@ -47,7 +46,6 @@ class Main : ComponentActivity() {
     private var granted by mutableStateOf(true)
     private var spec by mutableStateOf<String?>(null)
     private var sources by mutableStateOf(Sources())
-    private var scale by mutableStateOf(Scale.MICRODAP)
     private var shell by mutableStateOf(Shell())
     private var name by mutableStateOf<String?>(null)
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -92,7 +90,7 @@ class Main : ComponentActivity() {
         setContent {
             Box(Modifier.fillMaxSize().background(Black).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
                 val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board)
-                App(Remote.device, link, control, shell, sources, { saveSources(it) }, scale, Remote.backdrop, Remote.credits) { e ->
+                App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits) { e ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
                     } catch (_: ActivityNotFoundException) {
@@ -154,7 +152,6 @@ class Main : ComponentActivity() {
         name = deviceName(spec)
         if (!Remote.debuggable(this)) return
         intent?.getStringExtra(EXTRA_LINK)?.let { store(it) }
-        intent?.getStringExtra(EXTRA_SCALE)?.let { s -> Scale.entries.firstOrNull { it.name.equals(s, ignoreCase = true) }?.let { scale = it } }
         intent?.getStringExtra(EXTRA_PAGE)?.let { p -> debugPage(p)?.let { shell = Shell(Nav(it)) } }
     }
 
@@ -226,7 +223,6 @@ class Main : ComponentActivity() {
     companion object {
         const val EXTRA_LINK = "link"
         const val EXTRA_PAGE = "page"
-        const val EXTRA_SCALE = "scale"
         const val PREFS = "link"
         const val ART_PREFS = "art"
 

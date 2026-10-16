@@ -76,7 +76,7 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
         RoleText(
             number.toString(),
             Roles.overlayNumber,
-            Modifier.atBaseline(edge, ui.px(ui.overlayNumberBaseline)).scale(pop.value).testTag("overlay.number"),
+            Modifier.atBaseline(edge, ui.px(OVERLAY_NUMBER_BASELINE)).scale(pop.value).testTag("overlay.number"),
             alpha = Tok.overlayLit,
         )
         Box(Modifier.fillMaxSize().alpha(Tok.overlayDim)) {

@@ -227,7 +227,7 @@ fun ArtistDetail(ctx: Ctx, page: Page.Artist) {
             val idx = if (shuffle) 2 else 0
             var down by remember { mutableStateOf(false) }
             Box(
-                Modifier.at(ui.px(detailRingX(idx)) - ui.px(Tok.detailRingGap) / 2, ui.px(ui.detailRingTop) - ui.px(Tok.detailRingGap) / 2)
+                Modifier.at(ui.px(detailRingX(idx)) - ui.px(Tok.detailRingGap) / 2, ui.px(DETAIL_RING_TOP) - ui.px(Tok.detailRingGap) / 2)
                     .size(ui.px(Tok.detailRing + Tok.detailRingGap).dp())
                     .press({
                         ring = i
