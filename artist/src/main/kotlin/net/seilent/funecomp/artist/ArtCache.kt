@@ -44,6 +44,9 @@ class ArtCache(private val dir: File) {
     fun source(key: String): ByteArray? = src(key).takeIf { it.isFile }?.readBytes()
 
     @Synchronized
+    fun hasSource(key: String) = src(key).isFile
+
+    @Synchronized
     fun rendered(key: String, w: Int, h: Int): ByteArray? = jpg(key, w, h).takeIf { it.isFile }?.readBytes()
 
     @Synchronized

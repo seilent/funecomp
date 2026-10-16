@@ -10,6 +10,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asImageBitmap
 import net.seilent.funecomp.art.ArtWorker
 import net.seilent.funecomp.art.BitmapCodec
+import net.seilent.funecomp.art.Memo
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
@@ -42,7 +43,10 @@ object Remote : Control {
     private const val BACKDROP_SIDE = 2048
     private const val FETCH_W = 360
     private const val FETCH_H = 480
+    private const val FACES = 64
     private val codec = BitmapCodec { Log.i(TAG, it) }
+    private val decoded = Memo<BackdropArt>()
+    private val faces = Memo<Found>(FACES)
 
     var device by mutableStateOf(DeviceState())
         private set
@@ -94,6 +98,7 @@ object Remote : Control {
             update { DeviceState() }
             backdrop = null
             backdropFor = null
+            decoded.clear()
             phase = Phase.CONNECTING
             bye = null
             everLive = false
@@ -162,17 +167,23 @@ object Remote : Control {
     private fun showBackdrop(a: ArtistArt, final: Boolean): Boolean {
         val s = device.playback.state
         if (s.artists == backdropFor && backdrop != null) return true
-        val src = s.artists.withIndex().firstNotNullOfOrNull { (i, n) -> a.cached(n, s.mbids.getOrNull(i)) }
-        if (src == null) {
+        val e = s.artists.withIndex().firstNotNullOfOrNull { (i, n) -> a.cachedEntry(n, s.mbids.getOrNull(i)) }
+        if (e == null) {
             if (final) {
                 backdropFor = s.artists
                 backdrop = null
+                decoded.clear()
             }
             return false
         }
-        val (bmp, face) = codec.faced(src, BACKDROP_SIDE) ?: return false
+        val id = "${e.key}@${e.at}"
+        val art = decoded.get(id) {
+            a.source(e)?.let { src -> codec.faced(src, BACKDROP_SIDE) { detect -> faces.get(id) { Found(detect()) }?.at } }?.let { (bmp, face) ->
+                BackdropArt(bmp.asImageBitmap(), face?.let { it.first / bmp.width to it.second / bmp.height })
+            }
+        } ?: return false
         backdropFor = s.artists
-        backdrop = BackdropArt(bmp.asImageBitmap(), face?.let { it.first / bmp.width to it.second / bmp.height })
+        backdrop = art
         return true
     }
 
@@ -333,3 +344,5 @@ object Remote : Control {
         }
     }
 }
+
+private class Found(val at: Pair<Double, Double>?)

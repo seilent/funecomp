@@ -28,9 +28,9 @@ class BitmapCodec(private val log: (String) -> Unit = {}) : Codec {
         return BitmapPicture(scaled, log)
     }
 
-    fun faced(bytes: ByteArray, maxSide: Int): Pair<Bitmap, Pair<Double, Double>?>? {
+    fun faced(bytes: ByteArray, maxSide: Int, face: (() -> Pair<Double, Double>?) -> Pair<Double, Double>? = { it() }): Pair<Bitmap, Pair<Double, Double>?>? {
         val p = decode(bytes, maxSide) as? BitmapPicture ?: return null
-        return p.bmp to p.face()
+        return p.bmp to face { p.face() }
     }
 }
 

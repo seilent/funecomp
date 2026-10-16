@@ -64,11 +64,14 @@ class ArtistArt(
         return Art(jpeg, w, h, name.trim(), id, c.source, c.credit)
     }
 
-    fun cached(name: String, mbid: String?): ByteArray? {
+    fun cached(name: String, mbid: String?): ByteArray? = cachedEntry(name, mbid)?.let { source(it) }
+
+    fun cachedEntry(name: String, mbid: String?): ArtCache.Entry? {
         val key = (Names.mbid(mbid) ?: cache.mbid(name)?.mbid) ?: "name:${Names.fold(name)}"
-        cache.hit(key)?.takeIf { it.source in sources().enabled } ?: return null
-        return cache.source(key)
+        return cache.hit(key)?.takeIf { it.source in sources().enabled && cache.hasSource(key) }
     }
+
+    fun source(e: ArtCache.Entry): ByteArray? = cache.source(e.key)
 
     fun credits(): List<ArtCache.Entry> = cache.entries().filter { it.credit != null }
 

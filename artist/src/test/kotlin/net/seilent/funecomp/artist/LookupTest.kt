@@ -235,6 +235,10 @@ class LookupTest {
         assertNotNull(lookup.cached("Utada Hikaru", null))
         assertNotNull(lookup.cached("宇多田ヒカル", utada))
         assertNull(lookup.cached("Radiohead", null))
+        val e = lookup.cachedEntry("宇多田ヒカル", utada)!!
+        assertEquals(utada, e.key)
+        assertEquals(e.at, lookup.cachedEntry("Utada Hikaru", null)!!.at)
+        assertNull(lookup.cachedEntry("Radiohead", null))
         assertEquals(listOf("Utada Hikaru" to a.credit), lookup.credits().map { it.name to it.credit })
         assertEquals(n, http.calls.size)
     }
