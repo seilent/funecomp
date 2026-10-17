@@ -23,6 +23,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import kotlin.math.roundToInt
+import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.Crop
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.unit.IntSize
@@ -186,7 +187,14 @@ fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueu
         Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
         RoleText(s.artist ?: "", Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))
         RoleText(s.album ?: "", Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("np.album"))
-        if (artSide > 0f) Box(Modifier.at(artX, artY).size(artSide.dp()).background(Color(Tok.color_tile)).testTag("np.art"))
+        if (artSide > 0f) {
+            val track = s.track
+            val px = artSide.roundToInt()
+            LaunchedEffect(track, px, device.hello) { if (track != null) control.wantArt(Thumbs.NOW_PLAYING, track, px, s.album) }
+            Box(Modifier.at(artX, artY).size(artSide.dp()).background(Color(Tok.color_tile)).testTag("np.art")) {
+                track?.let { control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
+            }
+        }
         if (s.track != null) {
             val thick = ui.px(Tok.npProgressThick).dp()
             Box(Modifier.at(artX, progressY).size(artSide.dp(), thick).background(white(Tok.alpha_low)))

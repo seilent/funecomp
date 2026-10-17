@@ -11,11 +11,13 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import net.seilent.funecomp.art.ArtWorker
 import net.seilent.funecomp.art.BitmapCodec
 import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.art.Memo
+import net.seilent.funecomp.art.ThumbWorker
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
@@ -114,6 +116,7 @@ object Remote : Control {
     private val clock = ClockSync()
     private val timer = Executors.newSingleThreadScheduledExecutor { Thread(it, "clock").apply { isDaemon = true } }
     private var transition: ScheduledFuture<*>? = null
+    @Volatile private var thumbs: ThumbWorker? = null
 
     fun debuggable(context: Context) = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
@@ -124,6 +127,7 @@ object Remote : Control {
                 return true
             }
             drop()
+            thumbs(context)
             val connect = connector(context.applicationContext, spec)
             if (connect == null) {
                 Log.w(TAG, "link $spec not usable")
@@ -231,7 +235,20 @@ object Remote : Control {
         onPhase?.invoke()
     }
 
+    fun thumbs(context: Context): ThumbWorker = synchronized(lock) {
+        thumbs ?: ThumbWorker(File(context.applicationContext.filesDir, "thumb"), { link?.session }) { Log.i(TAG, it) }.also { thumbs = it }
+    }
+
+    override fun wantArt(slot: Int, track: Long, px: Int, album: String?) {
+        if (device.has("art")) thumbs?.want(slot, track, px, album)
+    }
+
+    override fun art(track: Long, px: Int): ImageBitmap? = thumbs?.image(track, px)
+
+    fun artFile(track: Long, px: Int): File? = thumbs?.file(track, px)
+
     fun artist(context: Context): ArtistArt = synchronized(lock) {
+        thumbs(context)
         artist ?: run {
             val c = context.applicationContext
             val version = c.packageManager.getPackageInfo(c.packageName, 0).versionName ?: "0"
@@ -465,6 +482,10 @@ object Remote : Control {
         override fun onHello(hello: HelloReply) {
             if (!live) return
             artKey = null
+            thumbs?.let { t ->
+                hello.libRev?.let { t.rev(it) }
+                t.session()
+            }
             update { it.withHello(hello) }
             synchronized(asked) { asked.clear() }
             bye = null
@@ -489,6 +510,7 @@ object Remote : Control {
             if (type == Msg.LIB || type == Msg.QUEUE) synchronized(asked) { asked.removeAll { k -> k.startsWith(if (type == Msg.LIB) "lib " else "queue ") } }
             if (type != Msg.STATE) return
             val s = State.from(body)
+            s.libRev?.let { r -> if (r != old.libRev) thumbs?.rev(r) }
             Scrobbles.state(s, System.currentTimeMillis())
             onState?.invoke()
             Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB}")

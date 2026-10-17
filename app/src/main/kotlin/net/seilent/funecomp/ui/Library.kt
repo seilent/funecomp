@@ -1,6 +1,7 @@
 package net.seilent.funecomp.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,7 +18,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import kotlin.math.roundToInt
+import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.proto.LibRow
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
@@ -260,7 +264,12 @@ fun AlbumDetail(ctx: Ctx, page: Page.Album) {
         val textW = ui.px(ui.w - Tok.edge) - textX
         RoleText(page.artist, Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW))
         RoleText(page.title, Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("album.title"))
-        Box(Modifier.at(ui.px(Tok.albumArtX), ui.px(ui.albumArtTop)).size(ui.px(Tok.tileL).dp()).background(Color(Tok.color_tile)))
+        val track = page.key.toULongOrNull()?.toLong()
+        val px = ui.px(Tok.tileL).roundToInt()
+        LaunchedEffect(track, px, ctx.device.hello) { if (track != null) ctx.control.wantArt(Thumbs.TILE, track, px, page.title) }
+        Box(Modifier.at(ui.px(Tok.albumArtX), ui.px(ui.albumArtTop)).size(ui.px(Tok.tileL).dp()).background(Color(Tok.color_tile)).testTag("album.art")) {
+            track?.let { ctx.control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("album.art.image"), contentScale = ContentScale.Crop) }
+        }
         Status(ctx.device)
         BackRing { ctx.nav.pop() }
     }

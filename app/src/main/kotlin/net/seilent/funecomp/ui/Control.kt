@@ -1,6 +1,7 @@
 package net.seilent.funecomp.ui
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.graphics.ImageBitmap
 import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.proto.Profile
@@ -51,6 +52,8 @@ interface Control {
     fun autoEqFind(query: String, done: (List<AutoEqIndex.Entry>?) -> Unit) {}
     fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) {}
     fun mediaControls(on: Boolean) {}
+    fun wantArt(slot: Int, track: Long, px: Int, album: String?) {}
+    fun art(track: Long, px: Int): ImageBitmap? = null
     fun firmwareCheck() {}
     fun firmwareDownload() {}
     fun firmwareCancel() {}

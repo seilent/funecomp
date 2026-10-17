@@ -62,6 +62,7 @@ class Shot(
     val credits: List<ArtCache.Entry> = emptyList(),
     val scrobble: ScrobbleView = ScrobbleView(),
     val firmware: FirmwareView = FirmwareView(),
+    val art: Boolean = false,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -118,6 +119,8 @@ val SHOTS = listOf(
     Shot("home", pages = HOME, prep = ::playing),
     Shot("nowplaying", pages = NP, prep = ::playing),
     Shot("nowplaying-v1", board = "v1", pages = NP, prep = ::playing),
+    Shot("nowplaying-art", pages = NP, prep = ::playing, art = true),
+    Shot("nowplaying-art-v1", board = "v1", pages = NP, prep = ::playing, art = true),
     Shot("nowplaying-backdrop", pages = NP, prep = ::playing, backdrop = true),
     Shot("nowplaying-overlay", pages = NP, prep = ::playing, after = 450) { it.overlay.show() },
     Shot("nowplaying-linkdown", pages = NP, prep = ::playing, link = LinkView(Phase.DOWN, "AP80", everLive = true)),
@@ -143,6 +146,7 @@ val SHOTS = listOf(
     Shot("artist", pages = HOME + Page.Music + Page.Artist("Utada Hikaru")),
     Shot("album-noartist", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "")),
     Shot("album", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru"), prep = ::playing),
+    Shot("album-art", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru"), prep = ::playing, art = true),
     Shot("settings-output", pages = HOME + Page.Settings),
     Shot("settings-output-v1", board = "v1", pages = HOME + Page.Settings),
     Shot("settings-edit", pages = HOME + Page.Settings) { rule.onNodeWithTag("set.volumeStep").performClick() },
@@ -260,6 +264,22 @@ class Shots {
         rule.waitForIdle()
     }
 
+    private val covers: File by lazy {
+        val dir = kotlin.io.path.createTempDirectory("covers").toFile()
+        val lib = net.seilent.funecomp.sim.Library.synthetic()
+        lib.tracks.mapNotNull { lib.albumKey(it.id) }.distinct().forEachIndexed { i, key ->
+            val img = java.awt.image.BufferedImage(600, 600, java.awt.image.BufferedImage.TYPE_INT_RGB)
+            val g = img.createGraphics()
+            g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color.getHSBColor(i * 0.13f, 0.6f, 0.8f), 600f, 600f, java.awt.Color.getHSBColor(i * 0.13f + 0.5f, 0.7f, 0.3f))
+            g.fillRect(0, 0, 600, 600)
+            g.color = java.awt.Color(255, 255, 255, 90)
+            g.fillOval(150, 150, 300, 300)
+            g.dispose()
+            javax.imageio.ImageIO.write(img, "jpg", File(dir, "$key.jpg"))
+        }
+        dir
+    }
+
     private val backdrop: ImageBitmap? by lazy {
         System.getProperty("shots.backdrop")?.let { File(it) }?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
     }
@@ -283,7 +303,7 @@ class Shots {
             for (shot in SHOTS) {
                 if (only.isNotEmpty() && only.split(',').none { "${shot.name}-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue
-                val c = SimControl(shot.board)
+                val c = SimControl(shot.board, artDir = if (shot.art) covers else null)
                 shot.prep(c)
                 control = c
                 shell = Shell(Nav(shot.pages))

@@ -1,9 +1,15 @@
 package net.seilent.funecomp
 
+import android.graphics.BitmapFactory
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.AutoEqIndex
+import net.seilent.funecomp.proto.ArtGetReply
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
@@ -21,9 +27,11 @@ import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LIB_PAGE
 import net.seilent.funecomp.ui.PickedFile
+import java.io.ByteArrayOutputStream
+import java.io.File
 
-class SimControl(board: String, lib: Library = Library.synthetic(), private val now: () -> Long = { 0L }) : Control {
-    val sim = Device(Options(Board.of(board)), lib, now)
+class SimControl(board: String, lib: Library = Library.synthetic(), private val now: () -> Long = { 0L }, artDir: File? = null) : Control {
+    val sim = Device(Options(Board.of(board), artDir = artDir), lib, now)
     var device by mutableStateOf(DeviceState())
     val sent = ArrayList<String>()
     val failed = ArrayList<Int>()
@@ -126,6 +134,28 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
     }
 
     override fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) = done(eqText)
+
+    val arts = mutableStateMapOf<String, ImageBitmap>()
+    val wanted = ArrayList<String>()
+
+    override fun wantArt(slot: Int, track: Long, px: Int, album: String?) {
+        val p = Thumbs.bucket(px)
+        val key = Thumbs.key(track, p)
+        wanted += "$slot $key"
+        if (key in arts) return
+        val out = ByteArrayOutputStream()
+        var total = Long.MAX_VALUE
+        while (out.size() < total) {
+            val a = req(Msg.ART_GET, Req.artGet(track, p, out.size().toLong())) as? Answer.Ok ?: return
+            val r = ArtGetReply.from(Node.decode("ART_GET.reply", a.payload))
+            r.total?.let { total = it }
+            val d = r.data?.takeIf { it.isNotEmpty() } ?: return
+            out.write(d)
+        }
+        BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size())?.let { arts[key] = it.asImageBitmap() }
+    }
+
+    override fun art(track: Long, px: Int): ImageBitmap? = arts[Thumbs.key(track, Thumbs.bucket(px))]
 
     val firmware = ArrayList<String>()
 
