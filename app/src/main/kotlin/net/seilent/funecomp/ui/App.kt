@@ -63,6 +63,7 @@ fun App(
     art: BackdropArt? = null,
     credits: List<ArtCache.Entry> = emptyList(),
     onCredit: (ArtCache.Entry) -> Unit = {},
+    scrobble: ScrobbleView = ScrobbleView(),
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Black)) {
         val ui = Ui.of(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
@@ -100,8 +101,9 @@ fun App(
                     Page.Queue -> Queue(ctx)
                     Page.Playlists -> Playlists(ctx)
                     Page.Settings -> SettingsPage(ctx)
-                    Page.Connection -> ConnectionPage(ctx, link)
+                    Page.Connection -> ConnectionPage(ctx, link, scrobble)
                     Page.ArtistArt -> ArtistArtPage(ctx, sources, onSources, credits, onCredit)
+                    Page.Scrobbling -> ScrobblingPage(ctx, scrobble)
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
                     is Page.Eq -> EqPage(ctx, page)

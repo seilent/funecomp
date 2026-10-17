@@ -198,6 +198,7 @@ object Remote : Control {
                 online = true
                 breaker.network()
                 art?.want()
+                Scrobbles.flush()
             }
 
             override fun onLost(network: Network) {
@@ -430,6 +431,7 @@ object Remote : Control {
             bye = null
             everLive = true
             board = hello.board
+            Scrobbles.session()
             phase(Phase.LIVE)
             wake?.drop(ATTEMPT)
             Log.i(TAG, "hello board=${hello.board} version=${hello.version} idle=${hello.idleMs} busy=${hello.busyMs}")
@@ -446,6 +448,7 @@ object Remote : Control {
             if (type == Msg.LIB || type == Msg.QUEUE) synchronized(asked) { asked.removeAll { k -> k.startsWith(if (type == Msg.LIB) "lib " else "queue ") } }
             if (type != Msg.STATE) return
             val s = State.from(body)
+            Scrobbles.state(s, System.currentTimeMillis())
             Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
             val key = listOf(s.artists, s.output, s.queueRev, s.slot)

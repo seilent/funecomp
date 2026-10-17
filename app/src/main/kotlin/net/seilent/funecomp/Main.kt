@@ -33,6 +33,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
+import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.ui.App
@@ -109,6 +110,12 @@ class Main : ComponentActivity() {
             batteryAsked = true
         }
 
+        override fun scrobble(accounts: Accounts) = Scrobbles.set(accounts)
+
+        override fun lastFmLogin(user: String, password: String) = Scrobbles.lastFmLogin(user, password)
+
+        override fun listenBrainzToken(token: String) = Scrobbles.listenBrainzToken(token)
+
         override fun askPermission() {
             if (asked >= 2) {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
@@ -124,6 +131,7 @@ class Main : ComponentActivity() {
         super.onCreate(savedInstanceState)
         sources = sources(this)
         Remote.artist(this)
+        Scrobbles.init(this)
         Remote.logExit(this)
         batteryAsked = prefs().getBoolean(BATTERY_ASKED, false)
         remember(intent)
@@ -132,12 +140,12 @@ class Main : ComponentActivity() {
             Box(Modifier.fillMaxSize().background(Black).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
                 val b = battery
                 val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, b != null && b != Battery.UNRESTRICTED && !batteryAsked)
-                App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits) { e ->
+                App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits, { e ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
                     } catch (_: ActivityNotFoundException) {
                     }
-                }
+                }, Scrobbles.view)
             }
         }
     }
@@ -228,6 +236,7 @@ class Main : ComponentActivity() {
             "eq" -> base + Page.Settings + Page.Eq(0)
             "connection" -> base + Page.Connection
             "art" -> base + Page.ArtistArt
+            "scrobbling" -> base + Page.Connection + Page.Scrobbling
             else -> when {
                 name.startsWith("artist:") -> base + Page.Music + Page.Artist(name.removePrefix("artist:"))
                 name.startsWith("album:") -> {

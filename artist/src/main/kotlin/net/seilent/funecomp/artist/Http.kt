@@ -12,6 +12,8 @@ class Response(val code: Int, val body: ByteArray, val headers: Map<String, Stri
 
 fun interface Http {
     fun get(url: String, headers: Map<String, String>): Response
+
+    fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = throw IOException("no post: $url")
 }
 
 class HttpRun(private val onCall: (String) -> Unit = {}) {
@@ -55,7 +57,11 @@ class HttpRun(private val onCall: (String) -> Unit = {}) {
 }
 
 class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int = 15_000) : Http {
-    override fun get(url: String, headers: Map<String, String>): Response {
+    override fun get(url: String, headers: Map<String, String>): Response = send(url, headers, null)
+
+    override fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = send(url, headers, body)
+
+    private fun send(url: String, headers: Map<String, String>, body: ByteArray?): Response {
         val run = HttpRun.current.get()
         val c = URI(url).toURL().openConnection() as HttpURLConnection
         run?.add(c)
@@ -64,6 +70,12 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
             c.readTimeout = timeoutMs
             c.instanceFollowRedirects = true
             headers.forEach { (k, v) -> c.setRequestProperty(k, v) }
+            if (body != null) {
+                c.requestMethod = "POST"
+                c.doOutput = true
+                c.setFixedLengthStreamingMode(body.size)
+                c.outputStream.use { it.write(body) }
+            }
             val code = c.responseCode
             val out = ByteArrayOutputStream()
             (if (code >= 400) c.errorStream else c.inputStream)?.use { input ->

@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
+import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.artist.Sources
@@ -34,6 +35,7 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.ScrobbleView
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.flatBand
 import org.junit.Assume.assumeTrue
@@ -55,6 +57,7 @@ class Shot(
     val backdrop: Boolean = false,
     val after: Long = 1000,
     val credits: List<ArtCache.Entry> = emptyList(),
+    val scrobble: ScrobbleView = ScrobbleView(),
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -96,6 +99,8 @@ private val CREDITS = listOf(
     ArtCache.Entry("a74b1b7f-71a5-4011-9441-d0b5e4122711", "Radiohead", null, "commons", Credit("Raph_PH", "CC BY 4.0", "https://commons.wikimedia.org/"), "", 0),
     ArtCache.Entry("b539e453-c4fe-47e3-8a07-8517eac74429", "Utada Hikaru", null, "commons", Credit("Goldnrush Podcast", "CC BY 4.0", "https://commons.wikimedia.org/"), "", 0),
 )
+
+private val SCROBBLE = ScrobbleView(Accounts(true, "0123456789abcdef0123456789abcdef", "secret", "seilent", "session", true, "token", "seilent"), queued = 3)
 
 val SHOTS = listOf(
     Shot("home", pages = HOME, prep = ::playing),
@@ -171,6 +176,10 @@ val SHOTS = listOf(
     Shot("connection-stopped", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "V1", battery = Battery.UNRESTRICTED), prep = { it.device = DeviceState() }),
     Shot("background", board = "v1", pages = NP, prep = ::playing, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.OPTIMIZED, askBattery = true)),
     Shot("artistart", pages = HOME + Page.ArtistArt),
+    Shot("scrobbling", pages = HOME + Page.Connection + Page.Scrobbling),
+    Shot("scrobbling-set", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE),
+    Shot("scrobbling-failed", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE.copy(accounts = SCROBBLE.accounts.copy(lastFmSession = ""), lastFm = "sign in failed", listenBrainz = "invalid")),
+    Shot("scrobbling-entry", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE) { rule.onNodeWithTag("scrobble.key").performClick() },
     Shot("artistart-credits", pages = HOME + Page.ArtistArt, credits = CREDITS) {
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.credit.2"))
@@ -209,7 +218,7 @@ class Shots {
             val c = control ?: return@setContent
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
-                    App(c.device, f.first.link, c, shell, Sources(), {}, if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits)
+                    App(c.device, f.first.link, c, shell, Sources(), {}, if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble)
                 }
             }
         }

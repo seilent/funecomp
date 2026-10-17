@@ -1,6 +1,7 @@
 package net.seilent.funecomp.ui
 
 import androidx.compose.runtime.Immutable
+import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.proto.Profile
 
 enum class Phase { NONE, CONNECTING, LIVE, DOWN, STOPPED }
@@ -41,6 +42,9 @@ interface Control {
     fun disconnect() {}
     fun allowBackground() {}
     fun backgroundLater() {}
+    fun scrobble(accounts: Accounts) {}
+    fun lastFmLogin(user: String, password: String) {}
+    fun listenBrainzToken(token: String) {}
 }
 
 const val LIB_PAGE = 100L

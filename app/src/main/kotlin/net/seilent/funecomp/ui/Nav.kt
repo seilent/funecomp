@@ -34,6 +34,7 @@ sealed interface Page {
     data object Settings : Page
     data object Connection : Page
     data object ArtistArt : Page
+    data object Scrobbling : Page
     data class Artist(val name: String) : Page
     data class Album(val key: String, val title: String, val artist: String) : Page
     data class Eq(val output: Int) : Page
