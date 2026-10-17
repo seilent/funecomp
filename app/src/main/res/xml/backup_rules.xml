@@ -3,4 +3,5 @@
     <exclude domain="sharedpref" path="art.xml" />
     <exclude domain="sharedpref" path="scrobble.xml" />
     <exclude domain="file" path="scrobble/" />
+    <exclude domain="file" path="lyrics/" />
 </full-backup-content>

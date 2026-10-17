@@ -13,6 +13,7 @@ import net.seilent.funecomp.sim.Battery
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
+import net.seilent.funecomp.state.LyricsPlan
 import net.seilent.funecomp.ui.Phase
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -49,8 +50,10 @@ class BackgroundTest {
         sims.forEach { it.stop() }
     }
 
-    private fun sim(battery: Battery = Battery(87, 87, 0)): String {
-        val s = Sim(Options(Board.of("v1"), battery = battery))
+    private val logs = java.util.concurrent.CopyOnWriteArrayList<String>()
+
+    private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList()): String {
+        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, log = { logs += it }))
         sims += s
         return "tcp:127.0.0.1:${s.listen(0)}"
     }
@@ -150,6 +153,72 @@ class BackgroundTest {
         assertEquals("dap", nm.getNotification(2)!!.channelId)
         waitFor { text() == "connected, dap 14 %" }
         assertEquals("v1 battery 15 %", nm.getNotification(2)!!.extras.getCharSequence("android.title")?.toString())
+        c.destroy()
+    }
+
+    @Test
+    fun lyricsArePutOncePerTrackAcrossADrop() {
+        val dir = kotlin.io.path.createTempDirectory("lrc").toFile()
+        val calls = java.util.Collections.synchronizedList(ArrayList<String>())
+        Lyrics.init(app, net.seilent.funecomp.artist.Http { url, _ ->
+            calls += url
+            net.seilent.funecomp.artist.Response(200, "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}".toByteArray())
+        })
+        Lyrics.set(true)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(lrcDir = dir))).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE }
+        Remote.queuePage(0)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+        waitFor { logs.count { it.startsWith("stored lrc") } >= 3 }
+        Thread.sleep(1500)
+        val first = logs.filter { it.startsWith("stored lrc") }.toSet()
+        assertTrue(first.size in 3..1 + LyricsPlan.AHEAD)
+        assertEquals(first.size, calls.size)
+        assertEquals(first.size, logs.count { it.startsWith("stored lrc") })
+        sims.forEach { it.stop() }
+        waitFor { Remote.phase != Phase.LIVE }
+        logs.clear()
+        c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
+        c.destroy()
+        val again = Robolectric.buildService(LinkService::class.java, startIntent(sim(lrcDir = dir))).create().startCommand(0, 3)
+        waitFor { Remote.phase == Phase.LIVE }
+        Remote.queuePage(0)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+        Thread.sleep(1500)
+        shadowOf(Looper.getMainLooper()).idle()
+        val second = logs.filter { it.startsWith("stored lrc") }
+        assertEquals(second.toSet().size, second.size)
+        assertTrue(second.none { it in first })
+        Lyrics.set(false)
+        again.destroy()
+    }
+
+    @Test
+    fun aRefusedLyricsPutIsNotSentAgain() {
+        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ ->
+            net.seilent.funecomp.artist.Response(200, "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}".toByteArray())
+        })
+        Lyrics.set(true)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("refuse=LRC_PUT")))).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE }
+        Remote.queuePage(0)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+        val end = System.currentTimeMillis() + 30_000
+        while (logs.count { it.contains("rx LRC_PUT") } < 1 + LyricsPlan.AHEAD) {
+            check(System.currentTimeMillis() < end) { "puts: ${logs.count { it.contains("rx LRC_PUT") }}" }
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+        }
+        Thread.sleep(500)
+        val first = logs.count { it.contains("rx LRC_PUT") }
+        assertEquals(1 + LyricsPlan.AHEAD, first)
+        repeat(3) {
+            Lyrics.poke()
+            Remote.queuePage(0)
+            Thread.sleep(300)
+        }
+        assertEquals(first, logs.count { it.contains("rx LRC_PUT") })
+        Lyrics.set(false)
         c.destroy()
     }
 

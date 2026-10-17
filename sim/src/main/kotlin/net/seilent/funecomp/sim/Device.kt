@@ -118,6 +118,10 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private val arts = HashMap<Pair<Long, Int>, Art>()
     private var upd: Upd? = null
 
+    init {
+        opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f -> f.name.removeSuffix(".lrc").toULongOrNull()?.let { lyrics += it.toLong() } }
+    }
+
     class Art(val crc: Long, val w: Int, val h: Int, val bytes: ByteArray, val source: Pair<Long, Long>)
     class Upd(val board: String, val size: Long, val md5: String, val part: File)
     @Volatile var droppedData = 0

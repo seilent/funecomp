@@ -21,6 +21,7 @@ data class LinkView(
     val battery: Battery? = null,
     val askBattery: Boolean = false,
     val mediaControls: Boolean = true,
+    val lyrics: Boolean = false,
 )
 
 @Immutable
@@ -53,6 +54,7 @@ interface Control {
     fun autoEqFind(query: String, done: (List<AutoEqIndex.Entry>?) -> Unit) {}
     fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) {}
     fun mediaControls(on: Boolean) {}
+    fun lyrics(on: Boolean) {}
     fun wantArt(slot: Int, track: Long, px: Int, album: String?) {}
     fun art(track: Long, px: Int): ImageBitmap? = null
     fun firmwareCheck() {}

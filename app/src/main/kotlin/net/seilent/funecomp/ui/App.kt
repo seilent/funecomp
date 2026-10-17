@@ -106,6 +106,7 @@ fun App(
                     Page.ArtistArt -> ArtistArtPage(ctx, sources, onSources, credits, onCredit)
                     Page.Scrobbling -> ScrobblingPage(ctx, scrobble)
                     Page.Firmware -> FirmwarePage(ctx, firmware)
+                    Page.Lyrics -> LyricsPage(ctx, link.lyrics)
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
                     is Page.Eq -> EqPage(ctx, page)

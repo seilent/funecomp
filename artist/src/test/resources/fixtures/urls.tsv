@@ -60,3 +60,8 @@ https://musicbrainz.org/ws/2/artist/?query=%E5%AE%87%E5%A4%9A%E7%94%B0%E3%83%92%
 https://musicbrainz.org/ws/2/artist/?query=Tenjin%20Kotone&fmt=json&limit=10	nm-f41807d1fe79.json
 https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/README.md	aeq-index.md
 https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/over-ear/Sennheiser%20HD%20650/Sennheiser%20HD%20650%20ParametricEQ.txt	aeq-hd650.txt
+https://lrclib.net/api/get?track_name=Airbag&artist_name=Radiohead&album_name=OK%20Computer&duration=284	lr-dbc1b0a54847.json
+https://lrclib.net/api/get?track_name=Airbag&artist_name=Radiohead	lr-b633e8bea7cf.json
+https://lrclib.net/api/get?track_name=Nope%20Not%20A%20Song&artist_name=Nobody%20Here&duration=100	code:404
+https://lrclib.net/api/get?track_name=Radio%20%28Demo%20Taped%20Remix%29&artist_name=Sylvan%20Esso%2C%20Demo%20Taped&album_name=Demo%20Taped%20Remixes&duration=183	lr-7f16ed745014.json
+https://lrclib.net/api/get?track_name=Durga%20%28Instrumental%29&artist_name=Instrumental&album_name=Instrumental&duration=721	lr-ff8727131afe.json

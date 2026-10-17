@@ -224,6 +224,8 @@ val SHOTS = listOf(
     Shot("firmware-mismatch", board = "v1", pages = FW, firmware = FOUND.copy(info = "checksum mismatch")),
     Shot("firmware-ready", board = "v1", pages = FW, firmware = FOUND.copy(ready = true)) { rule.onNodeWithTag("fw.release").performClick() },
     Shot("firmware-picked", board = "v1", pages = FW) { rule.onNodeWithTag("fw.pick").performClick() },
+    Shot("lyrics", pages = HOME + Page.Connection + Page.Lyrics),
+    Shot("lyrics-on", pages = HOME + Page.Connection + Page.Lyrics, link = LinkView(Phase.LIVE, "AP80", everLive = true, lyrics = true)),
     Shot("connection", pages = HOME + Page.Connection),
     Shot("connection-refused", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused)),
     Shot("connection-permission", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "AP80", permission = false)),

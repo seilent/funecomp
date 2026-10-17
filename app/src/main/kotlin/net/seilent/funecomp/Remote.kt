@@ -36,6 +36,7 @@ import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.SetReply
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.state.ClockSync
 import net.seilent.funecomp.state.DeviceState
@@ -214,6 +215,7 @@ object Remote : Control {
             override fun onAvailable(network: Network) {
                 online = true
                 breaker.network()
+                Lyrics.network()
                 art?.want()
                 Scrobbles.flush()
             }
@@ -377,6 +379,21 @@ object Remote : Control {
     override fun volumePercent(pct: Int, done: () -> Unit) =
         send(Msg.VOLUME, Req.volume(percent = pct), "volume percent $pct", ok = { done() }, fail = done)
 
+    fun lrcPut(track: Long, libRev: Long, text: ByteArray, crc: Long, done: (Int?) -> Unit) {
+        val s = link?.session ?: return done(-1)
+        s.request(Msg.LRC_PUT, Req.lrcPut(track, libRev, text, crc)) { r ->
+            Log.i(TAG, "lrc put ${java.lang.Long.toUnsignedString(track)} ${text.size} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
+            done(
+                when (r) {
+                    is Session.Result.Ok -> null
+                    is Session.Result.Failed -> r.error.code
+                    is Session.Result.Unsupported -> Err.unknown
+                    else -> -1
+                },
+            )
+        }
+    }
+
     fun volumeSet(n: Int) = send(Msg.VOLUME, Req.volume(set = n), "volume set $n")
 
     override fun libGet(view: Int, parent: String, offset: Long) {
@@ -501,6 +518,7 @@ object Remote : Control {
             board = hello.board
             Scrobbles.session()
             Firmwares.hello(hello.board, hello.version)
+            Lyrics.session()
             if (synchronized(clock) { clock.hello(hello) }) sendClock("hello")
             phase(Phase.LIVE)
             wake?.drop(ATTEMPT)
@@ -515,6 +533,7 @@ object Remote : Control {
                 old = it.playback.state
                 it.reduce(type, body, now)
             }
+            if (type == Msg.STATE || type == Msg.QUEUE) Lyrics.poke()
             if (type == Msg.LIB || type == Msg.QUEUE) synchronized(asked) { asked.removeAll { k -> k.startsWith(if (type == Msg.LIB) "lib " else "queue ") } }
             if (type != Msg.STATE) return
             val s = State.from(body)
@@ -546,6 +565,7 @@ object Remote : Control {
             update { it.copy(hello = null) }
             art?.cancel()
             clockOff()
+            Lyrics.session()
             phase(Phase.DOWN)
             onDrop?.invoke()
             wake?.drop(ATTEMPT)

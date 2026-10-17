@@ -153,6 +153,8 @@ class Main : ComponentActivity() {
             if (Remote.phase != Phase.NONE) startService(Intent(this@Main, LinkService::class.java).setAction(LinkService.ACTION_MEDIA))
         }
 
+        override fun lyrics(on: Boolean) = Lyrics.set(on)
+
         override fun firmwareCheck() = Firmwares.check()
 
         override fun firmwareDownload() = Firmwares.download()
@@ -186,6 +188,7 @@ class Main : ComponentActivity() {
         sources = sources(this)
         Remote.artist(this)
         Scrobbles.init(this)
+        Lyrics.init(this)
         AutoEqs.init(this)
         Firmwares.init(this)
         Remote.logExit(this)
@@ -196,7 +199,7 @@ class Main : ComponentActivity() {
         setContent {
             Box(Modifier.fillMaxSize().background(Black).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
                 val b = battery
-                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, b != null && b != Battery.UNRESTRICTED && !batteryAsked, mediaControls)
+                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, b != null && b != Battery.UNRESTRICTED && !batteryAsked, mediaControls, Lyrics.on)
                 App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits, { e ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
@@ -295,6 +298,7 @@ class Main : ComponentActivity() {
             "art" -> base + Page.ArtistArt
             "scrobbling" -> base + Page.Connection + Page.Scrobbling
             "firmware" -> base + Page.Connection + Page.Firmware
+            "lyrics" -> base + Page.Connection + Page.Lyrics
             else -> when {
                 name.startsWith("artist:") -> base + Page.Music + Page.Artist(name.removePrefix("artist:"))
                 name.startsWith("album:") -> {

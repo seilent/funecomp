@@ -113,6 +113,7 @@ class Api(
     private val tries: Int = 4,
     private val backoffMs: Long = 2000,
     private val maxRetryAfterMs: Long = 60_000,
+    private val jitter: () -> Double = { 0.0 },
 ) {
     fun get(url: String): Response? {
         val u = if (url.startsWith("http://")) "https://" + url.removePrefix("http://") else url
@@ -126,7 +127,7 @@ class Api(
                 r.code == 503 || r.code == 429 -> {
                     val after = r.headers["retry-after"]?.trim()?.toLongOrNull()?.times(1000)
                     if (after != null && after > maxRetryAfterMs) throw IOException("retry after ${after / 1000} s: $u")
-                    limiter.backoff(after ?: (backoffMs shl attempt))
+                    limiter.backoff(((after ?: (backoffMs shl attempt)) * (1.0 + jitter())).toLong())
                 }
                 r.code == 401 || r.code == 403 -> throw IOException("http ${r.code}: $u")
                 r.code in 100..499 -> return null
