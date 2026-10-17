@@ -119,6 +119,7 @@ val SHOTS = listOf(
     Shot("home", pages = HOME, prep = ::playing),
     Shot("nowplaying", pages = NP, prep = ::playing),
     Shot("nowplaying-v1", board = "v1", pages = NP, prep = ::playing),
+    Shot("nowplaying-last", pages = NP, prep = { it.queueOp(Enums.QueueCmd.playAt, slot = it.device.playback.state.slots!! - 1) }),
     Shot("nowplaying-art", pages = NP, prep = ::playing, art = true),
     Shot("nowplaying-art-v1", board = "v1", pages = NP, prep = ::playing, art = true),
     Shot("nowplaying-backdrop", pages = NP, prep = ::playing, backdrop = true),

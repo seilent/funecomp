@@ -262,8 +262,8 @@ fun AlbumDetail(ctx: Ctx, page: Page.Album) {
         Box(Modifier.at(0f, 0f).size(ui.px(ui.w).dp(), ui.px(ui.albumRowsTop).dp()).background(Black).press({}))
         val textX = ui.px(ui.albumTextX)
         val textW = ui.px(ui.w - Tok.edge) - textX
-        RoleText(page.artist, Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW))
-        RoleText(page.title, Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("album.title"))
+        RoleText(page.artist, Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.albumArtistBaseline), textW))
+        RoleText(page.title, Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.albumTitleBaseline), textW).testTag("album.title"))
         val track = page.key.toULongOrNull()?.toLong()
         val px = ui.px(Tok.tileL).roundToInt()
         LaunchedEffect(track, px, ctx.device.hello) { if (track != null) ctx.control.wantArt(Thumbs.TILE, track, px, page.title) }

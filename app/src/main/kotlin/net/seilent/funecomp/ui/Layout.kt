@@ -7,11 +7,11 @@ private const val PIVOT_TOP = 74f
 private const val PIVOT_BOTTOM = 106f
 private const val PIVOT_BASELINE_DROP = 21f
 private const val CONTENT_TOP = 128f
-private const val NP_TEXT_TOP = 117f
-private const val NP_ALBUM_BASELINE = 141f
 private const val NP_ART_TOP = 155f
 private const val NP_ART_MAX = 168f
 private const val NP_ART_STACK = 311f
+private const val NP_ALBUM_RISE = 14f
+private const val NP_ARTIST_RISE = 24f
 private const val NP_PROGRESS_FROM_BOTTOM = 156f
 private const val NP_TITLE_FROM_BOTTOM = 118f
 const val NP_NEXT_COUNT = 3
@@ -25,6 +25,8 @@ private const val NP_TITLE_LANDSCAPE = 116f
 private const val NP_NEXT_LANDSCAPE = 140f
 private const val NP_PROGRESS_GAP_LANDSCAPE = 8f
 const val DETAIL_RING_TOP = 150f
+private const val ALBUM_ARTIST_BASELINE = 117f
+private const val ALBUM_TITLE_BASELINE = 141f
 private const val DETAIL_LABEL_BASELINE = 200f
 private const val DETAIL_COLUMN = 200f
 private const val DETAIL_COLUMN_RIGHT = 216f
@@ -41,9 +43,9 @@ val Ui.pivotBaseline get() = pivotTop + PIVOT_BASELINE_DROP
 val Ui.contentTop get() = if (landscape) Tok.contentTop else CONTENT_TOP
 
 val Ui.npTextX get() = if (landscape) NP_COLUMN_RIGHT else Tok.edge
-val Ui.npArtistBaseline get() = if (landscape) NP_ARTIST_LANDSCAPE else NP_TEXT_TOP
-val Ui.npAlbumBaseline get() = if (landscape) NP_ALBUM_LANDSCAPE else NP_ALBUM_BASELINE
-val Ui.npArtTop get() = if (landscape) NP_ART_TOP_LANDSCAPE else NP_ART_TOP
+val Ui.npArtistBaseline get() = if (landscape) NP_ARTIST_LANDSCAPE else npAlbumBaseline - NP_ARTIST_RISE
+val Ui.npAlbumBaseline get() = if (landscape) NP_ALBUM_LANDSCAPE else npArtTop - NP_ALBUM_RISE
+val Ui.npArtTop get() = if (landscape) NP_ART_TOP_LANDSCAPE else npProgressY - npArt
 val Ui.npProgressY get() = if (landscape) NP_ART_TOP_LANDSCAPE + npArt + NP_PROGRESS_GAP_LANDSCAPE else h - NP_PROGRESS_FROM_BOTTOM
 val Ui.npArt get() = if (landscape) {
     min(NP_ART_MAX, h - NP_ART_LANDSCAPE_STACK)
@@ -69,6 +71,8 @@ val Ui.detailListX get() = if (landscape) DETAIL_COLUMN_RIGHT - Tok.hubEdge else
 
 fun detailRingX(index: Int) = Tok.hubEdge + index * (Tok.detailRing + Tok.detailRingGap)
 
+val Ui.albumArtistBaseline get() = if (landscape) NP_ARTIST_LANDSCAPE else ALBUM_ARTIST_BASELINE
+val Ui.albumTitleBaseline get() = if (landscape) NP_ALBUM_LANDSCAPE else ALBUM_TITLE_BASELINE
 val Ui.albumArtTop get() = if (landscape) contentTop else NP_ART_TOP
 val Ui.albumRowsTop get() = if (landscape) contentTop else albumArtTop + Tok.tileL + Tok.albumRowsGap
 val Ui.albumRowsX get() = if (landscape) NP_COLUMN_RIGHT - Tok.hubEdge else 0f

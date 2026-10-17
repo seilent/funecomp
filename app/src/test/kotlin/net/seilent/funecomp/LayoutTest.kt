@@ -4,13 +4,20 @@ import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.ui.Ui
+import net.seilent.funecomp.ui.albumArtTop
+import net.seilent.funecomp.ui.albumArtistBaseline
+import net.seilent.funecomp.ui.albumTitleBaseline
 import net.seilent.funecomp.ui.balanceText
 import net.seilent.funecomp.ui.bandText
 import net.seilent.funecomp.ui.display
 import net.seilent.funecomp.ui.freqText
 import net.seilent.funecomp.ui.gridHz
+import net.seilent.funecomp.ui.npAlbumBaseline
 import net.seilent.funecomp.ui.npArt
+import net.seilent.funecomp.ui.npArtTop
+import net.seilent.funecomp.ui.npArtistBaseline
 import net.seilent.funecomp.ui.npProgressY
+import net.seilent.funecomp.ui.npTitleBaseline
 import net.seilent.funecomp.ui.step
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -26,6 +33,18 @@ class LayoutTest {
         assertFalse(ui.landscape)
         assertEquals(168f, ui.npArt, 1e-3f)
         assertEquals(ui.h - 156f, ui.npProgressY, 1e-3f)
+        assertEquals(ui.npProgressY, ui.npArtTop + ui.npArt, 1e-3f)
+        assertEquals(ui.npArtTop - 14f, ui.npAlbumBaseline, 1e-3f)
+        assertEquals(ui.npAlbumBaseline - 24f, ui.npArtistBaseline, 1e-3f)
+        assertEquals(ui.h - 118f, ui.npTitleBaseline, 1e-3f)
+        for (album in listOf(ui, Ui.of(272f, 480f), Ui.of(360f, 640f))) {
+            assertEquals(117f, album.albumArtistBaseline, 1e-3f)
+            assertEquals(141f, album.albumTitleBaseline, 1e-3f)
+            assertEquals(155f, album.albumArtTop, 1e-3f)
+        }
+        val zune = Ui.of(272f, 480f)
+        assertEquals(156f, zune.npArtTop, 1e-3f)
+        assertEquals(118f, zune.npArtistBaseline, 1e-3f)
     }
 
     @Test
