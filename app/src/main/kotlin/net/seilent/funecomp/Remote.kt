@@ -34,6 +34,7 @@ import net.seilent.funecomp.proto.SetReply
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.state.ClockSync
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
@@ -44,6 +45,10 @@ import net.seilent.funecomp.ui.LIB_PAGE
 import net.seilent.funecomp.ui.Phase
 import java.io.File
 import java.io.IOException
+import java.time.ZoneId
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 object Remote : Control {
     const val TAG = "Funecomp"
@@ -55,6 +60,7 @@ object Remote : Control {
     private const val ATTEMPT = "attempt"
     private const val ART = "art"
     private const val ART_WAKE_MS = 60_000L
+    private const val TRANSITION_PAD_MS = 1_000L
     private val SECRET = Regex("(api_key|key|token|secret)=[^&]*")
     private val codec = BitmapCodec { Log.i(TAG, it) }
     private val decoded = Memo<BackdropArt>()
@@ -105,6 +111,9 @@ object Remote : Control {
     private val breaker = Sweep.Breaker(SystemClock::elapsedRealtime)
     private var wake: Wake? = null
     private var exitLogged = false
+    private val clock = ClockSync()
+    private val timer = Executors.newSingleThreadScheduledExecutor { Thread(it, "clock").apply { isDaemon = true } }
+    private var transition: ScheduledFuture<*>? = null
 
     fun debuggable(context: Context) = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
@@ -139,6 +148,7 @@ object Remote : Control {
     }
 
     fun stop() {
+        clockOff()
         synchronized(lock) { drop() }
         wake?.drop(ATTEMPT)
         wake?.drop(ART)
@@ -400,6 +410,33 @@ object Remote : Control {
         }
     }
 
+    fun clockChanged(why: String) {
+        if (phase == Phase.LIVE && synchronized(clock) { clock.armed }) sendClock(why)
+    }
+
+    private fun sendClock(why: String) {
+        val s = link?.session ?: return
+        val now = System.currentTimeMillis()
+        val zone = ZoneId.systemDefault()
+        val (unixS, zoneS) = ClockSync.draft(now, zone)
+        s.request(Msg.DRAFT, Req.draft(Enums.DraftKind.clock, unixS = unixS, zoneS = zoneS, automatic = true)) { r ->
+            if (r is Session.Result.Failed) synchronized(clock) { clock.failed(r.error.code) }
+            Log.i(TAG, "clock auto $why unixS=$unixS zoneS=$zoneS -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
+        }
+        synchronized(clock) {
+            transition?.cancel(false)
+            transition = ClockSync.next(now, zone)?.let { at ->
+                timer.schedule({ clockChanged("transition") }, (at - now).coerceAtLeast(0) + TRANSITION_PAD_MS, TimeUnit.MILLISECONDS)
+            }
+        }
+    }
+
+    private fun clockOff() = synchronized(clock) {
+        clock.closed()
+        transition?.cancel(false)
+        transition = null
+    }
+
     private fun connector(context: Context, spec: String): (() -> Transport)? {
         if (spec.startsWith("rfcomm:")) {
             val addr = spec.removePrefix("rfcomm:")
@@ -435,6 +472,7 @@ object Remote : Control {
             board = hello.board
             Scrobbles.session()
             Firmwares.hello(hello.board, hello.version)
+            if (synchronized(clock) { clock.hello(hello) }) sendClock("hello")
             phase(Phase.LIVE)
             wake?.drop(ATTEMPT)
             Log.i(TAG, "hello board=${hello.board} version=${hello.version} idle=${hello.idleMs} busy=${hello.busyMs}")
@@ -453,7 +491,7 @@ object Remote : Control {
             val s = State.from(body)
             Scrobbles.state(s, System.currentTimeMillis())
             onState?.invoke()
-            Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume}")
+            Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
             val key = listOf(s.artists, s.output, s.queueRev, s.slot)
             if (key != artKey) {
@@ -477,6 +515,7 @@ object Remote : Control {
             if (!live) return
             update { it.copy(hello = null) }
             art?.cancel()
+            clockOff()
             phase(Phase.DOWN)
             onDrop?.invoke()
             wake?.drop(ATTEMPT)

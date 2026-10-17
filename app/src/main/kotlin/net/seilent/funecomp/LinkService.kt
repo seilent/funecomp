@@ -22,7 +22,10 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.state.BatteryAlert
 import net.seilent.funecomp.ui.LinkView
+import net.seilent.funecomp.ui.batteryText
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.statusText
 
@@ -32,6 +35,7 @@ class LinkService : Service() {
     private var foreground = false
     private var address: String? = null
     private var sinkToDap = false
+    private val alert = BatteryAlert()
     private val media by lazy { MediaLink(this, Remote) { stop() } }
 
     private val receiver = object : BroadcastReceiver() {
@@ -42,6 +46,8 @@ class LinkService : Service() {
                     BluetoothAdapter.STATE_ON -> Remote.bluetooth(true)
                 }
                 Intent.ACTION_SCREEN_ON -> Remote.kick("screen")
+                Intent.ACTION_TIME_CHANGED -> Remote.clockChanged("time")
+                Intent.ACTION_TIMEZONE_CHANGED -> Remote.clockChanged("zone")
                 ACTION_ALARM -> Remote.kick("alarm")
                 BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED -> {
                     val d = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -68,6 +74,8 @@ class LinkService : Service() {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(ACTION_ALARM)
             addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+            addAction(Intent.ACTION_TIME_CHANGED)
+            addAction(Intent.ACTION_TIMEZONE_CHANGED)
         }
         registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
         Remote.onPhase = { main.post { refresh() } }
@@ -93,6 +101,7 @@ class LinkService : Service() {
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(NotificationChannel(CHANNEL, "Link", NotificationManager.IMPORTANCE_MIN))
         nm.createNotificationChannel(NotificationChannel(MEDIA, "Media controls", NotificationManager.IMPORTANCE_LOW))
+        nm.createNotificationChannel(NotificationChannel(DAP, "DAP battery", NotificationManager.IMPORTANCE_DEFAULT))
         try {
             startForeground(ID, notification(text()), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE)
             foreground = true
@@ -132,6 +141,7 @@ class LinkService : Service() {
         return when {
             Remote.bluetoothOff -> "bluetooth off"
             phase != Phase.LIVE && getSystemService(ActivityManager::class.java)?.isBackgroundRestricted == true -> "restricted"
+            phase == Phase.LIVE && Remote.device.playback.state.battery != null -> "${statusText(LinkView(phase, "", Remote.bye))}, dap ${batteryText(Remote.device.playback.state)}"
             else -> statusText(LinkView(phase, "", Remote.bye))
         }
     }
@@ -166,7 +176,10 @@ class LinkService : Service() {
 
     private fun refresh() {
         when (Remote.phase) {
-            Phase.LIVE -> media.live(Remote.device, MediaLink.controls(this), sinkToDap)
+            Phase.LIVE -> {
+                media.live(Remote.device, MediaLink.controls(this), sinkToDap)
+                battery(Remote.device.playback.state)
+            }
             Phase.DOWN, Phase.CONNECTING -> {}
             else -> media.off()
         }
@@ -182,6 +195,25 @@ class LinkService : Service() {
         posted = t
         val m = if (media.active) media.notification(MEDIA, open(), device) else null
         getSystemService(NotificationManager::class.java).notify(ID, m ?: notification(text()))
+    }
+
+    private fun battery(st: State) {
+        val nm = getSystemService(NotificationManager::class.java)
+        when (val e = alert.update(st.battery, st.charging)) {
+            is BatteryAlert.Event.Low -> if (nm.areNotificationsEnabled()) {
+                nm.notify(
+                    ALERT_ID,
+                    Notification.Builder(this, DAP)
+                        .setSmallIcon(android.R.drawable.stat_sys_warning)
+                        .setContentTitle("${Remote.board ?: "dap"} battery ${e.pct} %")
+                        .setContentIntent(open())
+                        .setAutoCancel(true)
+                        .build(),
+                )
+            }
+            BatteryAlert.Event.Clear -> nm.cancel(ALERT_ID)
+            null -> {}
+        }
     }
 
     private fun open() = PendingIntent.getActivity(
@@ -221,6 +253,8 @@ class LinkService : Service() {
         const val ACTION_STOP = "net.seilent.funecomp.STOP"
         const val ACTION_MEDIA = "net.seilent.funecomp.MEDIA"
         private const val MEDIA = "media"
+        private const val DAP = "dap"
+        private const val ALERT_ID = 2
         private const val RFCOMM = "rfcomm:"
         private const val ACTION_ALARM = "net.seilent.funecomp.ALARM"
         private const val CHANNEL = "link"

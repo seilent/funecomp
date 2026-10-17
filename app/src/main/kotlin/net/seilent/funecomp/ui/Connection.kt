@@ -21,7 +21,9 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
+import java.util.Locale
 
 private const val REMEDY = "settings > system > pair phone app"
 private const val PAIR_HINT = "pair on the device"
@@ -45,6 +47,16 @@ fun statusText(link: LinkView) = when {
     link.device != null -> "stopped"
     else -> "not set"
 }
+
+fun batteryText(s: State) = "${s.battery} %" + if (s.charging == true) " charging" else ""
+
+fun cardText(s: State): String? {
+    val free = s.cardFreeMiB ?: return null
+    val total = s.cardTotalMiB ?: return null
+    return String.format(Locale.ROOT, "%.1f of %.1f gb free", free / MIB_PER_GB, total / MIB_PER_GB)
+}
+
+private const val MIB_PER_GB = 1024.0
 
 private class Line(val title: String, val value: String, val info: Boolean = false, val tag: String, val tap: () -> Unit = {})
 
@@ -81,6 +93,9 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleVi
             add(Line("board", hello.board ?: "", tag = "board"))
             add(Line("version", hello.version ?: "", tag = "version"))
         }
+        val st = ctx.device.playback.state
+        if (hello != null && st.battery != null) add(Line("dap battery", batteryText(st), tag = "dapbattery"))
+        if (hello != null) cardText(st)?.let { add(Line("card", it, tag = "card")) }
         link.battery?.let { add(Line("battery", it.word, tag = "battery") { ctx.control.allowBackground() }) }
         add(Line("phone media controls", if (link.mediaControls) "on" else "off", tag = "media") { ctx.control.mediaControls(!link.mediaControls) })
         add(Line("scrobbling", scrobbleText(scrobble), tag = "scrobbling") { ctx.nav.push(Page.Scrobbling) })

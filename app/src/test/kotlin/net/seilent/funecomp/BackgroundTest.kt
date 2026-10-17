@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
+import net.seilent.funecomp.sim.Battery
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
@@ -46,8 +47,8 @@ class BackgroundTest {
         sims.forEach { it.stop() }
     }
 
-    private fun sim(): String {
-        val s = Sim(Options(Board.of("v1")))
+    private fun sim(battery: Battery = Battery(87, 87, 0)): String {
+        val s = Sim(Options(Board.of("v1"), battery = battery))
         sims += s
         return "tcp:127.0.0.1:${s.listen(0)}"
     }
@@ -73,9 +74,9 @@ class BackgroundTest {
     fun serviceStaysUpAcrossADropAndStopClearsThePhase() {
         val spec = sim()
         val c = Robolectric.buildService(LinkService::class.java, startIntent(spec)).create().startCommand(0, 1)
-        waitFor { Remote.phase == Phase.LIVE && text() == "connected" }
+        waitFor { Remote.phase == Phase.LIVE && text() == "connected, dap 87 %" }
         sims.forEach { it.stop() }
-        waitFor { Remote.phase != Phase.LIVE && text() != "connected" }
+        waitFor { Remote.phase != Phase.LIVE && text() != "connected, dap 87 %" }
         assertFalse(shadowOf(c.get()).isStoppedBySelf)
         c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
         shadowOf(Looper.getMainLooper()).idle()
@@ -86,7 +87,7 @@ class BackgroundTest {
         assertNull(Remote.onPhase)
 
         val again = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
-        waitFor { Remote.phase == Phase.LIVE && text() == "connected" }
+        waitFor { Remote.phase == Phase.LIVE && text() == "connected, dap 87 %" }
         again.destroy()
     }
 
@@ -100,7 +101,7 @@ class BackgroundTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(Phase.DOWN, Remote.phase)
         app.sendBroadcast(Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_ON))
-        waitFor { Remote.phase == Phase.LIVE && text() == "connected" }
+        waitFor { Remote.phase == Phase.LIVE && text() == "connected, dap 87 %" }
         c.destroy()
     }
 
@@ -114,8 +115,21 @@ class BackgroundTest {
         assertEquals("media", n.channelId)
         MediaLink.controls(app, false)
         c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_MEDIA)).startCommand(0, 2)
-        waitFor { text() == "connected" }
+        waitFor { text() == "connected, dap 87 %" }
         assertEquals("link", shadowOf(app.getSystemService(NotificationManager::class.java)).getNotification(1)!!.channelId)
+        c.destroy()
+    }
+
+    @Test
+    fun lowDapBatteryNotifiesOnceAndTheLinkTextCarriesIt() {
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(Battery.parse("17:14@300")))).create().startCommand(0, 1)
+        val nm = shadowOf(app.getSystemService(NotificationManager::class.java))
+        waitFor { Remote.phase == Phase.LIVE && text()?.startsWith("connected, dap ") == true }
+        waitFor { nm.getNotification(2) != null }
+        assertEquals("v1 battery 15 %", nm.getNotification(2)!!.extras.getCharSequence("android.title")?.toString())
+        assertEquals("dap", nm.getNotification(2)!!.channelId)
+        waitFor { text() == "connected, dap 14 %" }
+        assertEquals("v1 battery 15 %", nm.getNotification(2)!!.extras.getCharSequence("android.title")?.toString())
         c.destroy()
     }
 
