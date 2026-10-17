@@ -1,6 +1,12 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+}
+
+val keystoreProperties = rootProject.file("app/keystores/keystore.properties").takeIf { it.exists() }?.let { f ->
+    Properties().apply { f.inputStream().use { load(it) } }
 }
 
 android {
@@ -14,6 +20,24 @@ android {
         versionCode = 1
         versionName = "0.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            keystoreProperties?.let {
+                storeFile = file(it["storeFile"].toString())
+                storePassword = it["storePassword"].toString()
+                keyAlias = it["keyAlias"].toString()
+                keyPassword = it["keyPassword"].toString()
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = false
+            if (keystoreProperties != null) signingConfig = signingConfigs.getByName("release")
+        }
     }
 
     compileOptions {
@@ -67,3 +91,15 @@ dependencies {
 tasks.named("preBuild") {
     dependsOn(":proto:checkPinSums", ":proto:checkGen")
 }
+
+val checkNoGms = tasks.register("checkNoGms") {
+    val ids = configurations.named("releaseRuntimeClasspath").flatMap { it.incoming.artifacts.resolvedArtifacts }
+        .map { all -> all.map { a -> a.id.componentIdentifier.displayName } }
+    inputs.property("ids", ids)
+    doLast {
+        val bad = ids.get().filter { it.startsWith("com.google.android.gms") || it.startsWith("com.google.firebase") }
+        check(bad.isEmpty()) { "release classpath has Google Play Services or Firebase: $bad" }
+    }
+}
+
+tasks.named("check") { dependsOn(checkNoGms) }
