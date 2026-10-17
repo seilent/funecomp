@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 0
+const minor 1
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -263,6 +263,8 @@ tag IMG_LIST.reply 1 offset u32 one
 tag IMG_LIST.reply 2 total u32 one
 tag IMG_LIST.reply 3 more bool one
 tag IMG_LIST.reply 4 entry ImgEntry list
+tag IMG_LIST.reply 5 bytes u64 one
+tag IMG_LIST.reply 6 cap u64 one
 msg IMG_DEL 0x35 app req
 tag IMG_DEL 1 name str one
 msg IMG_ABORT 0x36 dev push
@@ -293,9 +295,12 @@ tag Band 4 gain10 i32 one
 tag Band 5 q100 i32 one
 tag QueueItem 1 track u64 one
 tag QueueItem 2 title str one
+tag QueueItem 3 artists str list
+tag QueueItem 4 mbids str list
 tag LibRow 1 name str one
 tag LibRow 2 count u32 one
 tag LibRow 3 first u64 one
 tag LibRow 4 key str one
+tag LibRow 5 mbid str one
 tag ImgEntry 1 name str one
 tag ImgEntry 2 mbid str one

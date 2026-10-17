@@ -375,10 +375,12 @@ data class Eq(val output: Int, val key: String?, val names: List<EqName>, val in
     }
 }
 
-data class QueueItem(val track: Long, val title: String?) {
+data class QueueItem(val track: Long, val title: String?, val artists: List<String> = emptyList(), val mbids: List<String> = emptyList()) {
     fun write(o: TlvWriter) = o.apply {
         u64(Tags.QueueItem.track, track)
         str(Tags.QueueItem.title, title)
+        artists.forEach { str(Tags.QueueItem.artists, it) }
+        mbids.forEach { str(Tags.QueueItem.mbids, it) }
     }
 
     val size: Int get() = TlvWriter().rec(Tags.Queue.item) { write(this) }.size
@@ -397,17 +399,20 @@ data class Queue(val rev: Long, val page: PageInfo, val items: List<QueueItem>) 
         fun from(n: Node) = Queue(
             n.long(Tags.Queue.rev) ?: 0,
             PageInfo.read(n, Tags.Queue.offset, Tags.Queue.total, Tags.Queue.more),
-            n.nodes(Tags.Queue.item).map { QueueItem(it.long(Tags.QueueItem.track) ?: 0, it.str(Tags.QueueItem.title)) },
+            n.nodes(Tags.Queue.item).map {
+                QueueItem(it.long(Tags.QueueItem.track) ?: 0, it.str(Tags.QueueItem.title), it.strs(Tags.QueueItem.artists), it.strs(Tags.QueueItem.mbids))
+            },
         )
     }
 }
 
-data class LibRow(val name: String?, val count: Long?, val first: Long?, val key: String?) {
+data class LibRow(val name: String?, val count: Long?, val first: Long?, val key: String?, val mbid: String? = null) {
     fun write(o: TlvWriter) = o.apply {
         str(Tags.LibRow.name, name)
         u32(Tags.LibRow.count, count)
         u64(Tags.LibRow.first, first)
         str(Tags.LibRow.key, key)
+        str(Tags.LibRow.mbid, mbid)
     }
 
     val size: Int get() = TlvWriter().rec(Tags.Lib.row) { write(this) }.size
@@ -431,7 +436,7 @@ data class Lib(val libRev: Long, val view: Int, val parent: String?, val page: P
             n.str(Tags.Lib.parent),
             PageInfo.read(n, Tags.Lib.offset, Tags.Lib.total, Tags.Lib.more),
             n.nodes(Tags.Lib.row).map {
-                LibRow(it.str(Tags.LibRow.name), it.long(Tags.LibRow.count), it.long(Tags.LibRow.first), it.str(Tags.LibRow.key))
+                LibRow(it.str(Tags.LibRow.name), it.long(Tags.LibRow.count), it.long(Tags.LibRow.first), it.str(Tags.LibRow.key), it.str(Tags.LibRow.mbid))
             },
         )
     }
@@ -467,7 +472,7 @@ data class ImgEntry(val name: String, val mbid: String?) {
     }.size
 }
 
-data class ImgListReply(val page: PageInfo, val entries: List<ImgEntry>) {
+data class ImgListReply(val page: PageInfo, val entries: List<ImgEntry>, val bytes: Long? = null, val cap: Long? = null) {
     fun encode() = tlv {
         u32(Tags.ImgListReply.offset, page.offset)
         u32(Tags.ImgListReply.total, page.total)
@@ -478,12 +483,16 @@ data class ImgListReply(val page: PageInfo, val entries: List<ImgEntry>) {
                 str(Tags.ImgEntry.mbid, e.mbid)
             }
         }
+        u64(Tags.ImgListReply.bytes, bytes)
+        u64(Tags.ImgListReply.cap, cap)
     }
 
     companion object {
         fun from(n: Node) = ImgListReply(
             PageInfo.read(n, Tags.ImgListReply.offset, Tags.ImgListReply.total, Tags.ImgListReply.more),
             n.nodes(Tags.ImgListReply.entry).map { ImgEntry(it.str(Tags.ImgEntry.name) ?: "", it.str(Tags.ImgEntry.mbid)) },
+            n.long(Tags.ImgListReply.bytes),
+            n.long(Tags.ImgListReply.cap),
         )
     }
 }

@@ -14,7 +14,10 @@ class Track(
     val durationMs: Long,
     val folder: String,
     val file: String,
-)
+    val mbids: List<String> = artists.map { "" },
+) {
+    fun mbidOf(name: String): String? = mbids.getOrNull(artists.indexOf(name))?.takeIf { it.isNotEmpty() }
+}
 
 class Library(val tracks: List<Track>) {
     val byId: Map<Long, Track> = tracks.associateBy { it.id }
@@ -37,7 +40,7 @@ class Library(val tracks: List<Track>) {
     fun rows(view: Int, parent: String): List<LibRow>? = when (view) {
         Enums.View.artists -> tracks.flatMap { it.artists }.distinct().map { a ->
             val ts = tracks.filter { a in it.artists }
-            LibRow(a, ts.size.toLong(), ts[0].id, a)
+            LibRow(a, ts.size.toLong(), ts[0].id, a, ts[0].mbidOf(a))
         }
         Enums.View.albums -> albums.map { albumRow(it) }
         Enums.View.songs -> tracks.map { trackRow(it) }
@@ -116,10 +119,11 @@ class Library(val tracks: List<Track>) {
             return text.replace(" / ", "; ").replace(", ", "; ").split("; ").map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         }
 
-        fun track(artist: String, album: String, title: String, no: Int, durationMs: Long, albumArtist: String = artist): Track {
+        fun track(artist: String, album: String, title: String, no: Int, durationMs: Long, albumArtist: String = artist, mbids: List<String> = emptyList()): Track {
             val folder = "${albumArtist.trim()}/${album.trim()}"
             val file = "%02d %s.flac".format(no, title)
-            return Track(hash64("$folder/$file"), artist, split(artist, albumArtist), album, albumArtist, title, durationMs, folder, file)
+            val names = split(artist, albumArtist)
+            return Track(hash64("$folder/$file"), artist, names, album, albumArtist, title, durationMs, folder, file, names.indices.map { mbids.getOrElse(it) { "" }.trim() })
         }
 
         fun load(f: File): Library {
@@ -127,9 +131,9 @@ class Library(val tracks: List<Track>) {
             val tracks = f.readLines().filter { it.isNotBlank() }.map { line ->
                 val p = line.split('\t')
                 require(p.size >= 4) { "${f.name}: needs artist, album, title, duration ms: $line" }
-                val albumArtist = p.getOrElse(4) { p[0] }
+                val albumArtist = p.getOrElse(4) { p[0] }.ifEmpty { p[0] }
                 val n = no.merge(albumArtist.trim() to p[1].trim(), 1, Int::plus)!!
-                track(p[0], p[1], p[2], n, p[3].toLong(), albumArtist)
+                track(p[0], p[1], p[2], n, p[3].toLong(), albumArtist, p.getOrNull(5)?.split(';').orEmpty())
             }
             return Library(tracks)
         }

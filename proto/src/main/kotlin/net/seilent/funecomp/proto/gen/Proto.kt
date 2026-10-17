@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "aae2ef1898c0fbdb1573852d4a0a8ff14b1a8bc4"
-    const val PROTO_SHA256 = "e37b1cab720d05a8efb0d2c6a099ef69d34ff8e0e50b871cdee06a49a7ce5669"
-    const val VECTORS_SHA256 = "5fc283802d1b9d510e94e408a3d2ce269fc4b8c157eb1992d250ae6c0c6e0efc"
+    const val COMMIT = "14db6fe44fbdf89a8dc2a14310182659d5fe99b9"
+    const val PROTO_SHA256 = "b54a8090e7fc1c7096adb3ad1ebda3bc77d1c1c9233b46d7c769e6165a053e15"
+    const val VECTORS_SHA256 = "f189eaf601a94f55cbbe350ff8a06b4a9a515b22d57f3e1fd3b991be21c2e443"
     const val TOKENS_SHA256 = "6ec9e3b80e9c857e924e2a26602d9fd282176337545ef938b4f7113a332f4bd5"
     const val TOKENSV1_SHA256 = "7463c4af8a045b4e5f2561bd4ff488de8edc667358e266ce781950ddac2e35a0"
 }
@@ -18,7 +18,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 0
+    const val minor = 1
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -447,6 +447,8 @@ object Tags {
         const val total = 2
         const val more = 3
         const val entry = 4
+        const val bytes = 5
+        const val cap = 6
     }
     object ImgDel {
         const val name = 1
@@ -491,12 +493,15 @@ object Tags {
     object QueueItem {
         const val track = 1
         const val title = 2
+        const val artists = 3
+        const val mbids = 4
     }
     object LibRow {
         const val name = 1
         const val count = 2
         const val first = 3
         const val key = 4
+        const val mbid = 5
     }
     object ImgEntry {
         const val name = 1
@@ -686,6 +691,8 @@ object Tags {
             2 to Field(2, "total", Base.U32, null, false),
             3 to Field(3, "more", Base.BOOL, null, false),
             4 to Field(4, "entry", Base.RECORD, "ImgEntry", true),
+            5 to Field(5, "bytes", Base.U64, null, false),
+            6 to Field(6, "cap", Base.U64, null, false),
         ),
         "IMG_DEL" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
@@ -730,12 +737,15 @@ object Tags {
         "QueueItem" to mapOf(
             1 to Field(1, "track", Base.U64, null, false),
             2 to Field(2, "title", Base.STR, null, false),
+            3 to Field(3, "artists", Base.STR, null, true),
+            4 to Field(4, "mbids", Base.STR, null, true),
         ),
         "LibRow" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
             2 to Field(2, "count", Base.U32, null, false),
             3 to Field(3, "first", Base.U64, null, false),
             4 to Field(4, "key", Base.STR, null, false),
+            5 to Field(5, "mbid", Base.STR, null, false),
         ),
         "ImgEntry" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),

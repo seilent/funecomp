@@ -8,8 +8,8 @@ import net.seilent.funecomp.proto.gen.Tags
 class Entry(val tag: Int, val field: Field?, val value: Any)
 
 class Node(val scope: String, val entries: List<Entry>) {
-    fun first(tag: Int): Any? = entries.firstOrNull { it.tag == tag }?.value
-    fun all(tag: Int): List<Any> = entries.filter { it.tag == tag }.map { it.value }
+    fun first(tag: Int): Any? = entries.firstOrNull { it.tag == tag && it.field != null }?.value
+    fun all(tag: Int): List<Any> = entries.filter { it.tag == tag && it.field != null }.map { it.value }
 
     fun long(tag: Int): Long? = first(tag) as Long?
     fun int(tag: Int): Int? = long(tag)?.toInt()
@@ -81,18 +81,18 @@ class Node(val scope: String, val entries: List<Entry>) {
     companion object {
         private fun known(f: Field, v: Int) = Enums.byName[f.ref]?.containsKey(v) == true
 
-        fun decode(scope: String, bytes: ByteArray): Node {
-            val fields = Tags.scopes[scope] ?: emptyMap()
+        fun decode(scope: String, bytes: ByteArray, table: Map<String, Map<Int, Field>> = Tags.scopes): Node {
+            val fields = table[scope] ?: emptyMap()
             val seen = HashSet<Int>()
             val entries = Tlv.parse(bytes).map { t ->
                 val f = fields[t.tag] ?: return@map Entry(t.tag, null, t.value)
                 if (!f.list && !seen.add(t.tag)) throw ProtoException("duplicate", "$scope.${f.name} sent twice")
-                Entry(t.tag, f, value(scope, f, t.value))
+                Entry(t.tag, f, value(scope, f, t.value, table))
             }
             return Node(scope, entries)
         }
 
-        private fun value(scope: String, f: Field, b: ByteArray): Any {
+        private fun value(scope: String, f: Field, b: ByteArray, table: Map<String, Map<Int, Field>>): Any {
             fun width(n: Int) {
                 if (b.size != n) throw ProtoException("badValue", "$scope.${f.name} has ${b.size} bytes, wants $n")
             }
@@ -115,7 +115,7 @@ class Node(val scope: String, val entries: List<Entry>) {
                 }
                 Base.STR -> String(b, Charsets.UTF_8)
                 Base.BYTES -> b
-                Base.RECORD -> decode(f.ref!!, b)
+                Base.RECORD -> decode(f.ref!!, b, table)
             }
         }
     }

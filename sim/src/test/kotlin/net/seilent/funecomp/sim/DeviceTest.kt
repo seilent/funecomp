@@ -219,6 +219,80 @@ class DeviceTest {
         assertEquals(0L, ImgListReply.from(Node.decode("IMG_LIST.reply", ok(req(d, Msg.IMG_LIST, Req.imgList(0, 10))))).page.total)
     }
 
+    private fun store(d: Device, name: String, img: ByteArray, w: Int = 360, h: Int = 480) {
+        val out = Sink()
+        ok(req(d, Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, name, null, img.size.toLong(), crc(img), w, h), out))
+        var off = 0
+        while (off < img.size) {
+            val n = minOf(16368, img.size - off)
+            d.imgData(Node.decode("IMG_DATA", Req.imgData(off.toLong(), img.copyOfRange(off, off + n))), out)
+            off += n
+        }
+        ok(req(d, Msg.IMG_END, Req.imgEnd(crc(img))))
+    }
+
+    private fun mbidLib() = Library(listOf(
+        Library.track("Utada Hikaru, Skrillex", "Hikari", "Face My Fears", 1, 220_000, "Utada Hikaru", listOf("mb-u", "")),
+        Library.track("Utada Hikaru", "First Love", "Automatic", 1, 200_000, "Utada Hikaru", listOf("mb-u")),
+        Library.track("Mili", "Miracle Milk", "Rubber Child", 1, 200_000),
+    ))
+
+    @Test
+    fun libFileSixthColumnHoldsTheMbids() {
+        val f = java.io.File.createTempFile("lib", ".tsv")
+        f.writeText("Utada Hikaru, Skrillex\tHikari\tFace My Fears\t220000\tUtada Hikaru\tmb-u;\nMili\tMiracle Milk\tRubber Child\t200000\n")
+        val l = Library.load(f)
+        f.delete()
+        assertEquals(listOf("mb-u", ""), l.tracks[0].mbids)
+        assertEquals(listOf(""), l.tracks[1].mbids)
+        assertEquals("Utada Hikaru", l.tracks[0].albumArtist)
+    }
+
+    @Test
+    fun protocol11TagsAndTheirAbsenceAt10() {
+        for (minor in listOf(1, 0)) {
+            val d = Device(Options(Board.of("ap80"), minor = minor), mbidLib()) { t }
+            val q = Sink()
+            ok(req(d, Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.page, offset = 0, count = 10), q))
+            val items = Queue.from(q.of(Msg.QUEUE).single()).items
+            val l = Sink()
+            ok(req(d, Msg.LIB_GET, Req.libGet(Enums.View.artists, "", 0, 100, d.lib.rev), l))
+            val rows = Lib.from(l.of(Msg.LIB).single()).rows.associateBy { it.name }
+            val list = ImgListReply.from(Node.decode("IMG_LIST.reply", ok(req(d, Msg.IMG_LIST, Req.imgList(0, 10)))))
+            val st = Sink()
+            d.greet(st)
+            assertEquals(listOf("mb-u", ""), State.from(st.of(Msg.STATE).single()).mbids)
+            if (minor == 1) {
+                assertEquals(listOf("Utada Hikaru", "Skrillex"), items[0].artists)
+                assertEquals(listOf("mb-u", ""), items[0].mbids)
+                assertEquals(listOf("Mili"), items[2].artists)
+                assertEquals("mb-u", rows.getValue("Utada Hikaru").mbid)
+                assertEquals(null, rows.getValue("Skrillex").mbid)
+                assertEquals(0L, list.bytes)
+                assertEquals(Options.IMG_CAP, list.cap)
+            } else {
+                assertTrue(items.all { it.artists.isEmpty() && it.mbids.isEmpty() })
+                assertTrue(rows.values.all { it.mbid == null })
+                assertEquals(null, list.bytes)
+                assertEquals(null, list.cap)
+            }
+        }
+    }
+
+    @Test
+    fun storeEvictsTheLeastRecentlyShownPastTheCap() {
+        val d = Device(Options(Board.of("ap80"), imgCap = 120_000), mbidLib()) { t }
+        store(d, "Utada Hikaru", jpeg(50_000))
+        store(d, "Mili", jpeg(50_001))
+        d.state()
+        store(d, "Skrillex", jpeg(50_002))
+        assertEquals(setOf("utada hikaru", "skrillex"), d.stored.keys)
+        val list = ImgListReply.from(Node.decode("IMG_LIST.reply", ok(req(d, Msg.IMG_LIST, Req.imgList(0, 10)))))
+        assertEquals(100_002L, list.bytes)
+        store(d, "Mili", jpeg(130_000))
+        assertEquals(setOf("mili"), d.stored.keys)
+    }
+
     @Test
     fun faultsParse() {
         val f = Faults(listOf("drop-after-bytes=131072,stall-ms=10", "enum=STATE.output=9", "refuse=SET", "bye=companionOff"))

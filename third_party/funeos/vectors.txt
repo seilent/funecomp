@@ -10,7 +10,7 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply 6d000101010001040046444350020200010003020000000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply 6d000101010001040046444350020200010003020001000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
 hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d08001f000000000000000e0400070000000f040003000000
 re hello_reply hello
 dec hello_reply 0.len 109
@@ -19,7 +19,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 0
+dec hello_reply 0.body.minor 1
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -235,6 +235,29 @@ dec queue_page 0.body.item[0].title One
 dec queue_page 0.body.item[1].track 102
 dec queue_page 0.body.item[1].title Two
 act queue_page accept
+vec queue_artists dev
+hex queue_artists 9d00140014000104000d00000002040000000000030400020000000401000005550001080065000000000000000203004f6e65030c0055746164612048696b61
+hex queue_artists 7275030800536b72696c6c657804240061316232633364342d303030302d343030302d383030302d303030303030303030303031040000052900010800660000
+hex queue_artists 000000000002030054776f031200e5ae87e5a49ae794b0e38392e382abe383ab040000
+dec queue_artists 0.len 157
+dec queue_artists 0.type QUEUE
+dec queue_artists 0.flags 0x00
+dec queue_artists 0.seq 20
+dec queue_artists 0.body.rev 13
+dec queue_artists 0.body.offset 0
+dec queue_artists 0.body.total 2
+dec queue_artists 0.body.more false
+dec queue_artists 0.body.item[0].track 101
+dec queue_artists 0.body.item[0].title One
+dec queue_artists 0.body.item[0].artists[0] Utada Hikaru
+dec queue_artists 0.body.item[0].artists[1] Skrillex
+dec queue_artists 0.body.item[0].mbids[0] a1b2c3d4-0000-4000-8000-000000000001
+dec queue_artists 0.body.item[0].mbids[1]
+dec queue_artists 0.body.item[1].track 102
+dec queue_artists 0.body.item[1].title Two
+dec queue_artists 0.body.item[1].artists[0] 宇多田ヒカル
+dec queue_artists 0.body.item[1].mbids[0]
+act queue_artists accept
 vec lib_page dev
 hex lib_page 7e0015000a000104000700000002010003030c0055746164612048696b617275040400000000000504000200000006010000072500010a004669727374204c6f
 hex lib_page 76650204000c000000030800c900000000000000040300323031072700010c00424144e383a2e383bce383890204000e0000000308002d010000000000000403
@@ -258,6 +281,32 @@ dec lib_page 0.body.row[1].count 14
 dec lib_page 0.body.row[1].first 301
 dec lib_page 0.body.row[1].key 301
 act lib_page accept
+vec lib_artists dev
+hex lib_artists bc00150015000104000700000002010000030000040400000000000504000200000006010000075700010c0055746164612048696b6172750204001a00000003
+hex lib_artists 0800c900000000000000040c0055746164612048696b61727505240061316232633364342d303030302d343030302d383030302d303030303030303030303031
+hex lib_artists 073f00011200e5ae87e5a49ae794b0e38392e382abe383ab020400030000000308009101000000000000041200e5ae87e5a49ae794b0e38392e382abe383ab05
+hex lib_artists 0000
+dec lib_artists 0.len 188
+dec lib_artists 0.type LIB
+dec lib_artists 0.flags 0x00
+dec lib_artists 0.seq 21
+dec lib_artists 0.body.libRev 7
+dec lib_artists 0.body.view artists
+dec lib_artists 0.body.parent
+dec lib_artists 0.body.offset 0
+dec lib_artists 0.body.total 2
+dec lib_artists 0.body.more false
+dec lib_artists 0.body.row[0].name Utada Hikaru
+dec lib_artists 0.body.row[0].count 26
+dec lib_artists 0.body.row[0].first 201
+dec lib_artists 0.body.row[0].key Utada Hikaru
+dec lib_artists 0.body.row[0].mbid a1b2c3d4-0000-4000-8000-000000000001
+dec lib_artists 0.body.row[1].name 宇多田ヒカル
+dec lib_artists 0.body.row[1].count 3
+dec lib_artists 0.body.row[1].first 401
+dec lib_artists 0.body.row[1].key 宇多田ヒカル
+dec lib_artists 0.body.row[1].mbid
+act lib_artists accept
 vec transport_seek app
 hex transport_seek 0b002004030001010005020400905f0100
 dec transport_seek 0.len 11
@@ -616,6 +665,22 @@ dec img_list_reply 0.body.entry[0].mbid a1b2c3d4-0000-4000-8000-000000000001
 dec img_list_reply 0.body.entry[1].name 宇多田ヒカル
 dec img_list_reply 0.body.entry[1].mbid
 act img_list_reply accept
+vec img_list_reply_bytes dev
+hex img_list_reply_bytes 610034011200010400000000000204000100000003010000043600010c0055746164612048696b61727502240061316232633364342d303030302d343030302d
+hex img_list_reply_bytes 383030302d3030303030303030303030310508006ab80000000000000608000000000800000000
+re img_list_reply_bytes img_list
+dec img_list_reply_bytes 0.len 97
+dec img_list_reply_bytes 0.type IMG_LIST
+dec img_list_reply_bytes 0.flags 0x01
+dec img_list_reply_bytes 0.seq 18
+dec img_list_reply_bytes 0.body.offset 0
+dec img_list_reply_bytes 0.body.total 1
+dec img_list_reply_bytes 0.body.more false
+dec img_list_reply_bytes 0.body.entry[0].name Utada Hikaru
+dec img_list_reply_bytes 0.body.entry[0].mbid a1b2c3d4-0000-4000-8000-000000000001
+dec img_list_reply_bytes 0.body.bytes 47210
+dec img_list_reply_bytes 0.body.cap 134217728
+act img_list_reply_bytes accept
 vec img_del app
 hex img_del 0f0035041300010c0075746164612068696b617275
 dec img_del 0.len 15

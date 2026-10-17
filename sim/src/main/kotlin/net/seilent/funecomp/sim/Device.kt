@@ -79,7 +79,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private var queueRev = 1L
     private var lastStateAt = 0L
 
-    class Stored(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray)
+    class Stored(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, var at: Long)
     class Partial(val name: String, val total: Long, val crc: Long, val w: Int, val h: Int, val data: ByteArrayOutputStream = ByteArrayOutputStream())
 
     private val images = LinkedHashMap<String, Stored>()
@@ -88,6 +88,9 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private var pushMbid: String? = null
     private var pushDropped = false
     private var abortFired = false
+    private var storeClock = 0L
+    private var shown: String? = null
+    private val v11: Boolean get() = opts.minor >= 1
     @Volatile var droppedData = 0
         private set
 
@@ -119,7 +122,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     }
 
     fun helloReply() = HelloReply(
-        faults.major, Proto.minor, board.name, "sim.${board.name}", board.screenW, board.screenH,
+        faults.major, opts.minor, board.name, "sim.${board.name}", board.screenW, board.screenH,
         board.backdropW, board.backdropH, Proto.maxPayload, opts.idleMs, opts.busyMs, faults.features, lib.rev, settingsRev,
     )
 
@@ -156,9 +159,12 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         val t = lib.byId[queue.getOrNull(slot)]
         val sample = now()
         lastStateAt = sample
+        val key = t?.artists?.map { fold(it) }?.firstOrNull { it in images }
+        if (key != null && key != shown) images[key]?.at = ++storeClock
+        shown = key
         State(
             Enums.Source.local, Enums.Output.wired, t?.id, t?.title, t?.artist, t?.artists.orEmpty(),
-            t?.artists?.map { "" }.orEmpty(), t?.durationMs, position(), sample, now(), playing, shuffle, repeat,
+            t?.mbids.orEmpty(), t?.durationMs, position(), sample, now(), playing, shuffle, repeat,
             volume, maxVolume, 87, queueRev, slot.toLong(), queue.size.toLong(), lib.rev, t?.album, sleepLeft(),
         ).encode()
     }
@@ -426,7 +432,10 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     }
 
     private fun queuePage(out: Out, offset: Int, count: Int) {
-        val items = queue.map { QueueItem(it, lib.byId[it]?.title) }
+        val items = queue.map { id ->
+            val t = lib.byId[id]
+            if (v11 && t != null) QueueItem(id, t.title, t.artists, t.mbids) else QueueItem(id, t?.title)
+        }
         val end = minOf(items.size, offset + count)
         val fixed = Queue(queueRev, PageInfo(0, 0, false), emptyList()).encode().size + 8
         var at = offset
@@ -494,7 +503,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         val libRev = b.long(Tags.LibGet.libRev)
         if (libRev != null && libRev != lib.rev) return Answer.Fail(Err.staleRev, "stale rev")
         val parent = b.str(Tags.LibGet.parent) ?: ""
-        val rows = lib.rows(view, parent) ?: return Answer.Fail(Err.staleRev, "stale rev")
+        val rows = lib.rows(view, parent)?.map { if (v11) it else it.copy(mbid = null) } ?: return Answer.Fail(Err.staleRev, "stale rev")
         val offset = n(b.long(Tags.LibGet.offset), 0)
         if (offset > rows.size) return Answer.Fail(Err.badValue, "offset past end")
         val end = minOf(rows.size, offset + n(b.long(Tags.LibGet.count), 100))
@@ -608,7 +617,8 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             return Answer.Fail(Err.badValue, "not baseline or wrong size")
         }
         partials.remove(key)
-        images[key] = Stored(p.name, pushMbid, p.crc, bytes)
+        images[key] = Stored(p.name, pushMbid, p.crc, bytes, ++storeClock)
+        evict(key)
         opts.imgDir?.let { dir ->
             val f = File(dir.apply { mkdirs() }, "%08x.jpg".format(p.crc))
             f.writeBytes(bytes)
@@ -617,13 +627,25 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         return Answer.Ok()
     }
 
+    private fun bytes() = images.values.sumOf { it.bytes.size.toLong() }
+
+    private fun evict(keep: String) {
+        while (bytes() > opts.imgCap) {
+            val old = images.entries.filter { it.key != keep }.minByOrNull { it.value.at } ?: return
+            images.remove(old.key)
+            opts.log("evicted name=${old.value.name}")
+        }
+    }
+
     private fun imgList(b: Node): Answer {
         val all = images.values.map { ImgEntry(it.name, it.mbid) }
         val offset = n(b.long(Tags.ImgList.offset), 0).coerceAtMost(all.size)
         val count = n(b.long(Tags.ImgList.count), 100)
-        val fixed = ImgListReply(PageInfo(0, 0, false), emptyList()).encode().size + 8
+        val size = if (v11) bytes() else null
+        val cap = if (v11) opts.imgCap else null
+        val fixed = ImgListReply(PageInfo(0, 0, false), emptyList(), size, cap).encode().size + 8
         val n = PageInfo.fill(all.map { it.size }, offset, fixed, count = count)
-        return Answer.Ok(ImgListReply(PageInfo(offset.toLong(), all.size.toLong(), offset + n < all.size), all.subList(offset, offset + n)).encode())
+        return Answer.Ok(ImgListReply(PageInfo(offset.toLong(), all.size.toLong(), offset + n < all.size), all.subList(offset, offset + n), size, cap).encode())
     }
 
     private fun imgDel(b: Node): Answer {

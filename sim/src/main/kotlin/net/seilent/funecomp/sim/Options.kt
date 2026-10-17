@@ -78,4 +78,10 @@ class Options(
     val helloTimeoutMs: Long = Proto.helloTimeoutMs.toLong(),
     val log: (String) -> Unit = {},
     val imgDir: File? = null,
-)
+    val minor: Int = Proto.minor,
+    val imgCap: Long = IMG_CAP,
+) {
+    companion object {
+        const val IMG_CAP = 128L shl 20
+    }
+}
