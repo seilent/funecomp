@@ -29,6 +29,7 @@ data class Bonded(val name: String, val address: String, val companion: Boolean 
 interface Control {
     fun transport(cmd: Int, seekMs: Long? = null, on: Boolean? = null, repeat: Int? = null)
     fun volume(detents: Int)
+    fun volumePercent(pct: Int, done: () -> Unit = {}) = done()
     fun libGet(view: Int, parent: String, offset: Long)
     fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean = false, tracks: List<Long> = emptyList())
     fun queuePage(offset: Long)

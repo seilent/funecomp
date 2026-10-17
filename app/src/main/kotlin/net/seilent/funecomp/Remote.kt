@@ -3,6 +3,7 @@ package net.seilent.funecomp
 import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.net.Network
 import android.os.PowerManager
@@ -245,7 +246,11 @@ object Remote : Control {
 
     override fun art(track: Long, px: Int): ImageBitmap? = thumbs?.image(track, px)
 
-    fun artFile(track: Long, px: Int): File? = thumbs?.file(track, px)
+    fun mediaArt(track: Long, px: Int): Bitmap? = thumbs?.media(track, px)
+
+    fun onMediaArt(f: (() -> Unit)?) {
+        thumbs?.onMedia = f
+    }
 
     fun artist(context: Context): ArtistArt = synchronized(lock) {
         thumbs(context)
@@ -368,6 +373,9 @@ object Remote : Control {
         send(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat), "transport ${Enums.TransportCmd.names[cmd]}")
 
     override fun volume(detents: Int) = send(Msg.VOLUME, Req.volume(step = detents), "volume step $detents")
+
+    override fun volumePercent(pct: Int, done: () -> Unit) =
+        send(Msg.VOLUME, Req.volume(percent = pct), "volume percent $pct", ok = { done() }, fail = done)
 
     fun volumeSet(n: Int) = send(Msg.VOLUME, Req.volume(set = n), "volume set $n")
 

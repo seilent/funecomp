@@ -22,6 +22,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.state.BatteryAlert
 import net.seilent.funecomp.ui.LinkView
@@ -36,7 +37,10 @@ class LinkService : Service() {
     private var address: String? = null
     private var sinkToDap = false
     private val alert = BatteryAlert()
-    private val media by lazy { MediaLink(this, Remote) { stop() } }
+    private val media by lazy { MediaLink(this, Remote, { track, album ->
+        Remote.wantArt(Thumbs.MEDIA, track, MediaLink.ART_PX, album)
+        Remote.mediaArt(track, MediaLink.ART_PX)
+    }) { stop() } }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -80,6 +84,7 @@ class LinkService : Service() {
         registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
         Remote.onPhase = { main.post { refresh() } }
         Remote.onState = { main.post { refresh() } }
+        Remote.onMediaArt { main.post { refresh() } }
         Remote.onDrop = {
             main.post {
                 media.closed(Remote.device)
@@ -130,6 +135,7 @@ class LinkService : Service() {
         Remote.onTail = null
         Remote.onState = null
         Remote.onDrop = null
+        Remote.onMediaArt(null)
         unregisterReceiver(receiver)
         getSystemService(AlarmManager::class.java)?.cancel(alarm())
         Remote.stop()

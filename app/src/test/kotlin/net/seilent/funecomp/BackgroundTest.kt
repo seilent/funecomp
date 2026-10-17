@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
+import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.sim.Battery
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Options
@@ -26,6 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -89,6 +91,24 @@ class BackgroundTest {
         val again = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE && text() == "connected, dap 87 %" }
         again.destroy()
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun fetchedMediaArtHasTheMediaSize() {
+        val dir = kotlin.io.path.createTempDirectory("art").toFile()
+        val lib = net.seilent.funecomp.sim.Library.synthetic()
+        val jpeg = java.awt.image.BufferedImage(1000, 1000, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        for (t in lib.tracks) javax.imageio.ImageIO.write(jpeg, "jpg", java.io.File(dir, "${lib.albumKey(t.id)}.jpg"))
+        val s = Sim(Options(Board.of("v1"), artDir = dir))
+        sims += s
+        val c = Robolectric.buildService(LinkService::class.java, startIntent("tcp:127.0.0.1:${s.listen(0)}")).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
+        val track = Remote.device.playback.state.track!!
+        Remote.wantArt(Thumbs.MEDIA, track, MediaLink.ART_PX, Remote.device.playback.state.album)
+        waitFor { Remote.mediaArt(track, MediaLink.ART_PX) != null }
+        assertEquals(MediaLink.ART_PX, Remote.mediaArt(track, MediaLink.ART_PX)!!.width)
+        c.destroy()
     }
 
     @Test

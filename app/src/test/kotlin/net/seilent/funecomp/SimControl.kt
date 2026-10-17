@@ -60,6 +60,17 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
         req(Msg.VOLUME, Req.volume(step = detents))
     }
 
+    val percents = ArrayList<Int>()
+    var held: (() -> Unit)? = null
+
+    override fun volumePercent(pct: Int, done: () -> Unit) {
+        percents += pct
+        req(Msg.VOLUME, Req.volume(percent = pct))
+        if (hold) held = done else done()
+    }
+
+    var hold = false
+
     override fun libGet(view: Int, parent: String, offset: Long) {
         req(Msg.LIB_GET, Req.libGet(view, parent, offset, LIB_PAGE, device.lib.rev))
     }

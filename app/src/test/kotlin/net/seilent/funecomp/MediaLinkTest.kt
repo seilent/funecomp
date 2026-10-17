@@ -3,7 +3,9 @@ package net.seilent.funecomp
 import android.app.PendingIntent
 import android.content.Intent
 import android.media.MediaMetadata
+import android.media.VolumeProvider
 import android.media.session.PlaybackState
+import android.os.Looper
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.DeviceState
@@ -17,6 +19,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
@@ -114,5 +117,53 @@ class MediaLinkTest {
         assertEquals("media", n.channelId)
         assertEquals("Airbag", n.extras.getString("android.title"))
         assertEquals("Radiohead", n.extras.getString("android.text"))
+    }
+
+    private val v12 = st.copy(volume = 123, volumePct = 4, volumeStepPct = 2, maxVolumePct = 5)
+
+    @Test
+    fun absoluteVolumeFromThe12Tags() {
+        link.live(device(v12), true, false)
+        val p = link.volume!!
+        assertEquals(VolumeProvider.VOLUME_CONTROL_ABSOLUTE, p.volumeControl)
+        assertEquals(3, p.maxVolume)
+        assertEquals(2, p.currentVolume)
+        p.onSetVolumeTo(3)
+        assertEquals(listOf(5), sim.percents)
+        shadowOf(Looper.getMainLooper()).idle()
+        p.onSetVolumeTo(1)
+        assertEquals(listOf(5, 2), sim.percents)
+        p.onAdjustVolume(0)
+        assertEquals(0, sim.sent.count { it == "VOLUME" } - 2)
+        p.onAdjustVolume(1)
+        assertEquals(3, sim.sent.count { it == "VOLUME" })
+    }
+
+    @Test
+    fun dragsCoalesceToTheLastValue() {
+        link.live(device(v12), true, false)
+        sim.hold = true
+        val p = link.volume!!
+        p.onSetVolumeTo(1)
+        p.onSetVolumeTo(2)
+        p.onSetVolumeTo(3)
+        assertEquals(listOf(2), sim.percents)
+        sim.held!!()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(2, 5), sim.percents)
+    }
+
+    @Test
+    fun relativeWithoutThe12TagsAndRebuildOnAStepChange() {
+        link.live(device(), true, false)
+        assertEquals(VolumeProvider.VOLUME_CONTROL_RELATIVE, link.volume!!.volumeControl)
+        link.live(device(v12), true, false)
+        val a = link.volume!!
+        assertEquals(VolumeProvider.VOLUME_CONTROL_ABSOLUTE, a.volumeControl)
+        link.live(device(v12.copy(volumePct = 2)), true, false)
+        assertTrue(a === link.volume)
+        assertEquals(1, a.currentVolume)
+        link.live(device(v12.copy(volumeStepPct = 1)), true, false)
+        assertEquals(5, link.volume!!.maxVolume)
     }
 }

@@ -67,7 +67,7 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     val off = ui.px(Tok.overlayGlyphOffset)
     val lit = white(Tok.overlayLit)
     val textW = ui.px(ui.w) - 2 * edge
-    val number = ((s.volume ?: 0) * 100f / CONTROL_MAX).roundToInt()
+    val number = s.volumePct ?: ((s.volume ?: 0) * 100f / CONTROL_MAX).roundToInt()
     val hit = with(d) { ui.px(Tok.overlayRing).toDp() }
 
     Box(Modifier.fillMaxSize().alpha(alpha.value).testTag("overlay")) {

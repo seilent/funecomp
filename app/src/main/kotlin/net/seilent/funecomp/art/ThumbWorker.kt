@@ -1,9 +1,11 @@
 package net.seilent.funecomp.art
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import net.seilent.funecomp.MediaLink
 import net.seilent.funecomp.link.ArtGet
 import net.seilent.funecomp.link.Session
 import java.io.File
@@ -16,7 +18,15 @@ class ThumbWorker(dir: File, private val link: () -> Session?, private val log: 
     private val order = ArrayList<String>()
     private var running = false
 
+    private val media = object : LinkedHashMap<String, Bitmap>(MEDIA_KEEP, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Bitmap>?) = size > MEDIA_KEEP
+    }
+
     val images = mutableStateMapOf<String, ImageBitmap>()
+
+    @Volatile var onMedia: (() -> Unit)? = null
+
+    fun media(track: Long, px: Int): Bitmap? = synchronized(media) { media[Thumbs.key(track, Thumbs.bucket(px))] }
 
     fun image(track: Long, px: Int): ImageBitmap? = images[Thumbs.key(track, Thumbs.bucket(px))]
 
@@ -26,12 +36,10 @@ class ThumbWorker(dir: File, private val link: () -> Session?, private val log: 
 
     fun want(slot: Int, track: Long, px: Int, album: String?) {
         val w = Thumbs.Want(slot, track, Thumbs.bucket(px), album)
-        if (images.containsKey(w.key)) return
+        if (if (slot == Thumbs.MEDIA) synchronized(media) { media.containsKey(w.key) } else images.containsKey(w.key)) return
         val f = thumbs.want(w)
         exec.execute { if (f != null) show(w, f) else pump() }
     }
-
-    fun file(track: Long, px: Int): File? = thumbs.cached(track, Thumbs.bucket(px))
 
     private fun pump() {
         if (running) return
@@ -65,6 +73,13 @@ class ThumbWorker(dir: File, private val link: () -> Session?, private val log: 
     private fun show(w: Thumbs.Want, f: File) {
         val b = BitmapFactory.decodeFile(f.path) ?: return
         val k = w.key
+        if (w.slot == Thumbs.MEDIA) {
+            val px = MediaLink.ART_PX
+            val m = if (b.width <= px) b else Bitmap.createScaledBitmap(b, px, px * b.height / b.width.coerceAtLeast(1), true)
+            synchronized(media) { media[k] = m }
+            onMedia?.invoke()
+            return
+        }
         order.remove(k)
         order += k
         while (order.size > KEEP) images.remove(order.removeAt(0))
@@ -73,5 +88,6 @@ class ThumbWorker(dir: File, private val link: () -> Session?, private val log: 
 
     companion object {
         private const val KEEP = 24
+        private const val MEDIA_KEEP = 4
     }
 }
