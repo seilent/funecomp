@@ -167,6 +167,8 @@ class VectorsTest {
             Msg.SET -> SetReply.from(n).encode()
             Msg.IMG_BEGIN -> ImgBeginReply.from(n).encode()
             Msg.IMG_LIST -> ImgListReply.from(n).encode()
+            Msg.ART_GET -> ArtGetReply.from(n).encode()
+            Msg.UPD_BEGIN -> UpdBeginReply.from(n).encode()
             else -> null
         }
         return when (f.type) {
@@ -179,6 +181,7 @@ class VectorsTest {
             Msg.QUEUE -> Queue.from(n).encode()
             Msg.LIB -> Lib.from(n).encode()
             Msg.IMG_ABORT -> ImgAbort.from(n).encode()
+            Msg.UPD_ABORT -> UpdAbort.from(n).encode()
             else -> null
         }
     }

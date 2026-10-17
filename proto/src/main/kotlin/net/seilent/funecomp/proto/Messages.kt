@@ -14,6 +14,10 @@ object Groups {
         "library" to setOf(Msg.LIB, Msg.LIB_GET, Msg.PLAY, Msg.ACTION),
         "queue" to setOf(Msg.QUEUE, Msg.QUEUE_OP),
         "image" to setOf(Msg.IMG_BEGIN, Msg.IMG_DATA, Msg.IMG_END, Msg.IMG_LIST, Msg.IMG_DEL, Msg.IMG_ABORT),
+        "art" to setOf(Msg.ART_GET),
+        "lyrics" to setOf(Msg.LRC_PUT, Msg.LRC_DEL),
+        "update" to setOf(Msg.UPD_BEGIN, Msg.UPD_DATA, Msg.UPD_END, Msg.UPD_ABORT),
+        "clockAuto" to emptySet(),
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -170,6 +174,13 @@ data class State(
     val libRev: Long? = null,
     val album: String? = null,
     val sleepLeftS: Long? = null,
+    val charging: Boolean? = null,
+    val cardFreeMiB: Long? = null,
+    val cardTotalMiB: Long? = null,
+    val volumePct: Int? = null,
+    val volumeStepPct: Int? = null,
+    val lyrics: Boolean? = null,
+    val maxVolumePct: Int? = null,
 ) {
     fun encode() = tlv {
         enum(Tags.State.source, source)
@@ -195,6 +206,13 @@ data class State(
         u32(Tags.State.libRev, libRev)
         str(Tags.State.album, album)
         u32(Tags.State.sleepLeftS, sleepLeftS)
+        bool(Tags.State.charging, charging)
+        u32(Tags.State.cardFreeMiB, cardFreeMiB)
+        u32(Tags.State.cardTotalMiB, cardTotalMiB)
+        u8(Tags.State.volumePct, volumePct)
+        u8(Tags.State.volumeStepPct, volumeStepPct)
+        bool(Tags.State.lyrics, lyrics)
+        u8(Tags.State.maxVolumePct, maxVolumePct)
     }
 
     companion object {
@@ -222,6 +240,13 @@ data class State(
             n.long(Tags.State.libRev),
             n.str(Tags.State.album),
             n.long(Tags.State.sleepLeftS),
+            n.bool(Tags.State.charging),
+            n.long(Tags.State.cardFreeMiB),
+            n.long(Tags.State.cardTotalMiB),
+            n.int(Tags.State.volumePct),
+            n.int(Tags.State.volumeStepPct),
+            n.bool(Tags.State.lyrics),
+            n.int(Tags.State.maxVolumePct),
         )
     }
 }
@@ -375,12 +400,23 @@ data class Eq(val output: Int, val key: String?, val names: List<EqName>, val in
     }
 }
 
-data class QueueItem(val track: Long, val title: String?, val artists: List<String> = emptyList(), val mbids: List<String> = emptyList()) {
+data class QueueItem(
+    val track: Long,
+    val title: String?,
+    val artists: List<String> = emptyList(),
+    val mbids: List<String> = emptyList(),
+    val album: String? = null,
+    val durationMs: Long? = null,
+    val lyrics: Boolean? = null,
+) {
     fun write(o: TlvWriter) = o.apply {
         u64(Tags.QueueItem.track, track)
         str(Tags.QueueItem.title, title)
         artists.forEach { str(Tags.QueueItem.artists, it) }
         mbids.forEach { str(Tags.QueueItem.mbids, it) }
+        str(Tags.QueueItem.album, album)
+        u32(Tags.QueueItem.durationMs, durationMs)
+        bool(Tags.QueueItem.lyrics, lyrics)
     }
 
     val size: Int get() = TlvWriter().rec(Tags.Queue.item) { write(this) }.size
@@ -400,7 +436,10 @@ data class Queue(val rev: Long, val page: PageInfo, val items: List<QueueItem>) 
             n.long(Tags.Queue.rev) ?: 0,
             PageInfo.read(n, Tags.Queue.offset, Tags.Queue.total, Tags.Queue.more),
             n.nodes(Tags.Queue.item).map {
-                QueueItem(it.long(Tags.QueueItem.track) ?: 0, it.str(Tags.QueueItem.title), it.strs(Tags.QueueItem.artists), it.strs(Tags.QueueItem.mbids))
+                QueueItem(
+                    it.long(Tags.QueueItem.track) ?: 0, it.str(Tags.QueueItem.title), it.strs(Tags.QueueItem.artists), it.strs(Tags.QueueItem.mbids),
+                    it.str(Tags.QueueItem.album), it.long(Tags.QueueItem.durationMs), it.bool(Tags.QueueItem.lyrics),
+                )
             },
         )
     }
@@ -506,5 +545,46 @@ data class ImgAbort(val name: String, val offset: Long, val code: Int) {
 
     companion object {
         fun from(n: Node) = ImgAbort(n.str(Tags.ImgAbort.name) ?: "", n.long(Tags.ImgAbort.offset) ?: 0, n.int(Tags.ImgAbort.code) ?: -1)
+    }
+}
+
+data class ArtGetReply(val crc: Long?, val total: Long?, val w: Int?, val h: Int?, val offset: Long, val data: ByteArray?) {
+    fun encode() = tlv {
+        u32(Tags.ArtGetReply.crc, crc)
+        u32(Tags.ArtGetReply.total, total)
+        u16(Tags.ArtGetReply.w, w)
+        u16(Tags.ArtGetReply.h, h)
+        u32(Tags.ArtGetReply.offset, offset)
+        bytes(Tags.ArtGetReply.data, data)
+    }
+
+    companion object {
+        fun from(n: Node) = ArtGetReply(
+            n.long(Tags.ArtGetReply.crc),
+            n.long(Tags.ArtGetReply.total),
+            n.int(Tags.ArtGetReply.w),
+            n.int(Tags.ArtGetReply.h),
+            n.long(Tags.ArtGetReply.offset) ?: 0,
+            n.bytes(Tags.ArtGetReply.data),
+        )
+    }
+}
+
+data class UpdBeginReply(val offset: Long) {
+    fun encode() = tlv { u32(Tags.UpdBeginReply.offset, offset) }
+
+    companion object {
+        fun from(n: Node) = UpdBeginReply(n.long(Tags.UpdBeginReply.offset) ?: 0)
+    }
+}
+
+data class UpdAbort(val offset: Long, val code: Int) {
+    fun encode() = tlv {
+        u32(Tags.UpdAbort.offset, offset)
+        enum(Tags.UpdAbort.code, code)
+    }
+
+    companion object {
+        fun from(n: Node) = UpdAbort(n.long(Tags.UpdAbort.offset) ?: 0, n.int(Tags.UpdAbort.code) ?: -1)
     }
 }

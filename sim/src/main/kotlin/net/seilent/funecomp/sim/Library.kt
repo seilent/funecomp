@@ -33,6 +33,8 @@ class Library(val tracks: List<Track>) {
         return albums.firstOrNull { a -> a.any { it.id == t.id } }
     }
 
+    fun albumKey(track: Long): String? = albums.firstOrNull { a -> a.any { it.id == track } }?.let { java.lang.Long.toUnsignedString(it[0].id) }
+
     private fun albumRow(a: List<Track>) = LibRow(a[0].album, a.size.toLong(), a[0].id, java.lang.Long.toUnsignedString(a[0].id))
 
     private fun trackRow(t: Track) = LibRow(t.title, 1, t.id, java.lang.Long.toUnsignedString(t.id))

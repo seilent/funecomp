@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "14db6fe44fbdf89a8dc2a14310182659d5fe99b9"
-    const val PROTO_SHA256 = "b54a8090e7fc1c7096adb3ad1ebda3bc77d1c1c9233b46d7c769e6165a053e15"
-    const val VECTORS_SHA256 = "f189eaf601a94f55cbbe350ff8a06b4a9a515b22d57f3e1fd3b991be21c2e443"
+    const val COMMIT = "5f888cdd246b434d803f3e51ae315384d406709d"
+    const val PROTO_SHA256 = "23ab3f638a8113c269fd954e514df40db7fab259c2542483bc3aa22bf9785ff3"
+    const val VECTORS_SHA256 = "f53007cf6364e0b4d230af0444cf52e3d16bb9c82219129d31dc83aea804ef7a"
     const val TOKENS_SHA256 = "6ec9e3b80e9c857e924e2a26602d9fd282176337545ef938b4f7113a332f4bd5"
     const val TOKENSV1_SHA256 = "7463c4af8a045b4e5f2561bd4ff488de8edc667358e266ce781950ddac2e35a0"
 }
@@ -18,7 +18,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 1
+    const val minor = 2
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -42,6 +42,11 @@ object Proto {
     const val refuseCount = 5
     const val refuseWindowMs = 10000
     val backoffMs: List<Long> = listOf(1000L, 2000L, 4000L, 8000L, 16000L, 30000L)
+    const val artChunk = 16320
+    const val artMaxPx = 512
+    const val artMinPx = 64
+    const val lrcMaxBytes = 15360
+    const val updChunk = 16320
 }
 
 object Msg {
@@ -63,6 +68,13 @@ object Msg {
     const val QUEUE_OP = 0x26
     const val LIB_GET = 0x27
     const val ACTION = 0x28
+    const val ART_GET = 0x29
+    const val LRC_PUT = 0x2a
+    const val LRC_DEL = 0x2b
+    const val UPD_BEGIN = 0x2c
+    const val UPD_DATA = 0x2d
+    const val UPD_END = 0x2e
+    const val UPD_ABORT = 0x2f
     const val IMG_BEGIN = 0x30
     const val IMG_DATA = 0x32
     const val IMG_END = 0x33
@@ -88,6 +100,13 @@ object Msg {
         QUEUE_OP to MsgInfo(QUEUE_OP, "QUEUE_OP", "app", false),
         LIB_GET to MsgInfo(LIB_GET, "LIB_GET", "app", false),
         ACTION to MsgInfo(ACTION, "ACTION", "app", false),
+        ART_GET to MsgInfo(ART_GET, "ART_GET", "app", false),
+        LRC_PUT to MsgInfo(LRC_PUT, "LRC_PUT", "app", false),
+        LRC_DEL to MsgInfo(LRC_DEL, "LRC_DEL", "app", false),
+        UPD_BEGIN to MsgInfo(UPD_BEGIN, "UPD_BEGIN", "app", false),
+        UPD_DATA to MsgInfo(UPD_DATA, "UPD_DATA", "app", true),
+        UPD_END to MsgInfo(UPD_END, "UPD_END", "app", false),
+        UPD_ABORT to MsgInfo(UPD_ABORT, "UPD_ABORT", "dev", true),
         IMG_BEGIN to MsgInfo(IMG_BEGIN, "IMG_BEGIN", "app", false),
         IMG_DATA to MsgInfo(IMG_DATA, "IMG_DATA", "app", true),
         IMG_END to MsgInfo(IMG_END, "IMG_END", "app", false),
@@ -108,7 +127,9 @@ object Err {
     const val staleRev = 7
     const val noLibrary = 8
     const val noSpace = 9
-    val names: Map<Int, String> = mapOf(1 to "unknown", 2 to "badValue", 3 to "busy", 4 to "refused", 5 to "tooBig", 6 to "crc", 7 to "staleRev", 8 to "noLibrary", 9 to "noSpace")
+    const val notFound = 10
+    const val readOnly = 11
+    val names: Map<Int, String> = mapOf(1 to "unknown", 2 to "badValue", 3 to "busy", 4 to "refused", 5 to "tooBig", 6 to "crc", 7 to "staleRev", 8 to "noLibrary", 9 to "noSpace", 10 to "notFound", 11 to "readOnly")
 }
 
 object Feature {
@@ -117,7 +138,11 @@ object Feature {
     const val library = 2
     const val queue = 3
     const val image = 4
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image")
+    const val art = 5
+    const val lyrics = 6
+    const val update = 7
+    const val clockAuto = 8
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto")
 }
 
 object Enums {
@@ -316,6 +341,13 @@ object Tags {
         const val libRev = 21
         const val album = 22
         const val sleepLeftS = 23
+        const val charging = 24
+        const val cardFreeMiB = 25
+        const val cardTotalMiB = 26
+        const val volumePct = 27
+        const val volumeStepPct = 28
+        const val lyrics = 29
+        const val maxVolumePct = 30
     }
     object Schema {
         const val pivot = 1
@@ -365,6 +397,7 @@ object Tags {
     object Volume {
         const val set = 1
         const val step = 2
+        const val percent = 3
     }
     object Set {
         const val text = 1
@@ -381,6 +414,7 @@ object Tags {
         const val minutes = 4
         const val unixS = 5
         const val zoneS = 6
+        const val automatic = 7
     }
     object DraftReply {
         const val status = 1
@@ -417,6 +451,48 @@ object Tags {
     object Action {
         const val cmd = 1
         const val track = 2
+    }
+    object ArtGet {
+        const val track = 1
+        const val px = 2
+        const val offset = 3
+        const val have = 4
+    }
+    object ArtGetReply {
+        const val crc = 1
+        const val total = 2
+        const val w = 3
+        const val h = 4
+        const val offset = 5
+        const val `data` = 6
+    }
+    object LrcPut {
+        const val track = 1
+        const val libRev = 2
+        const val text = 3
+        const val crc = 4
+    }
+    object LrcDel {
+        const val track = 1
+    }
+    object UpdBegin {
+        const val board = 1
+        const val size = 2
+        const val md5 = 3
+    }
+    object UpdBeginReply {
+        const val offset = 1
+    }
+    object UpdData {
+        const val offset = 1
+        const val `data` = 2
+    }
+    object UpdEnd {
+        const val md5 = 1
+    }
+    object UpdAbort {
+        const val offset = 1
+        const val code = 2
     }
     object ImgBegin {
         const val kind = 1
@@ -495,6 +571,9 @@ object Tags {
         const val title = 2
         const val artists = 3
         const val mbids = 4
+        const val album = 5
+        const val durationMs = 6
+        const val lyrics = 7
     }
     object LibRow {
         const val name = 1
@@ -560,6 +639,13 @@ object Tags {
             21 to Field(21, "libRev", Base.U32, null, false),
             22 to Field(22, "album", Base.STR, null, false),
             23 to Field(23, "sleepLeftS", Base.U32, null, false),
+            24 to Field(24, "charging", Base.BOOL, null, false),
+            25 to Field(25, "cardFreeMiB", Base.U32, null, false),
+            26 to Field(26, "cardTotalMiB", Base.U32, null, false),
+            27 to Field(27, "volumePct", Base.U8, null, false),
+            28 to Field(28, "volumeStepPct", Base.U8, null, false),
+            29 to Field(29, "lyrics", Base.BOOL, null, false),
+            30 to Field(30, "maxVolumePct", Base.U8, null, false),
         ),
         "SCHEMA" to mapOf(
             1 to Field(1, "pivot", Base.STR, null, false),
@@ -609,6 +695,7 @@ object Tags {
         "VOLUME" to mapOf(
             1 to Field(1, "set", Base.U16, null, false),
             2 to Field(2, "step", Base.I32, null, false),
+            3 to Field(3, "percent", Base.U8, null, false),
         ),
         "SET" to mapOf(
             1 to Field(1, "text", Base.STR, null, false),
@@ -625,6 +712,7 @@ object Tags {
             4 to Field(4, "minutes", Base.U32, null, false),
             5 to Field(5, "unixS", Base.I64, null, false),
             6 to Field(6, "zoneS", Base.I32, null, false),
+            7 to Field(7, "automatic", Base.BOOL, null, false),
         ),
         "DRAFT.reply" to mapOf(
             1 to Field(1, "status", Base.ENUM, "DRAFT_STATUS", false),
@@ -661,6 +749,48 @@ object Tags {
         "ACTION" to mapOf(
             1 to Field(1, "cmd", Base.ENUM, "ACTION_CMD", false),
             2 to Field(2, "track", Base.U64, null, false),
+        ),
+        "ART_GET" to mapOf(
+            1 to Field(1, "track", Base.U64, null, false),
+            2 to Field(2, "px", Base.U16, null, false),
+            3 to Field(3, "offset", Base.U32, null, false),
+            4 to Field(4, "have", Base.U32, null, false),
+        ),
+        "ART_GET.reply" to mapOf(
+            1 to Field(1, "crc", Base.U32, null, false),
+            2 to Field(2, "total", Base.U32, null, false),
+            3 to Field(3, "w", Base.U16, null, false),
+            4 to Field(4, "h", Base.U16, null, false),
+            5 to Field(5, "offset", Base.U32, null, false),
+            6 to Field(6, "data", Base.BYTES, null, false),
+        ),
+        "LRC_PUT" to mapOf(
+            1 to Field(1, "track", Base.U64, null, false),
+            2 to Field(2, "libRev", Base.U32, null, false),
+            3 to Field(3, "text", Base.BYTES, null, false),
+            4 to Field(4, "crc", Base.U32, null, false),
+        ),
+        "LRC_DEL" to mapOf(
+            1 to Field(1, "track", Base.U64, null, false),
+        ),
+        "UPD_BEGIN" to mapOf(
+            1 to Field(1, "board", Base.STR, null, false),
+            2 to Field(2, "size", Base.U32, null, false),
+            3 to Field(3, "md5", Base.STR, null, false),
+        ),
+        "UPD_BEGIN.reply" to mapOf(
+            1 to Field(1, "offset", Base.U32, null, false),
+        ),
+        "UPD_DATA" to mapOf(
+            1 to Field(1, "offset", Base.U32, null, false),
+            2 to Field(2, "data", Base.BYTES, null, false),
+        ),
+        "UPD_END" to mapOf(
+            1 to Field(1, "md5", Base.STR, null, false),
+        ),
+        "UPD_ABORT" to mapOf(
+            1 to Field(1, "offset", Base.U32, null, false),
+            2 to Field(2, "code", Base.ENUM, "ABORT_CODE", false),
         ),
         "IMG_BEGIN" to mapOf(
             1 to Field(1, "kind", Base.ENUM, "IMG_KIND", false),
@@ -739,6 +869,9 @@ object Tags {
             2 to Field(2, "title", Base.STR, null, false),
             3 to Field(3, "artists", Base.STR, null, true),
             4 to Field(4, "mbids", Base.STR, null, true),
+            5 to Field(5, "album", Base.STR, null, false),
+            6 to Field(6, "durationMs", Base.U32, null, false),
+            7 to Field(7, "lyrics", Base.BOOL, null, false),
         ),
         "LibRow" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),

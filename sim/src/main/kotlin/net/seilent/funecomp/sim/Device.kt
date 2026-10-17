@@ -1,5 +1,6 @@
 package net.seilent.funecomp.sim
 
+import net.seilent.funecomp.proto.ArtGetReply
 import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Eq
 import net.seilent.funecomp.proto.EqName
@@ -19,14 +20,23 @@ import net.seilent.funecomp.proto.Schema
 import net.seilent.funecomp.proto.SetReply
 import net.seilent.funecomp.proto.Settings
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.UpdAbort
+import net.seilent.funecomp.proto.UpdBeginReply
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
+import java.awt.RenderingHints
+import java.awt.image.BufferedImage
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.security.MessageDigest
 import java.util.zip.CRC32
+import javax.imageio.IIOImage
+import javax.imageio.ImageIO
+import javax.imageio.ImageWriteParam
 
 interface Out {
     fun push(type: Int, payload: ByteArray)
@@ -38,6 +48,13 @@ sealed class Answer {
 }
 
 private const val FULL_VOLUME = 255
+private const val V1_SPAN = 132
+private const val ART_QUALITY = 0.85f
+private const val UPDATE_BATTERY_MIN = 50
+private const val MIB = 1L shl 20
+private const val UPDATE_RESERVE = 64L shl 20
+private val SYNCED = Regex("^\\[[0-9]+:[0-9]{2}(\\.[0-9]+)?]", RegexOption.MULTILINE)
+private val MD5 = Regex("^[0-9a-f]{32}$")
 
 class Device(private val opts: Options, val lib: Library, private val clock: () -> Long) {
     private val board = opts.board
@@ -56,7 +73,10 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         "balance" to "0", "maxVolume" to "100", "powerOnVolume" to "0", "replaygain" to "off",
         "quickplay" to "on", "resume" to "position", "autoNowPlaying" to "off", "playKey" to "nowPlaying",
         "dre" to "off", "crossfade" to "0",
-    ).apply { keys.retainAll(rows.mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones")) }
+    ).apply {
+        keys.retainAll(rows.mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones"))
+        opts.maxPct?.let { put("maxVolume", it.coerceIn(50, 100).toString()) }
+    }
     var settingsRev = 1L
         private set
     private var sleepLeftS = 0L
@@ -91,6 +111,15 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private var storeClock = 0L
     private var shown: String? = null
     private val v11: Boolean get() = opts.minor >= 1
+    private val v12: Boolean get() = opts.minor >= 2
+    private val started = clock()
+    private var lastBattery = -1
+    private val lyrics = HashSet<Long>()
+    private val arts = HashMap<Pair<Long, Int>, Art>()
+    private var upd: Upd? = null
+
+    class Art(val crc: Long, val w: Int, val h: Int, val bytes: ByteArray, val source: Pair<Long, Long>)
+    class Upd(val board: String, val size: Long, val md5: String, val part: File)
     @Volatile var droppedData = 0
         private set
 
@@ -162,12 +191,23 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         val key = t?.artists?.map { fold(it) }?.firstOrNull { it in images }
         if (key != null && key != shown) images[key]?.at = ++storeClock
         shown = key
+        val bat = battery()
+        lastBattery = bat
         State(
             Enums.Source.local, Enums.Output.wired, t?.id, t?.title, t?.artist, t?.artists.orEmpty(),
             t?.mbids.orEmpty(), t?.durationMs, position(), sample, now(), playing, shuffle, repeat,
-            volume, maxVolume, 87, queueRev, slot.toLong(), queue.size.toLong(), lib.rev, t?.album, sleepLeft(),
+            volume, maxVolume, bat, queueRev, slot.toLong(), queue.size.toLong(), lib.rev, t?.album, sleepLeft(),
+            if (v12) opts.battery.charging else null,
+            if (v12) opts.cardFreeMiB else null,
+            if (v12) opts.cardTotalMiB else null,
+            if (v12) volumePercent(volume) else null,
+            if (v12) prefs.getValue("volumeStep").toIntOrNull() ?: 5 else null,
+            if (v12 && t != null) t.id in lyrics else null,
+            if (v12) prefs.getValue("maxVolume").toIntOrNull() ?: 100 else null,
         ).encode()
     }
+
+    private fun battery() = opts.battery.at(now() - started)
 
     fun tick(out: Out) = synchronized(lock) {
         val t = lib.byId[queue.getOrNull(slot)]
@@ -175,6 +215,8 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             advance(1, auto = true)
             send(out, Msg.STATE, state())
         } else if (playing && now() - lastStateAt >= Proto.stateIntervalMs) {
+            send(out, Msg.STATE, state())
+        } else if (battery() != lastBattery) {
             send(out, Msg.STATE, state())
         }
     }
@@ -249,6 +291,11 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             Msg.IMG_END -> imgEnd(body)
             Msg.IMG_LIST -> imgList(body)
             Msg.IMG_DEL -> imgDel(body)
+            Msg.ART_GET -> artGet(body)
+            Msg.LRC_PUT -> lrcPut(body, out)
+            Msg.LRC_DEL -> lrcDel(body, out)
+            Msg.UPD_BEGIN -> updBegin(body)
+            Msg.UPD_END -> updEnd(body)
             else -> Answer.Fail(Err.unknown, "unknown")
         }
     }
@@ -280,9 +327,23 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         return changed(out)
     }
 
-    private fun volumePercent(v: Int) = (v.coerceIn(0, FULL_VOLUME) * 100 + FULL_VOLUME / 2) / FULL_VOLUME
+    private val steps: IntArray = IntArray(101).also { t ->
+        var n = FULL_VOLUME - V1_SPAN
+        for (s in 1..100) {
+            t[s] = n
+            n += if (s <= V1_SPAN - 99) 2 else 1
+        }
+    }
 
-    private fun percentVolume(pct: Int) = (pct.coerceIn(0, 100) * FULL_VOLUME + 50) / 100
+    private fun volumePercent(v: Int): Int {
+        if (!opts.curve) return (v.coerceIn(0, FULL_VOLUME) * 100 + FULL_VOLUME / 2) / FULL_VOLUME
+        if (v <= 0) return 0
+        var s = 100
+        while (s > 1 && steps[s] > v) s--
+        return s
+    }
+
+    private fun percentVolume(pct: Int) = if (opts.curve) steps[pct.coerceIn(0, 100)] else (pct.coerceIn(0, 100) * FULL_VOLUME + 50) / 100
 
     private fun stepVolume(v: Int, detents: Int, pct: Int): Int {
         var n = percentVolume(volumePercent(v) + detents * pct)
@@ -294,8 +355,11 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private fun volume(b: Node, out: Out): Answer {
         val set = b.int(Tags.Volume.set)
         val step = b.int(Tags.Volume.step)
+        val pct = if (v12) b.int(Tags.Volume.percent) else null
         volume = when {
             set != null -> set
+            pct != null -> percentVolume(pct)
+            step == 0 -> volume
             step != null -> stepVolume(volume, step, prefs.getValue("volumeStep").toIntOrNull() ?: 5)
             else -> return Answer.Fail(Err.badValue, "no set or step")
         }.coerceIn(0, maxVolume)
@@ -375,6 +439,10 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             Enums.DraftKind.clock -> {
                 val s = b.long(Tags.Draft.unixS) ?: return Answer.Fail(Err.badValue, "bad clock")
                 if (s < 1735689600L || s > 4102444799L) return Answer.Fail(Err.badValue, "bad clock")
+                if (v12 && b.bool(Tags.Draft.automatic) == true) {
+                    opts.log("clock auto unixS=$s zoneS=${b.int(Tags.Draft.zoneS) ?: 0}")
+                    return Answer.Ok(net.seilent.funecomp.proto.tlv { enum(Tags.DraftReply.status, Enums.DraftStatus.done) })
+                }
             }
             else -> return Answer.Fail(Err.badValue, "no kind")
         }
@@ -434,7 +502,11 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private fun queuePage(out: Out, offset: Int, count: Int) {
         val items = queue.map { id ->
             val t = lib.byId[id]
-            if (v11 && t != null) QueueItem(id, t.title, t.artists, t.mbids) else QueueItem(id, t?.title)
+            when {
+                v12 && t != null -> QueueItem(id, t.title, t.artists, t.mbids, t.album, t.durationMs, id in lyrics)
+                v11 && t != null -> QueueItem(id, t.title, t.artists, t.mbids)
+                else -> QueueItem(id, t?.title)
+            }
         }
         val end = minOf(items.size, offset + count)
         val fixed = Queue(queueRev, PageInfo(0, 0, false), emptyList()).encode().size + 8
@@ -651,6 +723,144 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private fun imgDel(b: Node): Answer {
         val name = b.str(Tags.ImgDel.name) ?: return Answer.Fail(Err.badValue, "no name")
         images.remove(fold(name))
+        return Answer.Ok()
+    }
+
+    private fun artGet(b: Node): Answer {
+        val track = b.long(Tags.ArtGet.track) ?: return Answer.Fail(Err.badValue, "no track")
+        val px = b.int(Tags.ArtGet.px) ?: return Answer.Fail(Err.badValue, "no px")
+        return artGet(track, px, b.long(Tags.ArtGet.offset) ?: 0, b.long(Tags.ArtGet.have))
+    }
+
+    private fun artGet(track: Long, px: Int, offset: Long, have: Long?): Answer {
+        if (track !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
+        val s = px.coerceIn(Proto.artMinPx, Proto.artMaxPx)
+        val a = arts[track to s]?.takeIf { it.source == source(track) } ?: encode(track, s)?.also { arts[track to s] = it } ?: return Answer.Fail(Err.notFound, "no art")
+        if (offset == 0L && have == a.crc) {
+            opts.log("art have track=$track px=$s")
+            return Answer.Ok(ArtGetReply(a.crc, a.bytes.size.toLong(), a.w, a.h, 0, null).encode())
+        }
+        if (offset > 0 && have != null && have != a.crc) {
+            opts.log("art restart track=$track px=$s")
+            return artGet(track, px, 0, null)
+        }
+        if (offset !in 0..a.bytes.size.toLong()) return Answer.Fail(Err.badValue, "bad offset")
+        val end = minOf(a.bytes.size.toLong(), offset + Proto.artChunk)
+        val data = a.bytes.copyOfRange(offset.toInt(), end.toInt())
+        opts.log("art get track=$track px=$s offset=$offset bytes=${data.size} total=${a.bytes.size}")
+        return Answer.Ok(
+            if (offset == 0L) ArtGetReply(a.crc, a.bytes.size.toLong(), a.w, a.h, 0, data).encode()
+            else ArtGetReply(null, null, null, null, offset, data).encode(),
+        )
+    }
+
+    private fun source(track: Long): Pair<Long, Long>? {
+        val f = File(opts.artDir ?: return null, "${lib.albumKey(track) ?: return null}.jpg")
+        return if (f.isFile) f.lastModified() to f.length() else null
+    }
+
+    private fun encode(track: Long, px: Int): Art? {
+        val dir = opts.artDir ?: return null
+        val key = lib.albumKey(track) ?: return null
+        val f = File(dir, "$key.jpg").takeIf { it.isFile } ?: return null
+        val src = ImageIO.read(ByteArrayInputStream(f.readBytes())) ?: return null
+        val side = minOf(src.width, src.height)
+        val s = minOf(px, side)
+        val out = BufferedImage(s, s, BufferedImage.TYPE_INT_RGB)
+        val g = out.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+        val x = (src.width - side) / 2
+        val y = (src.height - side) / 2
+        g.drawImage(src, 0, 0, s, s, x, y, x + side, y + side, null)
+        g.dispose()
+        val bytes = ByteArrayOutputStream()
+        val w = ImageIO.getImageWritersByFormatName("jpeg").next()
+        ImageIO.createImageOutputStream(bytes).use { ios ->
+            w.output = ios
+            val p = w.defaultWriteParam
+            p.compressionMode = ImageWriteParam.MODE_EXPLICIT
+            p.compressionQuality = ART_QUALITY
+            w.write(null, IIOImage(out, null, null), p)
+        }
+        w.dispose()
+        val jpeg = bytes.toByteArray()
+        return Art(crc(jpeg), s, s, jpeg, f.lastModified() to f.length())
+    }
+
+    private fun lrcPut(b: Node, out: Out): Answer {
+        val track = b.long(Tags.LrcPut.track) ?: return Answer.Fail(Err.badValue, "no track")
+        if (b.long(Tags.LrcPut.libRev) != lib.rev) return Answer.Fail(Err.staleRev, "stale rev")
+        if (track !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
+        val text = b.bytes(Tags.LrcPut.text) ?: return Answer.Fail(Err.badValue, "no text")
+        if (text.size > Proto.lrcMaxBytes) return Answer.Fail(Err.tooBig, "too big")
+        if (b.long(Tags.LrcPut.crc) != crc(text)) return Answer.Fail(Err.crc, "crc")
+        if (!SYNCED.containsMatchIn(String(text, Charsets.UTF_8))) return Answer.Fail(Err.badValue, "not synced lrc")
+        opts.lrcDir?.let { File(it.apply { mkdirs() }, "${java.lang.Long.toUnsignedString(track)}.lrc").writeBytes(text) }
+        lyrics += track
+        opts.log("stored lrc track=${java.lang.Long.toUnsignedString(track)} bytes=${text.size}")
+        if (queue.getOrNull(slot) == track) send(out, Msg.STATE, state())
+        return Answer.Ok()
+    }
+
+    private fun lrcDel(b: Node, out: Out): Answer {
+        val track = b.long(Tags.LrcDel.track) ?: return Answer.Fail(Err.badValue, "no track")
+        opts.lrcDir?.let { File(it, "${java.lang.Long.toUnsignedString(track)}.lrc").delete() }
+        if (lyrics.remove(track) && queue.getOrNull(slot) == track) send(out, Msg.STATE, state())
+        return Answer.Ok()
+    }
+
+    private fun updName() = if (board.name == "v1") "v1.upt" else "update.upt"
+
+    private fun updBegin(b: Node): Answer {
+        val dir = opts.updDir ?: return Answer.Fail(Err.refused, "no update dir")
+        val name = b.str(Tags.UpdBegin.board) ?: return Answer.Fail(Err.badValue, "no board")
+        val size = b.long(Tags.UpdBegin.size) ?: return Answer.Fail(Err.badValue, "no size")
+        val md5 = b.str(Tags.UpdBegin.md5)?.lowercase()?.takeIf { MD5.matches(it) } ?: return Answer.Fail(Err.badValue, "bad md5")
+        if (name != board.name) return Answer.Fail(Err.badValue, "wrong board")
+        val other = File(dir, if (board.name == "v1") "update.upt" else "ap80.upt")
+        if (other.exists()) return Answer.Fail(Err.badValue, "remove ${other.name}")
+        if (battery() < UPDATE_BATTERY_MIN && !opts.battery.charging) return Answer.Fail(Err.refused, "battery")
+        val part = File(dir.apply { mkdirs() }, "${updName()}.part")
+        val inf = File(dir, "${updName()}.inf")
+        val same = part.isFile && inf.isFile && inf.readText() == "$size $md5"
+        if (!same) {
+            part.delete()
+            inf.writeText("$size $md5")
+        }
+        if (size - part.length() > opts.cardFreeMiB * MIB - UPDATE_RESERVE) return Answer.Fail(Err.noSpace, "no space")
+        upd = Upd(name, size, md5, part)
+        opts.log("upd begin size=$size offset=${part.length()}")
+        return Answer.Ok(UpdBeginReply(part.length()).encode())
+    }
+
+    fun updData(b: Node, out: Out) = synchronized(lock) {
+        val u = upd ?: return@synchronized
+        val off = b.long(Tags.UpdData.offset) ?: return@synchronized
+        val data = b.bytes(Tags.UpdData.`data`) ?: return@synchronized
+        if (off != u.part.length() || off + data.size > u.size) {
+            send(out, Msg.UPD_ABORT, UpdAbort(u.part.length(), Enums.AbortCode.offsetMismatch).encode())
+            upd = null
+            return@synchronized
+        }
+        u.part.appendBytes(data)
+    }
+
+    private fun updEnd(b: Node): Answer {
+        val u = upd ?: return Answer.Fail(Err.badValue, "no transfer")
+        upd = null
+        val md5 = b.str(Tags.UpdEnd.md5)?.lowercase()
+        if (u.part.length() != u.size) return Answer.Fail(Err.badValue, "short")
+        val got = MessageDigest.getInstance("MD5").digest(u.part.readBytes()).joinToString("") { "%02x".format(it) }
+        if (md5 != u.md5 || got != u.md5) {
+            u.part.delete()
+            File(u.part.parentFile, "${updName()}.inf").delete()
+            return Answer.Fail(Err.crc, "md5")
+        }
+        val f = File(u.part.parentFile, updName())
+        f.delete()
+        u.part.renameTo(f)
+        File(u.part.parentFile, "${updName()}.inf").delete()
+        opts.log("stored upd file=${f.path} bytes=${f.length()} md5=$got")
         return Answer.Ok()
     }
 }

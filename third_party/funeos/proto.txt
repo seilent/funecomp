@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 1
+const minor 2
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -25,6 +25,11 @@ const imgEndReplyMs 5000
 const refuseCount 5
 const refuseWindowMs 10000
 const backoffMs 1000,2000,4000,8000,16000,30000
+const artChunk 16320
+const artMaxPx 512
+const artMinPx 64
+const lrcMaxBytes 15360
+const updChunk 16320
 err unknown 1
 err badValue 2
 err busy 3
@@ -34,11 +39,17 @@ err crc 6
 err staleRev 7
 err noLibrary 8
 err noSpace 9
+err notFound 10
+err readOnly 11
 feature settings 0
 feature eq 1
 feature library 2
 feature queue 3
 feature image 4
+feature art 5
+feature lyrics 6
+feature update 7
+feature clockAuto 8
 enum SOURCE 0 local
 enum SOURCE 1 phone
 enum OUTPUT 0 wired
@@ -158,6 +169,13 @@ tag STATE 20 slots u32 one
 tag STATE 21 libRev u32 one
 tag STATE 22 album str one
 tag STATE 23 sleepLeftS u32 one
+tag STATE 24 charging bool one
+tag STATE 25 cardFreeMiB u32 one
+tag STATE 26 cardTotalMiB u32 one
+tag STATE 27 volumePct u8 one
+tag STATE 28 volumeStepPct u8 one
+tag STATE 29 lyrics bool one
+tag STATE 30 maxVolumePct u8 one
 msg SCHEMA 0x11 dev push
 tag SCHEMA 1 pivot str one
 tag SCHEMA 2 offset u32 one
@@ -200,6 +218,7 @@ tag TRANSPORT 4 repeat REPEAT one
 msg VOLUME 0x21 app req
 tag VOLUME 1 set u16 one
 tag VOLUME 2 step i32 one
+tag VOLUME 3 percent u8 one
 msg SET 0x22 app req
 tag SET 1 text str one
 tag SET.reply 1 rev u32 one
@@ -212,6 +231,7 @@ tag DRAFT 3 role BT_ROLE one
 tag DRAFT 4 minutes u32 one
 tag DRAFT 5 unixS i64 one
 tag DRAFT 6 zoneS i32 one
+tag DRAFT 7 automatic bool one
 tag DRAFT.reply 1 status DRAFT_STATUS one
 msg EQ_SET 0x24 app req
 tag EQ_SET 1 output EQ_OUTPUT one
@@ -241,6 +261,37 @@ tag LIB_GET 5 libRev u32 one
 msg ACTION 0x28 app req
 tag ACTION 1 cmd ACTION_CMD one
 tag ACTION 2 track u64 one
+msg ART_GET 0x29 app req
+tag ART_GET 1 track u64 one
+tag ART_GET 2 px u16 one
+tag ART_GET 3 offset u32 one
+tag ART_GET 4 have u32 one
+tag ART_GET.reply 1 crc u32 one
+tag ART_GET.reply 2 total u32 one
+tag ART_GET.reply 3 w u16 one
+tag ART_GET.reply 4 h u16 one
+tag ART_GET.reply 5 offset u32 one
+tag ART_GET.reply 6 data bytes one
+msg LRC_PUT 0x2a app req
+tag LRC_PUT 1 track u64 one
+tag LRC_PUT 2 libRev u32 one
+tag LRC_PUT 3 text bytes one
+tag LRC_PUT 4 crc u32 one
+msg LRC_DEL 0x2b app req
+tag LRC_DEL 1 track u64 one
+msg UPD_BEGIN 0x2c app req
+tag UPD_BEGIN 1 board str one
+tag UPD_BEGIN 2 size u32 one
+tag UPD_BEGIN 3 md5 str one
+tag UPD_BEGIN.reply 1 offset u32 one
+msg UPD_DATA 0x2d app push
+tag UPD_DATA 1 offset u32 one
+tag UPD_DATA 2 data bytes one
+msg UPD_END 0x2e app req
+tag UPD_END 1 md5 str one
+msg UPD_ABORT 0x2f dev push
+tag UPD_ABORT 1 offset u32 one
+tag UPD_ABORT 2 code ABORT_CODE one
 msg IMG_BEGIN 0x30 app req
 tag IMG_BEGIN 1 kind IMG_KIND one
 tag IMG_BEGIN 2 name str one
@@ -297,6 +348,9 @@ tag QueueItem 1 track u64 one
 tag QueueItem 2 title str one
 tag QueueItem 3 artists str list
 tag QueueItem 4 mbids str list
+tag QueueItem 5 album str one
+tag QueueItem 6 durationMs u32 one
+tag QueueItem 7 lyrics bool one
 tag LibRow 1 name str one
 tag LibRow 2 count u32 one
 tag LibRow 3 first u64 one

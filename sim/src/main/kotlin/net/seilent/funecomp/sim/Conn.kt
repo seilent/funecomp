@@ -170,6 +170,7 @@ class Conn(
         if (!helloDone) return
         if (!f.wantsReply) {
             if (f.type == Msg.IMG_DATA && Groups.allowed(f.type, faults.features)) device.imgData(body, this)
+            if (f.type == Msg.UPD_DATA && Groups.allowed(f.type, faults.features)) device.updData(body, this)
             return
         }
         if (f.type == Msg.PING) return reply(f)

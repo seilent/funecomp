@@ -10,20 +10,22 @@ object Req {
         enum(Tags.Transport.repeat, repeat)
     }
 
-    fun volume(set: Int? = null, step: Int? = null) = tlv {
+    fun volume(set: Int? = null, step: Int? = null, percent: Int? = null) = tlv {
         u16(Tags.Volume.set, set)
         i32(Tags.Volume.step, step)
+        u8(Tags.Volume.percent, percent)
     }
 
     fun set(text: String) = tlv { str(Tags.Set.text, text) }
 
-    fun draft(kind: Int, value: String? = null, role: Int? = null, minutes: Long? = null, unixS: Long? = null, zoneS: Int? = null) = tlv {
+    fun draft(kind: Int, value: String? = null, role: Int? = null, minutes: Long? = null, unixS: Long? = null, zoneS: Int? = null, automatic: Boolean? = null) = tlv {
         enum(Tags.Draft.kind, kind)
         str(Tags.Draft.`value`, value)
         enum(Tags.Draft.role, role)
         u32(Tags.Draft.minutes, minutes)
         i64(Tags.Draft.unixS, unixS)
         i32(Tags.Draft.zoneS, zoneS)
+        bool(Tags.Draft.automatic, automatic)
     }
 
     fun eqSet(output: Int, key: String? = null, ints: Profile? = null) = tlv {
@@ -87,4 +89,33 @@ object Req {
     }
 
     fun imgDel(name: String) = tlv { str(Tags.ImgDel.name, name) }
+
+    fun artGet(track: Long, px: Int, offset: Long = 0, have: Long? = null) = tlv {
+        u64(Tags.ArtGet.track, track)
+        u16(Tags.ArtGet.px, px)
+        u32(Tags.ArtGet.offset, offset)
+        u32(Tags.ArtGet.have, have)
+    }
+
+    fun lrcPut(track: Long, libRev: Long, text: ByteArray, crc: Long) = tlv {
+        u64(Tags.LrcPut.track, track)
+        u32(Tags.LrcPut.libRev, libRev)
+        bytes(Tags.LrcPut.text, text)
+        u32(Tags.LrcPut.crc, crc)
+    }
+
+    fun lrcDel(track: Long) = tlv { u64(Tags.LrcDel.track, track) }
+
+    fun updBegin(board: String, size: Long, md5: String) = tlv {
+        str(Tags.UpdBegin.board, board)
+        u32(Tags.UpdBegin.size, size)
+        str(Tags.UpdBegin.md5, md5)
+    }
+
+    fun updData(offset: Long, data: ByteArray) = tlv {
+        u32(Tags.UpdData.offset, offset)
+        bytes(Tags.UpdData.data, data)
+    }
+
+    fun updEnd(md5: String) = tlv { str(Tags.UpdEnd.md5, md5) }
 }

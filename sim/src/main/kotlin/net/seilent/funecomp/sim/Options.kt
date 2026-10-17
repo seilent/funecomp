@@ -80,8 +80,39 @@ class Options(
     val imgDir: File? = null,
     val minor: Int = Proto.minor,
     val imgCap: Long = IMG_CAP,
+    val artDir: File? = null,
+    val lrcDir: File? = null,
+    val updDir: File? = null,
+    val battery: Battery = Battery(87, 87, 0),
+    val cardFreeMiB: Long = 158_234,
+    val cardTotalMiB: Long = 233_440,
+    val curve: Boolean = board.name == "v1",
+    val maxPct: Int? = null,
 ) {
+    init {
+        if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
+    }
+
     companion object {
         const val IMG_CAP = 128L shl 20
+    }
+}
+
+class Battery(val from: Int, val to: Int, val everyMs: Long) {
+    val charging: Boolean get() = to > from
+
+    fun at(ms: Long): Int {
+        if (everyMs <= 0 || from == to) return from
+        val moved = (ms / everyMs).coerceAtMost(kotlin.math.abs(to - from).toLong()).toInt()
+        return if (to > from) from + moved else from - moved
+    }
+
+    companion object {
+        fun parse(s: String): Battery {
+            val (range, every) = if ('@' in s) s.substringBefore('@') to s.substringAfter('@').toLong() else s to 0L
+            val a = range.substringBefore(':').toInt()
+            val b = range.substringAfter(':', range).toInt()
+            return Battery(a.coerceIn(0, 100), b.coerceIn(0, 100), every)
+        }
     }
 }

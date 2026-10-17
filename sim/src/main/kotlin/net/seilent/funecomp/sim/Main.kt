@@ -5,7 +5,9 @@ import java.time.LocalTime
 import kotlin.system.exitProcess
 
 private const val USAGE = "usage: sim --board ap80|v1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
-    "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] [--quiet]"
+    "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
+    "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
+    "[--curve v1|linear] [--max-pct <n>] [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -19,6 +21,13 @@ fun main(args: Array<String>) {
     var imgDir: String? = null
     var minor: Int? = null
     var imgCap: Long? = null
+    var artDir: String? = null
+    var lrcDir: String? = null
+    var updDir: String? = null
+    var battery: String? = null
+    var card: String? = null
+    var curve: String? = null
+    var maxPct: String? = null
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -36,6 +45,13 @@ fun main(args: Array<String>) {
             "--img-dir" -> imgDir = value()
             "--minor" -> minor = value().toInt()
             "--img-cap" -> imgCap = value().toLong()
+            "--art-dir" -> artDir = value()
+            "--lrc-dir" -> lrcDir = value()
+            "--upd-dir" -> updDir = value()
+            "--battery" -> battery = value()
+            "--card" -> card = value()
+            "--curve" -> curve = value()
+            "--max-pct" -> maxPct = value()
             "--quiet" -> quiet = true
             else -> {
                 System.err.println(USAGE)
@@ -49,8 +65,9 @@ fun main(args: Array<String>) {
         exitProcess(2)
     }
     val base = Options()
+    val b = Board.of(board)
     val opts = Options(
-        Board.of(board),
+        b,
         Faults(faults),
         idle ?: base.idleMs,
         busy ?: base.busyMs,
@@ -59,6 +76,14 @@ fun main(args: Array<String>) {
         imgDir?.let { File(it) },
         minor ?: base.minor,
         imgCap ?: base.imgCap,
+        artDir?.let { File(it) },
+        lrcDir?.let { File(it) },
+        updDir?.let { File(it) },
+        battery?.let { Battery.parse(it) } ?: base.battery,
+        card?.substringBefore(':')?.toLong() ?: base.cardFreeMiB,
+        card?.substringAfter(':')?.toLong() ?: base.cardTotalMiB,
+        curve?.let { it == "v1" } ?: (b.name == "v1"),
+        maxPct?.toInt(),
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {
