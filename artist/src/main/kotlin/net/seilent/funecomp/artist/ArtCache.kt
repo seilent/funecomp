@@ -6,7 +6,7 @@ import java.util.Properties
 
 class ArtCache(private val dir: File) {
     class Entry(val key: String, val name: String, val mbid: String?, val source: String, val credit: Credit?, val url: String, val at: Long)
-    class Miss(val at: Long, val sources: Set<String>)
+    class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "")
     class Looked(val mbid: String?, val at: Long)
 
     private val names = File(dir, "names.properties")
@@ -37,7 +37,7 @@ class ArtCache(private val dir: File) {
     fun miss(key: String): Miss? {
         val p = load(meta(key))
         if (p.getProperty("state") != "miss") return null
-        return Miss(p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }.toSet())
+        return Miss(p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }.toSet(), p.getProperty("keyHash", ""))
     }
 
     @Synchronized
@@ -74,13 +74,14 @@ class ArtCache(private val dir: File) {
     fun putRendered(key: String, w: Int, h: Int, jpeg: ByteArray) = write(jpg(key, w, h), jpeg)
 
     @Synchronized
-    fun putMiss(key: String, at: Long, sources: Set<String>) {
+    fun putMiss(key: String, at: Long, sources: Set<String>, keyHash: String = "") {
         dropFiles(key)
         val p = Properties()
         p.setProperty("state", "miss")
         p.setProperty("key", key)
         p.setProperty("at", at.toString())
         p.setProperty("sources", sources.sorted().joinToString(","))
+        if (keyHash.isNotEmpty()) p.setProperty("keyHash", keyHash)
         save(meta(key), p)
     }
 
@@ -102,6 +103,8 @@ class ArtCache(private val dir: File) {
     private fun meta(key: String) = File(dir, "${hash(key)}.meta")
     private fun src(key: String) = File(dir, "${hash(key)}.src")
     private fun jpg(key: String, w: Int, h: Int) = File(dir, "${hash(key)}.${w}x$h.jpg")
+
+    fun keyHash(key: String) = if (key.isEmpty()) "" else hash("key:$key")
 
     private fun hash(key: String) = MessageDigest.getInstance("SHA-1").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(20)
 

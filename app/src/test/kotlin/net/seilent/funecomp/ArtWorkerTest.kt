@@ -56,12 +56,13 @@ class ArtWorkerTest {
         session: Session? = null,
         gateWaitMs: Long = 20,
         shown: Boolean = false,
-        push: (Session) -> ArtPusher.Report = { ArtPusher.Report(ArtPusher.Stop.DONE) },
+        trigger: () -> Any? = { null },
+        push: (Session, ArtWorker.Run) -> ArtPusher.Report = { _, _ -> ArtPusher.Report(ArtPusher.Stop.DONE) },
     ) = ArtWorker(
         { session },
-        {
+        { s, run ->
             c.push.incrementAndGet()
-            push(it)
+            push(s, run)
         },
         { final ->
             c.shows.incrementAndGet()
@@ -70,7 +71,8 @@ class ArtWorkerTest {
         },
         { c.fetch.incrementAndGet() },
         gateWaitMs,
-        { _, _ -> c.done.incrementAndGet() },
+        trigger,
+        done = { _, _ -> c.done.incrementAndGet() },
     ).also { workers += it }
 
     private fun waitFor(ms: Long = 5000, cond: () -> Boolean) {
@@ -88,7 +90,7 @@ class ArtWorkerTest {
         val c = Calls()
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
-        val w = worker(c, session()) {
+        val w = worker(c, session()) { _, _ ->
             if (c.push.get() == 1) {
                 entered.countDown()
                 release.await()
@@ -109,7 +111,7 @@ class ArtWorkerTest {
     @Test
     fun gateStopsAreRetriedThreeTimesThenThePhoneFetches() {
         val c = Calls()
-        worker(c, session()) { ArtPusher.Report(ArtPusher.Stop.GATE) }.want()
+        worker(c, session()) { _, _ -> ArtPusher.Report(ArtPusher.Stop.GATE) }.want()
         waitFor { c.done.get() == 1 }
         assertEquals(4, c.push.get())
         assertEquals(1, c.fetch.get())
@@ -129,7 +131,7 @@ class ArtWorkerTest {
     @Test
     fun stopDuringTheGateSleepEndsWithoutDone() {
         val c = Calls()
-        val w = worker(c, session(), gateWaitMs = 30_000) { ArtPusher.Report(ArtPusher.Stop.GATE) }
+        val w = worker(c, session(), gateWaitMs = 30_000) { _, _ -> ArtPusher.Report(ArtPusher.Stop.GATE) }
         w.want()
         waitFor { c.push.get() == 1 }
         Thread.sleep(100)
@@ -146,7 +148,7 @@ class ArtWorkerTest {
     fun stopDuringASessionCallEndsWithoutDone() {
         val c = Calls()
         val s = session("no-read")
-        val w = worker(c, s) { ArtPusher(it, { _, _, _, _ -> null }) { true }.run(listOf("Ado" to null)) }
+        val w = worker(c, s) { it, _ -> ArtPusher(it, { n, _, w, h -> net.seilent.funecomp.artist.Art(ByteArray(1000), w, h, n, null, "test", null) }) { true }.run(listOf("Ado" to null)) }
         w.want()
         waitFor { c.push.get() == 1 }
         Thread.sleep(300)
@@ -160,7 +162,7 @@ class ArtWorkerTest {
     fun stopDuringALookupEndsWithoutDone() {
         val c = Calls()
         val looking = CountDownLatch(1)
-        val w = worker(c, session()) {
+        val w = worker(c, session()) { it, _ ->
             ArtPusher(it, { _, _, _, _ ->
                 looking.countDown()
                 Thread.sleep(30_000)
@@ -173,5 +175,87 @@ class ArtWorkerTest {
         waitFor(2000) { artThreads() == 0 }
         assertEquals(0, c.done.get())
         assertEquals(0, c.fetch.get())
+    }
+
+    @Test
+    fun cancelDuringABlockedHttpCallLetsTheNextRunStart() {
+        val c = Calls()
+        val blocked = CountDownLatch(1)
+        val forever = CountDownLatch(1)
+        val http = net.seilent.funecomp.artist.Http { _, _ ->
+            blocked.countDown()
+            forever.await()
+            net.seilent.funecomp.artist.Response(500, ByteArray(0))
+        }
+        val api = net.seilent.funecomp.artist.Api(http, "ua", net.seilent.funecomp.artist.RateLimiter(0) { 0 }, {})
+        val w = worker(c, session()) { _, run ->
+            if (c.push.get() == 1) api.get("https://example.org/a")
+            ArtPusher.Report(if (run.current) ArtPusher.Stop.DONE else ArtPusher.Stop.CLOSED)
+        }
+        w.want()
+        assertTrue(blocked.await(5, TimeUnit.SECONDS))
+        w.cancel()
+        val at = System.nanoTime()
+        w.want()
+        waitFor(100) { c.push.get() == 2 }
+        assertTrue((System.nanoTime() - at) / 1_000_000 <= 100)
+        waitFor { c.done.get() == 1 }
+        forever.countDown()
+        Thread.sleep(200)
+        assertEquals(1, c.done.get())
+        assertEquals(2, c.push.get())
+    }
+
+    @Test
+    fun aCancelledRunMakesNoMoreHttpCalls() {
+        val c = Calls()
+        val calls = AtomicInteger()
+        val first = CountDownLatch(1)
+        val http = net.seilent.funecomp.artist.Http { _, _ ->
+            calls.incrementAndGet()
+            first.countDown()
+            Thread.sleep(300)
+            net.seilent.funecomp.artist.Response(404, ByteArray(0))
+        }
+        val api = net.seilent.funecomp.artist.Api(http, "ua", net.seilent.funecomp.artist.RateLimiter(0) { 0 }, {})
+        val w = worker(c, session()) { _, _ ->
+            try {
+                repeat(10) { api.get("https://example.org/$it") }
+            } catch (_: java.io.IOException) {
+            }
+            ArtPusher.Report(ArtPusher.Stop.DONE)
+        }
+        w.want()
+        assertTrue(first.await(5, TimeUnit.SECONDS))
+        w.cancel()
+        Thread.sleep(800)
+        assertEquals(1, calls.get())
+        assertEquals(0, c.done.get())
+    }
+
+    @Test
+    fun aSameTriggerKeepsTheRunAndANewOnePreemptsIt() {
+        val c = Calls()
+        val trigger = java.util.concurrent.atomic.AtomicInteger()
+        val preempted = AtomicInteger()
+        val w = worker(c, session(), trigger = { trigger.get() }) { _, run ->
+            if (c.push.get() == 1) {
+                val end = System.nanoTime() + 5_000_000_000L
+                while (run.live() && System.nanoTime() < end) Thread.sleep(10)
+                if (!run.live()) preempted.incrementAndGet()
+                ArtPusher.Report(ArtPusher.Stop.PREEMPTED)
+            } else {
+                ArtPusher.Report(ArtPusher.Stop.DONE)
+            }
+        }
+        w.want()
+        waitFor { c.push.get() == 1 }
+        Thread.sleep(200)
+        assertEquals(0, preempted.get())
+        trigger.incrementAndGet()
+        w.want()
+        waitFor { c.push.get() == 2 }
+        waitFor { c.done.get() == 2 }
+        assertEquals(1, preempted.get())
     }
 }

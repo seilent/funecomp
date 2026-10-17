@@ -3,6 +3,8 @@ package net.seilent.funecomp
 import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.net.ConnectivityManager
+import android.net.Network
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
@@ -49,6 +51,9 @@ object Remote : Control {
     private const val FACES = 64
     private const val ATTEMPT_WAKE_MS = 20_000L
     private const val ATTEMPT = "attempt"
+    private const val ART = "art"
+    private const val ART_WAKE_MS = 60_000L
+    private val SECRET = Regex("(api_key|key|token|secret)=[^&]*")
     private val codec = BitmapCodec { Log.i(TAG, it) }
     private val decoded = Memo<BackdropArt>()
     private val faces = Memo<Found>(FACES)
@@ -91,6 +96,8 @@ object Remote : Control {
     @Volatile private var artKey: Pair<List<String>, Int?>? = null
     @Volatile private var backdropFor: List<String>? = null
     @Volatile private var shown = false
+    @Volatile private var trigger = 0
+    @Volatile private var online = true
     private var wake: Wake? = null
     private var exitLogged = false
 
@@ -128,6 +135,8 @@ object Remote : Control {
 
     fun stop() {
         synchronized(lock) { drop() }
+        wake?.drop(ATTEMPT)
+        wake?.drop(ART)
         update { DeviceState() }
         everLive = false
         bluetoothOff = false
@@ -161,6 +170,7 @@ object Remote : Control {
 
     fun shown(on: Boolean) {
         shown = on
+        if (on) trigger++
         if (!on) {
             backdrop = null
             backdropFor = null
@@ -175,6 +185,21 @@ object Remote : Control {
         val am = context.getSystemService(ActivityManager::class.java) ?: return
         val e = am.getHistoricalProcessExitReasons(context.packageName, 0, 1).firstOrNull() ?: return
         Log.i(TAG, "exit reason=${e.reason} status=${e.status} importance=${e.importance} at=${e.timestamp} ${e.description ?: ""}")
+    }
+
+    private fun network(context: Context) {
+        val cm = context.getSystemService(ConnectivityManager::class.java) ?: return
+        online = cm.activeNetwork != null
+        cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                online = true
+                art?.want()
+            }
+
+            override fun onLost(network: Network) {
+                online = cm.activeNetwork != null
+            }
+        })
     }
 
     private fun wake(context: Context) {
@@ -193,7 +218,8 @@ object Remote : Control {
         artist ?: run {
             val c = context.applicationContext
             val version = c.packageManager.getPackageInfo(c.packageName, 0).versionName ?: "0"
-            ArtistArt(UrlHttp(), codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version).also {
+            network(c)
+            ArtistArt(UrlHttp(), codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }).also {
                 artist = it
                 Thread({ credits = it.credits() }, "art-credits").apply { isDaemon = true }.start()
             }
@@ -202,13 +228,25 @@ object Remote : Control {
 
     fun sourcesChanged() = art?.want()
 
+    private fun gate(): Boolean {
+        val open = PushGate.open(device, SystemClock.elapsedRealtime())
+        if (open) wake?.hold(ART, ART_WAKE_MS) else wake?.drop(ART)
+        return open
+    }
+
     private fun worker(context: Context, l: Link): ArtWorker {
         val a = artist(context)
         return ArtWorker(
             { l.session },
-            { s -> ArtPusher(s, a::get) { PushGate.open(device, SystemClock.elapsedRealtime()) }.run(ArtPusher.order(device.playback.state)) },
+            { s, run -> ArtPusher(s, a::get, run::live, ::gate).run(ArtPusher.order(device.playback.state)) },
             { final -> !shown || showBackdrop(a, final) },
             { if (shown) fetch(a) },
+            trigger = { trigger },
+            onHttp = { url ->
+                Log.i(TAG, "art http ${url.replace(SECRET, "$1=x")}")
+                if (PushGate.open(device, SystemClock.elapsedRealtime())) wake?.hold(ART, ART_WAKE_MS)
+            },
+            ended = { wake?.drop(ART) },
         ) { r, e ->
             try {
                 if (r != null) Log.i(TAG, "art ${r.stop} pushed=${r.pushed} stored=${r.stored} missing=${r.missing} failed=${r.failed}")
@@ -386,6 +424,7 @@ object Remote : Control {
             val key = s.artists to s.output
             if (key != artKey) {
                 artKey = key
+                trigger++
                 art?.want()
             }
         }
@@ -403,6 +442,7 @@ object Remote : Control {
         override fun onClosed(reason: String) {
             if (!live) return
             update { it.copy(hello = null) }
+            art?.cancel()
             phase(Phase.DOWN)
             wake?.drop(ATTEMPT)
             Log.i(TAG, "closed $reason")

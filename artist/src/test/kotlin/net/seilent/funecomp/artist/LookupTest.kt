@@ -110,12 +110,42 @@ class LookupTest {
         assertEquals("https://example.org/a.jpg", seen.single())
         code = 404
         assertNull(api.get("https://example.org/b"))
-        code = 502
+        for (c in listOf(502, 401, 403)) {
+            code = c
+            try {
+                api.get("https://example.org/c")
+                throw AssertionError("no IOException for $c")
+            } catch (e: IOException) {
+            }
+        }
+    }
+
+    @Test
+    fun aFanartKeyChangeRetriesAMiss() {
+        sources = Sources(fanartTv = true, fanartTvKey = "one")
+        assertNull(art().get("Ado", ado, 384, 480))
+        val n = http.calls.size
+        assertNull(art().get("Ado", ado, 384, 480))
+        assertEquals(n, http.calls.size)
+        sources = Sources(fanartTv = true, fanartTvKey = "two")
+        assertNull(art().get("Ado", ado, 384, 480))
+        assertTrue(http.calls.size > n)
+    }
+
+    @Test
+    fun forbiddenIsNotCachedAsAMiss() {
+        sources = Sources(fanartTv = true, fanartTvKey = "bad")
+        val n = http.calls.size
+        val api = "https://webservice.fanart.tv/v3/music/$ado?api_key=bad"
+        http.queued[api] = ArrayDeque(listOf(Response(403, ByteArray(0))))
         try {
-            api.get("https://example.org/c")
+            art().get("Ado", ado, 384, 480)
             throw AssertionError("no IOException")
         } catch (e: IOException) {
+            assertTrue(e.message!!.contains("403"))
         }
+        assertTrue(http.calls.size > n)
+        assertNull(cache.miss(ado))
     }
 
     @Test

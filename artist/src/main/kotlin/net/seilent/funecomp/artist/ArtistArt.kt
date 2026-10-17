@@ -13,6 +13,7 @@ class ArtistArt(
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val sleep: (Long) -> Unit = { Thread.sleep(it) },
     mono: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val online: () -> Boolean = { true },
 ) {
     private val ua = "funecomp/$version (github@seilent.net)"
     private fun api(limiter: RateLimiter) = Api(http, ua, limiter, sleep)
@@ -52,10 +53,12 @@ class ArtistArt(
                 return Art(jpeg, w, h, e.name, e.mbid, e.source, e.credit)
             }
         }
-        cache.miss(key)?.let { m -> if (now - m.at < TTL_MS && m.sources.containsAll(on)) return null }
+        val keyHash = if (Sources.FANART_TV in on) cache.keyHash(sources().fanartTvKey.trim()) else ""
+        cache.miss(key)?.let { m -> if (now - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash) return null }
+        if (!online()) throw IOException("offline")
         val found = lookup(name, id, w, h, on)
         if (found == null) {
-            cache.putMiss(key, now, on)
+            cache.putMiss(key, now, on, keyHash)
             return null
         }
         val (c, src, jpeg) = found
@@ -77,6 +80,7 @@ class ArtistArt(
 
     private fun resolve(name: String, now: Long): String? {
         cache.mbid(name)?.let { l -> if (l.mbid != null || now - l.at < TTL_MS) return l.mbid }
+        if (!online()) throw IOException("offline")
         val id = mb.search(name)
         cache.putMbid(name, id, now)
         return id

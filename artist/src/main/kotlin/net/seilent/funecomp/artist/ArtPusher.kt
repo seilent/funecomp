@@ -12,9 +12,10 @@ import net.seilent.funecomp.proto.gen.Msg
 class ArtPusher(
     private val session: Session,
     private val art: (String, String?, Int, Int) -> Art?,
+    private val keep: () -> Boolean = { true },
     private val gate: () -> Boolean,
 ) {
-    enum class Stop { DONE, UNSUPPORTED, GATE, CLOSED, ABORTED }
+    enum class Stop { DONE, UNSUPPORTED, GATE, CLOSED, ABORTED, PREEMPTED }
 
     class Report(
         val stop: Stop,
@@ -37,25 +38,26 @@ class ArtPusher(
         }
     }
 
-    fun run(artists: List<Pair<String, String?>>): Report {
+    fun run(artists: List<Pair<String, String?>>, have: Set<String> = emptySet()): Report {
         val hello = session.hello
         val w = hello?.backdropW
         val h = hello?.backdropH
         if (hello == null || w == null || h == null || !hello.has("image")) return Report(Stop.UNSUPPORTED)
-        val have = stored() ?: return Report(if (session.closedReason != null) Stop.CLOSED else Stop.UNSUPPORTED)
         val pushed = LinkedHashMap<String, Long>()
         val stored = ArrayList<String>()
         val missing = ArrayList<String>()
         val failed = ArrayList<String>()
         fun report(stop: Stop) = Report(stop, pushed, stored, missing, failed)
         val seen = HashSet<String>()
+        var gated = false
         for ((name, mbid) in artists) {
             if (name.isBlank() || !seen.add(name)) continue
+            if (session.closedReason != null) return report(Stop.CLOSED)
+            if (!keep()) return report(Stop.PREEMPTED)
             if (name in have) {
                 stored += name
                 continue
             }
-            if (!gate()) return report(Stop.GATE)
             val a = try {
                 art(name, mbid, w, h)
             } catch (e: InterruptedException) {
@@ -69,13 +71,17 @@ class ArtPusher(
                 missing += name
                 continue
             }
-            if (!gate()) return report(Stop.GATE)
+            if (!keep()) return report(Stop.PREEMPTED)
+            if (gated || !gate()) {
+                gated = true
+                continue
+            }
             var tries = 0
             while (true) {
                 when (val o = ImagePush(session, name, a.mbid, a.jpeg, w, h, gate).run()) {
                     is ImagePush.Outcome.Done -> pushed[name] = o.from
                     is ImagePush.Outcome.Have -> stored += name
-                    is ImagePush.Outcome.Gated -> return report(Stop.GATE)
+                    is ImagePush.Outcome.Gated -> gated = true
                     is ImagePush.Outcome.Aborted -> {
                         if (session.closedReason != null) return report(Stop.CLOSED)
                         if (o.abort.code in finalAborts) return report(Stop.ABORTED)
@@ -91,7 +97,7 @@ class ArtPusher(
                 break
             }
         }
-        return report(Stop.DONE)
+        return report(if (gated) Stop.GATE else Stop.DONE)
     }
 
     companion object {

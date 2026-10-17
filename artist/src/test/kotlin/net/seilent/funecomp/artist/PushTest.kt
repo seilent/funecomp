@@ -74,9 +74,13 @@ class PushTest {
         assertEquals(setOf("宇多田ヒカル", "コバソロ"), stored.keys)
         assertEquals("4981caf4-856a-4a2f-bdf1-3cfd65c6a532", stored.getValue("コバソロ").mbid)
 
-        val again = ArtPusher(s, { _, _, _, _ -> throw AssertionError("lookup for a stored artist") }) { true }.run(order.take(2))
+        val have = ArtPusher(s, { _, _, _, _ -> null }) { true }.stored()!!
+        assertEquals(setOf("宇多田ヒカル", "コバソロ"), have)
+        val again = ArtPusher(s, { _, _, _, _ -> throw AssertionError("lookup for a stored artist") }) { true }.run(order.take(2), have)
         assertEquals(listOf("宇多田ヒカル", "コバソロ"), again.stored)
-        assertEquals(setOf("宇多田ヒカル", "コバソロ"), ArtPusher(s, { _, _, _, _ -> null }) { true }.stored()!!.toSet())
+        val current = ArtPusher(s, lookup::get) { true }.run(order.take(2))
+        assertEquals(listOf("宇多田ヒカル", "コバソロ"), current.stored)
+        assertTrue(current.pushed.isEmpty())
     }
 
     @Test
@@ -94,11 +98,29 @@ class PushTest {
     }
 
     @Test
-    fun closedGateStopsBeforeAnyLookup() {
+    fun closedGateLooksUpButPushesNothing() {
         val (sim, port) = sim()
         val s = session(port)
-        val r = ArtPusher(s, { _, _, _, _ -> throw AssertionError("lookup while gated") }) { false }.run(listOf("Ado" to null))
+        val looked = ArrayList<String>()
+        val r = ArtPusher(s, { n, _, w, h ->
+            looked += n
+            art(n, noise(w, h, 2), w, h)
+        }) { false }.run(listOf("Ado" to null, "Mili" to null))
         assertEquals(ArtPusher.Stop.GATE, r.stop)
+        assertEquals(listOf("Ado", "Mili"), looked)
+        assertTrue(sim.device.stored.isEmpty())
+    }
+
+    @Test
+    fun aChangedTriggerStopsAtTheNextArtist() {
+        val (sim, port) = sim()
+        val s = session(port)
+        var keep = true
+        val r = ArtPusher(s, { n, _, w, h ->
+            keep = false
+            art(n, noise(w, h, 3), w, h)
+        }, { keep }) { true }.run(listOf("Ado" to null, "Mili" to null))
+        assertEquals(ArtPusher.Stop.PREEMPTED, r.stop)
         assertTrue(sim.device.stored.isEmpty())
     }
 
@@ -192,7 +214,8 @@ class PushTest {
             art(n, img, w, h)
         }
         ArtPusher(s, lookup) { true }.run(listOf("Sigur Rós" to null))
-        val r = ArtPusher(s, lookup) { true }.run(listOf("Sigur Rós" to null, "SIGUR RÓS" to null))
+        val have = ArtPusher(s, lookup) { true }.stored()!!
+        val r = ArtPusher(s, lookup) { true }.run(listOf("Sigur Rós" to null, "SIGUR RÓS" to null), have)
         assertEquals(listOf("Sigur Rós", "SIGUR RÓS"), r.stored)
         assertEquals(2, lookups)
     }
