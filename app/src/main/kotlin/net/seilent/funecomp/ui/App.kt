@@ -7,7 +7,11 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
@@ -25,7 +29,15 @@ private class Touch(base: ViewConfiguration, private val slop: Float) : ViewConf
     override val touchSlop: Float get() = slop
 }
 
-class Shell(val nav: Nav = Nav(), val overlay: Overlay = Overlay(), val sheet: SheetState = SheetState(), val toast: ToastState = ToastState())
+class Shell(
+    val nav: Nav = Nav(),
+    val overlay: Overlay = Overlay(),
+    val sheet: SheetState = SheetState(),
+    val toast: ToastState = ToastState(),
+    gated: Boolean = false,
+) {
+    var gated by mutableStateOf(gated)
+}
 
 fun homeItems(device: DeviceState, link: LinkView, sources: Sources): List<HomeItem> {
     val playlists = device.lib.pages[LibKey(Enums.View.playlists, "")]?.total
@@ -64,6 +76,13 @@ fun App(
         ) {
             val nav = shell.nav
             val ctx = Ctx(device, control, nav, shell.sheet, shell.toast)
+            LaunchedEffect(shell.gated, link.phase) {
+                if (shell.gated && link.phase == Phase.LIVE) {
+                    shell.gated = false
+                    shell.sheet.close()
+                    nav.reset(listOf(Page.Home, Page.NowPlaying))
+                }
+            }
             BackHandler(shell.sheet.shown || nav.stack.size > 1) {
                 if (shell.sheet.shown) shell.sheet.close() else nav.pop()
             }

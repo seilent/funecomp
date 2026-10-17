@@ -48,7 +48,7 @@ class Main : ComponentActivity() {
     private var granted by mutableStateOf(true)
     private var spec by mutableStateOf<String?>(null)
     private var sources by mutableStateOf(Sources())
-    private var shell by mutableStateOf(Shell())
+    private var shell by mutableStateOf(Shell(Nav(listOf(Page.Connection)), gated = true))
     private var name by mutableStateOf<String?>(null)
     private val companionUuid = UUID.fromString(Proto.uuid)
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {

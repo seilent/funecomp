@@ -2,6 +2,9 @@ package net.seilent.funecomp
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
@@ -26,6 +29,7 @@ import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -58,6 +62,35 @@ class BehaviorTest {
         rule.waitForIdle()
         rule.mainClock.advanceTimeBy(ms)
         rule.waitForIdle()
+    }
+
+    @Test
+    fun connectionGateOpensNowPlayingOnTheFirstLiveAndStaysOnADrop() {
+        val c = SimControl("ap80")
+        val shell = Shell(Nav(listOf(Page.Connection)), gated = true)
+        var link by mutableStateOf(LinkView(Phase.CONNECTING, "AP80"))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, link, c, shell) }
+        }
+        settle(1000)
+        assertEquals(listOf(Page.Connection), shell.nav.stack.toList())
+        rule.onNodeWithTag("conn.status").assertIsDisplayed()
+        link = LinkView(Phase.DOWN, "AP80")
+        settle(1000)
+        assertEquals(listOf(Page.Connection), shell.nav.stack.toList())
+        link = LinkView(Phase.LIVE, "AP80", everLive = true)
+        settle(1000)
+        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
+        assertFalse(shell.gated)
+        link = LinkView(Phase.DOWN, "AP80", everLive = true)
+        settle(1000)
+        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
+        shell.nav.pop()
+        shell.nav.push(Page.Connection)
+        link = LinkView(Phase.LIVE, "AP80", everLive = true)
+        settle(1000)
+        assertEquals(listOf(Page.Home, Page.Connection), shell.nav.stack.toList())
     }
 
     @Test

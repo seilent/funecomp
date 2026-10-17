@@ -60,6 +60,12 @@ class Nav(start: List<Page> = listOf(Page.Home, Page.NowPlaying)) {
         return true
     }
 
+    fun reset(pages: List<Page>) {
+        forward = true
+        stack.clear()
+        stack.addAll(pages)
+    }
+
     fun popTo(p: Page) {
         val i = stack.lastIndexOf(p)
         if (i < 0) {
