@@ -121,7 +121,7 @@ data class DeviceState(
     fun withLib(l: Lib): DeviceState {
         val base = if (l.libRev == lib.rev) lib else LibMirror(l.libRev)
         val key = LibKey(l.view, l.parent ?: "")
-        val old = if (l.page.offset == 0L) LibList() else base.pages[key] ?: LibList()
+        val old = base.pages[key] ?: LibList()
         val rows = old.rows + l.rows.mapIndexed { i, r -> l.page.offset + i to r }
         return copy(lib = base.copy(pages = base.pages + (key to LibList(l.page.total, rows))))
     }

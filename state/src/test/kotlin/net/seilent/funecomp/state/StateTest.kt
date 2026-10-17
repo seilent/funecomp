@@ -137,6 +137,20 @@ class StateTest {
     }
 
     @Test
+    fun libPagesOfOneRevMergeWhateverTheOrder() {
+        var d = DeviceState().withState(State(libRev = 7), 0)
+        val rows = (0 until 4).map { LibRow("a$it", 1, it.toLong(), "a$it") }
+        d = d.withLib(Lib(7, Enums.View.artists, "", PageInfo(0, 4, true), rows.take(2)))
+        d = d.withLib(Lib(7, Enums.View.artists, "", PageInfo(2, 4, false), rows.drop(2)))
+        d = d.withLib(Lib(7, Enums.View.artists, "", PageInfo(0, 4, true), rows.take(2)))
+        val list = d.lib.pages.getValue(LibKey(Enums.View.artists, ""))
+        assertEquals(4L, list.total)
+        assertEquals((0L until 4L).toList(), list.rows.keys.sorted())
+        d = d.withLib(Lib(8, Enums.View.artists, "", PageInfo(0, 4, true), rows.take(1)))
+        assertEquals(listOf(0L), d.lib.pages.getValue(LibKey(Enums.View.artists, "")).rows.keys.toList())
+    }
+
+    @Test
     fun pushGateClosedForStreamsUnknownOutputAndJustAfterPlay() {
         val wired = State(output = Enums.Output.wired, playing = false)
         var d = DeviceState().withState(wired, 0)
