@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import net.seilent.funecomp.artist.Accounts
+import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.ui.App
@@ -62,6 +63,13 @@ class Main : ComponentActivity() {
         granted = linkAllowed()
         name = deviceName(spec)
         if (granted && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) startLink()
+    }
+
+    private var picked: ((String, String?) -> Unit)? = null
+    private val eqPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val done = picked ?: return@registerForActivityResult
+        picked = null
+        if (uri != null) AutoEqs.read(uri, done)
     }
 
     private val control = object : Control by Remote {
@@ -116,6 +124,19 @@ class Main : ComponentActivity() {
 
         override fun listenBrainzToken(token: String) = Scrobbles.listenBrainzToken(token)
 
+        override fun eqFile(done: (String, String?) -> Unit) {
+            picked = done
+            try {
+                eqPicker.launch(arrayOf("text/*"))
+            } catch (_: ActivityNotFoundException) {
+                picked = null
+            }
+        }
+
+        override fun autoEqFind(query: String, done: (List<AutoEqIndex.Entry>?) -> Unit) = AutoEqs.find(query, done)
+
+        override fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) = AutoEqs.profile(entry, done)
+
         override fun askPermission() {
             if (asked >= 2) {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
@@ -132,6 +153,7 @@ class Main : ComponentActivity() {
         sources = sources(this)
         Remote.artist(this)
         Scrobbles.init(this)
+        AutoEqs.init(this)
         Remote.logExit(this)
         batteryAsked = prefs().getBoolean(BATTERY_ASKED, false)
         remember(intent)

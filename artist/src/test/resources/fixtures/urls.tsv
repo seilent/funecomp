@@ -58,3 +58,5 @@ https://api.deezer.com/search/artist?q=Sorahoshi%20Kirame	nm-176a18bf8941.json
 https://musicbrainz.org/ws/2/artist/?query=%E5%AE%87%E5%A4%9A%E7%94%B0%E3%83%92%E3%82%AB%E3%83%AB%5C%2FUtada%20Hikaru%E3%80%90%E5%85%AC%E5%BC%8F%E3%80%91&fmt=json&limit=10	nm-7025338353bc.json
 https://musicbrainz.org/ws/2/artist/?query=%E5%AE%87%E5%A4%9A%E7%94%B0%E3%83%92%E3%82%AB%E3%83%AB%5C%2FUtada%20Hikaru&fmt=json&limit=10	nm-a480fc2797a7.json
 https://musicbrainz.org/ws/2/artist/?query=Tenjin%20Kotone&fmt=json&limit=10	nm-f41807d1fe79.json
+https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/README.md	aeq-index.md
+https://raw.githubusercontent.com/jaakkopasanen/AutoEq/master/results/oratory1990/over-ear/Sennheiser%20HD%20650/Sennheiser%20HD%20650%20ParametricEQ.txt	aeq-hd650.txt

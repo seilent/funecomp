@@ -85,7 +85,7 @@ fun App(
                     nav.reset(listOf(Page.Home, Page.NowPlaying))
                 }
                 if (link.askBattery && link.phase == Phase.LIVE && !shell.sheet.shown) {
-                    shell.sheet.open("background", listOf("allow", "not now"), info = BACKGROUND_INFO, onDismiss = { control.backgroundLater() }) {
+                    shell.sheet.open("background", listOf("allow", "not now"), info = listOf(BACKGROUND_INFO), onDismiss = { control.backgroundLater() }) {
                         if (it == 0) control.allowBackground() else control.backgroundLater()
                     }
                 }

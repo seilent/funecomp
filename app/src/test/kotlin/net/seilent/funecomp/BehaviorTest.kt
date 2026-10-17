@@ -17,6 +17,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Enums
@@ -187,7 +189,7 @@ class BehaviorTest {
     fun backgroundSheetAllow() {
         val (c, shell) = start(listOf(Page.Home), LinkView(Phase.LIVE, "V1", battery = Battery.OPTIMIZED, askBattery = true))
         assertTrue(shell.sheet.shown)
-        assertEquals("works with the screen off", shell.sheet.info)
+        assertEquals(listOf("works with the screen off"), shell.sheet.info)
         assertEquals(0, shell.sheet.focus)
         rule.onNodeWithTag("sheet.info").performClick()
         settle(300)
@@ -291,5 +293,91 @@ class BehaviorTest {
         assertEquals(0L, c.device.lib.pages.getValue(fav).total)
         rule.onNode(hasText("0 songs", ignoreCase = true) and hasAnyAncestor(hasTestTag("row.favorites"))).assertExists()
         assertEquals(emptyList<Int>(), c.failed)
+    }
+
+    private val eqPage = listOf(Page.Home, Page.Settings, Page.Eq(Enums.EqOutput.wired))
+
+    private fun tapSheetItem(i: Int) {
+        rule.onNodeWithTag("sheet.item.$i").performClick()
+        settle(500)
+    }
+
+    @Test
+    fun autoEqSourceFetchesNothingUntilASearch() {
+        val (c, shell) = start(eqPage)
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(500)
+        assertEquals(listOf("file", "search"), shell.sheet.items)
+        tapSheetItem(1)
+        assertEquals(emptyList<String>(), c.queries)
+        rule.onNodeWithTag("entry").performImeAction()
+        settle(500)
+        assertEquals(emptyList<String>(), c.queries)
+    }
+
+    @Test
+    fun autoEqFileShowsTheConfirmWithoutSending() {
+        val (c, shell) = start(eqPage)
+        val sent = c.sent.size
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(500)
+        tapSheetItem(0)
+        assertEquals("Sennheiser HD 650", shell.sheet.title)
+        assertEquals(listOf("preamp -6.1 db", "10 bands", "device has no eq presets"), shell.sheet.info)
+        assertEquals(listOf("cancel"), shell.sheet.items)
+        tapSheetItem(0)
+        assertFalse(shell.sheet.shown)
+        assertEquals(sent, c.sent.size)
+    }
+
+    @Test
+    fun autoEqClampsAndRefusals() {
+        val (c, shell) = start(eqPage)
+        c.eqText = "Preamp: 1.5 dB\nFilter 1: ON PK Fc 15 Hz Gain 14 dB Q 12"
+        c.eqFileName = "custom.txt"
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(500)
+        tapSheetItem(0)
+        assertEquals(
+            listOf("preamp 0.0 db", "1 band", "preamp +1.5 to 0.0", "band 1 fc 15 hz to 20 hz", "band 1 gain +14.0 to +12.0", "band 1 q 12.00 to 10.00", "invalid name", "device has no eq presets"),
+            shell.sheet.info,
+        )
+        tapSheetItem(0)
+        c.eqText = (1..11).joinToString("\n") { "Filter $it: ON PK Fc ${it * 100} Hz Gain 1 dB Q 1" }
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(500)
+        tapSheetItem(0)
+        assertEquals(listOf("11 filters, max 10"), shell.sheet.info)
+        tapSheetItem(0)
+        c.eqText = null
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(500)
+        tapSheetItem(0)
+        assertEquals(listOf("not readable"), shell.sheet.info)
+    }
+
+    @Test
+    fun autoEqSearchPicksAResult() {
+        val (c, shell) = start(eqPage)
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(500)
+        tapSheetItem(1)
+        rule.onNodeWithTag("entry").performTextInput("hd 650")
+        rule.onNodeWithTag("entry").performImeAction()
+        settle(500)
+        assertEquals(listOf("hd 650"), c.queries)
+        assertEquals("hd 650", shell.sheet.title)
+        assertEquals(4, shell.sheet.items.size)
+        tapSheetItem(2)
+        assertEquals("Sennheiser HD 650 (2020, worn earpads)", shell.sheet.title)
+        tapSheetItem(0)
+        c.found = emptyList()
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(500)
+        tapSheetItem(1)
+        rule.onNodeWithTag("entry").performTextInput("nothing")
+        rule.onNodeWithTag("entry").performImeAction()
+        settle(500)
+        assertEquals(listOf("no results"), shell.sheet.info)
     }
 }

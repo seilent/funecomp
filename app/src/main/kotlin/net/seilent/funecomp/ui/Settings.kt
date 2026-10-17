@@ -291,6 +291,7 @@ private fun EqRows(ctx: Ctx, output: Int) {
         val keys = names.map { it.key }
         ctx.sheet.open("profile", names.map { it.name ?: it.key }, keys.indexOf(key).coerceAtLeast(0)) { ctx.control.eqSet(output, key = keys[it]) }
     }
+    lines += EqLine("import", "import autoeq", "", false) { autoEqImport(ctx) }
     if (key == "custom") {
         lines += EqLine("preamp", "preamp", signed(ints.preamp10 / 10f, false) + " db", false) {
             typedAt("preamp", "preamp", signed(ints.preamp10 / 10f, false), Tok.eq_preampMin, Tok.eq_preampMax, "db") { v ->
@@ -333,7 +334,7 @@ private fun EqRows(ctx: Ctx, output: Int) {
     Rows(ui.contentTop, state, focus = lines.indexOfFirst { it.id == focus }) {
         itemsIndexed(lines, key = { _, l -> l.id }) { i, l ->
             val tag = when {
-                l.id == "profile" || l.id == "preamp" -> "eq.${l.id}"
+                l.id == "profile" || l.id == "preamp" || l.id == "import" -> "eq.${l.id}"
                 l.sub -> "eq.band.${l.id.removePrefix("band").substringBefore('.')}.${fieldTags[l.id.substringAfter('.').toInt()]}"
                 else -> "eq.band.${l.id.removePrefix("band")}"
             }

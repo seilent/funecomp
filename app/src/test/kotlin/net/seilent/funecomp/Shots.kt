@@ -16,6 +16,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
@@ -102,6 +104,10 @@ private val CREDITS = listOf(
 
 private val SCROBBLE = ScrobbleView(Accounts(true, "0123456789abcdef0123456789abcdef", "secret", "seilent", "session", true, "token", "seilent"), queued = 3)
 
+private val EQ = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)
+
+private val CLAMPED = SimControl.HD650.replace("Preamp: -6.1 dB", "Preamp: 1.5 dB").replace("Gain 6.4 dB", "Gain 14.0 dB").replace("Fc 5332 Hz Gain -1.1 dB Q 5.75", "Fc 22000 Hz Gain -30.0 dB Q 12.00")
+
 val SHOTS = listOf(
     Shot("home", pages = HOME, prep = ::playing),
     Shot("nowplaying", pages = NP, prep = ::playing),
@@ -164,6 +170,40 @@ val SHOTS = listOf(
         rule.onNodeWithTag("eq.band.0.gain").performClick()
     },
     Shot("eq-profile", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)) { rule.onNodeWithTag("eq.profile").performClick() },
+    Shot("autoeq-source", pages = EQ) { rule.onNodeWithTag("eq.import").performClick() },
+    Shot("autoeq-results", pages = EQ) {
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(600)
+        rule.onNodeWithTag("sheet.item.1").performClick()
+        settle(600)
+        rule.onNodeWithTag("entry").performTextInput("hd 650")
+        rule.onNodeWithTag("entry").performImeAction()
+    },
+    Shot("autoeq-confirm-long", pages = EQ) {
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(600)
+        rule.onNodeWithTag("sheet.item.1").performClick()
+        settle(600)
+        rule.onNodeWithTag("entry").performTextInput("hd 650")
+        rule.onNodeWithTag("entry").performImeAction()
+        settle(600)
+        rule.onNodeWithTag("sheet.item.2").performClick()
+    },
+    Shot("autoeq-confirm", pages = EQ) {
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(600)
+        rule.onNodeWithTag("sheet.item.0").performClick()
+    },
+    Shot("autoeq-clamped", pages = EQ, prep = { it.eqText = CLAMPED }) {
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(600)
+        rule.onNodeWithTag("sheet.item.0").performClick()
+    },
+    Shot("autoeq-refused", pages = EQ, prep = { it.eqText = (1..11).joinToString("\n") { i -> "Filter $i: ON PK Fc ${i * 100} Hz Gain 1 dB Q 1" } }) {
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(600)
+        rule.onNodeWithTag("sheet.item.0").performClick()
+    },
     Shot("connection", pages = HOME + Page.Connection),
     Shot("connection-refused", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused)),
     Shot("connection-permission", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "AP80", permission = false)),

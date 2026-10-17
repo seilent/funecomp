@@ -44,7 +44,7 @@ class SheetState {
         private set
     var items by mutableStateOf(emptyList<String>())
         private set
-    var info by mutableStateOf<String?>(null)
+    var info by mutableStateOf(emptyList<String>())
         private set
     var focus by mutableIntStateOf(0)
     var entry by mutableStateOf<(@Composable () -> Unit)?>(null)
@@ -52,7 +52,7 @@ class SheetState {
     private var pick: (Int) -> Unit = {}
     private var dismiss: () -> Unit = {}
 
-    fun open(title: String, items: List<String>, focus: Int = 0, info: String? = null, onDismiss: () -> Unit = {}, pick: (Int) -> Unit) {
+    fun open(title: String, items: List<String>, focus: Int = 0, info: List<String> = emptyList(), onDismiss: () -> Unit = {}, pick: (Int) -> Unit) {
         this.title = title
         this.info = info
         this.items = items
@@ -65,7 +65,7 @@ class SheetState {
 
     fun openEntry(title: String, entry: @Composable () -> Unit) {
         this.title = title
-        this.info = null
+        this.info = emptyList()
         this.items = listOf("")
         this.focus = 0
         this.entry = entry
@@ -105,7 +105,7 @@ fun Sheet(state: SheetState) {
     val density = LocalDensity.current
     val lift = (WindowInsets.ime.getBottom(density) - WindowInsets.systemBars.getBottom(density)).coerceAtLeast(0).toFloat()
     val screenH = ui.px(ui.h) - lift
-    val lead = if (state.info != null) 1 else 0
+    val lead = state.info.size
     val wanted = edge + titleH + (lead + state.items.size) * pitch + edge
     val panelH = minOf(wanted, screenH)
     val p = progress.value
@@ -117,18 +117,16 @@ fun Sheet(state: SheetState) {
             Modifier.offset { IntOffset(0, panelY.roundToInt()) }.size(ui.px(ui.w).dp(), panelH.dp())
                 .alpha(p).background(Color(Tok.color_bgElevated)).press({}).clipToBounds(),
         ) {
-            if (state.title.isNotEmpty()) RoleText(state.title, Roles.dialogTitle, Modifier.at(edge, edge))
+            if (state.title.isNotEmpty()) RoleText(state.title, Roles.dialogTitle, Modifier.at(edge, edge).width((ui.px(ui.w) - 2 * edge).dp()).clipToBounds())
             Box(Modifier.offset { IntOffset(0, (edge + titleH).roundToInt()) }.size(ui.px(ui.w).dp(), (panelH - edge - titleH).coerceAtLeast(0f).dp())) {
             LazyColumn(
                 Modifier.fillMaxSize(),
                 state = list,
                 flingBehavior = rememberFling(),
             ) {
-                state.info?.let { line ->
-                    item(key = "info") {
-                        Box(Modifier.size(ui.px(ui.w).dp(), pitch.dp()).testTag("sheet.info")) {
-                            RoleText(line, Roles.dialogItem, Modifier.at(edge, pitch / 2, ay = 0.5f).width((ui.px(ui.w) - 2 * edge).dp()).clipToBounds(), color = white(Roles.dialogItem.dim))
-                        }
+                itemsIndexed(state.info, key = { i, _ -> "info$i" }) { i, line ->
+                    Box(Modifier.size(ui.px(ui.w).dp(), pitch.dp()).testTag(if (i == 0) "sheet.info" else "sheet.info.$i")) {
+                        RoleText(line, Roles.dialogItem, Modifier.at(edge, pitch / 2, ay = 0.5f).width((ui.px(ui.w) - 2 * edge).dp()).clipToBounds(), color = white(Roles.dialogItem.dim))
                     }
                 }
                 itemsIndexed(state.items) { i, item ->
