@@ -33,6 +33,7 @@ import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Bonded
+import net.seilent.funecomp.ui.FirmwareView
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -60,6 +61,7 @@ class Shot(
     val after: Long = 1000,
     val credits: List<ArtCache.Entry> = emptyList(),
     val scrobble: ScrobbleView = ScrobbleView(),
+    val firmware: FirmwareView = FirmwareView(),
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -103,6 +105,10 @@ private val CREDITS = listOf(
 )
 
 private val SCROBBLE = ScrobbleView(Accounts(true, "0123456789abcdef0123456789abcdef", "secret", "seilent", "session", true, "token", "seilent"), queued = 3)
+
+private val FW = HOME + Page.Connection + Page.Firmware
+
+private val FOUND = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true)
 
 private val EQ = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)
 
@@ -204,6 +210,16 @@ val SHOTS = listOf(
         settle(600)
         rule.onNodeWithTag("sheet.item.0").performClick()
     },
+    Shot("firmware", board = "v1", pages = FW),
+    Shot("firmware-private", board = "v1", pages = FW, firmware = FirmwareView(info = "no public releases")),
+    Shot("firmware-found", board = "v1", pages = FW, firmware = FOUND),
+    Shot("firmware-dev", board = "v1", pages = FW, firmware = FOUND.copy(newer = null, info = "device runs a dev build")),
+    Shot("firmware-download", board = "v1", pages = FW, firmware = FOUND) { rule.onNodeWithTag("fw.release").performClick() },
+    Shot("firmware-downloading", board = "v1", pages = FW, firmware = FOUND.copy(downloading = true, download = "42 %", checkDaily = true)),
+    Shot("firmware-paused", board = "v1", pages = FW, firmware = FOUND.copy(download = "paused 42 %")),
+    Shot("firmware-mismatch", board = "v1", pages = FW, firmware = FOUND.copy(info = "checksum mismatch")),
+    Shot("firmware-ready", board = "v1", pages = FW, firmware = FOUND.copy(ready = true)) { rule.onNodeWithTag("fw.release").performClick() },
+    Shot("firmware-picked", board = "v1", pages = FW) { rule.onNodeWithTag("fw.pick").performClick() },
     Shot("connection", pages = HOME + Page.Connection),
     Shot("connection-refused", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused)),
     Shot("connection-permission", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "AP80", permission = false)),
@@ -258,7 +274,7 @@ class Shots {
             val c = control ?: return@setContent
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
-                    App(c.device, f.first.link, c, shell, Sources(), {}, if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble)
+                    App(c.device, f.first.link, c, shell, Sources(), {}, if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware)
                 }
             }
         }

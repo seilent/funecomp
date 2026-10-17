@@ -432,6 +432,7 @@ object Remote : Control {
             everLive = true
             board = hello.board
             Scrobbles.session()
+            Firmwares.hello(hello.board, hello.version)
             phase(Phase.LIVE)
             wake?.drop(ATTEMPT)
             Log.i(TAG, "hello board=${hello.board} version=${hello.version} idle=${hello.idleMs} busy=${hello.busyMs}")

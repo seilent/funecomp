@@ -26,6 +26,7 @@ import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Bonded
+import net.seilent.funecomp.ui.FirmwareView
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -51,12 +52,12 @@ class BehaviorTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun start(pages: List<Page>, link: LinkView = LinkView(Phase.LIVE)): Pair<SimControl, Shell> {
+    private fun start(pages: List<Page>, link: LinkView = LinkView(Phase.LIVE), firmware: FirmwareView = FirmwareView()): Pair<SimControl, Shell> {
         val c = SimControl("ap80")
         val shell = Shell(Nav(pages))
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, link, c, shell) }
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, link, c, shell, firmware = firmware) }
         }
         settle(1000)
         return c to shell
@@ -379,5 +380,25 @@ class BehaviorTest {
         rule.onNodeWithTag("entry").performImeAction()
         settle(500)
         assertEquals(listOf("no results"), shell.sheet.info)
+    }
+
+    @Test
+    fun firmwareRowsDriveTheControl() {
+        val pages = listOf(Page.Home, Page.Connection, Page.Firmware)
+        val (c, shell) = start(pages, firmware = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true))
+        rule.onNodeWithTag("fw.check").performClick()
+        rule.onNodeWithTag("fw.daily").performClick()
+        rule.onNodeWithTag("fw.pre").performClick()
+        assertEquals(listOf("check", "settings true false", "settings false true"), c.firmware)
+        rule.onNodeWithTag("fw.release").performClick()
+        settle(500)
+        assertEquals(listOf("28.0 mb"), shell.sheet.info)
+        tapSheetItem(0)
+        assertEquals("download", c.firmware.last())
+        rule.onNodeWithTag("fw.pick").performClick()
+        settle(500)
+        assertEquals("funeos-v0.4.0-v1.upt", shell.sheet.title)
+        assertEquals(listOf("28.0 mb", "board v1", "device has no updater"), shell.sheet.info)
+        assertEquals(listOf("cancel"), shell.sheet.items)
     }
 }

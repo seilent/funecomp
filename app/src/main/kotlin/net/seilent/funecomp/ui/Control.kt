@@ -49,6 +49,11 @@ interface Control {
     fun eqFile(done: (String, String?) -> Unit) {}
     fun autoEqFind(query: String, done: (List<AutoEqIndex.Entry>?) -> Unit) {}
     fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) {}
+    fun firmwareCheck() {}
+    fun firmwareDownload() {}
+    fun firmwareCancel() {}
+    fun firmwareFile(done: (PickedFile) -> Unit) {}
+    fun firmwareSettings(checkDaily: Boolean, prereleases: Boolean) {}
 }
 
 const val LIB_PAGE = 100L

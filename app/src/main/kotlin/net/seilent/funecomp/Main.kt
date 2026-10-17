@@ -45,6 +45,7 @@ import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
+import net.seilent.funecomp.ui.PickedFile
 import net.seilent.funecomp.ui.Shell
 import java.util.UUID
 
@@ -70,6 +71,13 @@ class Main : ComponentActivity() {
         val done = picked ?: return@registerForActivityResult
         picked = null
         if (uri != null) AutoEqs.read(uri, done)
+    }
+
+    private var firmwarePicked: ((PickedFile) -> Unit)? = null
+    private val firmwarePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val done = firmwarePicked ?: return@registerForActivityResult
+        firmwarePicked = null
+        if (uri != null) Firmwares.read(uri, done)
     }
 
     private val control = object : Control by Remote {
@@ -137,6 +145,23 @@ class Main : ComponentActivity() {
 
         override fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) = AutoEqs.profile(entry, done)
 
+        override fun firmwareCheck() = Firmwares.check()
+
+        override fun firmwareDownload() = Firmwares.download()
+
+        override fun firmwareCancel() = Firmwares.cancel()
+
+        override fun firmwareFile(done: (PickedFile) -> Unit) {
+            firmwarePicked = done
+            try {
+                firmwarePicker.launch(arrayOf("*/*"))
+            } catch (_: ActivityNotFoundException) {
+                firmwarePicked = null
+            }
+        }
+
+        override fun firmwareSettings(checkDaily: Boolean, prereleases: Boolean) = Firmwares.settings(checkDaily, prereleases)
+
         override fun askPermission() {
             if (asked >= 2) {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
@@ -154,6 +179,7 @@ class Main : ComponentActivity() {
         Remote.artist(this)
         Scrobbles.init(this)
         AutoEqs.init(this)
+        Firmwares.init(this)
         Remote.logExit(this)
         batteryAsked = prefs().getBoolean(BATTERY_ASKED, false)
         remember(intent)
@@ -167,7 +193,7 @@ class Main : ComponentActivity() {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
                     } catch (_: ActivityNotFoundException) {
                     }
-                }, Scrobbles.view)
+                }, Scrobbles.view, Firmwares.view)
             }
         }
     }
@@ -259,6 +285,7 @@ class Main : ComponentActivity() {
             "connection" -> base + Page.Connection
             "art" -> base + Page.ArtistArt
             "scrobbling" -> base + Page.Connection + Page.Scrobbling
+            "firmware" -> base + Page.Connection + Page.Firmware
             else -> when {
                 name.startsWith("artist:") -> base + Page.Music + Page.Artist(name.removePrefix("artist:"))
                 name.startsWith("album:") -> {

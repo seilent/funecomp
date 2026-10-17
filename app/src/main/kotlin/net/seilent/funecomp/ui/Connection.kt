@@ -49,7 +49,7 @@ fun statusText(link: LinkView) = when {
 private class Line(val title: String, val value: String, val info: Boolean = false, val tag: String, val tap: () -> Unit = {})
 
 @Composable
-fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleView()) {
+fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleView(), firmware: FirmwareView = FirmwareView()) {
     val ui = LocalUi.current
     var focus by remember { mutableStateOf("device") }
     val read = { ctx.control.bonded().sortedByDescending { it.companion } }
@@ -83,6 +83,7 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleVi
         }
         link.battery?.let { add(Line("battery", it.word, tag = "battery") { ctx.control.allowBackground() }) }
         add(Line("scrobbling", scrobbleText(scrobble), tag = "scrobbling") { ctx.nav.push(Page.Scrobbling) })
+        add(Line("firmware", firmwareText(firmware), tag = "firmware") { ctx.nav.push(Page.Firmware) })
         if (link.phase != Phase.NONE) add(Line("disconnect", "", tag = "disconnect") { ctx.control.disconnect() })
     }
     val at = lines.indexOfFirst { it.tag == focus }.coerceAtLeast(0)

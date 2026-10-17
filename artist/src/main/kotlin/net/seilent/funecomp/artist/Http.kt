@@ -14,6 +14,8 @@ fun interface Http {
     fun get(url: String, headers: Map<String, String>): Response
 
     fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = throw IOException("no post: $url")
+
+    fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Unit): Response = throw IOException("no download: $url")
 }
 
 class HttpRun(private val onCall: (String) -> Unit = {}) {
@@ -61,7 +63,9 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
 
     override fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = send(url, headers, body)
 
-    private fun send(url: String, headers: Map<String, String>, body: ByteArray?): Response {
+    override fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Unit): Response = send(url, headers, null, sink)
+
+    private fun send(url: String, headers: Map<String, String>, body: ByteArray?, sink: ((Int, ByteArray, Int) -> Unit)? = null): Response {
         val run = HttpRun.current.get()
         val c = URI(url).toURL().openConnection() as HttpURLConnection
         run?.add(c)
@@ -83,6 +87,11 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
                 while (true) {
                     val n = input.read(buf)
                     if (n < 0) break
+                    if (sink != null && code in 200..299) {
+                        if (run?.cancelled == true) throw IOException("cancelled")
+                        sink(code, buf, n)
+                        continue
+                    }
                     if (out.size() + n > maxBytes) throw IOException("body over $maxBytes bytes: $url")
                     out.write(buf, 0, n)
                 }

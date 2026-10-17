@@ -64,6 +64,7 @@ fun App(
     credits: List<ArtCache.Entry> = emptyList(),
     onCredit: (ArtCache.Entry) -> Unit = {},
     scrobble: ScrobbleView = ScrobbleView(),
+    firmware: FirmwareView = FirmwareView(),
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Black)) {
         val ui = Ui.of(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
@@ -101,9 +102,10 @@ fun App(
                     Page.Queue -> Queue(ctx)
                     Page.Playlists -> Playlists(ctx)
                     Page.Settings -> SettingsPage(ctx)
-                    Page.Connection -> ConnectionPage(ctx, link, scrobble)
+                    Page.Connection -> ConnectionPage(ctx, link, scrobble, firmware)
                     Page.ArtistArt -> ArtistArtPage(ctx, sources, onSources, credits, onCredit)
                     Page.Scrobbling -> ScrobblingPage(ctx, scrobble)
+                    Page.Firmware -> FirmwarePage(ctx, firmware)
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
                     is Page.Eq -> EqPage(ctx, page)

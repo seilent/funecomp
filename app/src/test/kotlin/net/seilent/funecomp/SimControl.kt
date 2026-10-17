@@ -20,6 +20,7 @@ import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LIB_PAGE
+import net.seilent.funecomp.ui.PickedFile
 
 class SimControl(board: String, lib: Library = Library.synthetic(), private val now: () -> Long = { 0L }) : Control {
     val sim = Device(Options(Board.of(board)), lib, now)
@@ -125,6 +126,26 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
     }
 
     override fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) = done(eqText)
+
+    val firmware = ArrayList<String>()
+
+    override fun firmwareCheck() {
+        firmware += "check"
+    }
+
+    override fun firmwareDownload() {
+        firmware += "download"
+    }
+
+    override fun firmwareCancel() {
+        firmware += "cancel"
+    }
+
+    override fun firmwareFile(done: (PickedFile) -> Unit) = done(PickedFile("funeos-v0.4.0-v1.upt", 28_043_264, "v1"))
+
+    override fun firmwareSettings(checkDaily: Boolean, prereleases: Boolean) {
+        firmware += "settings $checkDaily $prereleases"
+    }
 
     companion object {
         val HD650 = """
