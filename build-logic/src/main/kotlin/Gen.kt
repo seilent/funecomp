@@ -16,17 +16,22 @@ object Gen {
     fun sha256(f: File): String =
         MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) }
 
-    class Pin(val commit: String, val sums: Map<String, String>)
+    class Pin(val spec: String, val tokens: String, val sums: Map<String, String>)
 
     fun readPin(f: File): Pin {
-        var commit: String? = null
+        var spec: String? = null
+        var tokens: String? = null
         val sums = LinkedHashMap<String, String>()
         f.readLines().filter { it.isNotBlank() }.forEach { line ->
             val p = line.trim().split(Regex("\\s+"))
             if (p.size != 2) throw GenException("PIN: bad line '$line'")
-            if (p[0] == "commit") commit = p[1] else sums[p[0]] = p[1]
+            when (p[0]) {
+                "commit.spec" -> spec = p[1]
+                "commit.tokens" -> tokens = p[1]
+                else -> sums[p[0]] = p[1]
+            }
         }
-        return Pin(commit ?: throw GenException("PIN: no commit line"), sums)
+        return Pin(spec ?: throw GenException("PIN: no commit.spec line"), tokens ?: throw GenException("PIN: no commit.tokens line"), sums)
     }
 
     fun checkPin(dir: File, allowDraft: Boolean) {
@@ -38,7 +43,7 @@ object Gen {
             val got = sha256(f)
             if (got != want) throw GenException("checkPin: third_party/funeos/$name sha256 $got does not match PIN $want")
         }
-        if (!allowDraft && pin.commit == "draft")
+        if (!allowDraft && (pin.spec == "draft" || pin.tokens == "draft"))
             throw GenException("checkPin: PIN commit is draft, run tools/pin.sh <funeos commit>")
     }
 
@@ -131,7 +136,7 @@ object Gen {
         o.append("class Field(val tag: Int, val name: String, val base: Base, val ref: String?, val list: Boolean)\n\n")
         o.append("class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)\n\n")
         o.append("object Pin {\n")
-        o.append("    const val COMMIT = ${quote(pin.commit)}\n")
+        o.append("    const val COMMIT = ${quote(pin.spec)}\n")
         for (name in pinned) o.append("    const val ${camel(name.removeSuffix(".txt")).uppercase()}_SHA256 = ${quote(pin.sums[name] ?: "")}\n")
         o.append("}\n\n")
         o.append("object Proto {\n")
