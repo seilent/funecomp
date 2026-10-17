@@ -10,17 +10,19 @@ class ArtCache(private val dir: File) {
     class Looked(val mbid: String?, val at: Long)
 
     private val names = File(dir, "names.properties")
+    private var nameMap: Properties? = null
+    private var listed: List<Entry>? = null
 
     @Synchronized
     fun mbid(name: String): Looked? {
-        val v = load(names).getProperty(Names.fold(name)) ?: return null
+        val v = nameMap().getProperty(Names.fold(name)) ?: return null
         val at = v.substringBefore(' ').toLongOrNull() ?: return null
         return Looked(Names.mbid(v.substringAfter(' ', "")), at)
     }
 
     @Synchronized
     fun putMbid(name: String, mbid: String?, at: Long) {
-        val p = load(names)
+        val p = nameMap()
         p.setProperty(Names.fold(name), "$at ${mbid ?: ""}".trim())
         save(names, p)
     }
@@ -51,6 +53,7 @@ class ArtCache(private val dir: File) {
 
     @Synchronized
     fun putHit(e: Entry, source: ByteArray) {
+        listed = null
         dropFiles(e.key)
         write(src(e.key), source)
         val p = Properties()
@@ -75,6 +78,7 @@ class ArtCache(private val dir: File) {
 
     @Synchronized
     fun putMiss(key: String, at: Long, sources: Set<String>, keyHash: String = "") {
+        listed = null
         dropFiles(key)
         val p = Properties()
         p.setProperty("state", "miss")
@@ -86,14 +90,19 @@ class ArtCache(private val dir: File) {
     }
 
     @Synchronized
-    fun entries(): List<Entry> = (dir.listFiles { f -> f.name.endsWith(".meta") } ?: emptyArray())
+    fun entries(): List<Entry> = listed ?: (dir.listFiles { f -> f.name.endsWith(".meta") } ?: emptyArray())
         .mapNotNull { f -> load(f).getProperty("key")?.let { hit(it) } }
         .sortedBy { Names.fold(it.name) }
+        .also { listed = it }
 
     @Synchronized
     fun clear() {
+        nameMap = null
+        listed = null
         dir.listFiles()?.forEach { it.delete() }
     }
+
+    private fun nameMap() = nameMap ?: load(names).also { nameMap = it }
 
     private fun dropFiles(key: String) {
         val h = hash(key)

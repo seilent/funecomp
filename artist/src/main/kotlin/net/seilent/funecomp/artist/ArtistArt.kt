@@ -38,6 +38,10 @@ class ArtistArt(
     )
     private val otherImages = api(otherLimiter)
 
+    class Mark(val sources: String, val until: Long)
+
+    @Volatile private var missDue = Long.MAX_VALUE
+
     @Throws(IOException::class)
     fun get(name: String, mbid: String?, w: Int, h: Int): Art? {
         val on = sources().enabled
@@ -53,18 +57,43 @@ class ArtistArt(
                 return Art(jpeg, w, h, e.name, e.mbid, e.source, e.credit)
             }
         }
-        val keyHash = if (Sources.FANART_TV in on) cache.keyHash(sources().fanartTvKey.trim()) else ""
-        cache.miss(key)?.let { m -> if (now - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash) return null }
+        val keyHash = keyHash(on)
+        cache.miss(key)?.let { m ->
+            if (now - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash) {
+                due(m.at)
+                return null
+            }
+        }
         if (!online()) throw IOException("offline")
         val found = lookup(name, id, w, h, on)
         if (found == null) {
             cache.putMiss(key, now, on, keyHash)
+            due(now)
             return null
         }
         val (c, src, jpeg) = found
         cache.putHit(ArtCache.Entry(key, name.trim(), id, c.source, c.credit, c.url, now), src)
         cache.putRendered(key, w, h, jpeg)
         return Art(jpeg, w, h, name.trim(), id, c.source, c.credit)
+    }
+
+    fun beginMark() {
+        missDue = Long.MAX_VALUE
+    }
+
+    fun mark() = Mark(signature(), missDue)
+
+    fun holds(m: Mark) = m.sources == signature() && clock() < m.until
+
+    private fun signature(): String {
+        val on = sources().enabled
+        return on.sorted().joinToString(",") + " " + keyHash(on)
+    }
+
+    private fun keyHash(on: Set<String>) = if (Sources.FANART_TV in on) cache.keyHash(sources().fanartTvKey.trim()) else ""
+
+    private fun due(at: Long) {
+        if (at + TTL_MS < missDue) missDue = at + TTL_MS
     }
 
     fun cached(name: String, mbid: String?): ByteArray? = cachedEntry(name, mbid)?.let { source(it) }
@@ -79,7 +108,13 @@ class ArtistArt(
     fun credits(): List<ArtCache.Entry> = cache.entries().filter { it.credit != null }
 
     private fun resolve(name: String, now: Long): String? {
-        cache.mbid(name)?.let { l -> if (l.mbid != null || now - l.at < TTL_MS) return l.mbid }
+        cache.mbid(name)?.let { l ->
+            if (l.mbid != null) return l.mbid
+            if (now - l.at < TTL_MS) {
+                due(l.at)
+                return null
+            }
+        }
         if (!online()) throw IOException("offline")
         val id = mb.search(name)
         cache.putMbid(name, id, now)

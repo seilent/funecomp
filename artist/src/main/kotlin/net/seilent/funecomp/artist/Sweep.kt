@@ -21,8 +21,10 @@ object Sweep {
         private var errors = 0
         private var until: Long? = null
 
-        val open: Boolean get() = until?.let { clock() < it } ?: false
+        val open: Boolean
+            @Synchronized get() = until?.let { clock() < it } ?: false
 
+        @Synchronized
         fun result(httpError: Boolean) {
             if (!httpError) {
                 errors = 0
@@ -34,6 +36,7 @@ object Sweep {
             }
         }
 
+        @Synchronized
         fun network() {
             errors = 0
             until = null

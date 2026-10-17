@@ -23,18 +23,34 @@ class ArtPusher(
         val stored: List<String> = emptyList(),
         val missing: List<String> = emptyList(),
         val failed: List<String> = emptyList(),
-    )
+    ) {
+        fun counts(): String {
+            val names = (pushed.keys + failed + missing).take(NAMES)
+            return "pushed=${pushed.size} stored=${stored.size} missing=${missing.size} failed=${failed.size} names=$names"
+        }
+    }
 
-    fun stored(): Set<String>? {
+    class Listing(val names: MutableSet<String>, val bytes: Long?, val cap: Long?)
+
+    fun stored(): Set<String>? = listing()?.names
+
+    fun listing(): Listing? {
         val out = HashSet<String>()
         var offset = 0L
+        var bytes: Long? = null
+        var cap: Long? = null
         while (true) {
+            if (!keep()) return null
             val r = session.call(Msg.IMG_LIST, Req.imgList(offset, 100))
             if (r !is Session.Result.Ok) return null
             val page = ImgListReply.from(r.body)
+            if (offset == 0L) {
+                bytes = page.bytes
+                cap = page.cap
+            }
             page.entries.forEach { out += it.name }
             offset += page.entries.size
-            if (!page.page.more || page.entries.isEmpty()) return out
+            if (!page.page.more || page.entries.isEmpty()) return Listing(out, bytes, cap)
         }
     }
 
@@ -101,6 +117,7 @@ class ArtPusher(
     }
 
     companion object {
+        const val NAMES = 10
         private val finalAborts = setOf(Enums.AbortCode.busy, Enums.AbortCode.noSpace, Enums.AbortCode.superseded)
         private val finalErrors = setOf(Err.busy, Err.noSpace)
 

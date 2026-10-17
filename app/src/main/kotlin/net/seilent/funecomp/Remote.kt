@@ -14,10 +14,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asImageBitmap
 import net.seilent.funecomp.art.ArtWorker
 import net.seilent.funecomp.art.BitmapCodec
+import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.art.Memo
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
+import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.link.Link
 import net.seilent.funecomp.link.Session
@@ -93,11 +95,12 @@ object Remote : Control {
     private val asked = HashSet<String>()
     private var artist: ArtistArt? = null
     @Volatile private var art: ArtWorker? = null
-    @Volatile private var artKey: Pair<List<String>, Int?>? = null
+    @Volatile private var artKey: List<Any?>? = null
     @Volatile private var backdropFor: List<String>? = null
     @Volatile private var shown = false
     @Volatile private var trigger = 0
     @Volatile private var online = true
+    private val breaker = Sweep.Breaker(SystemClock::elapsedRealtime)
     private var wake: Wake? = null
     private var exitLogged = false
 
@@ -193,6 +196,7 @@ object Remote : Control {
         cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 online = true
+                breaker.network()
                 art?.want()
             }
 
@@ -234,11 +238,34 @@ object Remote : Control {
         return open
     }
 
+    private fun libPage(s: Session, offset: Long, rev: Long?): Session.Result {
+        val key = "lib ${Enums.View.artists}  $offset $rev"
+        once(key)
+        val r = s.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", offset, LIB_PAGE, rev))
+        if (r !is Session.Result.Ok) forget(key)
+        return r
+    }
+
     private fun worker(context: Context, l: Link): ArtWorker {
         val a = artist(context)
+        val forward = Forward(
+            { device },
+            a::get,
+            ::gate,
+            { !shown && online && !breaker.open },
+            ::libPage,
+            breaker,
+            { online },
+            { credits = a.credits() },
+            object : Forward.Marks {
+                override fun begin() = a.beginMark()
+                override fun mark(): Any = a.mark()
+                override fun holds(mark: Any) = mark is ArtistArt.Mark && a.holds(mark)
+            },
+        ) { Log.i(TAG, it) }
         return ArtWorker(
             { l.session },
-            { s, run -> ArtPusher(s, a::get, run::live, ::gate).run(ArtPusher.order(device.playback.state)) },
+            { s, run -> forward.run(s, run::live) },
             { final -> !shown || showBackdrop(a, final) },
             { if (shown) fetch(a) },
             trigger = { trigger },
@@ -249,7 +276,7 @@ object Remote : Control {
             ended = { wake?.drop(ART) },
         ) { r, e ->
             try {
-                if (r != null) Log.i(TAG, "art ${r.stop} pushed=${r.pushed} stored=${r.stored} missing=${r.missing} failed=${r.failed}")
+                if (r != null) Log.i(TAG, "art ${r.stop} ${r.counts()}")
                 if (e != null) Log.w(TAG, "art: $e")
                 credits = a.credits()
             } catch (t: Throwable) {
@@ -421,7 +448,7 @@ object Remote : Control {
             val s = State.from(body)
             Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
-            val key = s.artists to s.output
+            val key = listOf(s.artists, s.output, s.queueRev, s.slot)
             if (key != artKey) {
                 artKey = key
                 trigger++

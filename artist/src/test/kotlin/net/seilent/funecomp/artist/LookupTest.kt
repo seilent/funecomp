@@ -359,6 +359,27 @@ class LookupTest {
     }
 
     @Test
+    fun aSweepMarkEndsAtTheFirstMissExpiryOrASourceChange() {
+        val a = art()
+        val t = time.now
+        assertNull(a.get("Ado", null, 384, 480))
+        time.now += 1000
+        a.beginMark()
+        assertNull(a.get("Ado", null, 384, 480))
+        val m = a.mark()
+        assertTrue(a.holds(m))
+        time.now = t + ArtistArt.TTL_MS - 1
+        assertTrue(a.holds(m))
+        time.now = t + ArtistArt.TTL_MS
+        assertFalse(a.holds(m))
+        a.beginMark()
+        val n = a.mark()
+        assertTrue(a.holds(n))
+        sources = Sources(youtube = true)
+        assertFalse(a.holds(n))
+    }
+
+    @Test
     fun hitIsServedFromCacheForBothBoardsAndDroppedWhenItsSourceIsOff() {
         sources = Sources(theAudioDb = true)
         val first = art().get("Radiohead", radiohead, 384, 480)!!
