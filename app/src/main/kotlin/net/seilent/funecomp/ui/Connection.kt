@@ -82,6 +82,7 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleVi
             add(Line("version", hello.version ?: "", tag = "version"))
         }
         link.battery?.let { add(Line("battery", it.word, tag = "battery") { ctx.control.allowBackground() }) }
+        add(Line("phone media controls", if (link.mediaControls) "on" else "off", tag = "media") { ctx.control.mediaControls(!link.mediaControls) })
         add(Line("scrobbling", scrobbleText(scrobble), tag = "scrobbling") { ctx.nav.push(Page.Scrobbling) })
         add(Line("firmware", firmwareText(firmware), tag = "firmware") { ctx.nav.push(Page.Firmware) })
         if (link.phase != Phase.NONE) add(Line("disconnect", "", tag = "disconnect") { ctx.control.disconnect() })

@@ -37,6 +37,7 @@ class BackgroundTest {
         app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
+        MediaLink.controls(app, false)
     }
 
     @After
@@ -102,6 +103,24 @@ class BackgroundTest {
         waitFor { Remote.phase == Phase.LIVE && text() == "connected" }
         c.destroy()
     }
+
+    @Test
+    fun mediaNotificationShowsTheSongWhileThePhoneControlsAreOn() {
+        MediaLink.controls(app, true)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.title != null }
+        waitFor { title() == Remote.device.playback.state.title }
+        val n = shadowOf(app.getSystemService(NotificationManager::class.java)).getNotification(1)!!
+        assertEquals("media", n.channelId)
+        MediaLink.controls(app, false)
+        c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_MEDIA)).startCommand(0, 2)
+        waitFor { text() == "connected" }
+        assertEquals("link", shadowOf(app.getSystemService(NotificationManager::class.java)).getNotification(1)!!.channelId)
+        c.destroy()
+    }
+
+    private fun title(): String? =
+        shadowOf(app.getSystemService(NotificationManager::class.java)).getNotification(1)?.extras?.getCharSequence("android.title")?.toString()
 
     @Test
     fun startGate() {

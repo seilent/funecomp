@@ -45,6 +45,7 @@ import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
+import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickedFile
 import net.seilent.funecomp.ui.Shell
 import java.util.UUID
@@ -55,6 +56,7 @@ class Main : ComponentActivity() {
     private var battery by mutableStateOf<Battery?>(null)
     private var batteryAsked by mutableStateOf(false)
     private var granted by mutableStateOf(true)
+    private var mediaControls by mutableStateOf(true)
     private var spec by mutableStateOf<String?>(null)
     private var sources by mutableStateOf(Sources())
     private var shell by mutableStateOf(Shell(Nav(listOf(Page.Connection)), gated = true))
@@ -145,6 +147,12 @@ class Main : ComponentActivity() {
 
         override fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) = AutoEqs.profile(entry, done)
 
+        override fun mediaControls(on: Boolean) {
+            MediaLink.controls(this@Main, on)
+            mediaControls = on
+            if (Remote.phase != Phase.NONE) startService(Intent(this@Main, LinkService::class.java).setAction(LinkService.ACTION_MEDIA))
+        }
+
         override fun firmwareCheck() = Firmwares.check()
 
         override fun firmwareDownload() = Firmwares.download()
@@ -182,12 +190,13 @@ class Main : ComponentActivity() {
         Firmwares.init(this)
         Remote.logExit(this)
         batteryAsked = prefs().getBoolean(BATTERY_ASKED, false)
+        mediaControls = MediaLink.controls(this)
         remember(intent)
         launch = opens(intent, Remote.debuggable(this))
         setContent {
             Box(Modifier.fillMaxSize().background(Black).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
                 val b = battery
-                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, b != null && b != Battery.UNRESTRICTED && !batteryAsked)
+                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, b != null && b != Battery.UNRESTRICTED && !batteryAsked, mediaControls)
                 App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits, { e ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))

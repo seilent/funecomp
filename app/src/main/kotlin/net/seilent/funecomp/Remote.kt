@@ -71,6 +71,8 @@ object Remote : Control {
 
     @Volatile var onPhase: (() -> Unit)? = null
     @Volatile var onTail: ((Long) -> Unit)? = null
+    @Volatile var onState: (() -> Unit)? = null
+    @Volatile var onDrop: (() -> Unit)? = null
 
     var bye by mutableStateOf<Int?>(null)
         private set
@@ -450,6 +452,7 @@ object Remote : Control {
             if (type != Msg.STATE) return
             val s = State.from(body)
             Scrobbles.state(s, System.currentTimeMillis())
+            onState?.invoke()
             Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
             val key = listOf(s.artists, s.output, s.queueRev, s.slot)
@@ -475,6 +478,7 @@ object Remote : Control {
             update { it.copy(hello = null) }
             art?.cancel()
             phase(Phase.DOWN)
+            onDrop?.invoke()
             wake?.drop(ATTEMPT)
             Log.i(TAG, "closed $reason")
         }

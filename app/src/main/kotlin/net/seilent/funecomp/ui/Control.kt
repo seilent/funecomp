@@ -19,6 +19,7 @@ data class LinkView(
     val board: String? = null,
     val battery: Battery? = null,
     val askBattery: Boolean = false,
+    val mediaControls: Boolean = true,
 )
 
 @Immutable
@@ -49,6 +50,7 @@ interface Control {
     fun eqFile(done: (String, String?) -> Unit) {}
     fun autoEqFind(query: String, done: (List<AutoEqIndex.Entry>?) -> Unit) {}
     fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) {}
+    fun mediaControls(on: Boolean) {}
     fun firmwareCheck() {}
     fun firmwareDownload() {}
     fun firmwareCancel() {}
