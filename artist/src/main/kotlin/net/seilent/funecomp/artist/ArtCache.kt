@@ -6,7 +6,7 @@ import java.util.Properties
 
 class ArtCache(private val dir: File) {
     class Entry(val key: String, val name: String, val mbid: String?, val source: String, val credit: Credit?, val url: String, val at: Long)
-    class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "")
+    class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false)
     class Looked(val mbid: String?, val at: Long)
 
     private val names = File(dir, "names.properties")
@@ -39,7 +39,7 @@ class ArtCache(private val dir: File) {
     fun miss(key: String): Miss? {
         val p = load(meta(key))
         if (p.getProperty("state") != "miss") return null
-        return Miss(p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }.toSet(), p.getProperty("keyHash", ""))
+        return Miss(p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }.toSet(), p.getProperty("keyHash", ""), p.getProperty("cleaned") == "true")
     }
 
     @Synchronized
@@ -86,6 +86,7 @@ class ArtCache(private val dir: File) {
         p.setProperty("at", at.toString())
         p.setProperty("sources", sources.sorted().joinToString(","))
         if (keyHash.isNotEmpty()) p.setProperty("keyHash", keyHash)
+        p.setProperty("cleaned", "true")
         save(meta(key), p)
     }
 

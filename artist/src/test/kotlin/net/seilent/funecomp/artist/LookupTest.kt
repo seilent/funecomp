@@ -471,4 +471,78 @@ class LookupTest {
         assertEquals("ja", Wikimedia.lang("JP"))
         assertEquals("en", Wikimedia.lang(null))
     }
+
+    @Test
+    fun aTaggedJoinFindsTheArtistByItsCleanedNameAndCachesItUnderTheOriginal() {
+        val name = "宇多田ヒカル/Utada Hikaru【公式】"
+        val a = art().get(name, null, 240, 320)
+        assertTrue("missing ${http.missing}", http.missing.isEmpty())
+        checkJpeg(a!!, 240, 320)
+        assertEquals(name, a.name)
+        assertEquals(utada, a.mbid)
+        val n = http.calls.size
+        assertTrue(art().get(name, null, 240, 320) != null)
+        assertEquals(n, http.calls.size)
+        assertEquals(listOf(name), cache.entries().map { it.name })
+        assertTrue(art().cachedEntry(name, null) != null)
+    }
+
+    @Test
+    fun theTagMbidWinsOverNameVariants() {
+        assertTrue(art().get("宇多田ヒカル/Utada Hikaru【公式】", utada, 240, 320) != null)
+        assertTrue(http.calls.none { it.contains("query=") })
+    }
+
+    @Test
+    fun everyCleanedNameIsTriedBeforeAMissIsCached() {
+        sources = Sources(deezer = true)
+        val name = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
+        assertNull(art().get(name, null, 240, 320))
+        assertTrue("missing ${http.missing}", http.missing.isEmpty())
+        for (q in listOf("空星きらめ/Sorahoshi Kirame【にじさんじ】", "空星きらめ/Sorahoshi Kirame", "空星きらめ", "Sorahoshi Kirame")) {
+            assertTrue(q, http.calls.any { it == "https://api.deezer.com/search/artist?q=${Api.enc(q)}" })
+        }
+        val n = http.calls.size
+        assertNull(art().get(name, null, 240, 320))
+        assertEquals(n, http.calls.size)
+        assertTrue(cache.miss("name:${Names.fold(name)}")!!.cleaned)
+    }
+
+    @Test
+    fun aMissFromBeforeTheCleanerIsLookedUpOnceMore() {
+        sources = Sources(deezer = true)
+        val name = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
+        val key = "name:${Names.fold(name)}"
+        cache.putMiss(key, time.now, sources.enabled)
+        val f = java.io.File(tmp.root, "art").listFiles { x -> x.name.endsWith(".meta") }!!.single()
+        f.writeText(f.readText().lines().filter { !it.startsWith("cleaned") }.joinToString("\n"))
+        assertTrue(!cache.miss(key)!!.cleaned)
+        assertNull(art().get(name, null, 240, 320))
+        assertTrue(http.calls.any { it.contains("q=Sorahoshi") })
+        assertTrue(cache.miss(key)!!.cleaned)
+    }
+
+    @Test
+    fun aTopScoreSortNameInTagOrderIsAccepted() {
+        assertEquals("2339cd33-4563-4c2a-b60d-4c074a67abff", mb().search("Tenjin Kotone"))
+        assertTrue("missing ${http.missing}", http.missing.isEmpty())
+    }
+
+    @Test
+    fun aSortNameMatchBelowTheTopOrUnder100IsRejected() {
+        val url = "https://musicbrainz.org/ws/2/artist/?query=Mori%20Calliope&fmt=json&limit=10"
+        fun reply(vararg a: Triple<String, String, Int>) = Response(200, a.joinToString(",", "{\"artists\":[", "]}") { (id, sort, score) ->
+            "{\"id\":\"$id\",\"name\":\"x$score\",\"sort-name\":\"$sort\",\"score\":$score}"
+        }.toByteArray())
+        val a = "11111111-1111-1111-1111-111111111111"
+        val b = "22222222-2222-2222-2222-222222222222"
+        http.queued[url] = ArrayDeque(listOf(
+            reply(Triple(a, "Other, Name", 100), Triple(b, "Mori, Calliope", 100)),
+            reply(Triple(a, "Mori, Calliope", 90)),
+            reply(Triple(a, "Mori, Calliope", 100)),
+        ))
+        assertNull(mb().search("Mori Calliope"))
+        assertNull(mb().search("Mori Calliope"))
+        assertEquals(a, mb().search("Mori Calliope"))
+    }
 }

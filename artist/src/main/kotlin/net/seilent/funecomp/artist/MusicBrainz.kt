@@ -10,6 +10,56 @@ object Names {
     fun fold(s: String?): String = Normalizer.normalize(s ?: "", Normalizer.Form.NFKC).trim().replace(space, " ").lowercase(Locale.ROOT)
 
     fun mbid(s: String?): String? = s?.trim()?.lowercase(Locale.ROOT)?.takeIf { uuid.matches(it) }
+
+    private val tagTail = Regex("\\s*(【[^【】]*】|\\[[^\\[\\]]*])\\s*$")
+
+    fun variants(name: String): List<String> {
+        val plain = name.trim()
+        var base = plain
+        while (true) {
+            val m = tagTail.find(base) ?: break
+            val rest = base.substring(0, m.range.first).trim()
+            if (rest.isEmpty()) break
+            base = rest
+        }
+        return (listOf(base) + split(base)).map { it.trim() }.filter { it.isNotEmpty() && it != plain }.distinct()
+    }
+
+    private fun latin(c: Char) = c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c in '\u00C0'..'\u024F'
+
+    private fun neighbor(s: String, from: Int, step: Int): Char? {
+        var i = from
+        while (i in s.indices && s[i].isWhitespace()) i += step
+        return s.getOrNull(i)
+    }
+
+    private fun joint(s: String, i: Int): Boolean = when (s[i]) {
+        '/' -> {
+            val a = s.getOrNull(i - 1)
+            val b = s.getOrNull(i + 1)
+            a != null && b != null && !a.isWhitespace() && !b.isWhitespace() && !(latin(a) && latin(b))
+        }
+        '×', 'x', 'X' -> {
+            val a = neighbor(s, i - 1, -1)
+            val b = neighbor(s, i + 1, 1)
+            a != null && b != null && !latin(a) && !latin(b) && a !in "×xX/" && b !in "×xX/"
+        }
+        else -> false
+    }
+
+    private fun split(s: String): List<String> {
+        val parts = ArrayList<String>()
+        var start = 0
+        for (i in s.indices) {
+            if (joint(s, i)) {
+                parts += s.substring(start, i)
+                start = i + 1
+            }
+        }
+        if (parts.isEmpty()) return emptyList()
+        parts += s.substring(start)
+        return parts.map { it.trim() }.filter { it.isNotEmpty() }
+    }
 }
 
 class Rel(val type: String, val url: String, val ended: Boolean)
@@ -23,10 +73,12 @@ class MusicBrainz(private val api: Api, private val base: String = "https://musi
         val want = Names.fold(name)
         if (want.isEmpty()) return null
         val r = api.json("$base/artist/?query=${Api.enc(escape(name.trim()))}&fmt=json&limit=10") ?: return null
-        return r["artists"].list.firstOrNull { a ->
+        val all = r["artists"].list
+        val top = all.firstOrNull()?.takeIf { it["score"].long == 100L && Names.fold(it["sort-name"].str?.replace(", ", " ")) == want }
+        return (all.firstOrNull { a ->
             Names.fold(a["name"].str) == want || Names.fold(a["sort-name"].str) == want ||
                 a["aliases"].list.any { Names.fold(it["name"].str) == want }
-        }?.get("id")?.str?.let { Names.mbid(it) }
+        } ?: top)?.get("id")?.str?.let { Names.mbid(it) }
     }
 
     fun artist(id: String): MbArtist? {

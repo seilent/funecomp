@@ -29,6 +29,7 @@ class Fixtures : Http {
             missing += url
             return Response(404, ByteArray(0))
         }
+        if (f.startsWith("code:")) return Response(f.removePrefix("code:").toInt(), ByteArray(0))
         if (f.startsWith("gen:")) {
             val (w, h) = f.removePrefix("gen:").split('x').map { it.toInt() }
             return Response(200, Images.jpeg(Images.photo(w, h), 92))

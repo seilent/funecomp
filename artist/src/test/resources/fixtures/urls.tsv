@@ -47,3 +47,14 @@ https://i.discogs.com/eG3bUGOvNZSm8nRHMz3xf4tRfaxTz5sq9PpfsEMdTSY/rs:fit/g:sm/q:
 https://i.discogs.com/1rOFEc5UAgD22TTmUwBfBmyRCGM3vdM8ghTG-C2iQtU/rs:fit/g:sm/q:90/h:600/w:446/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9BLTM4NDAt/MTc2MTY5NDAxNy03/ODM0LnBuZw.jpeg	gen:446x600
 https://cdn-images.dzcdn.net/images/artist/0d58cfbc90f2e776608bcdc0c45a4711/1000x1000-000000-80-0-0.jpg	gen:1000x1000
 https://yt3.googleusercontent.com/ytc/AIdro_l2Ct30OyvxG3NA-y_3rn79eJG0sygrJ66vTBxQb0J71xo=s900-c-k-c0x00ffffff-no-rj	gen:900x900
+https://musicbrainz.org/ws/2/artist/?query=%E7%A9%BA%E6%98%9F%E3%81%8D%E3%82%89%E3%82%81%5C%2FSorahoshi%20Kirame&fmt=json&limit=10	nm-c4b95a22c392.json
+https://musicbrainz.org/ws/2/artist/?query=%E7%A9%BA%E6%98%9F%E3%81%8D%E3%82%89%E3%82%81&fmt=json&limit=10	nm-f81954a283b9.json
+https://musicbrainz.org/ws/2/artist/?query=Sorahoshi%20Kirame&fmt=json&limit=10	nm-37c37eade248.json
+https://musicbrainz.org/ws/2/artist/?query=%E7%A9%BA%E6%98%9F%E3%81%8D%E3%82%89%E3%82%81%5C%2FSorahoshi%20Kirame%E3%80%90%E3%81%AB%E3%81%98%E3%81%95%E3%82%93%E3%81%98%E3%80%91&fmt=json&limit=10	nm-7ca68181a87e.json
+https://api.deezer.com/search/artist?q=%E7%A9%BA%E6%98%9F%E3%81%8D%E3%82%89%E3%82%81%2FSorahoshi%20Kirame%E3%80%90%E3%81%AB%E3%81%98%E3%81%95%E3%82%93%E3%81%98%E3%80%91	nm-9b9454cbd585.json
+https://api.deezer.com/search/artist?q=%E7%A9%BA%E6%98%9F%E3%81%8D%E3%82%89%E3%82%81%2FSorahoshi%20Kirame	nm-cfcf6f3b7dbd.json
+https://api.deezer.com/search/artist?q=%E7%A9%BA%E6%98%9F%E3%81%8D%E3%82%89%E3%82%81	nm-e56be691fcfd.json
+https://api.deezer.com/search/artist?q=Sorahoshi%20Kirame	nm-176a18bf8941.json
+https://musicbrainz.org/ws/2/artist/?query=%E5%AE%87%E5%A4%9A%E7%94%B0%E3%83%92%E3%82%AB%E3%83%AB%5C%2FUtada%20Hikaru%E3%80%90%E5%85%AC%E5%BC%8F%E3%80%91&fmt=json&limit=10	nm-7025338353bc.json
+https://musicbrainz.org/ws/2/artist/?query=%E5%AE%87%E5%A4%9A%E7%94%B0%E3%83%92%E3%82%AB%E3%83%AB%5C%2FUtada%20Hikaru&fmt=json&limit=10	nm-a480fc2797a7.json
+https://musicbrainz.org/ws/2/artist/?query=Tenjin%20Kotone&fmt=json&limit=10	nm-f41807d1fe79.json

@@ -59,22 +59,31 @@ class ArtistArt(
         }
         val keyHash = keyHash(on)
         cache.miss(key)?.let { m ->
-            if (now - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash) {
+            if (now - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash && m.cleaned) {
                 due(m.at)
                 return null
             }
         }
         if (!online()) throw IOException("offline")
-        val found = lookup(name, id, w, h, on)
+        var foundId = id
+        var found = lookup(name, id, w, h, on)
+        if (found == null && Names.mbid(mbid) == null) {
+            for (v in Names.variants(name)) {
+                val vid = resolve(v, now)
+                found = lookup(v, vid, w, h, on) ?: continue
+                foundId = vid
+                break
+            }
+        }
         if (found == null) {
             cache.putMiss(key, now, on, keyHash)
             due(now)
             return null
         }
         val (c, src, jpeg) = found
-        cache.putHit(ArtCache.Entry(key, name.trim(), id, c.source, c.credit, c.url, now), src)
+        cache.putHit(ArtCache.Entry(key, name.trim(), foundId, c.source, c.credit, c.url, now), src)
         cache.putRendered(key, w, h, jpeg)
-        return Art(jpeg, w, h, name.trim(), id, c.source, c.credit)
+        return Art(jpeg, w, h, name.trim(), foundId, c.source, c.credit)
     }
 
     fun beginMark() {
