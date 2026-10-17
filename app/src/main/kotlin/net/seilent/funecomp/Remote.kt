@@ -269,8 +269,14 @@ object Remote : Control {
 
     fun sourcesChanged() = art?.want()
 
+    fun session(): Session? = link?.session
+
+    fun holdWake(tag: String, ms: Long) = wake?.hold(tag, ms)
+
+    fun dropWake(tag: String) = wake?.drop(tag)
+
     private fun gate(): Boolean {
-        val open = PushGate.open(device, SystemClock.elapsedRealtime())
+        val open = PushGate.open(device, SystemClock.elapsedRealtime()) && !Firmwares.sending
         if (open) wake?.hold(ART, ART_WAKE_MS) else wake?.drop(ART)
         return open
     }
@@ -539,6 +545,7 @@ object Remote : Control {
             val s = State.from(body)
             s.libRev?.let { r -> if (r != old.libRev) thumbs?.rev(r) }
             Scrobbles.state(s, System.currentTimeMillis())
+            Firmwares.state()
             onState?.invoke()
             Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")

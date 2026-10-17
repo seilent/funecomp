@@ -16,6 +16,7 @@ import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.LyricsPlan
 import net.seilent.funecomp.ui.Phase
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -47,13 +48,14 @@ class BackgroundTest {
     @After
     fun tearDown() {
         Remote.stop()
+        Firmwares.reset()
         sims.forEach { it.stop() }
     }
 
     private val logs = java.util.concurrent.CopyOnWriteArrayList<String>()
 
-    private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList()): String {
-        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, log = { logs += it }))
+    private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList(), updDir: java.io.File? = null): String {
+        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, updDir = updDir, log = { logs += it }))
         sims += s
         return "tcp:127.0.0.1:${s.listen(0)}"
     }
@@ -219,6 +221,171 @@ class BackgroundTest {
         }
         assertEquals(first, logs.count { it.contains("rx LRC_PUT") })
         Lyrics.set(false)
+        c.destroy()
+    }
+
+    @Test
+    fun aFirmwareSendResumesAfterDropsWithoutASecondTap() {
+        val dir = kotlin.io.path.createTempDirectory("upd").toFile()
+        val image = java.io.File(dir, "image.upt").apply { writeBytes(ByteArray(400_000) { (it * 13 + 5).toByte() }) }
+        val card = java.io.File(dir, "card")
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("drop-after-bytes=150000"), updDir = card))).create().startCommand(0, 1)
+        Firmwares.send(image)
+        val done = java.io.File(card, "v1.upt")
+        val end = System.currentTimeMillis() + 30_000
+        while (!done.exists()) {
+            check(System.currentTimeMillis() < end) { "timed out: ${logs.filter { it.startsWith("upd") }} ${Firmwares.view}" }
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+            Thread.sleep(100)
+        }
+        assertArrayEquals(image.readBytes(), done.readBytes())
+        val trace = logs.filter { it.startsWith("upd begin") || it.endsWith("closed drop-after-bytes") }
+        val resumed = trace.zipWithNext().filter { (a, _) -> a.endsWith("closed drop-after-bytes") }.map { it.second }
+        assertTrue("$trace", resumed.isNotEmpty() && resumed.all { it.startsWith("upd begin") && !it.endsWith("offset=0") })
+        waitFor { Firmwares.view.info == "ready on the dap" }
+        c.destroy()
+    }
+
+    @Test
+    fun aBusyFirmwareBeginPausesThenResumes() {
+        val dir = kotlin.io.path.createTempDirectory("upd").toFile()
+        val image = java.io.File(dir, "image.upt").apply { writeBytes(ByteArray(100_000) { (it * 7 + 3).toByte() }) }
+        val card = java.io.File(dir, "card")
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("busy=UPD_BEGIN:1"), updDir = card))).create().startCommand(0, 1)
+        Firmwares.send(image)
+        waitFor { Firmwares.view.info == "dap busy" }
+        val done = java.io.File(card, "v1.upt")
+        val end = System.currentTimeMillis() + 30_000
+        while (!done.exists()) {
+            check(System.currentTimeMillis() < end) { "timed out: ${logs.filter { it.startsWith("upd") }} ${Firmwares.view}" }
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+            Thread.sleep(100)
+        }
+        assertArrayEquals(image.readBytes(), done.readBytes())
+        waitFor { Firmwares.view.info == "ready on the dap" }
+        c.destroy()
+    }
+
+    @Test
+    fun aBusyAbortMidSendPausesThenResumesAtTheDeviceOffset() {
+        val dir = kotlin.io.path.createTempDirectory("upd").toFile()
+        val image = java.io.File(dir, "image.upt").apply { writeBytes(ByteArray(400_000) { (it * 11 + 1).toByte() }) }
+        val card = java.io.File(dir, "card")
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("upd-abort-at=150000"), updDir = card))).create().startCommand(0, 1)
+        Firmwares.send(image)
+        val done = java.io.File(card, "v1.upt")
+        val end = System.currentTimeMillis() + 30_000
+        while (!done.exists()) {
+            check(System.currentTimeMillis() < end) { "timed out: ${logs.filter { it.startsWith("upd") }} ${Firmwares.view}" }
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+            Thread.sleep(100)
+        }
+        assertArrayEquals(image.readBytes(), done.readBytes())
+        val begins = logs.filter { it.startsWith("upd begin") }
+        assertTrue("$begins", begins.last().substringAfter("offset=").toLong() >= 150_000)
+        waitFor { Firmwares.view.info == "ready on the dap" }
+        c.destroy()
+    }
+
+    @Test
+    fun aRevokedFirmwareSourceFailsAndALaterSendStillRuns() {
+        val dir = kotlin.io.path.createTempDirectory("upd").toFile()
+        val image = java.io.File(dir, "image.upt").apply { writeBytes(ByteArray(100_000) { (it * 5 + 9).toByte() }) }
+        val card = java.io.File(dir, "card")
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(updDir = card))).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        Firmwares.send(Firmwares.Source("picked.upt", 1000) { throw SecurityException("grant revoked") })
+        waitFor { Firmwares.view.info == "send failed" && !Firmwares.sending }
+        Firmwares.send(image)
+        val done = java.io.File(card, "v1.upt")
+        val end = System.currentTimeMillis() + 30_000
+        while (!done.exists()) {
+            check(System.currentTimeMillis() < end) { "timed out: ${logs.filter { it.startsWith("upd") }} ${Firmwares.view}" }
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+            Thread.sleep(100)
+        }
+        assertArrayEquals(image.readBytes(), done.readBytes())
+        c.destroy()
+    }
+
+    @Test
+    fun aSendRightAfterStopIsNotDroppedByTheOldAttempt() {
+        val dir = kotlin.io.path.createTempDirectory("upd").toFile()
+        val first = java.io.File(dir, "first.upt").apply { writeBytes(ByteArray(400_000) { (it * 3 + 1).toByte() }) }
+        val second = java.io.File(dir, "second.upt").apply { writeBytes(ByteArray(120_000) { (it * 17 + 4).toByte() }) }
+        val card = java.io.File(dir, "card")
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("slow-bps=200000"), updDir = card))).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        Firmwares.send(first)
+        val end = System.currentTimeMillis() + 30_000
+        while (!(Firmwares.sending && logs.any { it.contains("rx UPD_DATA") })) {
+            check(System.currentTimeMillis() < end) { "never sending: ${Firmwares.view}" }
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+            Thread.sleep(20)
+        }
+        Firmwares.stopSend()
+        Firmwares.send(second)
+        val done = java.io.File(card, "v1.upt")
+        while (!(done.exists() && done.readBytes().contentEquals(second.readBytes()))) {
+            check(System.currentTimeMillis() < end) { "second not sent: ${logs.filter { it.startsWith("upd") }} ${Firmwares.view}" }
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(100)
+        }
+        c.destroy()
+    }
+
+    @Test
+    fun aLongBusyHoldKeepsOneRetryChain() {
+        val dir = kotlin.io.path.createTempDirectory("upd").toFile()
+        val image = java.io.File(dir, "image.upt").apply { writeBytes(ByteArray(10_000)) }
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("busy=UPD_BEGIN:100000"), updDir = java.io.File(dir, "card")))).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        Firmwares.send(image)
+        val start = System.currentTimeMillis()
+        var pokes = 0
+        while (System.currentTimeMillis() - start < 30_000) {
+            if (pokes < 5 && System.currentTimeMillis() - start >= (pokes + 1) * 5_000L - 2_500) {
+                Firmwares.state()
+                pokes++
+            }
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+        }
+        val begins = logs.count { it.contains("rx UPD_BEGIN") }
+        assertEquals("dap busy", Firmwares.view.info)
+        assertTrue("$begins", begins <= 1 + pokes + 30_000 / Firmwares.BUSY_RETRY_MS.toInt() + 1)
+        c.destroy()
+    }
+
+    @Test
+    fun anUnreadableFirmwareSourceIsNotRetried() {
+        val dir = kotlin.io.path.createTempDirectory("upd").toFile()
+        val image = java.io.File(dir, "image.upt").apply { writeBytes(ByteArray(1000)) }
+        val card = java.io.File(dir, "card")
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        Firmwares.send(image)
+        image.delete()
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(updDir = card))).create().startCommand(0, 1)
+        waitFor { Firmwares.view.info == "send failed" }
+        repeat(4) {
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+            Thread.sleep(500)
+        }
+        assertEquals(1, org.robolectric.shadows.ShadowLog.getLogsForTag(Remote.TAG).count { it.msg.startsWith("firmware send: ") })
+        assertEquals("send failed", Firmwares.view.info)
         c.destroy()
     }
 

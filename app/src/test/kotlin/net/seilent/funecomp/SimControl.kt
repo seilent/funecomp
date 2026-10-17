@@ -188,6 +188,14 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
         firmware += "settings $checkDaily $prereleases"
     }
 
+    override fun firmwareSend(picked: Boolean) {
+        firmware += if (picked) "send picked" else "send release"
+    }
+
+    override fun firmwareStopSend() {
+        firmware += "stop send"
+    }
+
     companion object {
         val HD650 = """
             Preamp: -6.1 dB

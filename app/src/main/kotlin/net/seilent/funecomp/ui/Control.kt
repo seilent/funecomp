@@ -62,6 +62,8 @@ interface Control {
     fun firmwareCancel() {}
     fun firmwareFile(done: (PickedFile) -> Unit) {}
     fun firmwareSettings(checkDaily: Boolean, prereleases: Boolean) {}
+    fun firmwareSend(picked: Boolean) {}
+    fun firmwareStopSend() {}
 }
 
 const val LIB_PAGE = 100L

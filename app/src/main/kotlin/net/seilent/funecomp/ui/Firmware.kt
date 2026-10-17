@@ -13,6 +13,8 @@ import java.util.Locale
 
 private const val NO_UPDATER = "device has no updater"
 private const val CANCEL = "cancel"
+private const val READY = "ready on the dap"
+private const val PATH = "settings > about > update firmware"
 
 @Immutable
 data class FirmwareView(
@@ -26,6 +28,9 @@ data class FirmwareView(
     val ready: Boolean = false,
     val checkDaily: Boolean = false,
     val prereleases: Boolean = false,
+    val send: String = "",
+    val pickedName: String = "",
+    val pickedSize: Long = 0,
 )
 
 @Immutable
@@ -34,6 +39,7 @@ data class PickedFile(val name: String, val size: Long, val board: String?)
 fun sizeText(bytes: Long) = if (bytes < 0) "size unknown" else String.format(Locale.ROOT, "%.1f mb", bytes / 1_000_000.0)
 
 fun firmwareText(v: FirmwareView) = when {
+    v.send.isNotEmpty() -> v.send.removePrefix("firmware ")
     v.downloading -> v.download
     v.ready -> "downloaded"
     v.tag != null && v.newer == true -> v.tag
@@ -50,6 +56,10 @@ fun FirmwarePage(ctx: Ctx, view: FirmwareView) {
     val items = buildList {
         add(FwItem("check", view.status, "check") { ctx.control.firmwareCheck() })
         if (view.info.isNotEmpty()) add(FwItem(view.info, "", "info", info = true))
+        if (view.info == READY) add(FwItem(PATH, "", "path", info = true))
+        if (view.send.isNotEmpty()) add(FwItem("firmware", view.send.removePrefix("firmware "), "send") {
+            ctx.sheet.open("firmware", listOf(CANCEL)) { ctx.control.firmwareStopSend() }
+        })
         val tag = view.tag
         if (tag != null) {
             val value = when {
@@ -63,8 +73,16 @@ fun FirmwarePage(ctx: Ctx, view: FirmwareView) {
             add(FwItem("$tag, ${sizeText(view.size)}", value, "release") {
                 when {
                     view.downloading -> ctx.sheet.open(tag, listOf("cancel download")) { ctx.control.firmwareCancel() }
-                    view.ready -> ctx.sheet.open(tag, listOf(CANCEL, "delete"), info = listOf(sizeText(view.size), "board ${board ?: "unknown"}", NO_UPDATER)) {
-                        if (it == 1) ctx.control.firmwareCancel()
+                    view.ready -> {
+                        val send = ctx.device.has("update")
+                        val items = if (send) listOf("send", CANCEL, "delete") else listOf(CANCEL, "delete")
+                        val info = listOf(sizeText(view.size), "board ${board ?: "unknown"}") + if (send) emptyList() else listOf(NO_UPDATER)
+                        ctx.sheet.open(tag, items, info = info) {
+                            when (items[it]) {
+                                "send" -> ctx.control.firmwareSend(picked = false)
+                                "delete" -> ctx.control.firmwareCancel()
+                            }
+                        }
                     }
                     else -> ctx.sheet.open(tag, listOf("download", CANCEL), info = listOf(sizeText(view.size))) { if (it == 0) ctx.control.firmwareDownload() }
                 }
@@ -72,7 +90,11 @@ fun FirmwarePage(ctx: Ctx, view: FirmwareView) {
         }
         add(FwItem("pick file", "", "pick") {
             ctx.control.firmwareFile { p ->
-                ctx.sheet.open(p.name.ifEmpty { "firmware" }, listOf(CANCEL), info = listOf(sizeText(p.size), "board ${p.board ?: "unknown"}", NO_UPDATER)) {}
+                val send = ctx.device.has("update") && p.size > 0
+                val info = listOf(sizeText(p.size), "board ${p.board ?: "unknown"}") + if (ctx.device.has("update")) emptyList() else listOf(NO_UPDATER)
+                ctx.sheet.open(p.name.ifEmpty { "firmware" }, if (send) listOf("send", CANCEL) else listOf(CANCEL), info = info) {
+                    if (send && it == 0) ctx.control.firmwareSend(picked = true)
+                }
             }
         })
         add(FwItem("check releases", if (view.checkDaily) "on" else "off", "daily") { ctx.control.firmwareSettings(!view.checkDaily, view.prereleases) })

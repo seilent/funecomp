@@ -108,6 +108,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private var pushMbid: String? = null
     private var pushDropped = false
     private var abortFired = false
+    private var updAbortFired = false
     private var storeClock = 0L
     private var shown: String? = null
     private val v11: Boolean get() = opts.minor >= 1
@@ -847,6 +848,12 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             return@synchronized
         }
         u.part.appendBytes(data)
+        val at = faults.updAbortAt
+        if (at != null && !updAbortFired && u.part.length() >= at) {
+            updAbortFired = true
+            send(out, Msg.UPD_ABORT, UpdAbort(u.part.length(), Enums.AbortCode.busy).encode())
+            upd = null
+        }
     }
 
     private fun updEnd(b: Node): Answer {

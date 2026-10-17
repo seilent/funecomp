@@ -8,6 +8,7 @@ import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.Hello
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.ImgAbort
+import net.seilent.funecomp.proto.UpdAbort
 import net.seilent.funecomp.proto.Inbound
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.ProtoException
@@ -20,6 +21,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
 
@@ -84,9 +86,15 @@ class Session(
     @Volatile var closedReason: String? = null
         private set
 
-    @Volatile var pushActive = false
+    private val pushers = AtomicInteger()
+    val pushActive: Boolean get() = pushers.get() > 0
+
+    fun pushBegin() = pushers.incrementAndGet()
+
+    fun pushEnd() = pushers.decrementAndGet()
 
     @Volatile var abortListener: ((ImgAbort) -> Unit)? = null
+    @Volatile var updAbortListener: ((UpdAbort) -> Unit)? = null
 
     fun run(): String {
         synchronized(own) { own += Thread.currentThread() }
@@ -299,6 +307,7 @@ class Session(
         val h = hello ?: return
         if (!Groups.allowed(f.type, h.features)) return
         if (f.type == Msg.IMG_ABORT) abortListener?.invoke(ImgAbort.from(body))
+        if (f.type == Msg.UPD_ABORT) updAbortListener?.invoke(UpdAbort.from(body))
         listener.onPush(f.type, body)
     }
 

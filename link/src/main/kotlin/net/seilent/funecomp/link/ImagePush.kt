@@ -34,7 +34,7 @@ class ImagePush(
         val abort = AtomicReference<ImgAbort?>()
         val armed = AtomicBoolean(false)
         session.abortListener = { if (armed.get() && it.name == name) abort.set(it) }
-        session.pushActive = true
+        session.pushBegin()
         try {
             val total = jpeg.size.toLong()
             val crc = crc32(jpeg.size)
@@ -72,7 +72,7 @@ class ImagePush(
                 else -> Outcome.Failed(null)
             }
         } finally {
-            session.pushActive = false
+            session.pushEnd()
             session.abortListener = null
         }
     }

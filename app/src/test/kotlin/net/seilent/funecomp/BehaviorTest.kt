@@ -398,7 +398,9 @@ class BehaviorTest {
         rule.onNodeWithTag("fw.pick").performClick()
         settle(500)
         assertEquals("funeos-v0.4.0-v1.upt", shell.sheet.title)
-        assertEquals(listOf("28.0 mb", "board v1", "device has no updater"), shell.sheet.info)
-        assertEquals(listOf("cancel"), shell.sheet.items)
+        assertEquals(listOf("28.0 mb", "board v1"), shell.sheet.info)
+        assertEquals(listOf("send", "cancel"), shell.sheet.items)
+        tapSheetItem(0)
+        assertEquals("send picked", c.firmware.last())
     }
 }

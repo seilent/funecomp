@@ -295,12 +295,14 @@ class DeviceTest {
 
     @Test
     fun faultsParse() {
-        val f = Faults(listOf("drop-after-bytes=131072,stall-ms=10", "enum=STATE.output=9", "refuse=SET", "bye=companionOff"))
+        val f = Faults(listOf("drop-after-bytes=131072,stall-ms=10", "enum=STATE.output=9", "refuse=SET", "bye=companionOff", "busy=UPD_BEGIN:2", "upd-abort-at=4096"))
         assertEquals(131072L, f.dropAfterBytes)
         assertEquals(Msg.STATE, f.enums.single().type)
         assertEquals(setOf(Msg.SET), f.refuse)
         assertEquals(Enums.ByeReason.companionOff, f.bye)
-        for (bad in listOf("nope=1", "enum=STATE.nope=1", "refuse=NOPE")) {
+        assertEquals(2, f.busy[Msg.UPD_BEGIN]?.get())
+        assertEquals(4096L, f.updAbortAt)
+        for (bad in listOf("nope=1", "enum=STATE.nope=1", "refuse=NOPE", "busy=UPD_BEGIN", "busy=NOPE:1")) {
             try {
                 Faults(listOf(bad))
                 throw AssertionError("$bad parsed")

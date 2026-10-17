@@ -83,7 +83,7 @@ object Lyrics {
         if (!d.has("lyrics") || Remote.phase != Phase.LIVE) return
         for (w in LyricsPlan.wants(d, done)) {
             if (gen != generation || !on || Remote.phase != Phase.LIVE) return
-            if (!PushGate.open(Remote.device, SystemClock.elapsedRealtime())) {
+            if (Firmwares.sending || !PushGate.open(Remote.device, SystemClock.elapsedRealtime())) {
                 exec.schedule({ poke() }, Proto.pushGateMs.toLong(), TimeUnit.MILLISECONDS)
                 return
             }

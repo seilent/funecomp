@@ -6,6 +6,7 @@ import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
 import java.io.File
+import java.util.concurrent.atomic.AtomicInteger
 
 class Board(
     val name: String,
@@ -33,9 +34,11 @@ class Faults(specs: List<String>) {
     var major = Proto.major
     var slowBps: Long? = null
     val refuse = HashSet<Int>()
+    val busy = HashMap<Int, AtomicInteger>()
     var bye: Int? = null
     var restart = false
     var abortAt: Long? = null
+    var updAbortAt: Long? = null
     val enums = ArrayList<EnumFault>()
     var features = Groups.all
 
@@ -50,10 +53,16 @@ class Faults(specs: List<String>) {
                 "major" -> major = v.toInt()
                 "slow-bps" -> slowBps = v.toLong()
                 "refuse" -> refuse += Msg.byName[v] ?: throw IllegalArgumentException("refuse: unknown msg $v")
+                "busy" -> {
+                    val msg = v.substringBefore(':')
+                    val n = v.substringAfter(':', "").toIntOrNull() ?: throw IllegalArgumentException("busy: count missing in $v")
+                    busy[Msg.byName[msg] ?: throw IllegalArgumentException("busy: unknown msg $msg")] = AtomicInteger(n)
+                }
                 "bye" -> bye = Enums.ByeReason.names.entries.firstOrNull { it.value == v }?.key
                     ?: throw IllegalArgumentException("bye: unknown reason $v")
                 "restart" -> restart = true
                 "abort-at" -> abortAt = v.toLong()
+                "upd-abort-at" -> updAbortAt = v.toLong()
                 "features" -> features = v.toLong()
                 "enum" -> {
                     val target = v.substringBefore('=')

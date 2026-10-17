@@ -172,6 +172,10 @@ class Main : ComponentActivity() {
 
         override fun firmwareSettings(checkDaily: Boolean, prereleases: Boolean) = Firmwares.settings(checkDaily, prereleases)
 
+        override fun firmwareSend(picked: Boolean) = Firmwares.send(picked)
+
+        override fun firmwareStopSend() = Firmwares.stopSend()
+
         override fun askPermission() {
             if (asked >= 2) {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))

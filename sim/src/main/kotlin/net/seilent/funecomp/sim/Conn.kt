@@ -178,6 +178,7 @@ class Conn(
             return error(f, Err.unknown, "unknown")
         }
         if (f.type in faults.refuse) return error(f, Err.refused, "refused")
+        if ((faults.busy[f.type]?.getAndDecrement() ?: 0) > 0) return error(f, Err.busy, "busy")
         if (faults.stallMs > 0) Thread.sleep(faults.stallMs)
         when (val a = device.request(f.type, body, this)) {
             is Answer.Ok -> reply(f, a.payload)
