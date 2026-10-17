@@ -194,4 +194,103 @@ class StateTest {
         s.bye(Enums.ByeReason.shutdown)
         assertNull(s.stopped)
     }
+
+    @Test
+    fun reconnectTailByClock() {
+        var now = 0L
+        val r = Reconnect(random = { 0.5 }, clock = { now })
+        val seen = ArrayList<Long>()
+        while (now < 10 * 60_000L) {
+            assertTrue(r.begin())
+            now += 100
+            r.ended(reachedHello = false)
+            val d = r.delayMs()!!
+            seen += d
+            now += d
+        }
+        assertEquals(listOf(1000L, 2000L, 4000L, 8000L, 16000L, 30000L), seen.take(6))
+        assertFalse(seen.takeWhile { it < Reconnect.TAIL_MS }.isEmpty())
+        assertEquals(Reconnect.TAIL_MS, seen.last())
+        val tailFrom = seen.indexOfFirst { it == Reconnect.TAIL_MS }
+        assertTrue(seen.drop(tailFrom).all { it == Reconnect.TAIL_MS })
+
+        r.begin()
+        r.live()
+        now += 10_000
+        r.ended(reachedHello = true)
+        assertEquals(Reconnect.TAIL_MS, r.delayMs())
+
+        r.begin()
+        r.live()
+        now += Reconnect.GOOD_MS
+        r.ended(reachedHello = true)
+        assertEquals(1000L, r.delayMs())
+        assertFalse(r.tail)
+
+        r.kick()
+        assertEquals(0L, r.delayMs())
+        assertTrue(r.begin())
+        r.ended(false)
+        assertEquals(2000L, r.delayMs())
+    }
+
+    @Test
+    fun reconnectPauseAndResetPaths() {
+        var now = 0L
+        val r = Reconnect(random = { 0.5 }, clock = { now })
+        repeat(20) {
+            r.begin()
+            now += 60_000
+            r.ended(false)
+        }
+        assertTrue(r.tail)
+        r.pause()
+        assertNull(r.delayMs())
+        assertFalse(r.begin())
+        r.kick()
+        assertNull(r.delayMs())
+        r.foreground()
+        assertNull(r.delayMs())
+        r.userAction()
+        assertEquals(0L, r.delayMs())
+        assertFalse(r.tail)
+
+        repeat(20) {
+            r.begin()
+            now += 60_000
+            r.ended(false)
+        }
+        r.foreground()
+        assertEquals(0L, r.delayMs())
+        assertFalse(r.tail)
+
+        r.bye(Enums.ByeReason.replaced)
+        assertEquals(Reconnect.Stop.REPLACED, r.stopped)
+        r.kick()
+        assertNull(r.delayMs())
+        assertFalse(r.begin())
+        r.userAction()
+        assertNull(r.stopped)
+        assertEquals(0L, r.delayMs())
+    }
+
+    @Test
+    fun wakeHoldsUntilTheLastReasonDrops() {
+        var now = 0L
+        val log = ArrayList<String>()
+        val w = Wake({ log += "acquire $it" }, { log += "release" }, { now })
+        w.hold("attempt", 20_000)
+        now += 5_000
+        w.hold("run", 60_000)
+        w.drop("attempt")
+        assertEquals(setOf("run"), w.held)
+        w.drop("run")
+        assertEquals(emptySet<String>(), w.held)
+        w.drop("run")
+        w.hold("attempt", 20_000)
+        now += 25_000
+        assertEquals(emptySet<String>(), w.held)
+        w.drop("attempt")
+        assertEquals(listOf("acquire 20000", "acquire 60000", "acquire 60000", "release", "acquire 20000"), log)
+    }
 }

@@ -42,6 +42,7 @@ fun statusText(link: LinkView) = when {
     link.phase == Phase.CONNECTING -> "connecting"
     link.phase == Phase.STOPPED -> byeText(link.bye)
     link.phase == Phase.DOWN -> byeText(link.bye)
+    link.device != null -> "stopped"
     else -> "not set"
 }
 
@@ -80,6 +81,8 @@ fun ConnectionPage(ctx: Ctx, link: LinkView) {
             add(Line("board", hello.board ?: "", tag = "board"))
             add(Line("version", hello.version ?: "", tag = "version"))
         }
+        link.battery?.let { add(Line("battery", it.word, tag = "battery") { ctx.control.allowBackground() }) }
+        if (link.phase != Phase.NONE) add(Line("disconnect", "", tag = "disconnect") { ctx.control.disconnect() })
     }
     val at = lines.indexOfFirst { it.tag == focus }.coerceAtLeast(0)
     HubPage("connection", { ctx.nav.pop() }, count = statusText(link)) {

@@ -56,7 +56,7 @@ class Session(
         object Unsupported : Result()
     }
 
-    private class Pending(val type: Int, val sentAt: Long, val timeoutMs: Long, val done: (Result) -> Unit)
+    private class Pending(val type: Int, var sentAt: Long, val timeoutMs: Long, val done: (Result) -> Unit)
 
     private val lock = Any()
     private val pending = HashMap<Int, Pending>()
@@ -68,6 +68,7 @@ class Session(
     private var busySince: Long? = null
     private var anchorRx: Long? = null
     private var anchorAt = 0L
+    private var tickAt: Long? = null
     @Volatile private var ticker: ScheduledExecutorService? = null
 
     private val outLock = ReentrantLock()
@@ -308,6 +309,15 @@ class Session(
         var ping = false
         synchronized(lock) {
             if (closedReason != null) return
+            val last = tickAt
+            tickAt = now
+            if (last != null && now - last > 2 * config.tickMs) {
+                rxAt = now
+                anchorAt = now
+                pending.values.forEach { it.sentAt = now }
+                probeUntil = probeUntil?.let { now + (hello?.busyMs ?: 0) }
+                return
+            }
             val it = pending.values.iterator()
             while (it.hasNext()) {
                 val p = it.next()

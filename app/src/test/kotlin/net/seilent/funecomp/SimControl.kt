@@ -85,6 +85,9 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
     var bonds = listOf(Bonded("AP80", "00:00:00:00:00:03", true), Bonded("V1", "00:00:00:00:00:01", true), Bonded("WH-1000XM4", "00:00:00:00:00:02"))
     var retries = 0
     var asks = 0
+    var disconnects = 0
+    var allows = 0
+    var laters = 0
 
     override fun bonded() = bonds
 
@@ -94,5 +97,17 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
 
     override fun askPermission() {
         asks++
+    }
+
+    override fun disconnect() {
+        disconnects++
+    }
+
+    override fun allowBackground() {
+        allows++
+    }
+
+    override fun backgroundLater() {
+        laters++
     }
 }

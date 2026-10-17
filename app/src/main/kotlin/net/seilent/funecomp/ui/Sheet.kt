@@ -44,37 +44,49 @@ class SheetState {
         private set
     var items by mutableStateOf(emptyList<String>())
         private set
+    var info by mutableStateOf<String?>(null)
+        private set
     var focus by mutableIntStateOf(0)
     var entry by mutableStateOf<(@Composable () -> Unit)?>(null)
         private set
     private var pick: (Int) -> Unit = {}
+    private var dismiss: () -> Unit = {}
 
-    fun open(title: String, items: List<String>, focus: Int = 0, pick: (Int) -> Unit) {
+    fun open(title: String, items: List<String>, focus: Int = 0, info: String? = null, onDismiss: () -> Unit = {}, pick: (Int) -> Unit) {
         this.title = title
+        this.info = info
         this.items = items
         this.focus = focus
         this.entry = null
         this.pick = pick
+        this.dismiss = onDismiss
         shown = true
     }
 
     fun openEntry(title: String, entry: @Composable () -> Unit) {
         this.title = title
+        this.info = null
         this.items = listOf("")
         this.focus = 0
         this.entry = entry
         this.pick = {}
+        this.dismiss = {}
         shown = true
     }
 
     fun accept(i: Int) {
         focus = i
+        dismiss = {}
         close()
         pick(i)
     }
 
     fun close() {
+        if (!shown) return
         shown = false
+        val d = dismiss
+        dismiss = {}
+        d()
     }
 }
 
@@ -93,7 +105,8 @@ fun Sheet(state: SheetState) {
     val density = LocalDensity.current
     val lift = (WindowInsets.ime.getBottom(density) - WindowInsets.systemBars.getBottom(density)).coerceAtLeast(0).toFloat()
     val screenH = ui.px(ui.h) - lift
-    val wanted = edge + titleH + state.items.size * pitch + edge
+    val lead = if (state.info != null) 1 else 0
+    val wanted = edge + titleH + (lead + state.items.size) * pitch + edge
     val panelH = minOf(wanted, screenH)
     val p = progress.value
     val panelY = screenH - panelH + (1f - p) * panelH
@@ -111,6 +124,13 @@ fun Sheet(state: SheetState) {
                 state = list,
                 flingBehavior = rememberFling(),
             ) {
+                state.info?.let { line ->
+                    item(key = "info") {
+                        Box(Modifier.size(ui.px(ui.w).dp(), pitch.dp()).testTag("sheet.info")) {
+                            RoleText(line, Roles.dialogItem, Modifier.at(edge, pitch / 2, ay = 0.5f).width((ui.px(ui.w) - 2 * edge).dp()).clipToBounds(), color = white(Roles.dialogItem.dim))
+                        }
+                    }
+                }
                 itemsIndexed(state.items) { i, item ->
                     val on = i == state.focus
                     Box(
@@ -126,7 +146,7 @@ fun Sheet(state: SheetState) {
                     }
                 }
             }
-            ListBar(list, state.focus, edge - ui.px(Tok.focus_barOffset))
+            ListBar(list, state.focus + lead, edge - ui.px(Tok.focus_barOffset))
             }
         }
     }

@@ -1,7 +1,9 @@
 package net.seilent.funecomp
 
+import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -31,6 +33,7 @@ import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
+import net.seilent.funecomp.state.Wake
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LIB_PAGE
@@ -44,6 +47,8 @@ object Remote : Control {
     private const val FETCH_W = 360
     private const val FETCH_H = 480
     private const val FACES = 64
+    private const val ATTEMPT_WAKE_MS = 20_000L
+    private const val ATTEMPT = "attempt"
     private val codec = BitmapCodec { Log.i(TAG, it) }
     private val decoded = Memo<BackdropArt>()
     private val faces = Memo<Found>(FACES)
@@ -53,6 +58,12 @@ object Remote : Control {
 
     var phase by mutableStateOf(Phase.NONE)
         private set
+
+    var bluetoothOff by mutableStateOf(false)
+        private set
+
+    @Volatile var onPhase: (() -> Unit)? = null
+    @Volatile var onTail: ((Long) -> Unit)? = null
 
     var bye by mutableStateOf<Int?>(null)
         private set
@@ -79,6 +90,9 @@ object Remote : Control {
     @Volatile private var art: ArtWorker? = null
     @Volatile private var artKey: Pair<List<String>, Int?>? = null
     @Volatile private var backdropFor: List<String>? = null
+    @Volatile private var shown = false
+    private var wake: Wake? = null
+    private var exitLogged = false
 
     fun debuggable(context: Context) = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
@@ -99,11 +113,12 @@ object Remote : Control {
             backdrop = null
             backdropFor = null
             decoded.clear()
-            phase = Phase.CONNECTING
             bye = null
             everLive = false
+            phase(Phase.CONNECTING)
             Log.i(TAG, "link $spec")
-            val l = Link(connect, listener(generation), clock = SystemClock::elapsedRealtime)
+            wake(context)
+            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), clock = SystemClock::elapsedRealtime)
             link = l
             art = worker(context, l)
             l.start()
@@ -114,11 +129,65 @@ object Remote : Control {
     fun stop() {
         synchronized(lock) { drop() }
         update { DeviceState() }
-        phase = Phase.NONE
         everLive = false
+        bluetoothOff = false
+        phase(Phase.NONE)
     }
 
     fun userAction() = link?.userAction()
+
+    fun kick(why: String) {
+        val l = link ?: return
+        if (phase == Phase.LIVE) return
+        Log.i(TAG, "kick $why")
+        wake?.hold(ATTEMPT, ATTEMPT_WAKE_MS)
+        l.kick()
+        if (l.stopped != null || l.paused) wake?.drop(ATTEMPT)
+    }
+
+    fun bluetooth(on: Boolean) {
+        val l = link ?: return
+        if (on == !bluetoothOff) return
+        bluetoothOff = !on
+        Log.i(TAG, "bluetooth ${if (on) "on" else "off"}")
+        if (on) {
+            l.userAction()
+            kick("bluetooth")
+        } else {
+            l.pause()
+        }
+        onPhase?.invoke()
+    }
+
+    fun shown(on: Boolean) {
+        shown = on
+        if (!on) {
+            backdrop = null
+            backdropFor = null
+            decoded.clear()
+        }
+        art?.want()
+    }
+
+    fun logExit(context: Context) {
+        if (exitLogged) return
+        exitLogged = true
+        val am = context.getSystemService(ActivityManager::class.java) ?: return
+        val e = am.getHistoricalProcessExitReasons(context.packageName, 0, 1).firstOrNull() ?: return
+        Log.i(TAG, "exit reason=${e.reason} status=${e.status} importance=${e.importance} at=${e.timestamp} ${e.description ?: ""}")
+    }
+
+    private fun wake(context: Context) {
+        if (wake != null) return
+        val pm = context.getSystemService(PowerManager::class.java) ?: return
+        val wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "funecomp:link").apply { setReferenceCounted(false) }
+        wake = Wake({ wl.acquire(it) }, { if (wl.isHeld) wl.release() }, SystemClock::elapsedRealtime)
+    }
+
+    private fun phase(p: Phase) {
+        phase = p
+        onPhase?.invoke()
+    }
 
     fun artist(context: Context): ArtistArt = synchronized(lock) {
         artist ?: run {
@@ -138,8 +207,8 @@ object Remote : Control {
         return ArtWorker(
             { l.session },
             { s -> ArtPusher(s, a::get) { PushGate.open(device, SystemClock.elapsedRealtime()) }.run(ArtPusher.order(device.playback.state)) },
-            { final -> showBackdrop(a, final) },
-            { fetch(a) },
+            { final -> !shown || showBackdrop(a, final) },
+            { if (shown) fetch(a) },
         ) { r, e ->
             try {
                 if (r != null) Log.i(TAG, "art ${r.stop} pushed=${r.pushed} stored=${r.stored} missing=${r.missing} failed=${r.failed}")
@@ -284,7 +353,7 @@ object Remote : Control {
 
         override fun onAttempt(at: Long) {
             if (!live) return
-            if (phase != Phase.LIVE) phase = Phase.CONNECTING
+            if (phase != Phase.LIVE) phase(Phase.CONNECTING)
             Log.i(TAG, "attempt at=$at")
         }
 
@@ -293,10 +362,11 @@ object Remote : Control {
             artKey = null
             update { it.withHello(hello) }
             synchronized(asked) { asked.clear() }
-            phase = Phase.LIVE
             bye = null
             everLive = true
             board = hello.board
+            phase(Phase.LIVE)
+            wake?.drop(ATTEMPT)
             Log.i(TAG, "hello board=${hello.board} version=${hello.version} idle=${hello.idleMs} busy=${hello.busyMs}")
         }
 
@@ -333,14 +403,22 @@ object Remote : Control {
         override fun onClosed(reason: String) {
             if (!live) return
             update { it.copy(hello = null) }
-            phase = Phase.DOWN
+            phase(Phase.DOWN)
+            wake?.drop(ATTEMPT)
             Log.i(TAG, "closed $reason")
         }
 
         override fun onStopped(stop: Reconnect.Stop) {
             if (!live) return
-            phase = Phase.STOPPED
+            phase(Phase.STOPPED)
+            wake?.drop(ATTEMPT)
             Log.i(TAG, "stopped $stop")
+        }
+
+        override fun onWait(at: Long, tail: Boolean) {
+            if (!live || !tail) return
+            Log.i(TAG, "tail at=$at")
+            onTail?.invoke(at)
         }
     }
 }

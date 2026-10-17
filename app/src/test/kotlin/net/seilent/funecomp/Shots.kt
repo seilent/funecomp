@@ -28,6 +28,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
+import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -165,6 +166,10 @@ val SHOTS = listOf(
     Shot("connection-refused-nobond", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused), prep = ::noBond),
     Shot("connection-nobond", pages = HOME + Page.Connection, link = LinkView(Phase.NONE), prep = ::noBond),
     Shot("connection-nobond-device", pages = HOME + Page.Connection, link = LinkView(Phase.NONE), prep = ::noBond) { rule.onNodeWithTag("conn.device").performClick() },
+    Shot("connection-battery", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.OPTIMIZED)),
+    Shot("connection-restricted", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.DOWN, "V1", everLive = true, battery = Battery.RESTRICTED)),
+    Shot("connection-stopped", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "V1", battery = Battery.UNRESTRICTED), prep = { it.device = DeviceState() }),
+    Shot("background", board = "v1", pages = NP, prep = ::playing, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.OPTIMIZED, askBattery = true)),
     Shot("artistart", pages = HOME + Page.ArtistArt),
     Shot("artistart-credits", pages = HOME + Page.ArtistArt, credits = CREDITS) {
         rule.mainClock.autoAdvance = true

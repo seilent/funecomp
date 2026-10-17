@@ -1,6 +1,7 @@
 package net.seilent.funecomp
 
 import android.Manifest
+import android.app.ActivityManager
 import android.bluetooth.BluetoothManager
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -10,7 +11,9 @@ import android.graphics.Color
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
+import android.util.Log
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -33,6 +36,7 @@ import androidx.lifecycle.Lifecycle
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Black
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.Control
@@ -43,8 +47,10 @@ import net.seilent.funecomp.ui.Shell
 import java.util.UUID
 
 class Main : ComponentActivity() {
-    private var started = false
+    private var launch = false
     private var asked = 0
+    private var battery by mutableStateOf<Battery?>(null)
+    private var batteryAsked by mutableStateOf(false)
     private var granted by mutableStateOf(true)
     private var spec by mutableStateOf<String?>(null)
     private var sources by mutableStateOf(Sources())
@@ -83,6 +89,26 @@ class Main : ComponentActivity() {
             startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
         }
 
+        override fun disconnect() {
+            startService(Intent(this@Main, LinkService::class.java).setAction(LinkService.ACTION_STOP))
+        }
+
+        override fun allowBackground() {
+            backgroundLater()
+            val details = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
+            val request = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName"))
+            try {
+                startActivity(if (battery == Battery.OPTIMIZED) request else details)
+            } catch (_: ActivityNotFoundException) {
+                startActivity(details)
+            }
+        }
+
+        override fun backgroundLater() {
+            prefs().edit().putBoolean(BATTERY_ASKED, true).apply()
+            batteryAsked = true
+        }
+
         override fun askPermission() {
             if (asked >= 2) {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
@@ -98,10 +124,14 @@ class Main : ComponentActivity() {
         super.onCreate(savedInstanceState)
         sources = sources(this)
         Remote.artist(this)
+        Remote.logExit(this)
+        batteryAsked = prefs().getBoolean(BATTERY_ASKED, false)
         remember(intent)
+        launch = opens(intent, Remote.debuggable(this))
         setContent {
             Box(Modifier.fillMaxSize().background(Black).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
-                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board)
+                val b = battery
+                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, b != null && b != Battery.UNRESTRICTED && !batteryAsked)
                 App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits) { e ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
@@ -115,21 +145,40 @@ class Main : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         remember(intent)
-        startLink()
+        val open = opens(intent, Remote.debuggable(this))
+        Log.i(Remote.TAG, "onNewIntent action=${intent.action} open=$open")
+        if (!open) return
+        launch = true
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) launched()
     }
 
     override fun onStart() {
         super.onStart()
         granted = linkAllowed()
-        startLink()
+        Remote.shown(true)
+        launched()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        battery = readBattery()
     }
 
     override fun onStop() {
         super.onStop()
-        if (started && !isChangingConfigurations) {
-            started = false
-            startService(Intent(this, LinkService::class.java).setAction(LinkService.ACTION_STOP))
-        }
+        if (!isChangingConfigurations) Remote.shown(false)
+    }
+
+    private fun launched() {
+        if (!launch) return
+        launch = false
+        startLink()
+    }
+
+    private fun readBattery(): Battery = when {
+        getSystemService(ActivityManager::class.java)?.isBackgroundRestricted == true -> Battery.RESTRICTED
+        getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(packageName) == true -> Battery.UNRESTRICTED
+        else -> Battery.OPTIMIZED
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -227,15 +276,21 @@ class Main : ComponentActivity() {
             }
             return
         }
-        started = true
         startForegroundService(Intent(this, LinkService::class.java).putExtra(EXTRA_LINK, spec))
     }
 
     companion object {
         const val EXTRA_LINK = "link"
         const val EXTRA_PAGE = "page"
+        const val ACTION_OPEN = "net.seilent.funecomp.OPEN"
+        private const val BATTERY_ASKED = "batteryAsked"
         const val PREFS = "link"
         const val ART_PREFS = "art"
+
+        fun opens(intent: Intent?, debuggable: Boolean): Boolean {
+            if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return false
+            return intent.action == Intent.ACTION_MAIN || intent.action == ACTION_OPEN || (debuggable && intent.hasExtra(EXTRA_LINK))
+        }
 
         fun sources(context: Context): Sources {
             val p = context.getSharedPreferences(ART_PREFS, MODE_PRIVATE)

@@ -23,6 +23,7 @@ import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LibKey
 
 private const val ACCENT_KEY = "accentHue"
+private const val BACKGROUND_INFO = "works with the screen off"
 
 private class Touch(base: ViewConfiguration, private val slop: Float) : ViewConfiguration by base {
     override val longPressTimeoutMillis: Long get() = Tok.input_keyHoldMs.toLong()
@@ -76,11 +77,16 @@ fun App(
         ) {
             val nav = shell.nav
             val ctx = Ctx(device, control, nav, shell.sheet, shell.toast)
-            LaunchedEffect(shell.gated, link.phase) {
+            LaunchedEffect(shell.gated, link.phase, link.askBattery) {
                 if (shell.gated && link.phase == Phase.LIVE) {
                     shell.gated = false
                     shell.sheet.close()
                     nav.reset(listOf(Page.Home, Page.NowPlaying))
+                }
+                if (link.askBattery && link.phase == Phase.LIVE && !shell.sheet.shown) {
+                    shell.sheet.open("background", listOf("allow", "not now"), info = BACKGROUND_INFO, onDismiss = { control.backgroundLater() }) {
+                        if (it == 0) control.allowBackground() else control.backgroundLater()
+                    }
                 }
             }
             BackHandler(shell.sheet.shown || nav.stack.size > 1) {

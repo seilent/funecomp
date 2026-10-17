@@ -5,6 +5,8 @@ import net.seilent.funecomp.proto.Profile
 
 enum class Phase { NONE, CONNECTING, LIVE, DOWN, STOPPED }
 
+enum class Battery(val word: String) { UNRESTRICTED("unrestricted"), OPTIMIZED("optimized"), RESTRICTED("restricted") }
+
 @Immutable
 data class LinkView(
     val phase: Phase = Phase.NONE,
@@ -13,6 +15,8 @@ data class LinkView(
     val permission: Boolean = true,
     val everLive: Boolean = false,
     val board: String? = null,
+    val battery: Battery? = null,
+    val askBattery: Boolean = false,
 )
 
 @Immutable
@@ -34,6 +38,9 @@ interface Control {
     fun askPermission() {}
     fun retry() {}
     fun openBluetoothSettings() {}
+    fun disconnect() {}
+    fun allowBackground() {}
+    fun backgroundLater() {}
 }
 
 const val LIB_PAGE = 100L

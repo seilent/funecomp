@@ -22,12 +22,14 @@ import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.statusText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -154,6 +156,76 @@ class BehaviorTest {
         rule.onNodeWithTag("conn.remedy").assertIsDisplayed()
         rule.onNodeWithTag("conn.pairhint").assertIsDisplayed()
         assertEquals(0, rule.onAllNodesWithTag("conn.pairpath").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun backgroundSheetOpensOnLiveAndBackCountsAsNotNow() {
+        val c = SimControl("v1")
+        val shell = Shell(Nav(listOf(Page.Connection)), gated = true)
+        var link by mutableStateOf(LinkView(Phase.CONNECTING, "V1", battery = Battery.OPTIMIZED, askBattery = true))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, link, c, shell) }
+        }
+        settle(1000)
+        assertFalse(shell.sheet.shown)
+        link = link.copy(phase = Phase.LIVE, everLive = true)
+        settle(1000)
+        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
+        assertTrue(shell.sheet.shown)
+        assertEquals("background", shell.sheet.title)
+        shell.sheet.close()
+        settle(500)
+        assertEquals(1, c.laters)
+        assertEquals(0, c.allows)
+        link = link.copy(askBattery = false)
+        settle(500)
+        assertFalse(shell.sheet.shown)
+    }
+
+    @Test
+    fun backgroundSheetAllow() {
+        val (c, shell) = start(listOf(Page.Home), LinkView(Phase.LIVE, "V1", battery = Battery.OPTIMIZED, askBattery = true))
+        assertTrue(shell.sheet.shown)
+        assertEquals("works with the screen off", shell.sheet.info)
+        assertEquals(0, shell.sheet.focus)
+        rule.onNodeWithTag("sheet.info").performClick()
+        settle(300)
+        assertTrue(shell.sheet.shown)
+        assertEquals(0, c.allows + c.laters)
+        rule.onNodeWithTag("sheet.item.0").performClick()
+        settle(500)
+        assertEquals(1, c.allows)
+        assertEquals(0, c.laters)
+        assertFalse(shell.sheet.shown)
+    }
+
+    @Test
+    fun batteryAndDisconnectLines() {
+        val (c, _) = start(listOf(Page.Home, Page.Connection), LinkView(Phase.LIVE, "V1", battery = Battery.RESTRICTED))
+        rule.onNode(hasText("restricted", ignoreCase = true) and hasAnyAncestor(hasTestTag("conn.battery"))).assertExists()
+        rule.onNodeWithTag("conn.battery").performClick()
+        settle(300)
+        assertEquals(1, c.allows)
+        rule.onNodeWithTag("conn.disconnect").performClick()
+        settle(300)
+        assertEquals(1, c.disconnects)
+    }
+
+    @Test
+    fun stoppedLinkHasNoDisconnectLine() {
+        start(listOf(Page.Home, Page.Connection), LinkView(Phase.NONE, "V1", battery = Battery.UNRESTRICTED))
+        rule.onNode(hasText("stopped", ignoreCase = true) and hasAnyAncestor(hasTestTag("conn.status"))).assertExists()
+        rule.onNode(hasText("unrestricted", ignoreCase = true) and hasAnyAncestor(hasTestTag("conn.battery"))).assertExists()
+        assertEquals(0, rule.onAllNodesWithTag("conn.disconnect").fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun statusWords() {
+        assertEquals("stopped", statusText(LinkView(Phase.NONE, "V1")))
+        assertEquals("not set", statusText(LinkView(Phase.NONE)))
+        assertEquals("connected", statusText(LinkView(Phase.LIVE, "V1")))
+        assertEquals(listOf("unrestricted", "optimized", "restricted"), Battery.entries.map { it.word })
     }
 
     @Test

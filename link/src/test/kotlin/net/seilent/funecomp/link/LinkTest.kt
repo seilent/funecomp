@@ -219,6 +219,26 @@ class LinkTest {
     }
 
     @Test
+    fun aClockJumpBetweenTicksClosesNeitherTheLinkNorAnOpenRequest() {
+        val rec = Recorder()
+        val t = java.util.concurrent.atomic.AtomicLong(1_000_000)
+        val s = Session(TcpTransport("127.0.0.1", sim("stall-ms=2000")), rec, Session.Config(), { t.get() })
+        Thread { s.run() }.apply { isDaemon = true }.start()
+        assertTrue(rec.hello.await(5, TimeUnit.SECONDS))
+        val got = java.util.concurrent.atomic.AtomicReference<Session.Result?>()
+        val done = CountDownLatch(1)
+        s.request(Msg.VOLUME, Req.volume(step = 1)) {
+            got.set(it)
+            done.countDown()
+        }
+        t.addAndGet(20_000)
+        assertTrue(done.await(5, TimeUnit.SECONDS))
+        assertTrue(got.get() is Session.Result.Ok)
+        assertNull(s.closedReason)
+        s.close("done")
+    }
+
+    @Test
     fun fullSendBufferStillClosesAsDead() {
         val rec = Recorder()
         val s = session(sim("no-read", idle = 200, busy = 100), rec)

@@ -19,18 +19,22 @@ class Link(
         fun onAttempt(at: Long) {}
         fun onSession(session: Session) {}
         fun onStopped(stop: Reconnect.Stop) {}
+        fun onWait(at: Long, tail: Boolean) {}
     }
 
     private val lock = ReentrantLock()
     private val wakeup = lock.newCondition()
     private var running = false
     private var endedAt = 0L
+    private var waitAt: Long? = null
     private var thread: Thread? = null
 
     @Volatile var session: Session? = null
         private set
 
     val stopped: Reconnect.Stop? get() = lock.withLock { policy.stopped }
+
+    val paused: Boolean get() = lock.withLock { policy.paused }
 
     fun start() {
         lock.withLock {
@@ -57,6 +61,13 @@ class Link(
 
     fun userAction() = wake { policy.userAction() }
 
+    fun pause() {
+        wake { policy.pause() }
+        session?.close("paused")
+    }
+
+    fun kick() = wake { policy.kick() }
+
     private fun wake(block: () -> Unit) = lock.withLock {
         block()
         wakeup.signalAll()
@@ -74,18 +85,24 @@ class Link(
                     }
                     val left = endedAt + d - clock()
                     if (left > 0) {
+                        if (waitAt != endedAt + d) {
+                            waitAt = endedAt + d
+                            listener.onWait(endedAt + d, policy.tail)
+                        }
                         wakeup.await(left, TimeUnit.MILLISECONDS)
                         continue
                     }
                     if (policy.begin()) break
                     wakeup.await()
                 }
+                waitAt = null
             }
             listener.onAttempt(clock())
             var reached = false
             val s = Session(connect(), object : Session.Listener {
                 override fun onHello(hello: HelloReply) {
                     reached = true
+                    lock.withLock { policy.live() }
                     listener.onHello(hello)
                 }
 
