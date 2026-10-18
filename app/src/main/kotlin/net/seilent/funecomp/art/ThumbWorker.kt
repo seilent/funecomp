@@ -42,6 +42,7 @@ class ThumbWorker(dir: File, private val link: () -> Session?, private val log: 
     }
 
     private fun pump() {
+        for ((w, f) in thumbs.ready()) show(w, f)
         if (running) return
         val s = link() ?: return
         val w = thumbs.next() ?: return

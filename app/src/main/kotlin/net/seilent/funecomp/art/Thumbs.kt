@@ -60,6 +60,18 @@ class Thumbs(private val dir: File) {
     }
 
     @Synchronized
+    fun ready(): List<Pair<Want, File>> {
+        val out = ArrayList<Pair<Want, File>>()
+        for (i in queued.indices) {
+            val w = queued[i] ?: continue
+            val f = cached(w.track, w.px) ?: continue
+            queued[i] = null
+            out += w to f
+        }
+        return out
+    }
+
+    @Synchronized
     fun next(): Want? {
         for (i in queued.indices) {
             val w = queued[i] ?: continue
