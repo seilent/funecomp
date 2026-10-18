@@ -727,7 +727,13 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
 
     private fun imgDel(b: Node): Answer {
         val name = b.str(Tags.ImgDel.name) ?: return Answer.Fail(Err.badValue, "no name")
-        images.remove(fold(name))
+        val old = images.remove(fold(name))
+        if (old == null) {
+            opts.log("absent name=$name")
+            return Answer.Ok()
+        }
+        opts.imgDir?.let { dir -> if (images.values.none { it.crc == old.crc }) File(dir, "%08x.jpg".format(old.crc)).delete() }
+        opts.log("deleted name=$name")
         return Answer.Ok()
     }
 

@@ -294,6 +294,19 @@ class DeviceTest {
     }
 
     @Test
+    fun aDeleteLogsTheNameAndRemovesTheStoredFile() {
+        val dir = kotlin.io.path.createTempDirectory("img").toFile()
+        val logs = ArrayList<String>()
+        val d = Device(Options(Board.of("ap80"), imgDir = dir, log = { logs += it }), mbidLib()) { t }
+        store(d, "Utada Hikaru", jpeg(50_000))
+        assertEquals(1, dir.listFiles()!!.size)
+        ok(req(d, Msg.IMG_DEL, Req.imgDel("Utada Hikaru")))
+        ok(req(d, Msg.IMG_DEL, Req.imgDel("Mili")))
+        assertEquals(0, dir.listFiles()!!.size)
+        assertEquals(listOf("deleted name=Utada Hikaru", "absent name=Mili"), logs.filter { it.startsWith("deleted") || it.startsWith("absent") })
+    }
+
+    @Test
     fun faultsParse() {
         val f = Faults(listOf("drop-after-bytes=131072,stall-ms=10", "enum=STATE.output=9", "refuse=SET", "bye=companionOff", "busy=UPD_BEGIN:2", "upd-abort-at=4096"))
         assertEquals(131072L, f.dropAfterBytes)
