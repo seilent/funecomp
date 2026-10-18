@@ -15,6 +15,7 @@ import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.LyricsPlan
+import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -435,6 +436,66 @@ class BackgroundTest {
         waitFor { volumes() == 2 }
         a.pause().stop().destroy()
         c.destroy()
+    }
+
+    private fun running(): org.robolectric.android.controller.ActivityController<Main> {
+        app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE).edit().putString(Main.EXTRA_LINK, "tcp:127.0.0.1:1").commit()
+        val a = Robolectric.buildActivity(Main::class.java, Intent(app, Main::class.java).setAction(Intent.ACTION_MAIN)).create().start().resume()
+        a.get().shell.gated = false
+        a.get().shell.nav.reset(listOf(Page.Home, Page.Settings, Page.Eq(0)))
+        return a
+    }
+
+    private fun reopen(a: org.robolectric.android.controller.ActivityController<Main>, intent: Intent) {
+        a.pause().stop()
+        a.newIntent(intent)
+        a.restart().resume()
+    }
+
+    @Test
+    fun aNotificationTapWhileRunningOpensNowPlayingAndClosesTheSheet() {
+        val a = running()
+        var dismissed = 0
+        a.get().shell.sheet.open("background", listOf("allow", "not now"), onDismiss = { dismissed++ }) {}
+        reopen(a, Intent(app, Main::class.java).setAction(Main.ACTION_OPEN))
+        assertEquals(listOf(Page.Home, Page.NowPlaying), a.get().shell.nav.stack.toList())
+        assertFalse(a.get().shell.sheet.shown)
+        assertEquals(0, dismissed)
+        a.pause().stop().destroy()
+    }
+
+    @Test
+    fun aLauncherOpenWhileRunningOpensNowPlaying() {
+        val a = running()
+        reopen(a, Intent(app, Main::class.java).setAction(Intent.ACTION_MAIN))
+        assertEquals(listOf(Page.Home, Page.NowPlaying), a.get().shell.nav.stack.toList())
+        a.pause().stop().destroy()
+    }
+
+    @Test
+    fun aReturnFromHistoryKeepsThePage() {
+        val a = running()
+        reopen(a, Intent(app, Main::class.java).setAction(Intent.ACTION_MAIN).addFlags(Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY))
+        assertEquals(listOf(Page.Home, Page.Settings, Page.Eq(0)), a.get().shell.nav.stack.toList())
+        a.pause().stop().destroy()
+    }
+
+    @Test
+    fun anOpenWhileGatedLeavesTheGateToReset() {
+        val a = running()
+        a.get().shell.gated = true
+        a.get().shell.nav.reset(listOf(Page.Connection))
+        reopen(a, Intent(app, Main::class.java).setAction(Main.ACTION_OPEN))
+        assertEquals(listOf(Page.Connection), a.get().shell.nav.stack.toList())
+        a.pause().stop().destroy()
+    }
+
+    @Test
+    fun aDebugPageIntentKeepsItsPage() {
+        val a = running()
+        reopen(a, Intent(app, Main::class.java).setAction(Main.ACTION_OPEN).putExtra(Main.EXTRA_PAGE, "settings"))
+        assertEquals(listOf(Page.Home, Page.Settings), a.get().shell.nav.stack.toList())
+        a.pause().stop().destroy()
     }
 
     @Test

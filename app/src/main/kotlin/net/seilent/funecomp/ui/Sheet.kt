@@ -81,12 +81,12 @@ class SheetState {
         pick(i)
     }
 
-    fun close() {
+    fun close(dismissed: Boolean = true) {
         if (!shown) return
         shown = false
         val d = dismiss
         dismiss = {}
-        d()
+        if (dismissed) d()
     }
 }
 

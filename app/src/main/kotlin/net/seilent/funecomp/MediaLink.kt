@@ -22,6 +22,7 @@ class MediaLink(
     private val context: Context,
     private val control: Control,
     private val art: (Long, String?) -> Bitmap? = { _, _ -> null },
+    private val open: () -> PendingIntent? = { null },
     private val stop: () -> Unit,
 ) {
     private val gate = MediaGate()
@@ -74,6 +75,7 @@ class MediaLink(
         }
         val s = session ?: MediaSession(context, TAG).also {
             it.setCallback(callback)
+            open()?.let { p -> it.setSessionActivity(p) }
             session = it
         }
         val st = device.playback.state

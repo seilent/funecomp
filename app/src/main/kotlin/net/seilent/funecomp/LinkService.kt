@@ -40,7 +40,7 @@ class LinkService : Service() {
     private val media by lazy { MediaLink(this, Remote, { track, album ->
         Remote.wantArt(Thumbs.MEDIA, track, MediaLink.ART_PX, album)
         Remote.mediaArt(track, MediaLink.ART_PX)
-    }) { stop() } }
+    }, { open() }) { stop() } }
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {

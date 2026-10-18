@@ -55,6 +55,20 @@ class MediaLinkTest {
     }
 
     @Test
+    fun theSessionTakesTheOpenIntentOnceWhenItIsBuilt() {
+        val open = PendingIntent.getActivity(app, 0, Intent(app, Main::class.java).setAction(Main.ACTION_OPEN), PendingIntent.FLAG_IMMUTABLE)
+        var asked = 0
+        val withOpen = MediaLink(app, sim, open = {
+            asked++
+            open
+        }) { stops++ }
+        withOpen.live(device(), setting = true, sinkToDap = false)
+        withOpen.live(device(st.copy(title = "Paranoid Android")), setting = true, sinkToDap = false)
+        assertEquals(1, asked)
+        withOpen.off()
+    }
+
+    @Test
     fun positionMapsThroughSentMs() {
         val p = MediaLink.state(device(at = 10_000), playing = true, now = 12_000)
         assertEquals(61_000L + 40 + 10 + 2_000, p.position)

@@ -59,7 +59,8 @@ class Main : ComponentActivity() {
     private var mediaControls by mutableStateOf(true)
     private var spec by mutableStateOf<String?>(null)
     private var sources by mutableStateOf(Sources())
-    private var shell by mutableStateOf(Shell(Nav(listOf(Page.Connection)), gated = true))
+    internal var shell by mutableStateOf(Shell(Nav(listOf(Page.Connection)), gated = true))
+        private set
     private var name by mutableStateOf<String?>(null)
     private val companionUuid = UUID.fromString(Proto.uuid)
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -216,10 +217,14 @@ class Main : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        remember(intent)
+        val paged = remember(intent)
         val open = opens(intent, Remote.debuggable(this))
         Log.i(Remote.TAG, "onNewIntent action=${intent.action} open=$open")
         if (!open) return
+        if (!shell.gated && !paged) {
+            shell.sheet.close(dismissed = false)
+            shell.nav.reset(listOf(Page.Home, Page.NowPlaying))
+        }
         launch = true
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) launched()
     }
@@ -280,12 +285,14 @@ class Main : ComponentActivity() {
         name = deviceName(value)
     }
 
-    private fun remember(intent: Intent?) {
+    private fun remember(intent: Intent?): Boolean {
         spec = prefs().getString(EXTRA_LINK, null)
         name = deviceName(spec)
-        if (!Remote.debuggable(this)) return
+        if (!Remote.debuggable(this)) return false
         intent?.getStringExtra(EXTRA_LINK)?.let { store(it) }
-        intent?.getStringExtra(EXTRA_PAGE)?.let { p -> debugPage(p)?.let { shell = Shell(Nav(it)) } }
+        val pages = intent?.getStringExtra(EXTRA_PAGE)?.let { debugPage(it) } ?: return false
+        shell = Shell(Nav(pages))
+        return true
     }
 
     private fun debugPage(name: String): List<Page>? {
