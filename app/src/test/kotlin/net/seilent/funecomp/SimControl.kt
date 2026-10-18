@@ -132,6 +132,12 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
         laters++
     }
 
+    val reconnects = ArrayList<Boolean>()
+
+    override fun reconnect(on: Boolean) {
+        reconnects += on
+    }
+
     var eqText: String? = HD650
     var eqFileName = "Sennheiser HD 650 ParametricEQ.txt"
     var found: List<AutoEqIndex.Entry>? = AutoEqIndex.parse(INDEX)

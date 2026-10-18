@@ -285,6 +285,10 @@ val SHOTS = listOf(
     Shot("connection-restricted", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.DOWN, "V1", everLive = true, battery = Battery.RESTRICTED)),
     Shot("connection-stopped", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "V1", battery = Battery.UNRESTRICTED), prep = { it.device = DeviceState() }),
     Shot("background", board = "v1", pages = NP, prep = ::playing, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.OPTIMIZED, askBattery = true)),
+    Shot("reconnect", board = "v1", pages = NP, prep = ::playing, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.UNRESTRICTED, askReconnect = true)),
+    Shot("connection-reconnect", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.UNRESTRICTED, reconnect = true)) {
+        scrollTo("conn.reconnect")
+    },
     Shot("artistart", pages = HOME + Page.ArtistArt),
     Shot("scrobbling", pages = HOME + Page.Connection + Page.Scrobbling),
     Shot("scrobbling-set", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE),

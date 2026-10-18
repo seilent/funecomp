@@ -53,6 +53,12 @@ object Lyrics {
         lrclib = Lrclib(File(app.filesDir, "lyrics"), http ?: UrlHttp(), version, { on })
     }
 
+    internal fun reset() {
+        context = null
+        lrclib = null
+        on = false
+    }
+
     fun set(on: Boolean) {
         val c = context ?: return
         prefs(c).edit().putBoolean(LRCLIB, on).apply()

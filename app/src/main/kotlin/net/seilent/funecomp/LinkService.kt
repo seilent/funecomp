@@ -115,13 +115,17 @@ class LinkService : Service() {
             stopSelf(startId)
             return START_NOT_STICKY
         }
+        Main.init(this)
         val spec = intent?.getStringExtra(Main.EXTRA_LINK)
         address = spec?.takeIf { it.startsWith(RFCOMM) }?.removePrefix(RFCOMM)
         address?.let { sink(it) }
+        if (intent?.getBooleanExtra(EXTRA_UPDATED, false) == true) Log.i(Remote.TAG, "reconnect start")
         if (spec == null || !Remote.start(this, spec)) {
+            prefs().edit().remove(Main.WANTED).apply()
             stopSelf(startId)
             return START_NOT_STICKY
         }
+        prefs().edit().putBoolean(Main.WANTED, true).apply()
         if (getSystemService(BluetoothManager::class.java)?.adapter?.isEnabled == false) Remote.bluetooth(false)
         posted = null
         post()
@@ -174,6 +178,7 @@ class LinkService : Service() {
 
     private fun stop() {
         Log.i(Remote.TAG, "service stop")
+        prefs().edit().remove(Main.WANTED).apply()
         foreground = false
         media.off()
         Remote.stop()
@@ -222,6 +227,8 @@ class LinkService : Service() {
         }
     }
 
+    private fun prefs() = getSharedPreferences(Main.PREFS, MODE_PRIVATE)
+
     private fun open() = PendingIntent.getActivity(
         this, 0,
         Intent(this, Main::class.java).setAction(Main.ACTION_OPEN),
@@ -258,6 +265,7 @@ class LinkService : Service() {
     companion object {
         const val ACTION_STOP = "net.seilent.funecomp.STOP"
         const val ACTION_MEDIA = "net.seilent.funecomp.MEDIA"
+        const val EXTRA_UPDATED = "updated"
         private const val MEDIA = "media"
         private const val DAP = "dap"
         private const val ALERT_ID = 2

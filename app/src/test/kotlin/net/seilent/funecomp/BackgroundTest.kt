@@ -499,6 +499,64 @@ class BackgroundTest {
     }
 
     @Test
+    fun aStartedLinkIsWantedUntilStop() {
+        val prefs = app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
+        assertTrue(prefs.getBoolean(Main.WANTED, false))
+        c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
+        assertFalse(prefs.contains(Main.WANTED))
+        c.destroy()
+    }
+
+    @Test
+    fun anUnusableSpecLeavesNothingWanted() {
+        val prefs = app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(Main.WANTED, true).commit()
+        val c = Robolectric.buildService(LinkService::class.java, startIntent("bogus:1")).create().startCommand(0, 1)
+        assertFalse(prefs.contains(Main.WANTED))
+        c.destroy()
+    }
+
+    @Test
+    fun aDestroyWithoutStopKeepsWanted() {
+        val prefs = app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE)
+        Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1).destroy()
+        assertTrue(prefs.getBoolean(Main.WANTED, false))
+    }
+
+    @Test
+    fun aServiceStartedWithoutMainReadsTheLyricsPref() {
+        Lyrics.reset()
+        app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).edit().putBoolean("lrclib", true).commit()
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim()).putExtra(LinkService.EXTRA_UPDATED, true)).create().startCommand(0, 1)
+        assertTrue(Lyrics.on)
+        Lyrics.set(false)
+        c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
+        c.destroy()
+    }
+
+    @Test
+    fun anAskWrittenAfterCreateIsShownAtLiveAndOnStoresIt() {
+        val prefs = app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE)
+        val spec = sim()
+        prefs.edit().putString(Main.EXTRA_LINK, spec).putBoolean("batteryAsked", true).commit()
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(spec)).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE }
+        val a = Robolectric.buildActivity(Main::class.java, Intent(app, Main::class.java).setAction(Intent.ACTION_MAIN)).create()
+        prefs.edit().putBoolean(Main.RECONNECT_ASK, true).commit()
+        a.start().resume().visible()
+        waitFor { a.get().shell.sheet.shown }
+        assertEquals("reconnect after update", a.get().shell.sheet.title)
+        a.get().shell.sheet.accept(0)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(prefs.getBoolean(Main.RECONNECT, false))
+        assertFalse(prefs.contains(Main.RECONNECT_ASK))
+        a.pause().stop().destroy()
+        c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
+        c.destroy()
+    }
+
+    @Test
     fun startGate() {
         assertTrue(Main.opens(Intent(Intent.ACTION_MAIN), debuggable = false))
         assertTrue(Main.opens(Intent(Main.ACTION_OPEN), debuggable = false))

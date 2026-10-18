@@ -100,6 +100,7 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleVi
         if (hello != null) cardText(st)?.let { add(Line("card", it, tag = "card")) }
         link.battery?.let { add(Line("battery", it.word, tag = "battery") { ctx.control.allowBackground() }) }
         add(Line("phone media controls", if (link.mediaControls) "on" else "off", tag = "media") { ctx.control.mediaControls(!link.mediaControls) })
+        add(Line("reconnect on update", if (link.reconnect) "on" else "off", tag = "reconnect") { ctx.control.reconnect(!link.reconnect) })
         add(Line("lyrics", if (link.lyrics) "lrclib" else "off", tag = "lyrics") { ctx.nav.push(Page.Lyrics) })
         add(Line("scrobbling", scrobbleText(scrobble), tag = "scrobbling") { ctx.nav.push(Page.Scrobbling) })
         add(Line("firmware", firmwareText(firmware), tag = "firmware") { ctx.nav.push(Page.Firmware) })

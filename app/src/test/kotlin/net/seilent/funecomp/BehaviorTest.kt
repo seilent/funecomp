@@ -18,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
@@ -178,17 +179,84 @@ class BehaviorTest {
         assertTrue(shell.sheet.shown)
         assertEquals("background", shell.sheet.title)
         shell.sheet.close()
+        link = link.copy(askBattery = false)
         settle(500)
         assertEquals(1, c.laters)
         assertEquals(0, c.allows)
-        link = link.copy(askBattery = false)
-        settle(500)
         assertFalse(shell.sheet.shown)
     }
 
     @Test
+    fun reconnectSheetFollowsTheBatterySheet() {
+        val c = SimControl("v1")
+        val shell = Shell(Nav(listOf(Page.Home)))
+        var link by mutableStateOf(LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.OPTIMIZED, askBattery = true, askReconnect = true))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, link, c, shell) }
+        }
+        settle(1000)
+        assertEquals("background", shell.sheet.title)
+        rule.onNodeWithTag("sheet.item.1").performClick()
+        link = link.copy(askBattery = false)
+        settle(1000)
+        assertTrue(shell.sheet.shown)
+        assertEquals("reconnect after update", shell.sheet.title)
+        assertEquals(listOf("on", "off"), shell.sheet.items)
+        assertEquals(listOf("the link restarts by itself"), shell.sheet.info)
+        rule.onNodeWithTag("sheet.item.0").performClick()
+        link = link.copy(askReconnect = false, reconnect = true)
+        settle(500)
+        assertEquals(listOf(true), c.reconnects)
+        assertFalse(shell.sheet.shown)
+    }
+
+    @Test
+    fun reconnectSheetBackCountsAsOff() {
+        val (c, shell) = start(listOf(Page.Home), LinkView(Phase.LIVE, "V1", everLive = true, askReconnect = true))
+        assertEquals("reconnect after update", shell.sheet.title)
+        shell.sheet.close()
+        settle(500)
+        assertEquals(listOf(false), c.reconnects)
+    }
+
+    @Test
+    fun reconnectSheetClosedWithoutAnAnswerShowsAgain() {
+        val (c, shell) = start(listOf(Page.Home), LinkView(Phase.LIVE, "V1", everLive = true, askReconnect = true))
+        assertEquals("reconnect after update", shell.sheet.title)
+        shell.sheet.close(dismissed = false)
+        settle(500)
+        assertTrue(shell.sheet.shown)
+        assertEquals("reconnect after update", shell.sheet.title)
+        assertEquals(emptyList<Boolean>(), c.reconnects)
+    }
+
+    @Test
+    fun reconnectSheetWaitsForLive() {
+        val (c, shell) = start(listOf(Page.Home), LinkView(Phase.DOWN, "V1", everLive = true, askReconnect = true))
+        assertFalse(shell.sheet.shown)
+        assertEquals(emptyList<Boolean>(), c.reconnects)
+    }
+
+    @Test
+    fun reconnectRowToggles() {
+        val (c, _) = start(listOf(Page.Home, Page.Connection), LinkView(Phase.LIVE, "V1", reconnect = true))
+        rule.onNode(hasText("on", ignoreCase = true) and hasAnyAncestor(hasTestTag("conn.reconnect"))).assertExists()
+        rule.onNodeWithTag("conn.reconnect").performClick()
+        settle(300)
+        assertEquals(listOf(false), c.reconnects)
+    }
+
+    @Test
     fun backgroundSheetAllow() {
-        val (c, shell) = start(listOf(Page.Home), LinkView(Phase.LIVE, "V1", battery = Battery.OPTIMIZED, askBattery = true))
+        val c = SimControl("v1")
+        val shell = Shell(Nav(listOf(Page.Home)))
+        var link by mutableStateOf(LinkView(Phase.LIVE, "V1", battery = Battery.OPTIMIZED, askBattery = true))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, link, c, shell) }
+        }
+        settle(1000)
         assertTrue(shell.sheet.shown)
         assertEquals(listOf("works with the screen off"), shell.sheet.info)
         assertEquals(0, shell.sheet.focus)
@@ -197,6 +265,7 @@ class BehaviorTest {
         assertTrue(shell.sheet.shown)
         assertEquals(0, c.allows + c.laters)
         rule.onNodeWithTag("sheet.item.0").performClick()
+        link = link.copy(askBattery = false)
         settle(500)
         assertEquals(1, c.allows)
         assertEquals(0, c.laters)
@@ -210,6 +279,9 @@ class BehaviorTest {
         rule.onNodeWithTag("conn.battery").performClick()
         settle(300)
         assertEquals(1, c.allows)
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("conn.disconnect"))
+        rule.mainClock.autoAdvance = false
         rule.onNodeWithTag("conn.disconnect").performClick()
         settle(300)
         assertEquals(1, c.disconnects)

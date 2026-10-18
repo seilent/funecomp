@@ -50,6 +50,8 @@ class Main : ComponentActivity() {
     private var asked = 0
     private var battery by mutableStateOf<Battery?>(null)
     private var batteryAsked by mutableStateOf(false)
+    private var reconnect by mutableStateOf(false)
+    private var reconnectAsk by mutableStateOf(false)
     private var granted by mutableStateOf(true)
     private var mediaControls by mutableStateOf(true)
     private var spec by mutableStateOf<String?>(null)
@@ -151,6 +153,12 @@ class Main : ComponentActivity() {
 
         override fun lyrics(on: Boolean) = Lyrics.set(on)
 
+        override fun reconnect(on: Boolean) {
+            prefs().edit().putBoolean(RECONNECT, on).remove(RECONNECT_ASK).apply()
+            reconnect = on
+            reconnectAsk = false
+        }
+
         override fun firmwareCheck() = Firmwares.check()
 
         override fun firmwareDownload() = Firmwares.download()
@@ -186,12 +194,7 @@ class Main : ComponentActivity() {
         enableEdgeToEdge(SystemBarStyle.dark(Color.TRANSPARENT), SystemBarStyle.dark(Color.TRANSPARENT))
         super.onCreate(savedInstanceState)
         sources = sources(this)
-        Remote.artist(this)
-        Scrobbles.init(this)
-        Lyrics.init(this)
-        AutoEqs.init(this)
-        Firmwares.init(this)
-        Remote.logExit(this)
+        init(this)
         batteryAsked = prefs().getBoolean(BATTERY_ASKED, false)
         mediaControls = MediaLink.controls(this)
         remember(intent)
@@ -199,7 +202,7 @@ class Main : ComponentActivity() {
         setContent {
             Box(Modifier.fillMaxSize().background(Black)) {
                 val b = battery
-                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, b != null && b != Battery.UNRESTRICTED && !batteryAsked, mediaControls, Lyrics.on)
+                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, b != null && b != Battery.UNRESTRICTED && !batteryAsked, mediaControls, Lyrics.on, reconnect, reconnectAsk)
                 App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits, { e ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
@@ -227,6 +230,8 @@ class Main : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         granted = linkAllowed()
+        reconnect = prefs().getBoolean(RECONNECT, false)
+        reconnectAsk = prefs().getBoolean(RECONNECT_ASK, false)
         Remote.shown(true)
         launched()
     }
@@ -364,7 +369,19 @@ class Main : ComponentActivity() {
         const val ACTION_OPEN = "net.seilent.funecomp.OPEN"
         private const val BATTERY_ASKED = "batteryAsked"
         const val PREFS = "link"
+        const val WANTED = "wanted"
+        const val RECONNECT = "reconnect"
+        const val RECONNECT_ASK = "reconnectAsk"
         const val ART_PREFS = "art"
+
+        fun init(c: Context) {
+            Remote.artist(c)
+            Scrobbles.init(c)
+            Lyrics.init(c)
+            AutoEqs.init(c)
+            Firmwares.init(c)
+            Remote.logExit(c)
+        }
 
         fun opens(intent: Intent?, debuggable: Boolean): Boolean {
             if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return false
