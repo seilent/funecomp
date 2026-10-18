@@ -4,7 +4,36 @@ import java.net.URLDecoder
 
 data class Credit(val author: String, val license: String, val page: String, val licenseUrl: String = "")
 
-class Candidate(val url: String, val source: String, val credit: Credit? = null)
+class Candidate(val url: String, val source: String, val credit: Credit? = null, val id: String = ImageIds.of(source, url))
+
+object ImageIds {
+    private val DEEZER = Regex("/images/artist/([0-9a-f]{32})/")
+
+    fun of(source: String, url: String): String {
+        val path = url.substringAfter("://").substringAfter('/', "").substringBefore('?')
+        return when (source) {
+            Wikimedia.SOURCE -> url
+            Sources.DEEZER -> DEEZER.find(url)?.groupValues?.get(1) ?: path
+            Sources.DISCOGS -> discogs(path)
+            Sources.YOUTUBE -> url.substringBefore('=')
+            else -> path
+        }
+    }
+
+    fun of(e: ArtCache.Entry): String = e.id.ifEmpty {
+        if (e.source == Wikimedia.SOURCE) e.credit?.page?.let { Wikimedia.commonsFile(it) }?.let { "File:$it" } ?: e.url else of(e.source, e.url)
+    }
+
+    private fun discogs(path: String): String {
+        val parts = path.split('/').drop(1).filter { ':' !in it }
+        val b64 = parts.joinToString("").substringBeforeLast('.')
+        return try {
+            String(java.util.Base64.getUrlDecoder().decode(b64.padEnd((b64.length + 3) / 4 * 4, '=')), Charsets.UTF_8)
+        } catch (e: IllegalArgumentException) {
+            path
+        }
+    }
+}
 
 class Wikimedia(
     private val api: Api,
@@ -23,7 +52,7 @@ class Wikimedia(
         }
         a.rels("image").mapNotNullTo(files) { commonsFile(it.url) }
         if (files.isEmpty()) return emptyList()
-        return info(files.toList()).filter { usable(it, minW, minH) }.map { Candidate(it.url, SOURCE, it.credit) }
+        return info(files.toList()).filter { usable(it, minW, minH) }.map { Candidate(it.url, SOURCE, it.credit, it.title) }
     }
 
     private fun p18(qid: String): List<String> =

@@ -74,11 +74,11 @@ class MbArtist(val id: String, val name: String, val country: String?, val rels:
 }
 
 class MusicBrainz(private val api: Api, private val base: String = "https://musicbrainz.org/ws/2") {
-    fun search(name: String): String? {
+    fun search(name: String, skip: Set<String> = emptySet()): String? {
         val want = Names.fold(name)
         if (want.isEmpty()) return null
         val r = api.json("$base/artist/?query=${Api.enc(escape(name.trim()))}&fmt=json&limit=10") ?: return null
-        val all = r["artists"].list
+        val all = r["artists"].list.filter { Names.mbid(it["id"].str) !in skip }
         val top = all.firstOrNull()?.takeIf { it["score"].long == 100L && Names.fold(it["sort-name"].str?.replace(", ", " ")) == want }
         fun matches(a: J, f: (String?) -> String, w: String) =
             f(a["name"].str) == w || f(a["sort-name"].str) == w || a["aliases"].list.any { f(it["name"].str) == w }

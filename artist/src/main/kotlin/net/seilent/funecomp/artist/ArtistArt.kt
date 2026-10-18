@@ -14,6 +14,7 @@ class ArtistArt(
     private val sleep: (Long) -> Unit = { Thread.sleep(it) },
     mono: () -> Long = { System.nanoTime() / 1_000_000 },
     private val online: () -> Boolean = { true },
+    val blocks: ArtBlocks = ArtBlocks(),
 ) {
     private val ua = "funecomp/$version (github@seilent.net)"
     private fun api(limiter: RateLimiter) = Api(http, ua, limiter, sleep)
@@ -42,19 +43,24 @@ class ArtistArt(
 
     @Volatile private var missDue = Long.MAX_VALUE
 
+    private class Found(val c: Candidate, val src: ByteArray, val jpeg: ByteArray, val mbid: String?, val by: String)
+
     @Throws(IOException::class)
     fun get(name: String, mbid: String?, w: Int, h: Int): Art? {
         val on = sources().enabled
         val now = clock()
-        val id = Names.mbid(mbid) ?: resolve(name, now)
+        val tag = Names.mbid(mbid)
+        val id = tag ?: resolve(name, now)
         val key = id ?: "name:${Names.fold(name)}"
-        cache.hit(key)?.takeIf { it.source in on }?.let { e ->
-            cache.rendered(key, w, h)?.let { return Art(it, w, h, e.name, e.mbid, e.source, e.credit) }
-            val src = cache.source(key)
-            val jpeg = src?.let { Backdrop.render(codec, it, w, h) }
+        val hit = cache.hit(key)?.takeIf { it.source in on }
+        if (hit != null && blocked(hit)) {
+            cache.drop(key)
+        } else if (hit != null) {
+            cache.rendered(key, w, h)?.let { return Art(it, w, h, hit.name, hit.mbid, hit.source, hit.credit) }
+            val jpeg = cache.source(key)?.let { Backdrop.render(codec, it, w, h) }
             if (jpeg != null) {
                 cache.putRendered(key, w, h, jpeg)
-                return Art(jpeg, w, h, e.name, e.mbid, e.source, e.credit)
+                return Art(jpeg, w, h, hit.name, hit.mbid, hit.source, hit.credit)
             }
         }
         val keyHash = keyHash(on)
@@ -65,26 +71,64 @@ class ArtistArt(
             }
         }
         if (!online()) throw IOException("offline")
-        var foundId = id
-        var found = lookup(name, id, w, h, on)
-        if (found == null && Names.mbid(mbid) == null) {
-            for (v in Names.variants(name)) {
-                val vid = resolve(v, now)
-                found = lookup(v, vid, w, h, on) ?: continue
-                foundId = vid
-                break
-            }
-        }
+        val found = find(name, tag, id, key, w, h, on, now)
         if (found == null) {
             cache.putMiss(key, now, on, keyHash)
             due(now)
             return null
         }
-        val (c, src, jpeg) = found
-        cache.putHit(ArtCache.Entry(key, name.trim(), foundId, c.source, c.credit, c.url, now), src)
-        cache.putRendered(key, w, h, jpeg)
-        return Art(jpeg, w, h, name.trim(), foundId, c.source, c.credit)
+        return keep(name, key, found, w, h, now)
     }
+
+    @Throws(IOException::class)
+    fun refresh(name: String, mbid: String?, w: Int, h: Int): Art? {
+        val on = sources().enabled
+        val now = clock()
+        val tag = Names.mbid(mbid)
+        val id = tag ?: resolve(name, now)
+        val key = id ?: "name:${Names.fold(name)}"
+        val found = try {
+            if (online()) find(name, tag, id, key, w, h, on, now) else null
+        } catch (e: IOException) {
+            null
+        }
+        return if (found == null) get(name, mbid, w, h) else keep(name, key, found, w, h, now)
+    }
+
+    private fun find(name: String, tag: String?, id: String?, key: String, w: Int, h: Int, on: Set<String>, now: Long): Found? {
+        lookup(name, name, id, w, h, on, key)?.let { (c, src, jpeg) -> return Found(c, src, jpeg, id, if (tag == null && id != null) name.trim() else "") }
+        if (tag != null) return null
+        for (v in Names.variants(name)) {
+            val vid = resolve(v, now)
+            val (c, src, jpeg) = lookup(v, name, vid, w, h, on, key) ?: continue
+            return Found(c, src, jpeg, vid, if (vid != null) v else "")
+        }
+        return null
+    }
+
+    private fun keep(name: String, key: String, f: Found, w: Int, h: Int, now: Long): Art {
+        cache.putHit(ArtCache.Entry(key, name.trim(), f.mbid, f.c.source, f.c.credit, f.c.url, now, f.c.id, ArtCache.sha256(f.src), f.by), f.src)
+        cache.putRendered(key, w, h, f.jpeg)
+        return Art(f.jpeg, w, h, name.trim(), f.mbid, f.c.source, f.c.credit)
+    }
+
+    fun blocked(e: ArtCache.Entry): Boolean = blocks.blocked(e.key, e.source, ImageIds.of(e), cache.sha(e), e.name)
+
+    fun forget(key: String) = cache.drop(key)
+
+    fun forget(e: ArtCache.Entry) = cache.drop(e.key, e.at)
+
+    fun resolvedBy(e: ArtCache.Entry): String =
+        e.resolvedBy.ifEmpty { e.name.takeIf { e.mbid != null && cache.mbid(it)?.mbid == e.mbid } ?: "" }
+
+    fun wrongArtistOffered(e: ArtCache.Entry): Boolean {
+        val by = resolvedBy(e)
+        return by.isNotEmpty() && e.mbid != null && cache.mbid(by)?.mbid == e.mbid
+    }
+
+    fun forgetName(name: String) = cache.forgetName(name)
+
+    fun sha(e: ArtCache.Entry): String = cache.sha(e)
 
     fun beginMark() {
         missDue = Long.MAX_VALUE
@@ -108,8 +152,8 @@ class ArtistArt(
     fun cached(name: String, mbid: String?): ByteArray? = cachedEntry(name, mbid)?.let { source(it) }
 
     fun cachedEntry(name: String, mbid: String?): ArtCache.Entry? {
-        val key = (Names.mbid(mbid) ?: cache.mbid(name)?.mbid) ?: "name:${Names.fold(name)}"
-        return cache.hit(key)?.takeIf { it.source in sources().enabled && cache.hasSource(key) }
+        val key = (Names.mbid(mbid) ?: cache.mbid(name)?.mbid?.takeIf { it !in blocks.rejected(name) }) ?: "name:${Names.fold(name)}"
+        return cache.hit(key)?.takeIf { it.source in sources().enabled && cache.hasSource(key) && !blocked(it) }
     }
 
     fun source(e: ArtCache.Entry): ByteArray? = cache.source(e.key)
@@ -117,20 +161,21 @@ class ArtistArt(
     fun credits(): List<ArtCache.Entry> = cache.entries().filter { it.credit != null }
 
     private fun resolve(name: String, now: Long): String? {
+        val skip = blocks.rejected(name)
         cache.mbid(name)?.let { l ->
-            if (l.mbid != null) return l.mbid
-            if (now - l.at < TTL_MS) {
+            if (l.mbid != null && l.mbid !in skip) return l.mbid
+            if (l.mbid == null && now - l.at < TTL_MS) {
                 due(l.at)
                 return null
             }
         }
         if (!online()) throw IOException("offline")
-        val id = mb.search(name)
+        val id = mb.search(name, skip)
         cache.putMbid(name, id, now)
         return id
     }
 
-    private fun lookup(name: String, id: String?, w: Int, h: Int, on: Set<String>): Triple<Candidate, ByteArray, ByteArray>? {
+    private fun lookup(name: String, display: String, id: String?, w: Int, h: Int, on: Set<String>, key: String): Triple<Candidate, ByteArray, ByteArray>? {
         var error: IOException? = null
         fun <T> attempt(block: () -> T): T? = try {
             block()
@@ -139,17 +184,19 @@ class ArtistArt(
             null
         }
         val a = id?.let { attempt { mb.artist(it) } }
-        val chain = buildList<() -> List<Candidate>> {
-            if (a != null) add { wikimedia.candidates(a, w, h) }
-            if (id != null && Sources.THE_AUDIO_DB in on) add { audioDb.candidates(id) }
-            if (id != null && Sources.FANART_TV in on) add { fanartTv.candidates(id) }
-            if (a != null && Sources.DISCOGS in on) add { discogs.candidates(a) }
-            if (a != null && Sources.YOUTUBE in on) add { youtube.candidates(a) }
-            if (Sources.DEEZER in on) add { deezer.candidates(name) }
-        }
-        for (step in chain) {
-            for (c in attempt(step)?.take(MAX_TRIES) ?: continue) {
+        val steps = mapOf<String, (() -> List<Candidate>)?>(
+            Wikimedia.SOURCE to a?.let { { wikimedia.candidates(it, w, h) } },
+            Sources.THE_AUDIO_DB to id?.takeIf { Sources.THE_AUDIO_DB in on }?.let { { audioDb.candidates(it) } },
+            Sources.FANART_TV to id?.takeIf { Sources.FANART_TV in on }?.let { { fanartTv.candidates(it) } },
+            Sources.DISCOGS to a?.takeIf { Sources.DISCOGS in on }?.let { { discogs.candidates(it) } },
+            Sources.YOUTUBE to a?.takeIf { Sources.YOUTUBE in on }?.let { { youtube.candidates(it) } },
+            Sources.DEEZER to if (Sources.DEEZER in on) ({ deezer.candidates(name) }) else null,
+        )
+        for (step in sources().order.mapNotNull { steps[it] }) {
+            val candidates = attempt(step)?.filterNot { blocks.blocked(key, it.source, it.id, name = display) } ?: continue
+            for (c in candidates.take(MAX_TRIES)) {
                 val src = attempt { (images[c.source] ?: otherImages).get(c.url) }?.body ?: continue
+                if (blocks.blocked(key, c.source, "", ArtCache.sha256(src), display)) continue
                 val jpeg = Backdrop.render(codec, src, w, h) ?: continue
                 return Triple(c, src, jpeg)
             }

@@ -7,6 +7,7 @@ data class Sources(
     val fanartTvKey: String = "",
     val deezer: Boolean = false,
     val youtube: Boolean = false,
+    val order: List<String> = ORDER,
 ) {
     val enabled: Set<String>
         get() = buildSet {
@@ -18,7 +19,24 @@ data class Sources(
             if (deezer) add(DEEZER)
         }
 
+    val ordered: List<String>
+        get() = enabled.let { on -> order.filter { it in on } }
+
+    fun moved(source: String, by: Int): Sources {
+        val i = order.indexOf(source)
+        val j = i + by
+        if (i < 0 || j !in order.indices) return this
+        return copy(order = order.toMutableList().apply { add(j, removeAt(i)) })
+    }
+
     companion object {
+        val ORDER = listOf(Wikimedia.SOURCE, "theaudiodb", "fanarttv", "discogs", "youtube", "deezer")
+
+        fun order(s: String?): List<String> {
+            val known = (s ?: "").split(',').map { it.trim() }.filter { it in ORDER }.distinct()
+            return known + ORDER.filter { it !in known }
+        }
+
         const val THE_AUDIO_DB = "theaudiodb"
         const val FANART_TV = "fanarttv"
         const val DISCOGS = "discogs"

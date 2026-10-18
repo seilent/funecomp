@@ -5,7 +5,18 @@ import java.security.MessageDigest
 import java.util.Properties
 
 class ArtCache(private val dir: File) {
-    class Entry(val key: String, val name: String, val mbid: String?, val source: String, val credit: Credit?, val url: String, val at: Long)
+    class Entry(
+        val key: String,
+        val name: String,
+        val mbid: String?,
+        val source: String,
+        val credit: Credit?,
+        val url: String,
+        val at: Long,
+        val id: String = "",
+        val sha: String = "",
+        val resolvedBy: String = "",
+    )
     class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false)
     class Looked(val mbid: String?, val at: Long)
 
@@ -36,7 +47,41 @@ class ArtCache(private val dir: File) {
         val p = load(meta(key))
         if (p.getProperty("state") != "hit" || !src(key).isFile) return null
         val credit = p.getProperty("license")?.let { Credit(p.getProperty("author", ""), it, p.getProperty("page", ""), p.getProperty("licenseUrl", "")) }
-        return Entry(key, p.getProperty("name", ""), p.getProperty("mbid"), p.getProperty("source", ""), credit, p.getProperty("url", ""), p.getProperty("at")?.toLongOrNull() ?: 0)
+        return Entry(
+            key, p.getProperty("name", ""), p.getProperty("mbid"), p.getProperty("source", ""), credit, p.getProperty("url", ""),
+            p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("id", ""), p.getProperty("sha", ""), p.getProperty("resolvedBy", ""),
+        )
+    }
+
+    @Synchronized
+    fun sha(e: Entry): String {
+        if (e.sha.isNotEmpty()) return e.sha
+        val src = source(e.key) ?: return ""
+        val sha = sha256(src)
+        val f = meta(e.key)
+        val p = load(f)
+        if (p.getProperty("state") == "hit") {
+            p.setProperty("sha", sha)
+            save(f, p)
+        }
+        return sha
+    }
+
+    @Synchronized
+    fun drop(key: String) {
+        listed = null
+        dropFiles(key)
+    }
+
+    @Synchronized
+    fun drop(key: String, at: Long) {
+        if (load(meta(key)).getProperty("at")?.toLongOrNull() == at) drop(key)
+    }
+
+    @Synchronized
+    fun forgetName(name: String) {
+        val p = nameMap()
+        if (p.remove(Names.fold(name)) != null) save(names, p)
     }
 
     @Synchronized
@@ -68,6 +113,9 @@ class ArtCache(private val dir: File) {
         p.setProperty("source", e.source)
         p.setProperty("url", e.url)
         p.setProperty("at", e.at.toString())
+        p.setProperty("id", e.id)
+        p.setProperty("sha", e.sha.ifEmpty { sha256(source) })
+        if (e.resolvedBy.isNotEmpty()) p.setProperty("resolvedBy", e.resolvedBy)
         e.credit?.let {
             p.setProperty("author", it.author)
             p.setProperty("license", it.license)
@@ -159,7 +207,9 @@ class ArtCache(private val dir: File) {
         }
     }
 
-    private companion object {
-        const val KANA = ".kana"
+    companion object {
+        private const val KANA = ".kana"
+
+        fun sha256(b: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
     }
 }
