@@ -545,4 +545,78 @@ class LookupTest {
         assertNull(mb().search("Mori Calliope"))
         assertEquals(a, mb().search("Mori Calliope"))
     }
+
+    @Test
+    fun aHiraganaNameFindsItsKatakanaOnlyArtist() {
+        assertEquals("6ac7acd1-2720-4733-9f98-cc5163bdce21", mb().search("むと"))
+        assertTrue("missing ${http.missing}", http.missing.isEmpty())
+    }
+
+    private fun kanaReply(vararg a: Pair<String, String>) = Response(200, a.joinToString(",", "{\"artists\":[", "]}") { (id, name) ->
+        "{\"id\":\"$id\",\"name\":\"$name\",\"sort-name\":\"Sato\",\"score\":100}"
+    }.toByteArray())
+
+    @Test
+    fun anExactNameWinsOverAKanaNamesakeRankedAbove() {
+        val a = "11111111-1111-1111-1111-111111111111"
+        val b = "22222222-2222-2222-2222-222222222222"
+        http.queued["https://musicbrainz.org/ws/2/artist/?query=${Api.enc("さとう")}&fmt=json&limit=10"] = ArrayDeque(listOf(kanaReply(a to "サトウ", b to "さとう")))
+        assertEquals(b, mb().search("さとう"))
+    }
+
+    @Test
+    fun twoKanaOnlyMatchesGiveNoMbid() {
+        val a = "11111111-1111-1111-1111-111111111111"
+        val b = "22222222-2222-2222-2222-222222222222"
+        http.queued["https://musicbrainz.org/ws/2/artist/?query=${Api.enc("さとう")}&fmt=json&limit=10"] = ArrayDeque(listOf(kanaReply(a to "サトウ", b to "ｻﾄｳ")))
+        assertNull(mb().search("さとう"))
+    }
+
+    @Test
+    fun aTopSortNameMatchWinsOverASingleKanaMatch() {
+        val a = "11111111-1111-1111-1111-111111111111"
+        val b = "22222222-2222-2222-2222-222222222222"
+        val body = "{\"artists\":[{\"id\":\"$a\",\"name\":\"x\",\"sort-name\":\"さとう, たろう\",\"score\":100},{\"id\":\"$b\",\"name\":\"サトウ タロウ\",\"sort-name\":\"y\",\"score\":90}]}"
+        http.queued["https://musicbrainz.org/ws/2/artist/?query=${Api.enc("さとう たろう")}&fmt=json&limit=10"] = ArrayDeque(listOf(Response(200, body.toByteArray())))
+        assertEquals(a, mb().search("さとう たろう"))
+    }
+
+    @Test
+    fun kanaChangesOnlySearchesWithNoExactMatch() {
+        val prefix = "https://musicbrainz.org/ws/2/artist/?query="
+        fun old(all: List<J>, q: String): String? {
+            val want = Names.fold(q)
+            val top = all.firstOrNull()?.takeIf { it["score"].long == 100L && Names.fold(it["sort-name"].str?.replace(", ", " ")) == want }
+            return (all.firstOrNull { a ->
+                Names.fold(a["name"].str) == want || Names.fold(a["sort-name"].str) == want || a["aliases"].list.any { Names.fold(it["name"].str) == want }
+            } ?: top)?.get("id")?.str
+        }
+        val rows = Fixtures.text("urls.tsv").lines().filter { it.startsWith(prefix) }.map { line ->
+            val q = java.net.URLDecoder.decode(line.removePrefix(prefix).substringBefore('&'), "UTF-8").replace(Regex("\\\\(.)"), "$1")
+            Triple(q, old(J.parse(Fixtures.text(line.substringAfter('\t')))["artists"].list, q), mb().search(q))
+        }
+        assertTrue("missing ${http.missing}", http.missing.isEmpty())
+        assertEquals(25, rows.size)
+        assertEquals(
+            listOf(Triple("むと", null, "6ac7acd1-2720-4733-9f98-cc5163bdce21"), Triple("アイミョン", null, "908d9ac2-5187-4b9e-b281-601c6afb0791")),
+            rows.filter { it.second != it.third },
+        )
+        val homographs = mapOf(
+            "さくら" to "224292b6-7684-4a98-aed7-a67d61c91840",
+            "サクラ" to "28e26449-27e4-4081-a6ba-42fb9f5b9028",
+            "ひとみ" to "3dca9aac-3d04-4505-bba1-885422108e83",
+            "ヒトミ" to "3d40b48a-7e19-4313-904e-b104598a8acf",
+            "ゆず" to "d796574f-db13-41d2-9dd7-82a55c5bd71f",
+            "ユズ" to "2e3b1726-6521-40c3-99b5-bb22a3f2f6e1",
+            "あいみょん" to "908d9ac2-5187-4b9e-b281-601c6afb0791",
+            "みゆき" to "fa88b2a6-27d3-48b8-bbd2-4793ac8a79e0",
+            "ミユキ" to "2dfcdf4c-9d2d-4fc4-9d93-739141375271",
+            "ヨルシカ" to "dfc6a151-3792-4695-8fda-f64723eaa788",
+        )
+        for ((q, id) in homographs) {
+            val r = rows.single { it.first == q }
+            assertEquals(q, id, r.second)
+            assertEquals(q, id, r.third)
+        }
+    }
 }

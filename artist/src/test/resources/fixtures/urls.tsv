@@ -65,3 +65,15 @@ https://lrclib.net/api/get?track_name=Airbag&artist_name=Radiohead	lr-b633e8bea7
 https://lrclib.net/api/get?track_name=Nope%20Not%20A%20Song&artist_name=Nobody%20Here&duration=100	code:404
 https://lrclib.net/api/get?track_name=Radio%20%28Demo%20Taped%20Remix%29&artist_name=Sylvan%20Esso%2C%20Demo%20Taped&album_name=Demo%20Taped%20Remixes&duration=183	lr-7f16ed745014.json
 https://lrclib.net/api/get?track_name=Durga%20%28Instrumental%29&artist_name=Instrumental&album_name=Instrumental&duration=721	lr-ff8727131afe.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%82%80%E3%81%A8&fmt=json&limit=10	nm-0008a07a474f.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%83%A8%E3%83%AB%E3%82%B7%E3%82%AB&fmt=json&limit=10	nm-69ebcac4b70a.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%81%95%E3%81%8F%E3%82%89&fmt=json&limit=10	nm-5ec686c804be.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%82%B5%E3%82%AF%E3%83%A9&fmt=json&limit=10	nm-0604166277a1.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%81%B2%E3%81%A8%E3%81%BF&fmt=json&limit=10	nm-a048789dde25.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%83%92%E3%83%88%E3%83%9F&fmt=json&limit=10	nm-5b2008e853b1.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%82%86%E3%81%9A&fmt=json&limit=10	nm-1860318a7ee8.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%83%A6%E3%82%BA&fmt=json&limit=10	nm-a26f72a84fe9.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%81%82%E3%81%84%E3%81%BF%E3%82%87%E3%82%93&fmt=json&limit=10	nm-b6bbb140a685.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%82%A2%E3%82%A4%E3%83%9F%E3%83%A7%E3%83%B3&fmt=json&limit=10	nm-437368a01c3e.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%81%BF%E3%82%86%E3%81%8D&fmt=json&limit=10	nm-5e778741e067.json
+https://musicbrainz.org/ws/2/artist/?query=%E3%83%9F%E3%83%A6%E3%82%AD&fmt=json&limit=10	nm-b63fa5f95553.json

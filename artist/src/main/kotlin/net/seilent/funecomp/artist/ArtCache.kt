@@ -15,15 +15,19 @@ class ArtCache(private val dir: File) {
 
     @Synchronized
     fun mbid(name: String): Looked? {
-        val v = nameMap().getProperty(Names.fold(name)) ?: return null
+        val k = Names.fold(name)
+        if (k == KANA) return null
+        val v = nameMap().getProperty(k) ?: return null
         val at = v.substringBefore(' ').toLongOrNull() ?: return null
         return Looked(Names.mbid(v.substringAfter(' ', "")), at)
     }
 
     @Synchronized
     fun putMbid(name: String, mbid: String?, at: Long) {
+        val k = Names.fold(name)
+        if (k == KANA) return
         val p = nameMap()
-        p.setProperty(Names.fold(name), "$at ${mbid ?: ""}".trim())
+        p.setProperty(k, "$at ${mbid ?: ""}".trim())
         save(names, p)
     }
 
@@ -103,7 +107,14 @@ class ArtCache(private val dir: File) {
         dir.listFiles()?.forEach { it.delete() }
     }
 
-    private fun nameMap() = nameMap ?: load(names).also { nameMap = it }
+    private fun nameMap() = nameMap ?: load(names).also { p ->
+        nameMap = p
+        if (p.getProperty(KANA) == null) {
+            p.stringPropertyNames().filter { Names.mbid(p.getProperty(it).substringAfter(' ', "")) == null }.forEach { p.remove(it) }
+            p.setProperty(KANA, "1")
+            save(names, p)
+        }
+    }
 
     private fun dropFiles(key: String) {
         val h = hash(key)
@@ -146,5 +157,9 @@ class ArtCache(private val dir: File) {
             f.delete()
             t.renameTo(f)
         }
+    }
+
+    private companion object {
+        const val KANA = ".kana"
     }
 }

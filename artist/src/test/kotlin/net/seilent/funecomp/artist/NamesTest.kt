@@ -1,6 +1,7 @@
 package net.seilent.funecomp.artist
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class NamesTest {
@@ -24,5 +25,26 @@ class NamesTest {
         assertEquals(listOf("花譜", "可不"), Names.variants("花譜 x 可不"))
         assertEquals(listOf("YOASOBI", "ヨルシカ"), Names.variants("YOASOBI/ヨルシカ"))
         assertEquals(emptyList<String>(), Names.variants("Ado × Eve"))
+    }
+
+    @Test
+    fun kanaFoldsHiraganaToKatakanaOnlyInKana() {
+        val equal = listOf(
+            listOf("ひかる", "ヒカル", "ﾋｶﾙ"),
+            listOf("ｶﾞ", "が", "ガ"),
+            listOf("ゝ", "ヽ"),
+            listOf("ゞ", "ヾ"),
+            listOf("\u308F\u3099", "ヷ"),
+        )
+        for (g in equal) {
+            for (n in g) assertEquals(n, Names.kana(g[0]), Names.kana(n))
+        }
+        assertEquals("ラーメン", Names.kana("らーめん"))
+        assertEquals("radiohead 宇多田", Names.kana("Radiohead 宇多田"))
+        assertNotEquals(Names.fold("ひかる"), Names.fold("ヒカル"))
+        assertNotEquals(Names.fold("ゝ"), Names.fold("ヽ"))
+        assertNotEquals(Names.fold("\u308F\u3099"), Names.fold("ヷ"))
+        assertEquals("ヒカル", Names.fold("ﾋｶﾙ"))
+        assertEquals("radiohead 宇多田", Names.fold("Radiohead 宇多田"))
     }
 }

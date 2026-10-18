@@ -1,9 +1,16 @@
 package net.seilent.funecomp.artist
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
+import java.util.Properties
 
 class ArtistTest {
+    @get:Rule
+    val tmp = TemporaryFolder()
+
     @Test
     fun cropKeepsTargetAspectInsideTheImage() {
         val r = Crop.rect(1200, 800, 384, 480)
@@ -37,5 +44,27 @@ class ArtistTest {
         l.backoff(10_000)
         assertEquals(10_000, l.reserve())
         assertEquals(2000, RateLimiter.perMinute(30) { 0 }.let { it.reserve(); it.reserve() })
+    }
+
+    @Test
+    fun noMbidNamesAreDroppedOnceForTheKanaSearch() {
+        val dir = tmp.newFolder("art")
+        val f = java.io.File(dir, "names.properties")
+        val mbid = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
+        f.writeText("むと=5\nradiohead=6 $mbid\n")
+        val c = ArtCache(dir)
+        assertNull(c.mbid("むと"))
+        assertEquals(mbid, c.mbid("Radiohead")!!.mbid)
+        assertNull(c.mbid(".kana"))
+        val saved = Properties().apply { f.reader().use { load(it) } }
+        assertEquals("1", saved.getProperty(".kana"))
+        assertNull(saved.getProperty("むと"))
+        c.putMbid("むと", null, 7)
+        c.putMbid(".kana", mbid, 8)
+        val again = ArtCache(dir)
+        assertEquals(7L, again.mbid("むと")!!.at)
+        assertNull(again.mbid("むと")!!.mbid)
+        assertNull(again.mbid(".kana"))
+        assertEquals("1", Properties().apply { f.reader().use { load(it) } }.getProperty(".kana"))
     }
 }

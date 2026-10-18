@@ -9,6 +9,11 @@ object Names {
 
     fun fold(s: String?): String = Normalizer.normalize(s ?: "", Normalizer.Form.NFKC).trim().replace(space, " ").lowercase(Locale.ROOT)
 
+    fun kana(s: String?): String {
+        val f = fold(s).map { c -> if (c in '\u3041'..'\u3096' || c == '\u309D' || c == '\u309E') c + 0x60 else c }.joinToString("")
+        return Normalizer.normalize(f, Normalizer.Form.NFC)
+    }
+
     fun mbid(s: String?): String? = s?.trim()?.lowercase(Locale.ROOT)?.takeIf { uuid.matches(it) }
 
     private val tagTail = Regex("\\s*(【[^【】]*】|\\[[^\\[\\]]*])\\s*$")
@@ -75,10 +80,11 @@ class MusicBrainz(private val api: Api, private val base: String = "https://musi
         val r = api.json("$base/artist/?query=${Api.enc(escape(name.trim()))}&fmt=json&limit=10") ?: return null
         val all = r["artists"].list
         val top = all.firstOrNull()?.takeIf { it["score"].long == 100L && Names.fold(it["sort-name"].str?.replace(", ", " ")) == want }
-        return (all.firstOrNull { a ->
-            Names.fold(a["name"].str) == want || Names.fold(a["sort-name"].str) == want ||
-                a["aliases"].list.any { Names.fold(it["name"].str) == want }
-        } ?: top)?.get("id")?.str?.let { Names.mbid(it) }
+        fun matches(a: J, f: (String?) -> String, w: String) =
+            f(a["name"].str) == w || f(a["sort-name"].str) == w || a["aliases"].list.any { f(it["name"].str) == w }
+        val kana = Names.kana(name)
+        return (all.firstOrNull { matches(it, Names::fold, want) } ?: top ?: all.filter { matches(it, Names::kana, kana) }.singleOrNull())
+            ?.get("id")?.str?.let { Names.mbid(it) }
     }
 
     fun artist(id: String): MbArtist? {
