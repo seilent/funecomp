@@ -48,6 +48,17 @@ class Ui(val u: Float, val w: Float, val h: Float, val landscape: Boolean) {
 
 val LocalUi = staticCompositionLocalOf { Ui(1f, Tok.canvasW, Tok.canvasH, false) }
 
+@Immutable
+data class Bleed(val left: Int = 0, val top: Int = 0, val right: Int = 0, val bottom: Int = 0)
+
+val LocalBleed = staticCompositionLocalOf { Bleed() }
+
+fun Modifier.bleed(b: Bleed) = layout { m, c ->
+    require(c.hasBoundedWidth && c.hasBoundedHeight)
+    val p = m.measure(Constraints.fixed(c.maxWidth + b.left + b.right, c.maxHeight + b.top + b.bottom))
+    layout(c.maxWidth, c.maxHeight) { p.place(-b.left, -b.top) }
+}
+
 enum class Case { UPPER, LOWER, MIXED }
 
 @Immutable

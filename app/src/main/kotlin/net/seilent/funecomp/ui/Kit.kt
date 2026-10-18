@@ -92,7 +92,7 @@ fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: ((
 @Composable
 fun PageSurface() {
     Box(
-        Modifier.fillMaxSize().background(Black).background(
+        Modifier.fillMaxSize().bleed(LocalBleed.current).background(Black).background(
             Brush.verticalGradient(listOf(Accent.copy(alpha = Tok.pageSurface_alphaTop), Accent.copy(alpha = 0f))),
         ),
     )

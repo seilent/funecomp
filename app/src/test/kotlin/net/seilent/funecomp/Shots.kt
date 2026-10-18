@@ -2,6 +2,7 @@ package net.seilent.funecomp
 
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -52,7 +53,11 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
-class Size(val name: String, val w: Int, val h: Int)
+class Size(val name: String, val w: Int, val h: Int, val bars: WindowInsets = if (w > h) FLIP_LAND else FLIP_PORT)
+
+private val FLIP_PORT = WindowInsets(0.dp, (109 / 2.625f).dp, 0.dp, (39 / 2.625f).dp)
+private val FLIP_LAND = WindowInsets((109 / 2.625f).dp, (109 / 2.625f).dp, 0.dp, (39 / 2.625f).dp)
+private val FLIP_COVER = WindowInsets(0.dp, (79 / 2.625f).dp, 0.dp, (220 / 2.625f).dp)
 
 class Shot(
     val name: String,
@@ -76,7 +81,7 @@ class Shot(
 val SIZES = listOf(
     Size("360x640", 360, 640),
     Size("411x960", 411, 960),
-    Size("cover361x399", 361, 399),
+    Size("cover361x399", 361, 399, FLIP_COVER),
     Size("600x960", 600, 960),
     Size("960x600", 960, 600),
     Size("flip960x411", 960, 411),
@@ -375,7 +380,7 @@ class Shots {
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
                     val held = f.first.artEntry?.let { BackdropArt(backdrop ?: plain, null, it, f.first.wrong) }
-                    App(c.device, f.first.link, c, shell, f.first.sources, {}, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked)
+                    App(c.device, f.first.link, c, shell, f.first.sources, {}, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, insets = f.second.bars)
                 }
             }
         }

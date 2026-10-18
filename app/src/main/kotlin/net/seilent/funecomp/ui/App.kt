@@ -4,7 +4,12 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.LocalOverscrollFactory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -13,6 +18,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
 import net.seilent.funecomp.artist.ArtBlocks
@@ -70,14 +77,19 @@ fun App(
     scrobble: ScrobbleView = ScrobbleView(),
     firmware: FirmwareView = FirmwareView(),
     blocked: List<ArtBlocks.Record> = emptyList(),
+    insets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
 ) {
-    BoxWithConstraints(Modifier.fillMaxSize().background(Black)) {
+    val density = LocalDensity.current
+    val dir = LocalLayoutDirection.current
+    val bleed = Bleed(insets.getLeft(density, dir), insets.getTop(density), insets.getRight(density, dir), insets.getBottom(density))
+    BoxWithConstraints(Modifier.fillMaxSize().background(Black).windowInsetsPadding(insets)) {
         val ui = Ui.of(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
         val base = LocalViewConfiguration.current
         val touch = remember(base, ui.u) { Touch(base, ui.px(Tok.touchSlop)) }
         val accent = accentFor(device.settings.values[ACCENT_KEY]?.toIntOrNull())
         CompositionLocalProvider(
             LocalUi provides ui,
+            LocalBleed provides bleed,
             LocalAccent provides accent,
             LocalViewConfiguration provides touch,
             LocalOverscrollFactory provides null,

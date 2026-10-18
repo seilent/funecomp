@@ -22,12 +22,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.displayCutout
-import androidx.compose.foundation.layout.systemBars
-import androidx.compose.foundation.layout.union
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -202,7 +197,7 @@ class Main : ComponentActivity() {
         remember(intent)
         launch = opens(intent, Remote.debuggable(this))
         setContent {
-            Box(Modifier.fillMaxSize().background(Black).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
+            Box(Modifier.fillMaxSize().background(Black)) {
                 val b = battery
                 val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, b != null && b != Battery.UNRESTRICTED && !batteryAsked, mediaControls, Lyrics.on)
                 App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits, { e ->

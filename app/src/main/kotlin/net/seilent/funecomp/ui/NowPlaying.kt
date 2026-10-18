@@ -33,9 +33,11 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.runtime.key
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -80,7 +82,9 @@ fun Backdrop(art: BackdropArt?) {
         old = null
     }
     if (shown == null && old == null) return
-    Box(Modifier.fillMaxSize().clipToBounds().testTag("backdrop")) {
+    val b = LocalBleed.current
+    val ui = LocalUi.current
+    Box(Modifier.fillMaxSize().bleed(b).clipToBounds().testTag("backdrop")) {
         old?.let { o -> key(o) { BackdropLayer(o, oldFrom * (1f - fade.value)) } }
         shown?.let { n -> key(n) { BackdropLayer(n, fade.value) } }
         Box(
@@ -89,6 +93,8 @@ fun Backdrop(art: BackdropArt?) {
                     Tok.backdrop_stop0_pos to Black.copy(alpha = Tok.backdrop_stop0_alpha),
                     Tok.backdrop_stop1_pos to Black.copy(alpha = Tok.backdrop_stop1_alpha),
                     Tok.backdrop_stop2_pos to Black.copy(alpha = Tok.backdrop_stop2_alpha),
+                    startY = b.top.toFloat(),
+                    endY = b.top + ui.px(ui.h),
                 ),
             ),
         )
@@ -98,8 +104,9 @@ fun Backdrop(art: BackdropArt?) {
 @Composable
 private fun BackdropLayer(art: BackdropArt, alpha: Float) {
     val ui = LocalUi.current
-    val w = ui.px(ui.w)
-    val h = ui.px(ui.h)
+    val b = LocalBleed.current
+    val w = ui.px(ui.w) + b.left + b.right
+    val h = ui.px(ui.h) + b.top + b.bottom
     val img = art.image
     val painter = remember(art, w.roundToInt(), h.roundToInt()) {
         val r = Crop.rect(img.width, img.height, w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1), art.face?.let { it.first * img.width }, art.face?.let { it.second * img.height })
@@ -116,8 +123,10 @@ private fun BackdropLayer(art: BackdropArt, alpha: Float) {
 @Composable
 fun BackRing(onBack: () -> Unit) {
     val ui = LocalUi.current
+    val b = LocalBleed.current
     Box(
-        Modifier.size(ui.px(Tok.backRingX + Tok.backRing).dp(), ui.px(Tok.backRingY + Tok.backRing).dp()).clipToBounds()
+        Modifier.size(ui.px(Tok.backRingX + Tok.backRing).dp(), ui.px(Tok.backRingY + Tok.backRing).dp())
+            .drawWithContent { clipRect(-b.left.toFloat(), -b.top.toFloat(), size.width, size.height) { this@drawWithContent.drawContent() } }
             .press({ onBack() }).testTag("back"),
     ) {
         Box(Modifier.at(ui.px(Tok.backRingX), ui.px(Tok.backRingY), unbounded = true)) { Ring(Tok.backRing, GlyphName.BACK, true) }

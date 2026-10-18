@@ -112,10 +112,15 @@ fun Sheet(state: SheetState) {
     val panelY = screenH - panelH + (1f - p) * panelH
     val list = remember(state.title, state.items, state.shown) { LazyListState(state.focus) }
     Box(Modifier.fillMaxSize().testTag("sheet")) {
-        Box(Modifier.fillMaxSize().background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha * p)).press({ if (state.shown) state.close() }))
+        val b = LocalBleed.current
+        Box(Modifier.fillMaxSize().bleed(b).background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha * p)).press({ if (state.shown) state.close() }))
+        Box(
+            Modifier.offset { IntOffset(-b.left, panelY.roundToInt()) }.size((ui.px(ui.w) + b.left + b.right).dp(), (panelH + b.bottom).dp())
+                .alpha(p).background(Color(Tok.color_bgElevated)).press({}),
+        )
         Box(
             Modifier.offset { IntOffset(0, panelY.roundToInt()) }.size(ui.px(ui.w).dp(), panelH.dp())
-                .alpha(p).background(Color(Tok.color_bgElevated)).press({}).clipToBounds(),
+                .alpha(p).clipToBounds(),
         ) {
             if (state.title.isNotEmpty()) RoleText(state.title, Roles.dialogTitle, Modifier.at(edge, edge).width((ui.px(ui.w) - 2 * edge).dp()).clipToBounds())
             Box(Modifier.offset { IntOffset(0, (edge + titleH).roundToInt()) }.size(ui.px(ui.w).dp(), (panelH - edge - titleH).coerceAtLeast(0f).dp())) {

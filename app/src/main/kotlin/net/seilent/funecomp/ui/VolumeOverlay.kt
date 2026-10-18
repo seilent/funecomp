@@ -77,7 +77,7 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     val hit = with(d) { ui.px(Tok.overlayRing).toDp() }
 
     Box(Modifier.fillMaxSize().alpha(alpha.value).testTag("overlay")) {
-        Box(Modifier.fillMaxSize().background(Black.copy(alpha = Tok.scrim_overlay_alpha)))
+        Box(Modifier.fillMaxSize().bleed(LocalBleed.current).background(Black.copy(alpha = Tok.scrim_overlay_alpha)))
         Glyph(GlyphName.PLUS, Tok.overlayGlyph, lit, Modifier.at(cx, ui.px(Tok.overlayPlusY), 0.5f, 0.5f))
         RoleText(
             number.toString(),
