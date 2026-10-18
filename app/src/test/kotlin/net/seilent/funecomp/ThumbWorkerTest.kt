@@ -67,8 +67,12 @@ class ThumbWorkerTest {
         worker.session()
         val track = lib.tracks.first().id
         worker.want(Thumbs.MEDIA, track, MediaLink.ART_PX, null)
-        worker.want(Thumbs.NOW_PLAYING, track, 667, null)
         val end = System.currentTimeMillis() + 15_000
+        while (logs.none { it.startsWith("art get") }) {
+            check(System.currentTimeMillis() < end) { "no art get" }
+            Thread.sleep(10)
+        }
+        worker.want(Thumbs.NOW_PLAYING, track, 667, null)
         while (worker.image(track, 667) == null) {
             check(System.currentTimeMillis() < end) { "no now playing image; media=${worker.media(track, MediaLink.ART_PX) != null} ${logs.filter { it.startsWith("art get") }}" }
             Thread.sleep(50)
