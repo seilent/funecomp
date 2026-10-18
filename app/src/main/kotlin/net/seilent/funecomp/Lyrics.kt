@@ -74,7 +74,11 @@ object Lyrics {
         if (!on || !queued.compareAndSet(false, true)) return
         exec.execute {
             queued.set(false)
-            run()
+            try {
+                run()
+            } catch (t: Throwable) {
+                Log.w(Remote.TAG, "lyrics run: $t", t)
+            }
         }
     }
 

@@ -7,6 +7,7 @@ class J(val v: Any?) {
     val entries: List<Pair<String, J>> get() = (v as? Map<*, *>)?.map { (k, x) -> k.toString() to J(x) } ?: emptyList()
     val str: String? get() = v as? String
     val long: Long? get() = (v as? Number)?.toLong()
+    val double: Double? get() = (v as? Number)?.toDouble()
     val bool: Boolean? get() = v as? Boolean
     val exists: Boolean get() = v != null
 
