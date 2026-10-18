@@ -14,6 +14,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import net.seilent.funecomp.artist.Firmware
 import net.seilent.funecomp.artist.FirmwareRefused
+import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.HttpRun
 import net.seilent.funecomp.artist.Release
 import net.seilent.funecomp.artist.UrlHttp
@@ -73,13 +74,13 @@ object Firmwares {
 
     private fun upd(f: (FirmwareView) -> FirmwareView) = f
 
-    fun init(c: Context) {
+    fun init(c: Context, http: Http = UrlHttp(timeoutMs = 30_000)) {
         val app = c.applicationContext
         if (context === app) return
         context = app
         val v = app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0"
-        firmware = Firmware(File(app.filesDir, "firmware"), UrlHttp(timeoutMs = 30_000), v)
-        view = FirmwareView(checkDaily = prefs(app).getBoolean(DAILY, false), prereleases = prefs(app).getBoolean(PRE, false))
+        firmware = Firmware(File(app.filesDir, "firmware"), http, v)
+        view = FirmwareView(checkDaily = prefs(app).getBoolean(DAILY, false), prereleases = prefs(app).getBoolean(PRE, true))
     }
 
     fun hello(board: String?, version: String?) {
@@ -256,13 +257,14 @@ object Firmwares {
         set { it.copy(status = "checking", info = "") }
         val v: (FirmwareView) -> FirmwareView = try {
             prefs(c).edit().putLong(LAST, System.currentTimeMillis()).apply()
-            when (val r = f.check(b, version, prefs(c).getBoolean(PRE, false))) {
+            when (val r = f.check(b, version, prefs(c).getBoolean(PRE, true))) {
                 is Firmware.Check.Found -> {
                     release = r.release
                     val ready = f.file(r.release).let { it.isFile && it.length() == r.release.asset.size }
                     upd { it.copy(status = "", info = if (r.newer == null) "device runs a dev build" else "", tag = r.release.tag, size = r.release.asset.size, newer = r.newer, ready = ready, download = "") }
                 }
                 Firmware.Check.NoAsset -> upd { it.copy(status = "", info = if (b == null) "not connected" else "no release for $b", tag = null) }
+                Firmware.Check.OnlyPre -> upd { it.copy(status = "", info = "only prereleases", tag = null) }
                 Firmware.Check.NoPublic -> upd { it.copy(status = "", info = "no public releases", tag = null) }
                 Firmware.Check.RateLimited -> upd { it.copy(status = "", info = "rate limited, try later") }
             }

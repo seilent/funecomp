@@ -98,6 +98,25 @@ class FirmwareTest {
     }
 
     @Test
+    fun onlyPrereleasesWithTheToggleOffIsNotANoAsset() {
+        val pre = """[{"tag_name":"v0.2.0","draft":false,"prerelease":true,"published_at":"2026-10-18T00:00:00Z","assets":[{"name":"v1.upt","size":1,"browser_download_url":"$BASE/v0.2.0/v1.upt"}]}]"""
+        val f = fw(Net(Response(200, pre.toByteArray())))
+        assertEquals(Firmware.Check.OnlyPre, f.check("v1", "v0.1.0", prereleases = false))
+        assertEquals("v0.2.0", found(f.check("v1", "v0.1.0", prereleases = true)).release.tag)
+        assertEquals(Firmware.Check.NoAsset, f.check("ap80", "v0.1.0", prereleases = false))
+
+        val mixed = """[{"tag_name":"v0.1.0","draft":false,"prerelease":false,"published_at":"2026-10-10T00:00:00Z","assets":[{"name":"update.upt","size":1,"browser_download_url":"$BASE/v0.1.0/update.upt"}]},""" +
+            """{"tag_name":"v0.2.0","draft":false,"prerelease":true,"published_at":"2026-10-18T00:00:00Z","assets":[{"name":"v1.upt","size":1,"browser_download_url":"$BASE/v0.2.0/v1.upt"}]}]"""
+        assertEquals(Firmware.Check.OnlyPre, fw(Net(Response(200, mixed.toByteArray()))).check("v1", "v0.1.0", prereleases = false))
+
+        val both = """[{"tag_name":"v0.1.0","draft":false,"prerelease":false,"published_at":"2026-10-10T00:00:00Z","assets":[{"name":"v1.upt","size":1,"browser_download_url":"$BASE/v0.1.0/v1.upt"}]},""" +
+            """{"tag_name":"v0.2.0","draft":false,"prerelease":true,"published_at":"2026-10-18T00:00:00Z","assets":[{"name":"v1.upt","size":1,"browser_download_url":"$BASE/v0.2.0/v1.upt"}]}]"""
+        val older = found(fw(Net(Response(200, both.toByteArray()))).check("v1", "v0.2.0", prereleases = false))
+        assertEquals("v0.1.0", older.release.tag)
+        assertEquals(false, older.newer)
+    }
+
+    @Test
     fun capturedFunecompResponseParsesWithNoBoardAsset() {
         val f = fw(Net(Response(200, Fixtures.load("gh-funecomp-releases.json"))))
         assertEquals(Firmware.Check.NoAsset, f.check("v1", "v0.1.0", prereleases = true))

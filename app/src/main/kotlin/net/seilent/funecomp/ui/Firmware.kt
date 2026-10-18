@@ -27,7 +27,7 @@ data class FirmwareView(
     val download: String = "",
     val ready: Boolean = false,
     val checkDaily: Boolean = false,
-    val prereleases: Boolean = false,
+    val prereleases: Boolean = true,
     val send: String = "",
     val pickedName: String = "",
     val pickedSize: Long = 0,

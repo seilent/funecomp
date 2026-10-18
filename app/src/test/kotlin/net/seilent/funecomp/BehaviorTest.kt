@@ -389,7 +389,7 @@ class BehaviorTest {
         rule.onNodeWithTag("fw.check").performClick()
         rule.onNodeWithTag("fw.daily").performClick()
         rule.onNodeWithTag("fw.pre").performClick()
-        assertEquals(listOf("check", "settings true false", "settings false true"), c.firmware)
+        assertEquals(listOf("check", "settings true true", "settings false false"), c.firmware)
         rule.onNodeWithTag("fw.release").performClick()
         settle(500)
         assertEquals(listOf("28.0 mb"), shell.sheet.info)

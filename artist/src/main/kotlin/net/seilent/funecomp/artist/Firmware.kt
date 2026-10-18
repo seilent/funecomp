@@ -61,6 +61,7 @@ class Firmware(
     sealed interface Check {
         data class Found(val release: Release, val newer: Boolean?) : Check
         data object NoAsset : Check
+        data object OnlyPre : Check
         data object NoPublic : Check
         data object RateLimited : Check
     }
@@ -89,7 +90,8 @@ class Firmware(
         } catch (e: IllegalArgumentException) {
             throw IOException("${e.message}: $URL")
         }
-        val rel = Releases.pick(json, board, prereleases) ?: return Check.NoAsset
+        val rel = Releases.pick(json, board, prereleases)
+            ?: return if (!prereleases && Releases.pick(json, board, true) != null) Check.OnlyPre else Check.NoAsset
         return Check.Found(rel, Releases.newer(rel.tag, device))
     }
 
