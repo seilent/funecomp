@@ -17,6 +17,7 @@ import net.seilent.funecomp.ui.npArt
 import net.seilent.funecomp.ui.npArtTop
 import net.seilent.funecomp.ui.npArtistBaseline
 import net.seilent.funecomp.ui.npProgressY
+import net.seilent.funecomp.ui.npRingY
 import net.seilent.funecomp.ui.npTitleBaseline
 import net.seilent.funecomp.ui.step
 import org.junit.Assert.assertEquals
@@ -32,11 +33,11 @@ class LayoutTest {
         assertEquals(272f, ui.w, 1e-3f)
         assertFalse(ui.landscape)
         assertEquals(168f, ui.npArt, 1e-3f)
-        assertEquals(ui.h - 156f, ui.npProgressY, 1e-3f)
+        assertEquals(427.111f, ui.npProgressY, 1e-3f)
         assertEquals(ui.npProgressY, ui.npArtTop + ui.npArt, 1e-3f)
         assertEquals(ui.npArtTop - 14f, ui.npAlbumBaseline, 1e-3f)
         assertEquals(ui.npAlbumBaseline - 24f, ui.npArtistBaseline, 1e-3f)
-        assertEquals(ui.h - 118f, ui.npTitleBaseline, 1e-3f)
+        assertEquals(465.111f, ui.npTitleBaseline, 1e-3f)
         for (album in listOf(ui, Ui.of(272f, 480f), Ui.of(360f, 640f))) {
             assertEquals(117f, album.albumArtistBaseline, 1e-3f)
             assertEquals(141f, album.albumTitleBaseline, 1e-3f)
@@ -45,6 +46,28 @@ class LayoutTest {
         val zune = Ui.of(272f, 480f)
         assertEquals(156f, zune.npArtTop, 1e-3f)
         assertEquals(118f, zune.npArtistBaseline, 1e-3f)
+    }
+
+    @Test
+    fun npBottomStackLiftsByAThirdOfTheSurplus() {
+        val flip = Ui.of(411f, 960f - 148f / 2.625f)
+        assertEquals(598.016f, flip.h, 1e-3f)
+        assertEquals(402.677f, flip.npProgressY, 1e-3f)
+        assertEquals(234.677f, flip.npArtTop, 1e-3f)
+        assertEquals(196.677f, flip.npArtistBaseline, 1e-3f)
+        assertEquals(440.677f, flip.npTitleBaseline, 1e-3f)
+        assertEquals(518.677f, flip.npRingY, 1e-3f)
+        val small = Ui.of(360f, 640f - 148f / 2.625f)
+        assertEquals(480f, small.h, 1e-3f)
+        assertEquals(324f, small.npProgressY, 1e-3f)
+        assertEquals(362f, small.npTitleBaseline, 1e-3f)
+        assertEquals(440f, small.npRingY, 1e-3f)
+        val land = Ui.of(960f - 109f / 2.625f, 411f - 148f / 2.625f)
+        assertTrue(land.landscape)
+        assertEquals(272f, land.h, 1e-3f)
+        assertEquals(246f, land.npProgressY, 1e-3f)
+        assertEquals(116f, land.npTitleBaseline, 1e-3f)
+        assertEquals(232f, land.npRingY, 1e-3f)
     }
 
     @Test

@@ -16,6 +16,7 @@ private const val NP_PROGRESS_FROM_BOTTOM = 156f
 private const val NP_TITLE_FROM_BOTTOM = 118f
 const val NP_NEXT_COUNT = 3
 private const val NP_RING_FROM_BOTTOM = 40f
+private const val NP_SURPLUS_BELOW = 1f / 3f
 private const val NP_COLUMN_RIGHT = 216f
 private const val NP_ART_TOP_LANDSCAPE = 72f
 private const val NP_ART_LANDSCAPE_STACK = 106f
@@ -46,15 +47,16 @@ val Ui.npTextX get() = if (landscape) NP_COLUMN_RIGHT else Tok.edge
 val Ui.npArtistBaseline get() = if (landscape) NP_ARTIST_LANDSCAPE else npAlbumBaseline - NP_ARTIST_RISE
 val Ui.npAlbumBaseline get() = if (landscape) NP_ALBUM_LANDSCAPE else npArtTop - NP_ALBUM_RISE
 val Ui.npArtTop get() = if (landscape) NP_ART_TOP_LANDSCAPE else npProgressY - npArt
-val Ui.npProgressY get() = if (landscape) NP_ART_TOP_LANDSCAPE + npArt + NP_PROGRESS_GAP_LANDSCAPE else h - NP_PROGRESS_FROM_BOTTOM
+val Ui.npProgressY get() = if (landscape) NP_ART_TOP_LANDSCAPE + npArt + NP_PROGRESS_GAP_LANDSCAPE else h - NP_PROGRESS_FROM_BOTTOM - npLift
 val Ui.npArt get() = if (landscape) {
     min(NP_ART_MAX, h - NP_ART_LANDSCAPE_STACK)
 } else {
     min(NP_ART_MAX, min(w - 2 * Tok.edge, h - NP_ART_STACK))
 }.coerceAtLeast(0f)
-val Ui.npTitleBaseline get() = if (landscape) NP_TITLE_LANDSCAPE else h - NP_TITLE_FROM_BOTTOM
+val Ui.npTitleBaseline get() = if (landscape) NP_TITLE_LANDSCAPE else h - NP_TITLE_FROM_BOTTOM - npLift
 val Ui.npNextBaseline get() = if (landscape) NP_NEXT_LANDSCAPE else npTitleBaseline + Tok.npNextPitch
-val Ui.npRingY get() = h - NP_RING_FROM_BOTTOM
+val Ui.npRingY get() = h - NP_RING_FROM_BOTTOM - npLift
+private val Ui.npLift get() = if (landscape) 0f else (h - Ui.PORTRAIT_H).coerceAtLeast(0f) * NP_SURPLUS_BELOW
 
 fun Ui.npRingCenter(index: Int): Float {
     val f = NP_RING_X[index]
