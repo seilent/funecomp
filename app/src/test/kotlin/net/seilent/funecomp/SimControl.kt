@@ -7,8 +7,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.CompletableDeferred
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.AutoEqIndex
+import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.proto.ArtGetReply
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Node
@@ -187,17 +189,31 @@ class SimControl(
 
     var eqText: String? = HD650
     var eqFileName = "Sennheiser HD 650 ParametricEQ.txt"
-    var found: List<AutoEqIndex.Entry>? = AutoEqIndex.parse(INDEX)
-    val queries = ArrayList<String>()
+    var autoEq: AutoEqList? = FULL
+    var holdList = false
+    var heldList: (() -> Unit)? = null
+    var lists = 0
+    val profiles = ArrayList<String>()
 
     override fun eqFile(done: (String, String?) -> Unit) = done(eqFileName, eqText)
 
-    override fun autoEqFind(query: String, done: (List<AutoEqIndex.Entry>?) -> Unit) {
-        queries += query
-        done(found)
+    override fun autoEqList(done: (AutoEqList?) -> Unit) {
+        lists++
+        val l = autoEq
+        if (holdList) heldList = { done(l) } else done(l)
     }
 
-    override fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) = done(eqText)
+    val slow = HashMap<String, CompletableDeferred<Unit>>()
+
+    override suspend fun autoEqView(list: AutoEqList, query: String): AutoEqList.View {
+        slow[query]?.await()
+        return list.view(query)
+    }
+
+    override fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) {
+        profiles += entry.name
+        done(eqText)
+    }
 
     val arts = mutableStateMapOf<String, ImageBitmap>()
     val wanted = ArrayList<String>()
@@ -264,11 +280,6 @@ class SimControl(
             Filter 10: ON PK Fc 5332 Hz Gain -1.1 dB Q 5.75
         """.trimIndent()
 
-        val INDEX = listOf(
-            "Sennheiser HD 650" to "oratory1990/over-ear/Sennheiser%20HD%20650",
-            "Sennheiser HD 650 (2020)" to "crinacle/GRAS%2043AG-7%20over-ear/Sennheiser%20HD%20650%20(2020)",
-            "Sennheiser HD 650 (2020, worn earpads)" to "crinacle/GRAS%2043AG-7%20over-ear/Sennheiser%20HD%20650%20(2020,%20worn%20earpads)",
-            "Sennheiser HD 650 (balanced)" to "Headphone.com%20Legacy/over-ear/Sennheiser%20HD%20650%20(balanced)",
-        ).joinToString("\n") { "- [${it.first}](./${it.second})" }
+        val FULL: AutoEqList by lazy { AutoEqList.build(AutoEqIndex.parse(File("../artist/src/test/resources/autoeq/index.md").readText())) }
     }
 }

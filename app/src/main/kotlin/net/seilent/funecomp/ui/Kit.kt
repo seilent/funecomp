@@ -47,6 +47,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -59,6 +60,11 @@ import kotlin.math.ln
 import kotlin.math.roundToInt
 
 private const val MS_PER_S = 1000f
+private const val ROW_PRIMARY = "primary"
+private const val ROW_SECONDARY = "secondary"
+private const val ROW_NUMBER = "number"
+private const val ROW_TRAILING = "trailing"
+private const val ROW_DOT = "dot"
 private const val NS_PER_S = 1_000_000_000L
 
 @Composable
@@ -292,30 +298,31 @@ fun ListRow(
         if (ring) Ring(Tok.rowRing, GlyphName.PLAY, focused, Modifier.at(ui.px(Tok.hubEdge), rowH / 2, ay = 0.5f))
         Layout(
             content = {
-                RoleText(primary, primaryRole, Modifier, color = c)
-                RoleText(secondary, secondaryRole, Modifier)
-                RoleText(number, Roles.listCount, Modifier)
-                RoleText(trailing, Roles.listCount, Modifier)
-                Box(Modifier.clip(CircleShape).background(Accent))
+                RoleText(primary, primaryRole, Modifier.layoutId(ROW_PRIMARY), color = c)
+                if (secondary.isNotEmpty()) RoleText(secondary, secondaryRole, Modifier.layoutId(ROW_SECONDARY))
+                if (number.isNotEmpty()) RoleText(number, Roles.listCount, Modifier.layoutId(ROW_NUMBER))
+                if (trailing.isNotEmpty()) RoleText(trailing, Roles.listCount, Modifier.layoutId(ROW_TRAILING))
+                if (playingDot) Box(Modifier.layoutId(ROW_DOT).clip(CircleShape).background(Accent))
             },
             modifier = Modifier.fillMaxSize(),
         ) { m, cons ->
-            val trailingP = m[3].measure(Constraints())
-            val trailingX = rowW - ui.px(Tok.hubEdge) - trailingP.width
-            val primaryW = if (trailing.isNotEmpty()) trailingX - ui.px(Tok.gutter) - textX else rowW - ui.px(Tok.hubEdge) - textX
-            val p = m[0].measure(Constraints(maxWidth = primaryW.roundToInt().coerceAtLeast(0)))
-            val s = m[1].measure(Constraints(maxWidth = (rowW - ui.px(Tok.hubEdge) - textX).roundToInt().coerceAtLeast(0)))
-            val n = m[2].measure(Constraints())
+            fun part(id: String) = m.firstOrNull { it.layoutId == id }
+            val trailingP = part(ROW_TRAILING)?.measure(Constraints())
+            val trailingX = rowW - ui.px(Tok.hubEdge) - (trailingP?.width ?: 0)
+            val primaryW = if (trailingP != null) trailingX - ui.px(Tok.gutter) - textX else rowW - ui.px(Tok.hubEdge) - textX
+            val p = part(ROW_PRIMARY)!!.measure(Constraints(maxWidth = primaryW.roundToInt().coerceAtLeast(0)))
+            val s = part(ROW_SECONDARY)?.measure(Constraints(maxWidth = (rowW - ui.px(Tok.hubEdge) - textX).roundToInt().coerceAtLeast(0)))
+            val n = part(ROW_NUMBER)?.measure(Constraints())
             val dotSide = ui.px(Tok.playingDot).roundToInt()
-            val dot = m[4].measure(Constraints.fixed(dotSide, dotSide))
+            val dot = part(ROW_DOT)?.measure(Constraints.fixed(dotSide, dotSide))
             layout(cons.maxWidth, cons.maxHeight) {
-                val py = if (secondary.isNotEmpty()) ui.px(Tok.rowTextInset).roundToInt() else ((rowH - p.height) / 2).roundToInt()
+                val py = if (s != null) ui.px(Tok.rowTextInset).roundToInt() else ((rowH - p.height) / 2).roundToInt()
                 val baseline = py + p[FirstBaseline]
                 p.place(textX.roundToInt(), py)
-                if (secondary.isNotEmpty()) s.place(textX.roundToInt(), (rowH - ui.px(Tok.rowTextInset) - s.height).roundToInt())
-                if (number.isNotEmpty()) n.place(ui.px(Tok.hubEdge).roundToInt(), baseline - n[FirstBaseline])
-                if (trailing.isNotEmpty()) trailingP.place(trailingX.roundToInt(), baseline - trailingP[FirstBaseline])
-                if (playingDot) dot.place(ui.px(Tok.hubEdge - Tok.playingDotOffset).roundToInt(), baseline - dotSide)
+                s?.place(textX.roundToInt(), (rowH - ui.px(Tok.rowTextInset) - s.height).roundToInt())
+                n?.place(ui.px(Tok.hubEdge).roundToInt(), baseline - n[FirstBaseline])
+                trailingP?.place(trailingX.roundToInt(), baseline - trailingP[FirstBaseline])
+                dot?.place(ui.px(Tok.hubEdge - Tok.playingDotOffset).roundToInt(), baseline - dotSide)
             }
         }
     }

@@ -6,6 +6,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.union
@@ -79,6 +81,7 @@ fun App(
     firmware: FirmwareView = FirmwareView(),
     blocked: List<ArtBlocks.Record> = emptyList(),
     insets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
+    ime: WindowInsets = WindowInsets.ime,
 ) {
     val density = LocalDensity.current
     val dir = LocalLayoutDirection.current
@@ -131,6 +134,7 @@ fun App(
                     Page.Scrobbling -> ScrobblingPage(ctx, scrobble)
                     Page.Firmware -> FirmwarePage(ctx, firmware)
                     Page.Lyrics -> LyricsPage(ctx, link.lyrics)
+                    Page.AutoEq -> AutoEqPage(ctx, remember(ime, insets) { ime.exclude(insets) })
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
                     is Page.Eq -> EqPage(ctx, page)

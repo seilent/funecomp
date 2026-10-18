@@ -17,8 +17,8 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
@@ -44,6 +44,7 @@ import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.ScrobbleView
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.TextEntry
 import net.seilent.funecomp.ui.flatBand
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -77,6 +78,7 @@ class Shot(
     val sources: Sources = Sources(),
     val minor: Int = Proto.minor,
     val faults: List<String> = emptyList(),
+    val ime: Float = 0f,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -156,6 +158,10 @@ private val FW = HOME + Page.Connection + Page.Firmware
 private val FOUND = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true)
 
 private val EQ = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)
+
+private val AEQ = EQ + Page.AutoEq
+
+private const val AEQ_IME = 0.4f
 
 private val CLAMPED = SimControl.HD650.replace("Preamp: -6.1 dB", "Preamp: 1.5 dB").replace("Gain 6.4 dB", "Gain 14.0 dB").replace("Fc 5332 Hz Gain -1.1 dB Q 5.75", "Fc 22000 Hz Gain -30.0 dB Q 12.00")
 
@@ -263,23 +269,36 @@ val SHOTS = listOf(
     },
     Shot("eq-profile", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)) { rule.onNodeWithTag("eq.profile").performClick() },
     Shot("autoeq-source", pages = EQ) { rule.onNodeWithTag("eq.import").performClick() },
-    Shot("autoeq-results", pages = EQ) {
-        rule.onNodeWithTag("eq.import").performClick()
-        settle(600)
-        rule.onNodeWithTag("sheet.item.1").performClick()
-        settle(600)
-        rule.onNodeWithTag("entry").performTextInput("hd 650")
-        rule.onNodeWithTag("entry").performImeAction()
+    Shot("autoeq-list", pages = AEQ),
+    Shot("autoeq-dividers", pages = AEQ) {
+        jump(25)
+        scrollTo("aeq.div.z")
     },
-    Shot("autoeq-confirm-long", pages = EQ) {
-        rule.onNodeWithTag("eq.import").performClick()
-        settle(600)
-        rule.onNodeWithTag("sheet.item.1").performClick()
-        settle(600)
-        rule.onNodeWithTag("entry").performTextInput("hd 650")
-        rule.onNodeWithTag("entry").performImeAction()
-        settle(600)
-        rule.onNodeWithTag("sheet.item.2").performClick()
+    Shot("autoeq-jump", pages = AEQ) {
+        jump(19)
+        rule.onNodeWithTag("aeq.div.s").performClick()
+    },
+    Shot("autoeq-hd650", pages = AEQ) { type("hd 650") },
+    Shot("autoeq-oratory1990", pages = AEQ) { type("oratory1990") },
+    Shot("autoeq-rode", pages = AEQ) { type("rode") },
+    Shot("autoeq-none", pages = AEQ) { type("zzqx") },
+    Shot("autoeq-loading", pages = AEQ, prep = { it.holdList = true }),
+    Shot("autoeq-failed", pages = AEQ, prep = { it.autoEq = null }),
+    Shot("autoeq-long", pages = AEQ) { type("tungsten double") },
+    Shot("autoeq-ime", pages = AEQ, ime = AEQ_IME) {
+        jump(26)
+        scrollTo("aeq.row.${SimControl.FULL.rows.last().entry.name}")
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performTouchInput { swipeUp() }
+        rule.mainClock.autoAdvance = false
+    },
+    Shot("autoeq-sheetfield", pages = AEQ) {
+        type("hd 650")
+        it.sheet.openEntry("search") { TextEntry("hd 650") {} }
+    },
+    Shot("autoeq-confirm-long", pages = AEQ) {
+        type("hd 650")
+        rule.onNodeWithTag("aeq.row.Sennheiser HD 650 (2020, worn earpads)").performClick()
     },
     Shot("autoeq-confirm", pages = EQ) {
         rule.onNodeWithTag("eq.import").performClick()
@@ -372,6 +391,19 @@ class Shots {
         rule.waitForIdle()
     }
 
+    fun type(text: String) {
+        rule.onNodeWithTag("aeq.field").performClick()
+        rule.onNodeWithTag("aeq.field").performTextInput(text)
+        settle(300)
+    }
+
+    fun jump(letter: Int) {
+        rule.onAllNodesWithTag("aeq.div.#")[0].performClick()
+        settle(300)
+        rule.onNodeWithTag("jump.$letter").performClick()
+        settle(300)
+    }
+
     fun scrollTo(tag: String) {
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag(tag))
@@ -421,7 +453,7 @@ class Shots {
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
                     val held = f.first.artEntry?.let { BackdropArt(backdrop ?: plain, null, it, f.first.wrong) }
-                    App(c.device, f.first.link, c, shell, f.first.sources, {}, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, insets = f.second.bars)
+                    App(c.device, f.first.link, c, shell, f.first.sources, {}, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * f.first.ime).dp))
                 }
             }
         }

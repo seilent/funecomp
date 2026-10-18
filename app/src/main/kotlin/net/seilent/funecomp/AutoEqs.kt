@@ -7,6 +7,7 @@ import android.os.Looper
 import android.provider.OpenableColumns
 import android.util.Log
 import net.seilent.funecomp.artist.AutoEqIndex
+import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.proto.gen.Tok
 import java.io.File
@@ -28,9 +29,9 @@ object AutoEqs {
         index = AutoEqIndex(File(app.filesDir, "autoeq"), UrlHttp(), version)
     }
 
-    fun find(query: String, done: (List<AutoEqIndex.Entry>?) -> Unit) = exec.execute {
+    fun list(done: (AutoEqList?) -> Unit) = exec.execute {
         val r = try {
-            index?.search(query)
+            index?.list()
         } catch (e: IOException) {
             Log.w(Remote.TAG, "autoeq index: $e")
             null

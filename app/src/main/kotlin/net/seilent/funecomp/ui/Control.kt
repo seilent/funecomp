@@ -6,6 +6,9 @@ import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.AutoEqIndex
+import net.seilent.funecomp.artist.AutoEqList
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.State
 
@@ -57,7 +60,8 @@ interface Control {
     fun lastFmLogin(user: String, password: String) {}
     fun listenBrainzToken(token: String) {}
     fun eqFile(done: (String, String?) -> Unit) {}
-    fun autoEqFind(query: String, done: (List<AutoEqIndex.Entry>?) -> Unit) {}
+    fun autoEqList(done: (AutoEqList?) -> Unit) {}
+    suspend fun autoEqView(list: AutoEqList, query: String): AutoEqList.View = withContext(Dispatchers.Default) { list.view(query) }
     fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) {}
     fun mediaControls(on: Boolean) {}
     fun lyrics(on: Boolean) {}

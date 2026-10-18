@@ -102,6 +102,7 @@ object Roles {
     val toastTitle = Role(Tok.type_toastTitle_size, weight(Tok.type_toastTitle_style), case(Tok.type_toastTitle_case), Tok.type_toastTitle_alpha)
     val dialogTitle = Role(Tok.type_dialogTitle_size, weight(Tok.type_dialogTitle_style), case(Tok.type_dialogTitle_case), Tok.type_dialogTitle_alpha)
     val dialogItem = Role(Tok.type_dialogItem_size, weight(Tok.type_dialogItem_style), case(Tok.type_dialogItem_case), Tok.type_dialogItem_alpha, Tok.type_dialogItem_alphaDim)
+    val letterGlyph = Role(Tok.type_letterGlyph_size, weight(Tok.type_letterGlyph_style), case(Tok.type_letterGlyph_case), Tok.type_letterGlyph_alpha)
     val watermark = Role(Tok.type_watermark_size, weight(Tok.type_watermark_style), case(Tok.type_watermark_case), Tok.type_watermark_alpha)
 }
 

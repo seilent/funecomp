@@ -2,28 +2,43 @@ package net.seilent.funecomp
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.junit4.StateRestorationTester
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
+import androidx.test.espresso.Espresso
+import kotlinx.coroutines.CompletableDeferred
+import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.LibKey
+import net.seilent.funecomp.state.Section
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Bonded
@@ -417,19 +432,6 @@ class BehaviorTest {
     }
 
     @Test
-    fun autoEqSourceFetchesNothingUntilASearch() {
-        val (c, shell) = start(eqPage)
-        rule.onNodeWithTag("eq.import").performClick()
-        settle(500)
-        assertEquals(listOf("file", "search"), shell.sheet.items)
-        tapSheetItem(1)
-        assertEquals(emptyList<String>(), c.queries)
-        rule.onNodeWithTag("entry").performImeAction()
-        settle(500)
-        assertEquals(emptyList<String>(), c.queries)
-    }
-
-    @Test
     fun autoEqFileShowsTheConfirmWithoutSending() {
         val (c, shell) = start(eqPage)
         val sent = c.sent.size
@@ -470,29 +472,304 @@ class BehaviorTest {
         assertEquals(listOf("not readable"), shell.sheet.info)
     }
 
+    private val aeqRow = SemanticsMatcher("aeq row") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("aeq.row.") == true }
+
+    private val aeqDiv = SemanticsMatcher("aeq divider") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("aeq.div.") == true }
+
+    private fun tags(m: SemanticsMatcher) = rule.onAllNodes(m).fetchSemanticsNodes().map { it.config[SemanticsProperties.TestTag] }
+
+    private fun top(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
+
+    private fun gridOpen() = rule.onAllNodesWithTag("jump").fetchSemanticsNodes().any { it.layoutInfo.isPlaced }
+
+    private val jumpNode = SemanticsMatcher("jump node") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("jump") == true }
+
+    private fun jumpNodes() = rule.onAllNodes(jumpNode, useUnmergedTree = true).fetchSemanticsNodes().size
+
+    private fun stateLine(text: String) = rule.onNode(hasText(text) and hasAnyAncestor(hasTestTag("aeq.state"))).assertExists()
+
+    private fun type(text: String) {
+        rule.onNodeWithTag("aeq.field").performClick()
+        rule.onNodeWithTag("aeq.field").performTextClearance()
+        rule.onNodeWithTag("aeq.field").performTextInput(text)
+        settle(300)
+    }
+
+    private fun jumpTo(letter: Int) {
+        rule.onAllNodes(aeqDiv)[0].performClick()
+        settle(300)
+        rule.onNodeWithTag("jump.$letter").performClick()
+        settle(300)
+    }
+
+    private fun itemTag(i: AutoEqList.Item) = when (i) {
+        is AutoEqList.Divider -> "aeq.div.${Section.letter(i.letter)}"
+        is AutoEqList.Hit -> "aeq.row.${i.row.entry.name}"
+    }
+
+    private fun openAutoEq(): Pair<SimControl, Shell> {
+        val (sim, shell) = start(eqPage)
+        rule.onNodeWithTag("eq.import").performClick()
+        settle(500)
+        assertEquals(listOf("file", "search"), shell.sheet.items)
+        assertEquals(0, sim.lists)
+        tapSheetItem(1)
+        settle(1500)
+        return sim to shell
+    }
+
     @Test
-    fun autoEqSearchPicksAResult() {
+    fun autoEqSearchOpensTheListAndFetchesTheIndexOnce() {
+        val (c, shell) = openAutoEq()
+        assertEquals(Page.AutoEq, shell.nav.top)
+        assertEquals(1, c.lists)
+        rule.onNodeWithTag("aeq.field").assertIsNotFocused()
+        rule.onNode(hasText("type to search"), useUnmergedTree = true).assertExists()
+        val first = c.autoEq!!.items("")
+        assertEquals("aeq.div.#", itemTag(first[0]))
+        assertEquals(top("rows"), top("aeq.div.#"))
+        val row = (first[1] as AutoEqList.Hit).row.entry
+        rule.onNode(hasText(row.source) and hasAnyAncestor(hasTestTag("aeq.row.${row.name}"))).assertExists()
+        settle(1000)
+        assertEquals(1, c.lists)
+    }
+
+    @Test
+    fun autoEqTypingNarrowsTheRowsLive() {
+        openAutoEq()
+        type("oratory hd 6")
+        val want = listOf(
+            "Sennheiser HD 560S", "Sennheiser HD 569", "Sennheiser HD 600", "Sennheiser HD 620S", "Sennheiser HD 630VB",
+            "Sennheiser HD 650", "Sennheiser HD 660 S", "Sennheiser HD 660S (Dekoni Fenestrated Sheepskin Earpads)",
+            "Sennheiser HD 660S2", "Sennheiser HD 6XX", "Superlux HD 651", "Superlux HD 660", "Superlux HD 660 Pro 150 Ohm",
+            "Superlux HD 662F", "Superlux HD 662F (Brainwavz round XL pleather earpads)", "Superlux HD 668B",
+            "Superlux HD 668B (velour earpads)", "Superlux HD 681", "Superlux HD 681 (velour earpads)",
+            "Superlux Hd 681B (Brainwavz round hybrid earpads)", "Superlux HD 681B (pleather earpads)", "Superlux HD 681B (velour earpads)",
+        ).map { "aeq.row.$it" }
+        val shown = tags(aeqRow)
+        assertTrue(shown.isNotEmpty())
+        assertEquals(want.take(shown.size), shown)
+        assertEquals(listOf("aeq.div.s"), tags(aeqDiv))
+    }
+
+    @Test
+    fun autoEqQueryChangeShowsTheFirstMatchAtTheTop() {
+        val (c, _) = openAutoEq()
+        jumpTo(19)
+        assertEquals(top("rows"), top("aeq.div.s"))
+        type("hd")
+        val first = itemTag(c.autoEq!!.items("hd")[0])
+        assertNotEquals("aeq.div.s", first)
+        assertEquals(top("rows"), top(first))
+    }
+
+    @Test
+    fun autoEqSlowQuerySupersededByANewerOneNeverShows() {
+        val (c, _) = openAutoEq()
+        val gate = CompletableDeferred<Unit>()
+        c.slow["sennheiser"] = gate
+        type("sennheiser")
+        rule.onNodeWithTag("aeq.div.#").assertIsDisplayed()
+        type("rode")
+        assertEquals(listOf("aeq.div.r"), tags(aeqDiv))
+        gate.complete(Unit)
+        settle(500)
+        assertEquals(listOf("aeq.div.r"), tags(aeqDiv))
+        assertEquals(listOf("RØDE NTH-100", "RØDE NTH-100 (front dampening removed)", "RØDE NTH-100M").map { "aeq.row.$it" }, tags(aeqRow))
+    }
+
+    @Test
+    fun autoEqTypingWhileLoadingAppliesOnArrival() {
         val (c, shell) = start(eqPage)
-        rule.onNodeWithTag("eq.import").performClick()
+        c.holdList = true
+        shell.nav.push(Page.AutoEq)
+        settle(1500)
+        stateLine("loading")
+        type("rode")
+        stateLine("loading")
+        c.heldList!!()
+        settle(300)
+        assertEquals(listOf("aeq.div.r"), tags(aeqDiv))
+        assertEquals(listOf("RØDE NTH-100", "RØDE NTH-100 (front dampening removed)", "RØDE NTH-100M").map { "aeq.row.$it" }, tags(aeqRow))
+    }
+
+    @Test
+    fun autoEqSearchFailedRetriesOncePerTap() {
+        val (c, shell) = start(eqPage)
+        c.autoEq = null
+        shell.nav.push(Page.AutoEq)
+        settle(1500)
+        stateLine("search failed")
+        assertEquals(1, c.lists)
+        rule.onNodeWithTag("aeq.state").performClick()
+        settle(300)
+        assertEquals(2, c.lists)
+        stateLine("search failed")
+        c.autoEq = SimControl.FULL
+        c.holdList = true
+        rule.onNodeWithTag("aeq.state").performClick()
+        settle(300)
+        stateLine("loading")
+        rule.onNodeWithTag("aeq.state").performClick()
+        settle(300)
+        assertEquals(3, c.lists)
+        c.heldList!!()
+        settle(300)
+        rule.onNodeWithTag("aeq.div.#").assertIsDisplayed()
+    }
+
+    @Test
+    fun autoEqNoResults() {
+        openAutoEq()
+        type("zzqx")
+        stateLine("no results")
+        assertEquals(emptyList<String>(), tags(aeqRow))
+    }
+
+    @Test
+    fun autoEqDividerOpensTheGridOnItsLetter() {
+        openAutoEq()
+        type("rode")
+        rule.onNodeWithTag("aeq.div.r").performClick()
+        settle(300)
+        assertTrue(gridOpen())
+        rule.onNodeWithTag("jump.18").assertIsSelected()
+        rule.onNodeWithTag("jump.1").assertIsNotSelected()
+        rule.onNodeWithTag("jump.1").performClick()
+        settle(300)
+        assertTrue(gridOpen())
+        rule.onNodeWithTag("jump.18").performClick()
+        settle(300)
+        assertFalse(gridOpen())
+        assertEquals(top("rows"), top("aeq.div.r"))
+    }
+
+    @Test
+    fun autoEqGridEmptyLetterExitAndBack() {
+        val (_, shell) = openAutoEq()
+        rule.onNodeWithTag("aeq.div.#").performClick()
+        settle(300)
+        rule.onNodeWithTag("jump.0").assertIsSelected()
+        rule.onNodeWithTag("jump.27").performClick()
+        settle(300)
+        assertTrue(gridOpen())
+        assertEquals(top("rows"), top("aeq.div.#"))
+        rule.onNodeWithTag("jump.exit").performClick()
+        settle(300)
+        assertFalse(gridOpen())
+        rule.onNodeWithTag("aeq.div.#").performClick()
+        settle(300)
+        Espresso.pressBack()
+        settle(300)
+        assertFalse(gridOpen())
+        assertEquals(Page.AutoEq, shell.nav.top)
+        Espresso.pressBack()
+        settle(1500)
+        assertEquals(Page.Eq(Enums.EqOutput.wired), shell.nav.top)
+    }
+
+    @Test
+    fun autoEqClosedGridHasNoSemanticsNodes() {
+        openAutoEq()
+        assertEquals(0, jumpNodes())
+        assertEquals(0, rule.onAllNodes(hasText("漢")).fetchSemanticsNodes().size)
+        rule.onNodeWithTag("aeq.div.#").performClick()
+        settle(300)
+        assertEquals(1 + Tok.jumpCells.toInt() + 1, jumpNodes())
+        assertEquals(1, rule.onAllNodes(hasText("漢")).fetchSemanticsNodes().size)
+        rule.onNodeWithTag("jump.exit").performClick()
+        settle(300)
+        assertEquals(0, jumpNodes())
+        assertEquals(0, rule.onAllNodes(hasText("漢")).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun autoEqRestoredOpenGridKeepsItsLetters() {
+        val c = SimControl("ap80")
+        val shell = Shell(Nav(eqPage + Page.AutoEq))
+        val restore = StateRestorationTester(rule)
+        rule.mainClock.autoAdvance = false
+        restore.setContent {
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
+        }
+        settle(1000)
+        rule.onNodeWithTag("aeq.div.#").performClick()
+        settle(300)
+        assertTrue(gridOpen())
+        rule.mainClock.autoAdvance = true
+        restore.emulateSavedInstanceStateRestore()
+        rule.mainClock.autoAdvance = false
+        settle(1000)
+        assertTrue(gridOpen())
+        rule.onNodeWithTag("jump.19").performClick()
+        settle(300)
+        assertFalse(gridOpen())
+        assertEquals(top("rows"), top("aeq.div.s"))
+    }
+
+    @Test
+    fun autoEqEqualResultKeepsTheScroll() {
+        openAutoEq()
+        jumpTo(19)
+        assertEquals(top("rows"), top("aeq.div.s"))
+        rule.onNodeWithTag("aeq.field").performClick()
+        rule.onNodeWithTag("aeq.field").performTextInput(" ")
+        settle(300)
+        rule.onNodeWithTag("aeq.field").assert(hasText(" "))
+        assertEquals(top("rows"), top("aeq.div.s"))
+    }
+
+    @Test
+    fun autoEqRowTapShowsTheConfirm() {
+        val (c, shell) = openAutoEq()
+        type("oratory1990 hd 650")
+        assertEquals(listOf("aeq.row.Sennheiser HD 650"), tags(aeqRow))
+        rule.onNodeWithTag("aeq.row.Sennheiser HD 650").performClick()
         settle(500)
-        tapSheetItem(1)
-        rule.onNodeWithTag("entry").performTextInput("hd 650")
-        rule.onNodeWithTag("entry").performImeAction()
-        settle(500)
-        assertEquals(listOf("hd 650"), c.queries)
-        assertEquals("hd 650", shell.sheet.title)
-        assertEquals(4, shell.sheet.items.size)
-        tapSheetItem(2)
-        assertEquals("Sennheiser HD 650 (2020, worn earpads)", shell.sheet.title)
-        tapSheetItem(0)
-        c.found = emptyList()
-        rule.onNodeWithTag("eq.import").performClick()
-        settle(500)
-        tapSheetItem(1)
-        rule.onNodeWithTag("entry").performTextInput("nothing")
-        rule.onNodeWithTag("entry").performImeAction()
-        settle(500)
-        assertEquals(listOf("no results"), shell.sheet.info)
+        assertEquals(listOf("Sennheiser HD 650"), c.profiles)
+        assertEquals("Sennheiser HD 650", shell.sheet.title)
+        assertEquals(listOf("preamp -6.1 db", "10 bands", "device has no eq presets"), shell.sheet.info)
+    }
+
+    @Test
+    fun autoEqLastRowScrollsAboveTheKeyboard() {
+        val c = SimControl("ap80")
+        val shell = Shell(Nav(eqPage + Page.AutoEq))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell, insets = WindowInsets(0.dp), ime = WindowInsets(bottom = 300.dp)) }
+        }
+        settle(1000)
+        jumpTo(26)
+        val name = SimControl.FULL.rows.last().entry.name
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("aeq.row.$name"))
+        rule.onNodeWithTag("rows").performTouchInput { swipeUp() }
+        rule.mainClock.autoAdvance = false
+        settle(1000)
+        val last = rule.onNodeWithTag("aeq.row.$name").fetchSemanticsNode().boundsInRoot.bottom
+        val keyboard = with(rule.density) { (960.dp - 300.dp).toPx() }
+        assertTrue("$last above $keyboard", last <= keyboard + 1f)
+    }
+
+    @Test
+    fun autoEqResizeKeepsTheQueryAndTheScroll() {
+        val c = SimControl("ap80")
+        val shell = Shell(Nav(eqPage + Page.AutoEq))
+        var size by mutableStateOf(411.dp to 960.dp)
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            Box(Modifier.requiredSize(size.first, size.second)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
+        }
+        settle(1000)
+        type("hd")
+        jumpTo(19)
+        assertEquals(top("rows"), top("aeq.div.s"))
+        size = 361.dp to 399.dp
+        settle(1000)
+        rule.onNodeWithTag("aeq.field").assert(hasText("hd"))
+        assertEquals(top("rows"), top("aeq.div.s"))
+        assertEquals(1, c.lists)
     }
 
     @Test
