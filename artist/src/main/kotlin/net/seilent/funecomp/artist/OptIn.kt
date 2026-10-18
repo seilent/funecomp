@@ -76,15 +76,11 @@ class Discogs(private val api: Api, private val base: String = "https://api.disc
 }
 
 class YouTube(private val api: Api) {
-    fun candidates(a: MbArtist): List<Candidate> {
-        val channels = a.rels("youtube").map { it.url }.filter { CHANNEL.containsMatchIn(it) }.sortedBy { if (it.contains("/channel/")) 0 else 1 }
-        for (url in channels) {
-            val page = api.get(url)?.text ?: continue
-            val img = ogImage(page) ?: continue
-            return listOf(Candidate(img, Sources.YOUTUBE))
-        }
-        return emptyList()
-    }
+    fun candidates(a: MbArtist): Sequence<Candidate> =
+        a.rels("youtube").map { it.url }.filter { CHANNEL.containsMatchIn(it) }.sortedBy { if (it.contains("/channel/")) 0 else 1 }
+            .asSequence()
+            .mapNotNull { url -> api.get(url)?.text?.let { ogImage(it) } }
+            .map { Candidate(it, Sources.YOUTUBE) }
 
     companion object {
         private val CHANNEL = Regex("^https?://(www\\.|m\\.)?youtube\\.com/(channel/|user/|c/|@)")
@@ -99,9 +95,8 @@ class Deezer(private val api: Api, private val base: String = "https://api.deeze
         val want = Names.fold(name)
         val r = api.json("$base/search/artist?q=${Api.enc(name.trim())}") ?: return emptyList()
         return r["data"].list.filter { Names.fold(it["name"].str) == want }
-            .sortedByDescending { it["nb_fan"].long ?: 0 }
+            .sortedWith(compareBy<J> { it["name"].str?.trim() != name.trim() }.thenByDescending { it["nb_fan"].long ?: 0 })
             .mapNotNull { it["picture_xl"].str?.takeIf { u -> u.startsWith("http") && !u.contains("/artist//") } }
-            .take(1)
             .map { Candidate(it, Sources.DEEZER) }
     }
 }

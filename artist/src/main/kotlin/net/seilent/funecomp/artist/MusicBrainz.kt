@@ -87,7 +87,9 @@ class MusicBrainz(private val api: Api, private val base: String = "https://musi
         fun matches(a: J, f: (String?) -> String, w: String) =
             f(a["name"].str) == w || f(a["sort-name"].str) == w || a["aliases"].list.any { f(it["name"].str) == w }
         val kana = Names.kana(name)
-        return (all.firstOrNull { matches(it, Names::fold, want) } ?: top ?: all.filter { matches(it, Names::kana, kana) }.singleOrNull())
+        val folded = all.filter { matches(it, Names::fold, want) }
+        val same = folded.firstOrNull { matches(it, { s -> s?.trim() ?: "" }, name.trim()) }
+        return (same ?: folded.firstOrNull() ?: top ?: all.filter { matches(it, Names::kana, kana) }.singleOrNull())
             ?.get("id")?.str?.let { Names.mbid(it) }
     }
 

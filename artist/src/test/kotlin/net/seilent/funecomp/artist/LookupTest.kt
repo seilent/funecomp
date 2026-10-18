@@ -565,6 +565,32 @@ class LookupTest {
     }
 
     @Test
+    fun deezerTakesTheSameCaseNameFirstThenFans() {
+        http.now = { time.now }
+        val dz = Deezer(Api(http, "ua", RateLimiter(0) { time.now }, time.sleep))
+        fun order(q: String) = dz.candidates(q).map { ImageIds.of(Sources.DEEZER, it.url) }
+        val title = "26cc4f7884f4a1122ee11c72fcbff31d"
+        val upper = "7d0d00dbfa6f87119195f6edb1a83170"
+        assertEquals(listOf(upper, title), order("SHIHO"))
+        assertEquals(listOf(title, upper), order("Shiho"))
+        assertEquals(listOf(title, upper), order("shiho"))
+        assertTrue("missing ${http.missing}", http.missing.isEmpty())
+    }
+
+    @Test
+    fun musicBrainzTakesTheSameCaseNameAmongFoldedMatches() {
+        val a = "11111111-1111-1111-1111-111111111111"
+        val b = "22222222-2222-2222-2222-222222222222"
+        for (q in listOf("SHIHO", "Shiho", "shiho")) {
+            http.queued["https://musicbrainz.org/ws/2/artist/?query=${Api.enc(q)}&fmt=json&limit=10"] =
+                ArrayDeque(listOf(kanaReply(a to "SHIHO", b to "Shiho")))
+        }
+        assertEquals(a, mb().search("SHIHO"))
+        assertEquals(b, mb().search("Shiho"))
+        assertEquals(a, mb().search("shiho"))
+    }
+
+    @Test
     fun twoKanaOnlyMatchesGiveNoMbid() {
         val a = "11111111-1111-1111-1111-111111111111"
         val b = "22222222-2222-2222-2222-222222222222"

@@ -187,17 +187,18 @@ class ArtistArt(
             null
         }
         val a = id?.let { attempt { mb.artist(it) } }
-        val steps = mapOf<String, (() -> List<Candidate>)?>(
-            Wikimedia.SOURCE to a?.let { { wikimedia.candidates(it, w, h) } },
-            Sources.THE_AUDIO_DB to id?.takeIf { Sources.THE_AUDIO_DB in on }?.let { { audioDb.candidates(it) } },
-            Sources.FANART_TV to id?.takeIf { Sources.FANART_TV in on }?.let { { fanartTv.candidates(it) } },
-            Sources.DISCOGS to a?.takeIf { Sources.DISCOGS in on }?.let { { discogs.candidates(it) } },
+        val steps = mapOf<String, (() -> Sequence<Candidate>)?>(
+            Wikimedia.SOURCE to a?.let { { wikimedia.candidates(it, w, h).asSequence() } },
+            Sources.THE_AUDIO_DB to id?.takeIf { Sources.THE_AUDIO_DB in on }?.let { { audioDb.candidates(it).asSequence() } },
+            Sources.FANART_TV to id?.takeIf { Sources.FANART_TV in on }?.let { { fanartTv.candidates(it).asSequence() } },
+            Sources.DISCOGS to a?.takeIf { Sources.DISCOGS in on }?.let { { discogs.candidates(it).asSequence() } },
             Sources.YOUTUBE to a?.takeIf { Sources.YOUTUBE in on }?.let { { youtube.candidates(it) } },
-            Sources.DEEZER to if (Sources.DEEZER in on) ({ deezer.candidates(name) }) else null,
+            Sources.DEEZER to if (Sources.DEEZER in on) ({ deezer.candidates(name).asSequence() }) else null,
         )
         for (step in sources().order.mapNotNull { steps[it] }) {
-            val candidates = attempt(step)?.filterNot { blocks.blocked(key, it.source, it.id, name = display) } ?: continue
-            for (c in candidates.take(MAX_TRIES)) {
+            val candidates = attempt { step().filterNot { blocks.blocked(key, it.source, it.id, name = display) }.take(MAX_TRIES).iterator() } ?: continue
+            while (attempt { candidates.hasNext() } == true) {
+                val c = candidates.next()
                 val src = attempt { (images[c.source] ?: otherImages).get(c.url) }?.body ?: continue
                 if (blocks.blocked(key, c.source, "", ArtCache.sha256(src), display)) continue
                 val jpeg = Backdrop.render(codec, src, w, h) ?: continue

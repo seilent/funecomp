@@ -236,6 +236,52 @@ class BlockTest {
     }
 
     @Test
+    fun aDeezerBlockGivesTheNextExactNameMatchByFans() {
+        val shiho = "7f8015a0-d7c2-4566-89a3-0174f0dfaa27"
+        val pic = { md5: String -> "https://cdn-images.dzcdn.net/images/artist/$md5/1000x1000-000000-80-0-0.jpg" }
+        http.queued["https://musicbrainz.org/ws/2/artist/$shiho?inc=url-rels&fmt=json"] =
+            ArrayDeque(List(3) { Response(200, "{\"id\":\"$shiho\",\"name\":\"shiho\",\"relations\":[]}".toByteArray()) })
+        http.queued[pic("26cc4f7884f4a1122ee11c72fcbff31d")] = ArrayDeque(List(2) { Response(200, Images.jpeg(Images.photo(1000, 1000, 1), 92)) })
+        http.queued[pic("7d0d00dbfa6f87119195f6edb1a83170")] = ArrayDeque(List(2) { Response(200, Images.jpeg(Images.photo(1000, 1000, 2), 92)) })
+        sources = Sources(deezer = true)
+        assertEquals(Sources.DEEZER, art().get("shiho", shiho, 240, 320)!!.source)
+        val first = shown("shiho", shiho)
+        assertEquals("26cc4f7884f4a1122ee11c72fcbff31d", ImageIds.of(first))
+        block(first)
+        assertNotNull(art().get("shiho", shiho, 240, 320))
+        assertEquals("7d0d00dbfa6f87119195f6edb1a83170", ImageIds.of(shown("shiho", shiho)))
+        block(shown("shiho", shiho))
+        assertNull(art().get("shiho", shiho, 240, 320))
+        assertNotNull(cache.miss(shiho))
+        assertTrue("missing ${http.missing}", http.missing.isEmpty())
+    }
+
+    @Test
+    fun aYouTubeBlockFetchesTheNextChannelOnlyThen() {
+        val id = "33333333-3333-3333-3333-333333333333"
+        val ch = listOf("https://www.youtube.com/channel/UCaaaa", "https://www.youtube.com/channel/UCbbbb")
+        val avatar = { k: String -> "https://yt3.googleusercontent.com/ytc/$k=s900-c-k-c0x00ffffff-no-rj" }
+        val rels = ch.joinToString(",") { "{\"type\":\"youtube\",\"ended\":false,\"url\":{\"resource\":\"$it\"}}" }
+        http.queued["https://musicbrainz.org/ws/2/artist/$id?inc=url-rels&fmt=json"] =
+            ArrayDeque(List(2) { Response(200, "{\"id\":\"$id\",\"name\":\"Two\",\"relations\":[$rels]}".toByteArray()) })
+        ch.zip(listOf("AAAA", "BBBB")).forEachIndexed { i, (url, k) ->
+            http.queued[url] = ArrayDeque(List(2) { Response(200, "<meta property=\"og:image\" content=\"${avatar(k)}\">".toByteArray()) })
+            http.queued[avatar(k)] = ArrayDeque(List(2) { Response(200, Images.jpeg(Images.photo(1000, 1000, i + 3L), 92)) })
+        }
+        sources = Sources(youtube = true)
+        assertEquals(Sources.YOUTUBE, art().get("Two", id, 240, 320)!!.source)
+        val first = shown("Two", id)
+        assertEquals(avatar("AAAA").substringBefore('='), ImageIds.of(first))
+        assertEquals(1, http.calls.count { it == ch[0] })
+        assertEquals(0, http.calls.count { it == ch[1] })
+        block(first)
+        assertNotNull(art().get("Two", id, 240, 320))
+        assertEquals(avatar("BBBB").substringBefore('='), ImageIds.of(shown("Two", id)))
+        assertEquals(1, http.calls.count { it == ch[1] })
+        assertTrue("missing ${http.missing}", http.missing.isEmpty())
+    }
+
+    @Test
     fun anEntryFromBeforeResolvedByIsOfferedByItsStoredSearch() {
         cache.putMbid("宇多田ヒカル", utada, time.now)
         val searched = ArtCache.Entry(utada, "宇多田ヒカル", utada, Wikimedia.SOURCE, null, "https://upload.wikimedia.org/x.png", 0)
