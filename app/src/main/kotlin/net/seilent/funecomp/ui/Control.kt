@@ -3,6 +3,8 @@ package net.seilent.funecomp.ui
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import net.seilent.funecomp.artist.Accounts
+import net.seilent.funecomp.artist.ArtBlocks
+import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.proto.Profile
 
@@ -65,6 +67,9 @@ interface Control {
     fun firmwareSettings(checkDaily: Boolean, prereleases: Boolean) {}
     fun firmwareSend(picked: Boolean) {}
     fun firmwareStopSend() {}
+    fun blockArt(e: ArtCache.Entry) {}
+    fun wrongArtist(e: ArtCache.Entry) {}
+    fun unblock(r: ArtBlocks.Record) {}
 }
 
 const val LIB_PAGE = 100L

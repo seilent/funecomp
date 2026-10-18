@@ -15,6 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
+import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
@@ -50,7 +51,7 @@ fun homeItems(device: DeviceState, link: LinkView, sources: Sources): List<HomeI
         HomeItem("music", "artists albums songs", Page.Music),
         HomeItem("connection", if (link.phase == Phase.LIVE) link.device ?: device.hello?.board ?: "" else statusText(link), Page.Connection),
         HomeItem("playlists", if (playlists != null && playlists > 0) (if (playlists == 1L) "1 playlist" else "$playlists playlists") else if (playlists == 0L) "0 playlists" else "", Page.Playlists),
-        HomeItem("artist art", sources.enabled.sorted().joinToString(" "), Page.ArtistArt),
+        HomeItem("artist art", sources.ordered.joinToString(" "), Page.ArtistArt),
         HomeItem("settings", pivots.joinToString(" "), Page.Settings),
     )
 }
@@ -68,6 +69,7 @@ fun App(
     onCredit: (ArtCache.Entry) -> Unit = {},
     scrobble: ScrobbleView = ScrobbleView(),
     firmware: FirmwareView = FirmwareView(),
+    blocked: List<ArtBlocks.Record> = emptyList(),
 ) {
     BoxWithConstraints(Modifier.fillMaxSize().background(Black)) {
         val ui = Ui.of(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
@@ -100,14 +102,14 @@ fun App(
             }
             Stack(nav) { page ->
                 when (page) {
-                    Page.NowPlaying -> NowPlaying(device, control, { nav.pop() }, { nav.push(Page.Queue) }, art)
+                    Page.NowPlaying -> NowPlaying(device, control, { nav.pop() }, { nav.push(Page.Queue) }, art) { held -> artSheet(ctx, held) }
                     Page.Home -> Home(homeItems(device, link, sources)) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)
                     Page.Playlists -> Playlists(ctx)
                     Page.Settings -> SettingsPage(ctx)
                     Page.Connection -> ConnectionPage(ctx, link, scrobble, firmware)
-                    Page.ArtistArt -> ArtistArtPage(ctx, sources, onSources, credits, onCredit)
+                    Page.ArtistArt -> ArtistArtPage(ctx, sources, onSources, credits, onCredit, blocked)
                     Page.Scrobbling -> ScrobblingPage(ctx, scrobble)
                     Page.Firmware -> FirmwarePage(ctx, firmware)
                     Page.Lyrics -> LyricsPage(ctx, link.lyrics)

@@ -210,7 +210,7 @@ class Main : ComponentActivity() {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
                     } catch (_: ActivityNotFoundException) {
                     }
-                }, Scrobbles.view, Firmwares.view)
+                }, Scrobbles.view, Firmwares.view, Remote.blocked)
             }
         }
     }
@@ -329,6 +329,7 @@ class Main : ComponentActivity() {
     }
 
     private fun saveSources(s: Sources) {
+        val reordered = s.order != sources.order
         sources = s
         getSharedPreferences(ART_PREFS, MODE_PRIVATE).edit()
             .putBoolean("theaudiodb", s.theAudioDb)
@@ -337,8 +338,9 @@ class Main : ComponentActivity() {
             .putString("fanarttvKey", s.fanartTvKey)
             .putBoolean("deezer", s.deezer)
             .putBoolean("youtube", s.youtube)
+            .putString("order", s.order.joinToString(","))
             .apply()
-        Remote.sourcesChanged()
+        if (reordered) Remote.reordered() else Remote.sourcesChanged()
     }
 
     private fun missing() = buildList {
@@ -383,6 +385,7 @@ class Main : ComponentActivity() {
                 p.getString("fanarttvKey", "") ?: "",
                 p.getBoolean("deezer", false),
                 p.getBoolean("youtube", false),
+                Sources.order(p.getString("order", null)),
             )
         }
     }

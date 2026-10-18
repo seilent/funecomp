@@ -128,7 +128,10 @@ class ArtistArt(
 
     fun forgetName(name: String) = cache.forgetName(name)
 
-    fun sha(e: ArtCache.Entry): String = cache.sha(e)
+    fun withSha(e: ArtCache.Entry): ArtCache.Entry =
+        if (e.sha.isNotEmpty()) e else ArtCache.Entry(e.key, e.name, e.mbid, e.source, e.credit, e.url, e.at, e.id, cache.sha(e), e.resolvedBy)
+
+    fun keyOf(name: String, mbid: String?): String = (Names.mbid(mbid) ?: cache.mbid(name)?.mbid) ?: "name:${Names.fold(name)}"
 
     fun beginMark() {
         missDue = Long.MAX_VALUE

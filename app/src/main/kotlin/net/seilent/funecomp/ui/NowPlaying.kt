@@ -24,6 +24,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import kotlin.math.roundToInt
 import net.seilent.funecomp.art.Thumbs
+import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Crop
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.unit.IntSize
@@ -56,7 +57,7 @@ fun formatTime(ms: Long): String {
     return "${total / 60}:${if (s < 10) "0" else ""}$s"
 }
 
-class BackdropArt(val image: ImageBitmap, val face: Pair<Double, Double>? = null)
+class BackdropArt(val image: ImageBitmap, val face: Pair<Double, Double>? = null, val entry: ArtCache.Entry? = null, val wrongArtist: Boolean = false)
 
 @Composable
 fun Backdrop(art: BackdropArt?) {
@@ -124,7 +125,7 @@ fun BackRing(onBack: () -> Unit) {
 }
 
 @Composable
-fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueue: () -> Unit, art: BackdropArt? = null) {
+fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueue: () -> Unit, art: BackdropArt? = null, onBackdrop: ((BackdropArt) -> Unit)? = null) {
     val ui = LocalUi.current
     val s = device.playback.state
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -183,6 +184,8 @@ fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueu
         }.testTag("np"),
     ) {
         Backdrop(art)
+        val held = art?.takeIf { it.entry != null }
+        if (held != null && onBackdrop != null) Box(Modifier.fillMaxSize().press({}, { onBackdrop(held) }).testTag("np.backdrop"))
         BackRing(onBack)
         Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
         RoleText(s.artist ?: "", Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))

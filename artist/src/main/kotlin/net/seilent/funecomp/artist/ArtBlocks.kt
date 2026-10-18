@@ -105,6 +105,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         for (p in pushes) line("push", p.name, p.mbid ?: "", p.done.joinToString(","))
     }
 
+    @Synchronized
     fun save() {
         val f = file ?: return
         val text = encode()

@@ -24,6 +24,7 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.artist.Accounts
+import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.artist.Sources
@@ -64,6 +65,10 @@ class Shot(
     val scrobble: ScrobbleView = ScrobbleView(),
     val firmware: FirmwareView = FirmwareView(),
     val art: Boolean = false,
+    val artEntry: ArtCache.Entry? = null,
+    val wrong: Boolean = false,
+    val blocked: List<ArtBlocks.Record> = emptyList(),
+    val sources: Sources = Sources(),
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -93,6 +98,12 @@ private fun playing(c: SimControl) {
     c.transport(Enums.TransportCmd.seek, seekMs = 61_000)
 }
 
+private fun held(c: SimControl) {
+    playing(c)
+    val p = c.device.playback
+    c.device = c.device.copy(playback = p.copy(state = p.state.copy(title = "Reckoner", artist = HELD.name, artists = listOf(HELD.name), mbids = emptyList(), album = "In Rainbows")))
+}
+
 private fun longTitle(c: SimControl) {
     val p = c.device.playback
     c.device = c.device.copy(playback = p.copy(state = p.state.copy(title = "Svefn-g-englar (Live at the Hammersmith Apollo, London, 2001 remaster)")))
@@ -115,6 +126,15 @@ private val CREDITS = listOf(
     ArtCache.Entry("a74b1b7f-71a5-4011-9441-d0b5e4122711", "Radiohead", null, "commons", Credit("Raph_PH", "CC BY 4.0", "https://commons.wikimedia.org/"), "", 0),
     ArtCache.Entry("b539e453-c4fe-47e3-8a07-8517eac74429", "Utada Hikaru", null, "commons", Credit("Goldnrush Podcast", "CC BY 4.0", "https://commons.wikimedia.org/"), "", 0),
 )
+
+private val HELD = ArtCache.Entry("a74b1b7f-71a5-4011-9441-d0b5e4122711", "Radiohead", "a74b1b7f-71a5-4011-9441-d0b5e4122711", "commons", Credit("Raph_PH", "CC BY 4.0", "https://commons.wikimedia.org/wiki/File:RadioheadO2211125_composite.jpg", "https://creativecommons.org/licenses/by/4.0"), "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/RadioheadO2211125_composite.jpg/500px-RadioheadO2211125_composite.jpg", 0, "File:RadioheadO2211125 composite.jpg", "s", "Radiohead")
+
+private val BLOCKED: List<ArtBlocks.Record> = (0 until 12).map { i ->
+    if (i % 4 == 3) ArtBlocks.Reject("m$i", "m$i", "Muto $i", "むと and a very long artist name number $i", 100L - i)
+    else ArtBlocks.Block("k$i", null, listOf("deezer", "commons", "theaudiodb")[i % 3], "id$i", "s$i", listOf("むと", "Radiohead", "空星きらめ/Sorahoshi Kirame【にじさんじ】")[i % 3] + " $i", 100L - i)
+}
+
+private val ORDERED = Sources(theAudioDb = true, fanartTv = true, deezer = true, order = Sources.order("deezer,commons,theaudiodb"))
 
 private val SCROBBLE = ScrobbleView(Accounts(true, "0123456789abcdef0123456789abcdef", "secret", "seilent", "session", true, "token", "seilent"), queued = 3)
 
@@ -265,6 +285,23 @@ val SHOTS = listOf(
     Shot("scrobbling-set", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE),
     Shot("scrobbling-failed", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE.copy(accounts = SCROBBLE.accounts.copy(lastFmSession = ""), lastFm = "sign in failed", listenBrainz = "invalid")),
     Shot("scrobbling-entry", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE) { rule.onNodeWithTag("scrobble.key").performClick() },
+    Shot("np-block", pages = NP, prep = ::held, artEntry = HELD) { rule.onNodeWithTag("np.backdrop").performTouchInput { longClick() } },
+    Shot("np-block-wrong", pages = NP, prep = ::held, artEntry = HELD, wrong = true) { rule.onNodeWithTag("np.backdrop").performTouchInput { longClick() } },
+    Shot("artistart-blocked-1", pages = HOME + Page.ArtistArt, blocked = BLOCKED.take(1), credits = CREDITS) { scrollTo("art.blocked.0") },
+    Shot("artistart-blocked-12", pages = HOME + Page.ArtistArt, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.blocked.11") },
+    Shot("artistart-order", pages = HOME + Page.ArtistArt, sources = ORDERED) { scrollTo("art.order.5") },
+    Shot("artistart-order-first", pages = HOME + Page.ArtistArt, sources = ORDERED) {
+        scrollTo("art.order.0")
+        rule.onNodeWithTag("art.order.0").performClick()
+    },
+    Shot("artistart-order-middle", pages = HOME + Page.ArtistArt, sources = ORDERED) {
+        scrollTo("art.order.2")
+        rule.onNodeWithTag("art.order.2").performClick()
+    },
+    Shot("artistart-order-last", pages = HOME + Page.ArtistArt, sources = ORDERED) {
+        scrollTo("art.order.5")
+        rule.onNodeWithTag("art.order.5").performClick()
+    },
     Shot("artistart-credits", pages = HOME + Page.ArtistArt, credits = CREDITS) {
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.credit.2"))
@@ -289,6 +326,13 @@ class Shots {
         rule.waitForIdle()
     }
 
+    fun scrollTo(tag: String) {
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag(tag))
+        rule.mainClock.autoAdvance = false
+        settle(100)
+    }
+
     private val covers: File by lazy {
         val dir = kotlin.io.path.createTempDirectory("covers").toFile()
         val lib = net.seilent.funecomp.sim.Library.synthetic()
@@ -305,6 +349,17 @@ class Shots {
         dir
     }
 
+    private val plain: ImageBitmap by lazy {
+        val img = java.awt.image.BufferedImage(720, 960, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        val g = img.createGraphics()
+        g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(90, 70, 60), 720f, 960f, java.awt.Color(20, 30, 50))
+        g.fillRect(0, 0, 720, 960)
+        g.dispose()
+        val out = java.io.ByteArrayOutputStream()
+        javax.imageio.ImageIO.write(img, "jpg", out)
+        BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size()).asImageBitmap()
+    }
+
     private val backdrop: ImageBitmap? by lazy {
         System.getProperty("shots.backdrop")?.let { File(it) }?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
     }
@@ -319,7 +374,8 @@ class Shots {
             val c = control ?: return@setContent
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
-                    App(c.device, f.first.link, c, shell, Sources(), {}, if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware)
+                    val held = f.first.artEntry?.let { BackdropArt(backdrop ?: plain, null, it, f.first.wrong) }
+                    App(c.device, f.first.link, c, shell, f.first.sources, {}, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked)
                 }
             }
         }

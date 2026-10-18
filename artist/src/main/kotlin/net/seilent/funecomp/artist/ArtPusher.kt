@@ -2,6 +2,7 @@ package net.seilent.funecomp.artist
 
 import net.seilent.funecomp.link.ImagePush
 import net.seilent.funecomp.link.Session
+import net.seilent.funecomp.proto.ImgEntry
 import net.seilent.funecomp.proto.ImgListReply
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.State
@@ -30,12 +31,13 @@ class ArtPusher(
         }
     }
 
-    class Listing(val names: MutableSet<String>, val bytes: Long?, val cap: Long?)
+    class Listing(val names: MutableSet<String>, val bytes: Long?, val cap: Long?, val entries: List<ImgEntry> = emptyList())
 
     fun stored(): Set<String>? = listing()?.names
 
     fun listing(): Listing? {
         val out = HashSet<String>()
+        val entries = ArrayList<ImgEntry>()
         var offset = 0L
         var bytes: Long? = null
         var cap: Long? = null
@@ -49,8 +51,9 @@ class ArtPusher(
                 cap = page.cap
             }
             page.entries.forEach { out += it.name }
+            entries += page.entries
             offset += page.entries.size
-            if (!page.page.more || page.entries.isEmpty()) return Listing(out, bytes, cap)
+            if (!page.page.more || page.entries.isEmpty()) return Listing(out, bytes, cap, entries)
         }
     }
 

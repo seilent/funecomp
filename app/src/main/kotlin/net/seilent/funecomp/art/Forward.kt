@@ -1,9 +1,12 @@
 package net.seilent.funecomp.art
 
 import net.seilent.funecomp.artist.Art
+import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtPusher
+import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.link.Session
+import net.seilent.funecomp.proto.ImgEntry
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
@@ -23,8 +26,16 @@ class Forward(
     private val online: () -> Boolean = { true },
     private val progress: () -> Unit = {},
     private val marks: Marks? = null,
+    private val blocks: Blocks? = null,
     private val log: (String) -> Unit = {},
 ) {
+    class Blocks(
+        val records: ArtBlocks,
+        val device: () -> String?,
+        val keyOf: (String, String?) -> String,
+        val open: () -> Boolean = { true },
+    )
+
     interface Marks {
         fun begin()
         fun mark(): Any
@@ -35,11 +46,15 @@ class Forward(
         var swept: Any? = null
     }
 
+    private class Listed(val session: Session, val listing: ArtPusher.Listing, val records: Set<Pair<String, Long>>)
+
     private var known: Known? = null
+    private var listed: Listed? = null
     private val sizes = HashMap<String, Int>()
 
     fun run(s: Session, keep: () -> Boolean): ArtPusher.Report {
         val pusher = ArtPusher(s, ::lookup, keep, gate)
+        blocks?.let { b -> b.device()?.let { dev -> unblocked(s, pusher, keep, b, dev)?.let { return it } } }
         val st = device().playback.state
         val now = pusher.run(ArtPusher.order(st).filter { real(it.first) })
         note(s, "current", now)
@@ -52,6 +67,58 @@ class Forward(
         }
         if (!sweeping()) return now
         return sweep(s, pusher, keep)
+    }
+
+    private fun unblocked(s: Session, pusher: ArtPusher, keep: () -> Boolean, b: Blocks, dev: String): ArtPusher.Report? {
+        val todo = b.records.pending(dev)
+        val ids = todo.mapTo(HashSet()) { it.key to it.at }
+        val l = if (todo.isEmpty()) null else listed?.takeIf { it.session === s && it.records.containsAll(ids) }?.listing ?: pusher.listing()?.also { l ->
+            listed = Listed(s, l, ids)
+            val cap = l.cap
+            if (cap != null && known?.session !== s) known = Known(s, device().lib.rev, HashSet(l.names), Sweep.Budget(l.bytes ?: 0, cap))
+        }
+        if (todo.isNotEmpty() && l == null) {
+            if (s.closedReason != null) return ArtPusher.Report(ArtPusher.Stop.CLOSED)
+            log("art del list failed")
+        }
+        if (l != null) {
+            val k = known?.takeIf { it.session === s }
+            for (r in todo) {
+                val names = l.entries.filter { e -> matches(r, e, b) }.map { it.name }.filter { it in l.names }
+                var ok = true
+                for (n in names) {
+                    if (!keep()) return ArtPusher.Report(ArtPusher.Stop.PREEMPTED)
+                    if (!b.open()) return ArtPusher.Report(ArtPusher.Stop.GATE)
+                    val res = s.call(Msg.IMG_DEL, Req.imgDel(n))
+                    log("art del $n -> ${if (res is Session.Result.Failed) "error ${res.error.code}" else res.javaClass.simpleName.lowercase()}")
+                    if (res is Session.Result.Ok) {
+                        k?.names?.remove(n)
+                        l.names.remove(n)
+                    } else {
+                        ok = false
+                    }
+                }
+                if (ok) b.records.applied(r, dev)
+            }
+            b.records.save()
+        }
+        val pushes = b.records.pushes(dev)
+        for (p in pushes) {
+            val r = pusher.run(listOf(p.name to p.mbid))
+            note(s, "unblock", r)
+            if (p.name in r.pushed || p.name in r.stored || p.name in r.missing) b.records.pushed(p, dev)
+            if (r.stop != ArtPusher.Stop.DONE) {
+                b.records.save()
+                return r
+            }
+        }
+        if (pushes.isNotEmpty()) b.records.save()
+        return null
+    }
+
+    private fun matches(r: ArtBlocks.Record, e: ImgEntry, b: Blocks): Boolean {
+        val on = (r.mbid != null && e.mbid?.trim()?.lowercase() == r.mbid) || b.keyOf(e.name, e.mbid) == r.key
+        return on && (r !is ArtBlocks.Reject || Names.fold(e.name) == Names.fold(r.name))
     }
 
     private fun lookup(name: String, mbid: String?, w: Int, h: Int): Art? {

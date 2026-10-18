@@ -19,9 +19,13 @@ import net.seilent.funecomp.art.BitmapCodec
 import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.art.Memo
 import net.seilent.funecomp.art.ThumbWorker
+import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
+import net.seilent.funecomp.artist.Http
+import net.seilent.funecomp.artist.ImageIds
+import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.link.Link
@@ -69,6 +73,10 @@ object Remote : Control {
     private val codec = BitmapCodec { Log.i(TAG, it) }
     private val decoded = Memo<BackdropArt>()
     private val faces = Memo<Found>(FACES)
+    internal var forgetting: () -> Unit = {}
+
+    internal var faced: (ByteArray, (() -> Pair<Double, Double>?) -> Pair<Double, Double>?) -> Pair<Bitmap, Pair<Double, Double>?>? =
+        { src, face -> codec.faced(src, BACKDROP_SIDE, face) }
 
     var device by mutableStateOf(DeviceState())
         private set
@@ -98,6 +106,15 @@ object Remote : Control {
 
     var credits by mutableStateOf<List<ArtCache.Entry>>(emptyList())
         private set
+
+    var blocked by mutableStateOf<List<ArtBlocks.Record>>(emptyList())
+        private set
+
+    private val backdropLock = Any()
+    private val blockExec = Executors.newSingleThreadExecutor { Thread(it, "artblock").apply { isDaemon = true } }
+    private val refreshLock = Any()
+    private var refreshNames = HashSet<String>()
+    private var refreshFor: List<String>? = null
 
     private val lock = Any()
     private val stateLock = Any()
@@ -258,20 +275,94 @@ object Remote : Control {
         thumbs?.onMedia = f
     }
 
-    fun artist(context: Context): ArtistArt = synchronized(lock) {
+    fun artist(context: Context, http: Http = UrlHttp()): ArtistArt = synchronized(lock) {
         thumbs(context)
         artist ?: run {
             val c = context.applicationContext
             val version = c.packageManager.getPackageInfo(c.packageName, 0).versionName ?: "0"
             network(c)
-            ArtistArt(UrlHttp(), codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }).also {
+            val blocks = ArtBlocks(File(c.filesDir, "artblock.tsv")) { Log.w(TAG, it) }
+            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks).also {
                 artist = it
+                blocked = blocks.records()
                 Thread({ credits = it.credits() }, "art-credits").apply { isDaemon = true }.start()
             }
         }
     }
 
+    internal fun resetArtist() = synchronized(lock) {
+        artist = null
+        blocked = emptyList()
+    }
+
     fun sourcesChanged() = art?.want()
+
+    fun reordered() {
+        synchronized(refreshLock) {
+            refreshFor = device.playback.state.artists
+            refreshNames = HashSet(device.playback.state.artists)
+        }
+        trigger++
+        art?.want()
+    }
+
+    private fun refreshing(name: String): Boolean = synchronized(refreshLock) {
+        if (refreshFor != device.playback.state.artists) refreshNames.clear()
+        refreshNames.remove(name)
+    }
+
+    override fun blockArt(e: ArtCache.Entry) {
+        val a = artist ?: return
+        a.blocks.add(ArtBlocks.Block(e.key, e.mbid, e.source, ImageIds.of(e), e.sha, e.name, System.currentTimeMillis()))
+        Log.i(TAG, "art block ${e.name} ${e.source} ${ImageIds.of(e)}")
+        blockedArt(a) { a.forget(e) }
+    }
+
+    override fun wrongArtist(e: ArtCache.Entry) {
+        val a = artist ?: return
+        val by = a.resolvedBy(e)
+        a.blocks.add(ArtBlocks.Reject(e.key, e.mbid, by, e.name, System.currentTimeMillis()))
+        Log.i(TAG, "art wrong artist ${e.name} ${e.mbid} by $by")
+        blockedArt(a) { a.forget(e) }
+    }
+
+    override fun unblock(r: ArtBlocks.Record) {
+        val a = artist ?: return
+        Log.i(TAG, "art unblock ${r.name}")
+        blocked = blocked - r
+        blockExec.execute {
+            forgetting()
+            if (r is ArtBlocks.Reject) {
+                a.forgetName(r.resolvedBy)
+                a.forget("name:${Names.fold(r.name)}")
+                a.forget("name:${Names.fold(r.resolvedBy)}")
+            }
+            a.forget(r.key)
+            a.blocks.remove(r)
+            a.blocks.save()
+            blocked = a.blocks.records()
+            trigger++
+            art?.want()
+        }
+    }
+
+    private fun blockedArt(a: ArtistArt, forget: () -> Unit) {
+        synchronized(backdropLock) {
+            backdrop = null
+            backdropFor = null
+        }
+        blocked = a.blocks.records()
+        trigger++
+        blockExec.execute {
+            forgetting()
+            a.blocks.save()
+            forget()
+            decoded.clear()
+            trigger++
+            art?.want()
+            credits = a.credits()
+        }
+    }
 
     fun session(): Session? = link?.session
 
@@ -297,7 +388,13 @@ object Remote : Control {
         val a = artist(context)
         val forward = Forward(
             { device },
-            a::get,
+            { name, mbid, w, h ->
+                if (refreshing(name)) {
+                    a.refresh(name, mbid, w, h).also { synchronized(backdropLock) { backdropFor = null } }
+                } else {
+                    a.get(name, mbid, w, h)
+                }
+            },
             ::gate,
             { !shown && online && !breaker.open },
             ::libPage,
@@ -309,6 +406,7 @@ object Remote : Control {
                 override fun mark(): Any = a.mark()
                 override fun holds(mark: Any) = mark is ArtistArt.Mark && a.holds(mark)
             },
+            Forward.Blocks(a.blocks, { spec }, a::keyOf) { !Firmwares.sending },
         ) { Log.i(TAG, it) }
         return ArtWorker(
             { l.session },
@@ -348,23 +446,31 @@ object Remote : Control {
     private fun showBackdrop(a: ArtistArt, final: Boolean): Boolean {
         val s = device.playback.state
         if (s.artists == backdropFor && backdrop != null) return true
-        val e = s.artists.withIndex().firstNotNullOfOrNull { (i, n) -> a.cachedEntry(n, s.mbids.getOrNull(i)) }
+        val found = s.artists.withIndex().firstNotNullOfOrNull { (i, n) -> a.cachedEntry(n, s.mbids.getOrNull(i))?.let { i to it } }
+        val e = found?.second
         if (e == null) {
             if (final) {
-                backdropFor = s.artists
-                backdrop = null
+                synchronized(backdropLock) {
+                    backdropFor = s.artists
+                    backdrop = null
+                }
                 decoded.clear()
             }
             return false
         }
+        val full = a.withSha(e)
+        val wrong = a.wrongArtistOffered(full) && s.mbids.getOrNull(found.first).isNullOrBlank()
         val id = "${e.key}@${e.at}"
         val art = decoded.get(id) {
-            a.source(e)?.let { src -> codec.faced(src, BACKDROP_SIDE) { detect -> faces.get(id) { Found(detect()) }?.at } }?.let { (bmp, face) ->
+            a.source(e)?.let { src -> faced(src) { detect -> faces.get(id) { Found(detect()) }?.at } }?.let { (bmp, face) ->
                 BackdropArt(bmp.asImageBitmap(), face?.let { it.first / bmp.width to it.second / bmp.height })
             }
         } ?: return false
-        backdropFor = s.artists
-        backdrop = art
+        synchronized(backdropLock) {
+            if (a.blocked(full)) return false
+            backdropFor = s.artists
+            backdrop = BackdropArt(art.image, art.face, full, wrong)
+        }
         return true
     }
 

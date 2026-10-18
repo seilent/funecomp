@@ -18,8 +18,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.compose.LifecycleResumeEffect
+import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
@@ -118,8 +120,35 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleVi
 
 private class Toggle(val title: String, val on: Boolean, val tag: String, val flip: (Sources) -> Sources)
 
+private val SOURCE_NAMES = mapOf(
+    Wikimedia.SOURCE to "commons",
+    Sources.THE_AUDIO_DB to "theaudiodb",
+    Sources.DISCOGS to "discogs",
+    Sources.FANART_TV to "fanart.tv",
+    Sources.YOUTUBE to "youtube",
+    Sources.DEEZER to "deezer",
+)
+
+fun sourceName(id: String) = SOURCE_NAMES[id] ?: id
+
+fun artSheet(ctx: Ctx, held: BackdropArt) {
+    val e = held.entry ?: return
+    val items = listOf("block image") + if (held.wrongArtist) listOf("wrong artist") else emptyList()
+    val info = listOf(listOfNotNull(sourceName(e.source), e.credit?.author?.takeIf { it.isNotBlank() }).joinToString(", "))
+    ctx.sheet.open(e.name, items, info = info) {
+        if (it == 0) ctx.control.blockArt(e) else ctx.control.wrongArtist(e)
+    }
+}
+
 @Composable
-fun ArtistArtPage(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, credits: List<ArtCache.Entry> = emptyList(), onCredit: (ArtCache.Entry) -> Unit = {}) {
+fun ArtistArtPage(
+    ctx: Ctx,
+    sources: Sources,
+    onSources: (Sources) -> Unit,
+    credits: List<ArtCache.Entry> = emptyList(),
+    onCredit: (ArtCache.Entry) -> Unit = {},
+    blocked: List<ArtBlocks.Record> = emptyList(),
+) {
     val ui = LocalUi.current
     var focus by remember { mutableIntStateOf(0) }
     val toggles = listOf(
@@ -129,7 +158,17 @@ fun ArtistArtPage(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, cred
         Toggle("youtube", sources.youtube, Sources.YOUTUBE) { it.copy(youtube = !it.youtube) },
         Toggle("deezer", sources.deezer, Sources.DEEZER) { it.copy(deezer = !it.deezer) },
     )
-    HubPage("artist art", { ctx.nav.pop() }, count = sources.enabled.sorted().joinToString(" ")) {
+    val above = Tok.detailLabelBaseline - Tok.detailRingTop - Tok.detailRing
+    val orderAt = toggles.size + 1
+    val blockedAt = orderAt + 2 + sources.order.size
+    val creditsAt = blockedAt + if (blocked.isEmpty()) 0 else 1 + blocked.size
+    @Composable
+    fun Label(text: String, i: Int) {
+        Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(above + Tok.detailLabelDrop).dp())) {
+            RoleText(text, Roles.sectionLabel, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(above)))
+        }
+    }
+    HubPage("artist art", { ctx.nav.pop() }, count = sources.ordered.joinToString(" ")) {
         Rows(ui.contentTop, focus = focus) {
             itemsIndexed(toggles, key = { _, t -> t.tag }) { i, t ->
                 SettingsRow(t.title, if (t.on) "on" else "off", Modifier.enter { i }.testTag("art.${t.tag}"), focused = focus == i) {
@@ -149,15 +188,43 @@ fun ArtistArtPage(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, cred
                     }
                 }
             }
-            if (credits.isNotEmpty()) {
-                item(key = "credits") {
-                    val above = Tok.detailLabelBaseline - Tok.detailRingTop - Tok.detailRing
-                    Box(Modifier.enter { toggles.size + 1 }.size(ui.px(ui.w).dp(), ui.px(above + Tok.detailLabelDrop).dp())) {
-                        RoleText("credits", Roles.sectionLabel, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(above)))
+            item(key = "order") { Label("order", orderAt) }
+            item(key = "order.info") { SettingsRow("new lookups and the current artist", "", Modifier.enter { orderAt + 1 }, info = true) }
+            itemsIndexed(sources.order, key = { _, id -> "order $id" }) { j, id ->
+                val i = orderAt + 2 + j
+                val value = when {
+                    id == Wikimedia.SOURCE -> "always"
+                    id == Sources.FANART_TV && sources.fanartTv && sources.fanartTvKey.isBlank() -> "no key"
+                    id in sources.enabled -> "on"
+                    else -> "off"
+                }
+                SettingsRow(sourceName(id), value, Modifier.enter { i }.testTag("art.order.$j"), focused = focus == i) {
+                    focus = i
+                    val moves = buildList {
+                        if (j > 0) add("move up" to -1)
+                        if (j < sources.order.size - 1) add("move down" to 1)
+                    }
+                    ctx.sheet.open(sourceName(id), moves.map { it.first }) { k -> onSources(sources.moved(id, moves[k].second)) }
+                }
+            }
+            if (blocked.isNotEmpty()) {
+                item(key = "blocked") { Label("blocked", blockedAt) }
+                itemsIndexed(blocked, key = { _, r -> "blocked ${r.javaClass.simpleName} ${r.key} ${r.at}" }) { j, r ->
+                    val i = blockedAt + 1 + j
+                    val lines = when (r) {
+                        is ArtBlocks.Block -> listOf(sourceName(r.source))
+                        is ArtBlocks.Reject -> listOf("wrong artist")
+                    }
+                    CreditRow(r.name, lines, Modifier.enter { i }.testTag("art.blocked.$j"), focused = focus == i) {
+                        focus = i
+                        ctx.sheet.open(r.name, listOf("unblock")) { ctx.control.unblock(r) }
                     }
                 }
+            }
+            if (credits.isNotEmpty()) {
+                item(key = "credits") { Label("credits", creditsAt) }
                 itemsIndexed(credits, key = { _, e -> "credit ${e.key}" }) { j, e ->
-                    val i = toggles.size + 2 + j
+                    val i = creditsAt + 1 + j
                     val c = e.credit ?: return@itemsIndexed
                     CreditRow(e.name, listOf(c.author, c.license), Modifier.enter { i }.testTag("art.credit.$j"), focused = focus == i) {
                         focus = i

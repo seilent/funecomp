@@ -3,6 +3,7 @@ package net.seilent.funecomp
 import net.seilent.funecomp.art.ArtWorker
 import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.artist.Art
+import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.link.Session
@@ -104,6 +105,7 @@ class ForwardTest {
         fail: Boolean = false,
         missing: (String) -> Boolean = { false },
         marks: Forward.Marks? = null,
+        blocks: Forward.Blocks? = null,
         log: (String) -> Unit = {},
     ) = Forward(
         { device },
@@ -120,6 +122,7 @@ class ForwardTest {
         { s, offset, rev -> s.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", offset, LIB_PAGE, rev)) },
         breaker,
         marks = marks,
+        blocks = blocks,
         log = log,
     )
 
@@ -293,5 +296,148 @@ class ForwardTest {
         assertEquals(120, sim.device.stored.size)
         assertTrue(sessionsUsed > 1)
         assertEquals(stores().size, stores().toSet().size)
+    }
+
+    private fun blocks(records: ArtBlocks, device: String) = Forward.Blocks(records, { device }, { n, m -> m ?: "name:$n" })
+
+    private fun deleted() = synchronized(lines) { lines.filter { it.startsWith("deleted name=") }.map { it.removePrefix("deleted name=") } }
+
+    private fun lists() = synchronized(lines) { lines.count { "rx IMG_LIST" in it } }
+
+    @Test
+    fun aBlockDeletesTheNameOnceAndTheNextRunLooksItUpAgain() {
+        val (sim, port) = sim(30)
+        val s = session(port)
+        val records = ArtBlocks()
+        forward(Lookups()).run(s) { true }
+        records.add(ArtBlocks.Block("mb-002", "mb-002", "test", "x", "", "Artist 002", 1))
+        val looked = Lookups()
+        val f = forward(looked, missing = { it == "Artist 002" }, blocks = blocks(records, "tcp:A"))
+        val r = f.run(s) { true }
+        assertEquals(ArtPusher.Stop.DONE, r.stop)
+        assertEquals(listOf("Artist 002"), deleted())
+        assertTrue("Artist 002" in looked.names)
+        assertTrue("artist 002" !in sim.device.stored.keys)
+        assertTrue(records.pending("tcp:A").isEmpty())
+        val n = lists()
+        f.run(s) { true }
+        assertEquals(1, deleted().size)
+        assertEquals(n, lists())
+    }
+
+    @Test
+    fun deletesRunWithTheSweepOffAndEveryDeviceGetsItsOwn() {
+        val (simA, portA) = sim(10)
+        val a = session(portA)
+        forward(Lookups()).run(a) { true }
+        val records = ArtBlocks()
+        records.add(ArtBlocks.Block("mb-003", "mb-003", "test", "x", "", "Artist 003", 1))
+        forward(Lookups(), sweeping = { false }, missing = { it == "Artist 003" }, blocks = blocks(records, "tcp:A")).run(a) { true }
+        assertEquals(listOf("Artist 003"), deleted())
+        assertTrue("artist 003" !in simA.device.stored.keys)
+        val (simB, portB) = sim(10)
+        val b = session(portB)
+        forward(Lookups()).run(b) { true }
+        assertTrue("artist 003" in simB.device.stored.keys)
+        forward(Lookups(), missing = { it == "Artist 003" }, blocks = blocks(records, "tcp:B")).run(b) { true }
+        assertEquals(listOf("Artist 003", "Artist 003"), deleted())
+        assertTrue("artist 003" !in simB.device.stored.keys)
+        forward(Lookups(), missing = { it == "Artist 003" }, blocks = blocks(records, "tcp:A")).run(session(portA)) { true }
+        assertEquals(2, deleted().size)
+    }
+
+    @Test
+    fun oneRecordDeletesEveryNameOnItsMbid() {
+        val s0 = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = tmp.newFolder()), Library(listOf(
+            Library.track("Muto", "A", "One", 1, 200_000, mbids = listOf("mb-m")),
+            Library.track("むと", "B", "Two", 1, 200_000, mbids = listOf("mb-m")),
+            Library.track("Other", "C", "Three", 1, 200_000, mbids = listOf("mb-o")),
+        )))
+        sims += s0
+        val s = session(s0.listen(0))
+        forward(Lookups()).run(s) { true }
+        assertEquals(3, s0.device.stored.size)
+        val records = ArtBlocks()
+        records.add(ArtBlocks.Block("name:x", "mb-m", "test", "x", "", "むと", 1))
+        forward(Lookups(), missing = { it != "Other" }, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertEquals(setOf("Muto", "むと"), deleted().toSet())
+        assertEquals(setOf("other"), s0.device.stored.keys)
+        assertTrue(records.pending("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun anUndoPushesTheNameEvenWithAHeldMarkAndAMissIsDone() {
+        val (sim, port) = sim(30)
+        val s = session(port)
+        val records = ArtBlocks()
+        val kept = Kept()
+        forward(Lookups(), marks = kept).run(s) { true }
+        val block = ArtBlocks.Block("mb-020", "mb-020", "test", "x", "", "Artist 020", 1)
+        records.add(block)
+        forward(Lookups(), missing = { it == "Artist 020" }, marks = kept, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertTrue("artist 020" !in sim.device.stored.keys)
+        records.remove(block)
+        val before = stores().count { it == "Artist 020" }
+        forward(Lookups(), marks = kept, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertEquals(before + 1, stores().count { it == "Artist 020" })
+        assertTrue(records.pushes("tcp:A").isEmpty())
+        records.add(ArtBlocks.Block("mb-021", "mb-021", "test", "x", "", "Artist 021", 2))
+        records.remove(records.records().single())
+        forward(Lookups(), missing = { it == "Artist 021" }, marks = kept, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertTrue(records.pushes("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun aBusyDeleteRetriesOnTheSessionListing() {
+        val (sim, port) = sim(30, 1, Options.IMG_CAP, "busy=IMG_DEL:2")
+        val s = session(port)
+        forward(Lookups()).run(s) { true }
+        val records = ArtBlocks()
+        records.add(ArtBlocks.Block("mb-004", "mb-004", "test", "x", "", "Artist 004", 1))
+        val f = forward(Lookups(), missing = { it == "Artist 004" }, blocks = blocks(records, "tcp:A"))
+        val n = lists()
+        repeat(2) {
+            f.run(s) { true }
+            assertEquals(1, records.pending("tcp:A").size)
+        }
+        f.run(s) { true }
+        assertTrue(records.pending("tcp:A").isEmpty())
+        assertTrue("artist 004" !in sim.device.stored.keys)
+        assertEquals(n + 1, lists())
+    }
+
+    @Test
+    fun aFailedListingFallsThroughToThePushes() {
+        val (_, port) = sim(30, 1, Options.IMG_CAP, "busy=IMG_LIST:1")
+        val s = session(port)
+        forward(Lookups(), sweeping = { false }).run(s) { true }
+        val current = device.playback.state.artists.first()
+        val records = ArtBlocks()
+        records.add(ArtBlocks.Block("x", "x", "test", "x", "", "Nobody", 1))
+        val logs = ArrayList<String>()
+        val looked = Lookups()
+        val r = forward(looked, sweeping = { false }, blocks = blocks(records, "tcp:A"), log = { logs += it }).run(s) { true }
+        assertEquals(ArtPusher.Stop.DONE, r.stop)
+        assertTrue("art del list failed" in logs)
+        assertTrue(current in looked.names)
+        assertEquals(1, records.pending("tcp:A").size)
+        forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertTrue(records.pending("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun aRejectDeletesOnlyItsNameOnTheMbid() {
+        val s0 = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = tmp.newFolder()), Library(listOf(
+            Library.track("Muto", "A", "One", 1, 200_000, mbids = listOf("mb-m")),
+            Library.track("むと", "B", "Two", 1, 200_000, mbids = listOf("mb-m")),
+        )))
+        sims += s0
+        val s = session(s0.listen(0))
+        forward(Lookups()).run(s) { true }
+        val records = ArtBlocks()
+        records.add(ArtBlocks.Reject("mb-m", "mb-m", "むと", "むと", 1))
+        forward(Lookups(), missing = { true }, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertEquals(listOf("むと"), deleted())
+        assertEquals(setOf("muto"), s0.device.stored.keys)
     }
 }
