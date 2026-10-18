@@ -88,7 +88,7 @@ class ArtCache(private val dir: File) {
     fun miss(key: String): Miss? {
         val p = load(meta(key))
         if (p.getProperty("state") != "miss") return null
-        return Miss(p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }.toSet(), p.getProperty("keyHash", ""), p.getProperty("cleaned") == "true")
+        return Miss(p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }.toSet(), p.getProperty("keyHash", ""), p.getProperty("cleaned") == CLEANED)
     }
 
     @Synchronized
@@ -138,7 +138,7 @@ class ArtCache(private val dir: File) {
         p.setProperty("at", at.toString())
         p.setProperty("sources", sources.sorted().joinToString(","))
         if (keyHash.isNotEmpty()) p.setProperty("keyHash", keyHash)
-        p.setProperty("cleaned", "true")
+        p.setProperty("cleaned", CLEANED)
         save(meta(key), p)
     }
 
@@ -209,6 +209,7 @@ class ArtCache(private val dir: File) {
 
     companion object {
         private const val KANA = ".kana"
+        private const val CLEANED = "2"
 
         fun sha256(b: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
     }

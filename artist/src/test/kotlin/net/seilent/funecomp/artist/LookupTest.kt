@@ -596,7 +596,7 @@ class LookupTest {
             Triple(q, old(J.parse(Fixtures.text(line.substringAfter('\t')))["artists"].list, q), mb().search(q))
         }
         assertTrue("missing ${http.missing}", http.missing.isEmpty())
-        assertEquals(25, rows.size)
+        assertEquals(31, rows.size)
         assertEquals(
             listOf(Triple("むと", null, "6ac7acd1-2720-4733-9f98-cc5163bdce21"), Triple("アイミョン", null, "908d9ac2-5187-4b9e-b281-601c6afb0791")),
             rows.filter { it.second != it.third },
@@ -618,5 +618,55 @@ class LookupTest {
             assertEquals(q, id, r.second)
             assertEquals(q, id, r.third)
         }
+    }
+
+    @Test
+    fun aChannelSuffixedNameFindsTheArtistByItsBareName() {
+        val dazbee = "10623c33-205c-49f4-b8a0-55a105dd4fa3"
+        sources = Sources(deezer = true)
+        val a = art().get("DAZBEE official", null, 240, 320)
+        assertTrue("missing ${http.missing}", http.missing.isEmpty())
+        assertEquals(dazbee, a!!.mbid)
+        assertEquals("DAZBEE official", a.name)
+        assertNotNull(art().cachedEntry("DAZBEE official", null))
+    }
+
+    @Test
+    fun aMissCleanedUnderTheOlderRulesIsLookedUpOnceMore() {
+        sources = Sources(deezer = true)
+        val name = "DAZBEE official"
+        val key = "name:${Names.fold(name)}"
+        cache.putMiss(key, time.now, sources.enabled)
+        val f = java.io.File(tmp.root, "art").listFiles { x -> x.name.endsWith(".meta") }!!.single()
+        f.writeText(f.readText().lines().map { if (it.startsWith("cleaned")) "cleaned=true" else it }.joinToString("\n"))
+        assertFalse(cache.miss(key)!!.cleaned)
+        assertNotNull(art().get(name, null, 240, 320))
+        assertTrue(http.calls.any { it.contains("query=DAZBEE&") })
+    }
+
+    @Test
+    fun theChannelRuleStripsOnlySuffixedNamesInEveryFixture() {
+        val names = HashSet<String>()
+        for (line in Fixtures.text("urls.tsv").lines().filter { it.endsWith(".json") }) {
+            val url = line.substringBefore('\t')
+            val body = J.parse(Fixtures.text(line.substringAfter('\t')))
+            when {
+                url.startsWith("https://musicbrainz.org/ws/2/artist/?query=") -> {
+                    names += java.net.URLDecoder.decode(url.substringAfter("query=").substringBefore('&'), "UTF-8").replace(Regex("\\\\(.)"), "$1")
+                    for (a in body["artists"].list) {
+                        names += listOfNotNull(a["name"].str, a["sort-name"].str) + a["aliases"].list.mapNotNull { it["name"].str }
+                    }
+                }
+                url.startsWith("https://api.deezer.com/search/artist?q=") -> {
+                    names += java.net.URLDecoder.decode(url.substringAfter("q="), "UTF-8")
+                    names += body["data"].list.mapNotNull { it["name"].str }
+                }
+            }
+        }
+        assertTrue(names.size > 600)
+        val stripped = names.filter { Names.bare(it) != null }
+        assertTrue("Aoi ch." in names)
+        assertEquals(setOf("DAZBEE official", "Fatz Official", "Iris Official"), stripped.toSet())
+        assertEquals(listOf("DAZBEE", "Fatz", "Iris"), stripped.mapNotNull { Names.bare(it) }.sorted())
     }
 }

@@ -20,6 +20,26 @@ class NamesTest {
     }
 
     @Test
+    fun oneTrailingChannelSuffixIsDroppedAfterTheTagTail() {
+        assertEquals(listOf("DAZBEE"), Names.variants("DAZBEE official"))
+        assertEquals(listOf("DAZBEE"), Names.variants("DAZBEE  OFFICIAL "))
+        for (s in listOf("Official", "channel", "Channel", "公式", "チャンネル")) assertEquals(s, listOf("Aoi"), Names.variants("Aoi $s"))
+        assertEquals(listOf("宇多田ヒカル"), Names.variants("宇多田ヒカル/公式"))
+        assertEquals(listOf("ダズビー"), Names.variants("ダズビー\u3000公式"))
+        assertEquals(listOf("ダズビー"), Names.variants("ダズビー\u3000\u3000Official"))
+        assertEquals(listOf("DAZBEE official", "DAZBEE"), Names.variants("DAZBEE official【公式】"))
+        assertEquals(listOf("YOASOBI/ヨルシカ", "YOASOBI", "ヨルシカ"), Names.variants("YOASOBI/ヨルシカ official"))
+        assertEquals(listOf("DAZBEE official"), Names.variants("DAZBEE official official"))
+    }
+
+    @Test
+    fun aChannelWordAsAPrefixOrInnerWordStays() {
+        for (n in listOf("Official髭男dism", "Official", "official DAZBEE", "Ch. Aoi", "Aoi channel X", "Aoi ch.", "Aoi ch", "Aoi Ch.", "Aoi CH.", "Aoich.", "公式", "/公式", "DAZBEEofficial", "Aoi Chan")) {
+            assertEquals(n, emptyList<String>(), Names.variants(n))
+        }
+    }
+
+    @Test
     fun crossJoinsSplitOnlyBetweenNonLatinParts() {
         assertEquals(listOf("花譜", "可不"), Names.variants("花譜×可不"))
         assertEquals(listOf("花譜", "可不"), Names.variants("花譜 x 可不"))

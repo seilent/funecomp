@@ -17,6 +17,7 @@ object Names {
     fun mbid(s: String?): String? = s?.trim()?.lowercase(Locale.ROOT)?.takeIf { uuid.matches(it) }
 
     private val tagTail = Regex("\\s*(【[^【】]*】|\\[[^\\[\\]]*])\\s*$")
+    private val channelTail = Regex("^(.*\\S)([\\s\u3000]+(official|Official|OFFICIAL|channel|Channel|公式|チャンネル)|/公式)$")
 
     fun variants(name: String): List<String> {
         val plain = name.trim()
@@ -27,8 +28,11 @@ object Names {
             if (rest.isEmpty()) break
             base = rest
         }
-        return (listOf(base) + split(base)).map { it.trim() }.filter { it.isNotEmpty() && it != plain }.distinct()
+        val bare = bare(base)
+        return (listOf(base) + listOfNotNull(bare) + split(bare ?: base)).map { it.trim() }.filter { it.isNotEmpty() && it != plain }.distinct()
     }
+
+    fun bare(s: String): String? = channelTail.find(s.trim())?.groupValues?.get(1)?.trim()
 
     private fun latin(c: Char) = c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c in '\u00C0'..'\u024F'
 
