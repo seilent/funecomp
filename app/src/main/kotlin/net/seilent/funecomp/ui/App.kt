@@ -43,10 +43,13 @@ class Shell(
 fun homeItems(device: DeviceState, link: LinkView, sources: Sources): List<HomeItem> {
     val playlists = device.lib.pages[LibKey(Enums.View.playlists, "")]?.total
     val pivots = device.schema.rows.mapNotNull { it.pivot }.distinct()
+    val s = device.playback.state
+    val playing = s.title ?: if (link.phase == Phase.LIVE) songs(s.slots ?: 0L) else statusText(link)
     return listOf(
+        HomeItem("now playing", playing, Page.NowPlaying),
         HomeItem("music", "artists albums songs", Page.Music),
         HomeItem("connection", if (link.phase == Phase.LIVE) link.device ?: device.hello?.board ?: "" else statusText(link), Page.Connection),
-        HomeItem("playlists", if (playlists != null && playlists > 0) (if (playlists == 1L) "1 playlist" else "$playlists playlists") else "now playing", Page.Playlists),
+        HomeItem("playlists", if (playlists != null && playlists > 0) (if (playlists == 1L) "1 playlist" else "$playlists playlists") else if (playlists == 0L) "0 playlists" else "", Page.Playlists),
         HomeItem("artist art", sources.enabled.sorted().joinToString(" "), Page.ArtistArt),
         HomeItem("settings", pivots.joinToString(" "), Page.Settings),
     )
@@ -91,6 +94,7 @@ fun App(
                     }
                 }
             }
+            if (link.phase == Phase.LIVE) libList(device, control, Enums.View.playlists, "")
             BackHandler(shell.sheet.shown || nav.stack.size > 1) {
                 if (shell.sheet.shown) shell.sheet.close() else nav.pop()
             }

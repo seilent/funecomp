@@ -20,6 +20,7 @@ import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.artist.Accounts
@@ -92,6 +93,16 @@ private fun playing(c: SimControl) {
     c.transport(Enums.TransportCmd.seek, seekMs = 61_000)
 }
 
+private fun longTitle(c: SimControl) {
+    val p = c.device.playback
+    c.device = c.device.copy(playback = p.copy(state = p.state.copy(title = "Svefn-g-englar (Live at the Hammersmith Apollo, London, 2001 remaster)")))
+}
+
+private fun emptyQueue(c: SimControl) {
+    val p = c.device.playback
+    c.device = c.device.copy(playback = p.copy(state = p.state.copy(track = null, title = null, artist = null, slots = 0)))
+}
+
 private fun custom(c: SimControl) {
     c.eqSet(Enums.EqOutput.wired, ints = Profile(-64, (0 until 10).map { i ->
         val b = flatBand(i)
@@ -117,6 +128,14 @@ private val CLAMPED = SimControl.HD650.replace("Preamp: -6.1 dB", "Preamp: 1.5 d
 
 val SHOTS = listOf(
     Shot("home", pages = HOME, prep = ::playing),
+    Shot("home-long", pages = HOME, prep = ::longTitle),
+    Shot("home-empty", pages = HOME, prep = ::emptyQueue),
+    Shot("home-down", pages = HOME, prep = ::playing, link = LinkView(Phase.DOWN, "AP80", everLive = true)),
+    Shot("home-end", pages = HOME, prep = ::playing) {
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("home.column").performTouchInput { swipeUp() }
+        rule.mainClock.autoAdvance = false
+    },
     Shot("nowplaying", pages = NP, prep = ::playing),
     Shot("nowplaying-v1", board = "v1", pages = NP, prep = ::playing),
     Shot("nowplaying-last", pages = NP, prep = { it.queueOp(Enums.QueueCmd.playAt, slot = it.device.playback.state.slots!! - 1) }),

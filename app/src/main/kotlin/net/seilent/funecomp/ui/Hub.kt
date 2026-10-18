@@ -9,6 +9,8 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -144,40 +146,46 @@ fun Home(items: List<HomeItem>, onOpen: (Page) -> Unit) {
         enter.animateTo(total, tween(total.toInt(), easing = LinearEasing))
     }
     val measurer = rememberTextMeasurer()
+    val pitch = ui.homePitch
+    val x = ui.px(ui.homeTextX)
+    val margin = Tok.homeFirstBaseline - Tok.homeBarTop
     Box(Modifier.fillMaxSize().testTag("home")) {
-        val pitch = ui.homePitch
-        val x = ui.px(ui.homeTextX)
-        val barX = ui.homeTextX - Tok.focus_barOffset
-        val first = ui.px(Tok.homeFirstBaseline)
-        FocusBar(ui.px(Tok.homeBarH), ui.px(barX), first + ui.px(focus * pitch) - ui.px(Tok.homeBarTop))
-        items.forEachIndexed { i, item ->
-            val baseline = ui.px(Tok.homeFirstBaseline + i * pitch)
-            val on = focus == i
-            val c by animateColorAsState(white(if (on) Roles.homeItem.alpha else Roles.homeItem.dim), tween(Tok.motion_focusAlpha.toInt()), label = "home")
-            val subBaseline = baseline + ui.px(Tok.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size)
-            val top = baseline - ui.px(Tok.homeBarTop)
-            val shiftPx = ui.px(Tok.motion_homeEnterShift)
-            Box(
-                Modifier.fillMaxSize().graphicsLayer {
-                    val p = Decel.transform(((enter.value - Tok.motion_homeEnterStagger * i) / Tok.motion_homeEnter).coerceIn(0f, 1f))
-                    translationX = shiftPx * (1f - p)
-                    alpha = p
-                },
-            ) {
-                val labelW = measurer.measure(shown(item.name, Roles.homeItem.case), textStyle(Roles.homeItem, c)).size.width
-                Pressable(
-                    {
-                        focus = i
-                        onOpen(item.page)
-                    },
-                    Modifier.at(ui.px(barX), top).size((x - ui.px(barX) + labelW).dp(), ui.px(pitch).dp()).testTag("home.${item.name}"),
-                ) {
-                    RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c)
-                    RoleText(item.subtitle, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(Tok.homeSubtitleX), subBaseline - top, ui.px(ui.w - Tok.edge) - x - ui.px(Tok.homeSubtitleX)))
+        Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("home.column")) {
+            val height = maxOf(ui.h, 2 * margin + items.size * pitch)
+            Box(Modifier.size(ui.px(ui.w).dp(), ui.px(height).dp())) {
+                val barX = ui.homeTextX - Tok.focus_barOffset
+                val first = ui.px(Tok.homeFirstBaseline)
+                FocusBar(ui.px(Tok.homeBarH), ui.px(barX), first + ui.px(focus * pitch) - ui.px(Tok.homeBarTop))
+                items.forEachIndexed { i, item ->
+                    val baseline = ui.px(Tok.homeFirstBaseline + i * pitch)
+                    val on = focus == i
+                    val c by animateColorAsState(white(if (on) Roles.homeItem.alpha else Roles.homeItem.dim), tween(Tok.motion_focusAlpha.toInt()), label = "home")
+                    val subBaseline = baseline + ui.px(Tok.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size)
+                    val top = baseline - ui.px(Tok.homeBarTop)
+                    val shiftPx = ui.px(Tok.motion_homeEnterShift)
+                    Box(
+                        Modifier.fillMaxSize().graphicsLayer {
+                            val p = Decel.transform(((enter.value - Tok.motion_homeEnterStagger * i) / Tok.motion_homeEnter).coerceIn(0f, 1f))
+                            translationX = shiftPx * (1f - p)
+                            alpha = p
+                        },
+                    ) {
+                        val labelW = measurer.measure(shown(item.name, Roles.homeItem.case), textStyle(Roles.homeItem, c)).size.width
+                        Pressable(
+                            {
+                                focus = i
+                                onOpen(item.page)
+                            },
+                            Modifier.at(ui.px(barX), top).size((x - ui.px(barX) + labelW).dp(), ui.px(pitch).dp()).testTag("home.${item.name}"),
+                        ) {
+                            RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c)
+                            RoleText(item.subtitle, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(Tok.homeSubtitleX), subBaseline - top, ui.px(ui.w - Tok.edge) - x - ui.px(Tok.homeSubtitleX)))
+                        }
+                    }
                 }
+                RoleText("funecomp", Roles.watermark, Modifier.atBaseline(x, ui.px(height - Tok.edge)))
             }
         }
-        RoleText("funecomp", Roles.watermark, Modifier.atBaseline(x, ui.px(ui.h - Tok.edge)))
     }
 }
 
