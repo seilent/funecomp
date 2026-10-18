@@ -230,7 +230,13 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
 
     fun tick(out: Out) = synchronized(lock) {
         val t = lib.byId[queue.getOrNull(slot)]
-        if (playing && t != null && position() >= t.durationMs) {
+        if (sleepLeftS > 0 && sleepLeft() == 0L) {
+            sleepLeftS = 0
+            mark()
+            playing = false
+            opts.log("sleep expired")
+            send(out, Msg.STATE, state())
+        } else if (playing && t != null && position() >= t.durationMs) {
             advance(1, auto = true)
             send(out, Msg.STATE, state())
         } else if (playing && now() - lastStateAt >= Proto.stateIntervalMs) {
@@ -274,7 +280,6 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private fun live(r: Row): Row = when (r.key) {
         "about" -> r.copy(words = listOf("sim.${board.name}"))
         "rescan" -> r.copy(words = listOf("${lib.tracks.size} SONGS"))
-        "sleep" -> r.copy(words = if (sleepLeft() > 0) listOf("${(sleepLeft() + 59) / 60} MIN LEFT") else r.words)
         "dateTime" -> r.copy(words = listOf(java.time.LocalDateTime.now().withNano(0).toString().replace('T', ' ').dropLast(3)))
         else -> r
     }

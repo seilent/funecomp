@@ -1,6 +1,7 @@
 package net.seilent.funecomp
 
 import android.graphics.BitmapFactory
+import android.os.SystemClock
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.requiredSize
@@ -106,6 +107,19 @@ private fun playing(c: SimControl) {
     c.transport(Enums.TransportCmd.shuffle, on = true)
     c.transport(Enums.TransportCmd.repeat, repeat = Enums.Repeat.all)
     c.transport(Enums.TransportCmd.seek, seekMs = 61_000)
+}
+
+private fun sleep(minutes: Long, agoMs: Long): (SimControl) -> Unit = { c ->
+    c.draft(Enums.DraftKind.sleep, minutes = minutes)
+    val p = c.device.playback
+    c.device = c.device.copy(playback = p.copy(receivedAt = SystemClock.elapsedRealtime() - agoMs))
+}
+
+private fun power(s: Shots) {
+    for (p in listOf("library", "display", "power")) {
+        s.rule.onNodeWithTag("pivot.$p").performClick()
+        s.settle(1000)
+    }
 }
 
 private fun favorite(c: SimControl) {
@@ -244,6 +258,18 @@ val SHOTS = listOf(
             settle(1000)
         }
     },
+    Shot("settings-sleep", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) { power(this) },
+    Shot("settings-sleep-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) { power(this) },
+    Shot("settings-sleep-edit", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) {
+        power(this)
+        rule.onNodeWithTag("set.sleep").performClick()
+    },
+    Shot("settings-sleep-edit-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) {
+        power(this)
+        rule.onNodeWithTag("set.sleep").performClick()
+    },
+    Shot("settings-sleep-wide", pages = HOME + Page.Settings, prep = sleep(120, 0)) { power(this) },
+    Shot("settings-sleep-wide-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(120, 0)) { power(this) },
     Shot("settings-system", pages = HOME + Page.Settings) {
         for (p in listOf("library", "display", "power", "system")) {
             rule.onNodeWithTag("pivot.$p").performClick()

@@ -1,5 +1,6 @@
 package net.seilent.funecomp.ui
 
+import android.os.SystemClock
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Row as HRow
 import androidx.compose.foundation.layout.IntrinsicSize
@@ -22,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -34,13 +36,18 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import kotlinx.coroutines.delay
+import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Rows as RowRules
+import net.seilent.funecomp.state.SleepLeft
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.pow
@@ -50,6 +57,7 @@ private const val BALANCE_KEY = "balance"
 private const val ACCENT_KEY = "accentHue"
 private const val EQ_KEY = "eq"
 private const val CLOCK_KEY = "dateTime"
+private const val SLEEP_KEY = "sleep"
 private const val HALF_DB = 0.5f
 private const val GRID_CENTER = 34
 private const val GRID_STEPS_PER_OCTAVE = 6f
@@ -66,12 +74,34 @@ fun Row.word(v: String?): String {
     if (kind == Enums.RowKind.steps) {
         val n = v.toIntOrNull()
         if (n != null) {
-            val near = values.mapNotNull { it.toIntOrNull() }.minByOrNull { abs(it - n) }
-            val j = values.indexOf(near?.toString())
+            val j = values.indexOf(nearest(n)?.toString())
             if (j in words.indices) return words[j]
         }
     }
     return v
+}
+
+fun Row.nearest(n: Int): Int? = values.mapNotNull { it.toIntOrNull() }.minByOrNull { abs(it - n) }
+
+fun sleepText(row: Row, minutes: Int): String = if (minutes > 0) "$minutes min left" else row.display(null)
+
+fun sleepStart(row: Row, minutes: Int): String? = row.nearest(minutes)?.toString()
+
+@Composable
+fun sleepMinutes(device: DeviceState): Int {
+    var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(device.playback.receivedAt, device.playback.state.sleepLeftS) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                now = SystemClock.elapsedRealtime()
+                val left = device.sleepLeftMs(now)
+                if (left <= 0) break
+                delay(SleepLeft.nextDropMs(left) + 1)
+            }
+        }
+    }
+    return SleepLeft.minutes(device.sleepLeftMs(now))
 }
 
 fun balanceText(v: Int): String {
@@ -117,7 +147,9 @@ fun Row.step(v: String?, dir: Int): String? {
 fun draftKind(key: String?): Int? =
     if (key == CLOCK_KEY) Enums.DraftKind.clock else Enums.DraftKind.names.entries.firstOrNull { it.value == key }?.key
 
-private class Edit(val key: String, val original: String?, val draft: Boolean)
+private class Edit(val key: String, val original: String?, val draft: Boolean) {
+    var stepped = false
+}
 
 fun Row.actionCmd(): Int? = Enums.ActionCmd.names.entries.firstOrNull { it.value == key }?.key
 
@@ -146,9 +178,13 @@ fun SettingsPage(ctx: Ctx) {
     fun confirm() {
         val e = edit ?: return
         val v = editValue
-        if (e.draft && v != null && v != e.original) {
+        if (e.draft && v != null) {
             val kind = draftKind(e.key)
-            if (kind == Enums.DraftKind.sleep) ctx.control.draft(kind, minutes = v.toLongOrNull()) else if (kind != null) ctx.control.draft(kind, value = v)
+            if (kind == Enums.DraftKind.sleep) {
+                if (e.stepped) ctx.control.draft(kind, minutes = v.toLongOrNull())
+            } else if (kind != null && v != e.original) {
+                ctx.control.draft(kind, value = v)
+            }
         }
         edit = null
     }
@@ -176,9 +212,15 @@ fun SettingsPage(ctx: Ctx) {
                     val editing = edit?.key == key
                     val v = if (editing) editValue else values[key]
                     val eqRow = key == EQ_KEY && eqOn
+                    val sleepRow = key == SLEEP_KEY && r.kind == Enums.RowKind.draft
+                    val minutes = if (sleepRow) sleepMinutes(ctx.device) else 0
                     SettingsRow(
                         r.label ?: key,
-                        if (eqRow) profileName(ctx.device, activeEqOutput(ctx.device)) else r.display(v),
+                        when {
+                            eqRow -> profileName(ctx.device, activeEqOutput(ctx.device))
+                            sleepRow && !editing -> sleepText(r, minutes)
+                            else -> r.display(v)
+                        },
                         Modifier.enter { i }.testTag("set.$key"),
                         focused = focus == i,
                         editing = editing,
@@ -195,6 +237,7 @@ fun SettingsPage(ctx: Ctx) {
                                 val next = r.step(editValue, if (x < 0.5f) -1 else 1)
                                 if (next != editValue) {
                                     editValue = next
+                                    edit?.stepped = true
                                     if (r.kind != Enums.RowKind.draft && next != null) ctx.control.set(key, next)
                                 }
                             }
@@ -205,8 +248,9 @@ fun SettingsPage(ctx: Ctx) {
                             }
                             r.kind == Enums.RowKind.action -> r.actionCmd()?.let { ctx.control.action(it) }
                             r.editable() -> {
-                                edit = Edit(key, values[key] ?: r.values.firstOrNull(), r.kind == Enums.RowKind.draft)
-                                editValue = values[key] ?: r.values.firstOrNull()
+                                val start = if (sleepRow) sleepStart(r, minutes) else values[key] ?: r.values.firstOrNull()
+                                edit = Edit(key, start, r.kind == Enums.RowKind.draft)
+                                editValue = start
                             }
                         }
                     }

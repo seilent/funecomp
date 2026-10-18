@@ -77,6 +77,8 @@ data class DeviceState(
 
     fun positionMs(now: Long): Long = Position.at(playback, rttMs, now)
 
+    fun sleepLeftMs(now: Long): Long = SleepLeft.leftMs(playback, rttMs, now)
+
     fun reduce(type: Int, body: Node, now: Long): DeviceState = when (type) {
         Msg.STATE -> withState(State.from(body), now)
         Msg.SCHEMA -> withSchema(Schema.from(body))

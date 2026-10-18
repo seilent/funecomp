@@ -187,6 +187,27 @@ class DeviceTest {
     }
 
     @Test
+    fun sleepTimerCountsDownInStateAndPausesAtExpiry() {
+        val d = device()
+        ok(req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.play)))
+        ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, minutes = 30)))
+        val greet = Sink()
+        d.greet(greet)
+        val row = greet.of(Msg.SCHEMA).flatMap { Schema.from(it).rows }.single { it.key == "sleep" }
+        assertEquals(listOf("OFF", "15 MIN", "30 MIN", "45 MIN", "60 MIN", "90 MIN", "120 MIN"), row.words)
+        t += 61_000
+        assertEquals(1739L, State.from(Node.decode("STATE", d.state())).sleepLeftS)
+        t = 1000L + 1_800_000
+        val out = Sink()
+        d.tick(out)
+        d.tick(out)
+        val states = out.of(Msg.STATE).map { State.from(it) }
+        assertEquals(1, states.size)
+        assertEquals(0L, states[0].sleepLeftS)
+        assertEquals(false, states[0].playing)
+    }
+
+    @Test
     fun eqSetKeysAndRanges() {
         val d = device()
         assertEquals(Err.badValue, fail(req(d, Msg.EQ_SET, Req.eqSet(Enums.EqOutput.wired, "/etc/passwd"))).code)

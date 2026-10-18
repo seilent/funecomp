@@ -82,6 +82,8 @@ class SimControl(
 
     private fun req(type: Int, payload: ByteArray): Answer = call(type, payload).also { after(it) }
 
+    fun tick() = sim.tick(out)
+
     override fun transport(cmd: Int, seekMs: Long?, on: Boolean?, repeat: Int?) {
         req(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat))
     }
