@@ -33,11 +33,9 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.runtime.key
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -123,10 +121,8 @@ private fun BackdropLayer(art: BackdropArt, alpha: Float) {
 @Composable
 fun BackRing(onBack: () -> Unit) {
     val ui = LocalUi.current
-    val b = LocalBleed.current
     Box(
-        Modifier.size(ui.px(Tok.backRingX + Tok.backRing).dp(), ui.px(Tok.backRingY + Tok.backRing).dp())
-            .drawWithContent { clipRect(-b.left.toFloat(), -b.top.toFloat(), size.width, size.height) { this@drawWithContent.drawContent() } }
+        Modifier.size(ui.px(Tok.backRingX + Tok.backRing).dp(), ui.px(Tok.backRingY + Tok.backRing).dp()).clipToBounds()
             .press({ onBack() }).testTag("back"),
     ) {
         Box(Modifier.at(ui.px(Tok.backRingX), ui.px(Tok.backRingY), unbounded = true)) { Ring(Tok.backRing, GlyphName.BACK, true) }
