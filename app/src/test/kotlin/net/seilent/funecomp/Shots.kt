@@ -219,6 +219,12 @@ val SHOTS = listOf(
             settle(1000)
         }
     },
+    Shot("settings-display-v1", board = "v1", pages = HOME + Page.Settings) {
+        for (p in listOf("library", "display")) {
+            rule.onNodeWithTag("pivot.$p").performClick()
+            settle(1000)
+        }
+    },
     Shot("settings-artistphoto-v1", board = "v1", pages = HOME + Page.Settings) {
         for (p in listOf("library", "display")) {
             rule.onNodeWithTag("pivot.$p").performClick()

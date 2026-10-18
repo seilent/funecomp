@@ -21,6 +21,7 @@ display	brightness	steps	BRIGHTNESS	10,15,20,25,30,35,40,45,50,55,60,65,70,75,80
 display	accentHue	range	ACCENT	-	-	0,350,10	-
 display	scale	info	SCALE	-	1.5	-	readOnly
 display	saverSeconds	steps	SAVER	10,15,30,60,120,300	10 S,15 S,30 S,1 MIN,2 MIN,5 MIN	-	-
+display	saverLyrics	toggle	SAVER LYRICS	off,on	OFF,ON	-	-
 display	clock	choice	CLOCK	24h,12h,off	24H,12H,OFF	-	-
 display	batteryPercent	toggle	BATTERY PERCENT	off,on	OFF,ON	-	-
 display	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-

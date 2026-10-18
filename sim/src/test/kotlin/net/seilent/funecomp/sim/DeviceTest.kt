@@ -100,6 +100,31 @@ class DeviceTest {
     }
 
     @Test
+    fun saverLyricsRowBelowSaverOnBothBoards() {
+        for (b in listOf("ap80", "v1")) {
+            val d = device(b)
+            val keys = d.rows.map { it.key }
+            assertEquals(keys.indexOf("saverSeconds") + 1, keys.indexOf("saverLyrics"))
+            val row = d.rows.first { it.key == "saverLyrics" }
+            assertEquals("display", row.pivot)
+            assertEquals(Enums.RowKind.toggle, row.kind)
+            assertEquals("SAVER LYRICS", row.label)
+            assertEquals(listOf("off", "on"), row.values)
+            assertEquals(listOf("OFF", "ON"), row.words)
+            assertTrue(row.flags.isEmpty())
+            assertEquals(if (b == "v1") 38 else 40, d.rows.size)
+            val out = Sink()
+            d.greet(out)
+            assertTrue("saverLyrics=off" in Settings.from(out.of(Msg.SETTINGS).single()).text.lines())
+            val set = Sink()
+            val r = SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverLyrics=on\n"), set))))
+            assertEquals(listOf("saverLyrics"), r.kept)
+            assertTrue("saverLyrics=on" in Settings.from(set.of(Msg.SETTINGS).single()).text.lines())
+            assertEquals(listOf("saverLyrics"), fail(req(d, Msg.SET, Req.set("saverLyrics=yes\n"))).refused)
+        }
+    }
+
+    @Test
     fun sizeAndWifiOnlyOnTheV1() {
         val v1 = device("v1")
         val ap80 = device("ap80")

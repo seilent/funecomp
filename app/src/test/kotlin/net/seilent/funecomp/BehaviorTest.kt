@@ -345,6 +345,7 @@ class BehaviorTest {
             settle(1000)
         }
         row("set.brightness", "BRIGHTNESS", brightness)
+        row("set.saverLyrics", "SAVER LYRICS", "OFF")
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.artistPhoto"))
         rule.mainClock.autoAdvance = false

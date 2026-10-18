@@ -73,7 +73,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         "usbMode" to "storage", "btCodec" to "auto", "btCodecHeadphones" to "auto", "digitalFilter" to "0",
         "balance" to "0", "maxVolume" to "100", "powerOnVolume" to "0", "replaygain" to "off",
         "quickplay" to "on", "resume" to "position", "autoNowPlaying" to "off", "playKey" to "nowPlaying",
-        "dre" to "off", "crossfade" to "0", "crossfeed" to "off", "artistPhoto" to "on",
+        "dre" to "off", "crossfade" to "0", "crossfeed" to "off", "artistPhoto" to "on", "saverLyrics" to "off",
         "brightness" to if (board.name == "v1") "35" else "55",
     ).apply {
         if (board.name == "v1") put("size", "standard")
