@@ -407,6 +407,37 @@ class BackgroundTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun theFirstVolumeKeyOnlyShowsTheOverlay() {
+        val spec = sim()
+        app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE).edit().putString(Main.EXTRA_LINK, spec).commit()
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(spec)).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.hello != null }
+        val a = Robolectric.buildActivity(Main::class.java, Intent(app, Main::class.java)).create().start().resume().visible()
+        val main = a.get()
+        fun volumes() = logs.count { " rx VOLUME " in it }
+        fun key(repeat: Int = 0) = main.onKeyDown(android.view.KeyEvent.KEYCODE_VOLUME_UP, android.view.KeyEvent(0, 0, android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_VOLUME_UP, repeat))
+        fun quiet() {
+            Thread.sleep(300)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        assertTrue(key())
+        quiet()
+        assertEquals(0, volumes())
+        key()
+        waitFor { volumes() == 1 }
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        key()
+        quiet()
+        assertEquals(1, volumes())
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        key(repeat = 1)
+        waitFor { volumes() == 2 }
+        a.pause().stop().destroy()
+        c.destroy()
+    }
+
+    @Test
     fun startGate() {
         assertTrue(Main.opens(Intent(Intent.ACTION_MAIN), debuggable = false))
         assertTrue(Main.opens(Intent(Main.ACTION_OPEN), debuggable = false))

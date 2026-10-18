@@ -255,7 +255,7 @@ class Main : ComponentActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val detents = detents(keyCode) ?: return super.onKeyDown(keyCode, event)
-        Remote.volume(detents)
+        if (shell.overlay.visible || event.repeatCount > 0) Remote.volume(detents)
         shell.overlay.show()
         return true
     }

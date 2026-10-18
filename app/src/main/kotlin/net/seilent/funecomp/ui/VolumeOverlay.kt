@@ -1,5 +1,6 @@
 package net.seilent.funecomp.ui
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
@@ -36,7 +37,12 @@ class Overlay {
     var shows by mutableIntStateOf(0)
         private set
 
+    private var until = 0L
+
+    val visible get() = SystemClock.uptimeMillis() < until
+
     fun show() {
+        until = SystemClock.uptimeMillis() + Tok.motion_volumeHide.toLong() + Tok.motion_volumeFade.toLong()
         shows++
     }
 }
