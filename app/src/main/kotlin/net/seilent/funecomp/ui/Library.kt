@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import kotlin.math.roundToInt
+import kotlin.random.Random
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.proto.LibRow
 import net.seilent.funecomp.proto.gen.Enums
@@ -117,9 +118,24 @@ fun Pane(ctx: Ctx, view: Int, parent: String, top: Float? = null, x: Float = 0f,
     }
 }
 
+internal var startRandom: Random = Random.Default
+
+fun sourceStart(count: Long?, shuffle: Boolean, random: Random = startRandom): Long? = when {
+    !shuffle -> 0L
+    count == null -> null
+    count > 0 -> random.nextLong(count)
+    else -> 0L
+}
+
 private fun playAndShow(ctx: Ctx, view: Int, parent: String, start: Long, shuffle: Boolean = false) {
     ctx.control.play(view, parent, start, shuffle)
     ctx.nav.popTo(Page.NowPlaying)
+}
+
+private fun playSource(ctx: Ctx, view: Int, parent: String, count: Long?, shuffle: Boolean = false) {
+    val start = sourceStart(count, shuffle || ctx.device.playback.state.shuffle == true)
+    if (start == null) ctx.control.log("start 0 (no count)")
+    playAndShow(ctx, view, parent, start ?: 0L, shuffle)
 }
 
 private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
@@ -134,18 +150,18 @@ private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
     }
 }
 
-private fun groupSheet(ctx: Ctx, title: String, view: Int, parent: String) {
-    ctx.sheet.open(title, listOf("play", "shuffle")) { playAndShow(ctx, view, parent, 0, shuffle = it == 1) }
+private fun groupSheet(ctx: Ctx, title: String, view: Int, parent: String, count: Long?) {
+    ctx.sheet.open(title, listOf("play", "shuffle")) { playSource(ctx, view, parent, count, shuffle = it == 1) }
 }
 
 private fun musicRow(ctx: Ctx, view: Int, i: Int, r: LibRow): RowSpec {
     val name = r.name ?: ""
     return when (view) {
-        Enums.View.artists -> RowSpec(name, songs(r.count ?: 0), countLine = true, tap = { ctx.nav.push(Page.Artist(r.key ?: name)) }) {
-            groupSheet(ctx, name, Enums.View.artistAlbums, r.key ?: name)
+        Enums.View.artists -> RowSpec(name, songs(r.count ?: 0), countLine = true, tap = { ctx.nav.push(Page.Artist(r.key ?: name, r.count)) }) {
+            groupSheet(ctx, name, Enums.View.artistAlbums, r.key ?: name, r.count)
         }
         Enums.View.albums -> RowSpec(name, songs(r.count ?: 0), countLine = true, tap = { ctx.nav.push(Page.Album(r.key ?: "", name, "")) }) {
-            groupSheet(ctx, name, Enums.View.albumTracks, r.key ?: "")
+            groupSheet(ctx, name, Enums.View.albumTracks, r.key ?: "", r.count)
         }
         else -> {
             val play = { playAndShow(ctx, view, "", i.toLong()) }
@@ -172,7 +188,7 @@ private fun folderRow(ctx: Ctx, folder: String, i: Int, r: LibRow, list: LibList
     val name = r.name ?: ""
     if (!r.isTrack()) {
         return RowSpec(name, songs(r.count ?: 0), bold = true, tap = { open(r.key ?: name) }) {
-            groupSheet(ctx, name, Enums.View.folders, r.key ?: name)
+            groupSheet(ctx, name, Enums.View.folders, r.key ?: name, r.count)
         }
     }
     val song = i - list.folderCount()
@@ -198,8 +214,8 @@ fun PlaylistRows(ctx: Ctx, top: Float? = null) {
         item {
             ListRow("favorites", Modifier.enter { 1 }.testTag("row.favorites"), songs(fav?.total ?: 0), bold = true, ring = true, focused = focus == 1, onTap = {
                 focus = 1
-                if ((fav?.total ?: 0L) > 0L) playAndShow(ctx, Enums.View.favorites, "", 0)
-            }, onLong = { groupSheet(ctx, "favorites", Enums.View.favorites, "") })
+                if ((fav?.total ?: 0L) > 0L) playSource(ctx, Enums.View.favorites, "", fav?.total)
+            }, onLong = { groupSheet(ctx, "favorites", Enums.View.favorites, "", fav?.total) })
         }
         val n = (list?.total ?: 0L).toInt()
         items(n) { i ->
@@ -207,8 +223,8 @@ fun PlaylistRows(ctx: Ctx, top: Float? = null) {
             val name = r?.name ?: ""
             ListRow(name, Modifier.enter { i + 2 - state.firstVisibleItemIndex }.testTag("row.playlist.$i"), songs(r?.count ?: 0), bold = true, ring = true, focused = focus == i + 2, onTap = {
                 focus = i + 2
-                if (r != null) playAndShow(ctx, Enums.View.playlists, r.key ?: name, 0)
-            }, onLong = { if (r != null) groupSheet(ctx, name, Enums.View.playlists, r.key ?: name) })
+                if (r != null) playSource(ctx, Enums.View.playlists, r.key ?: name, r.count)
+            }, onLong = { if (r != null) groupSheet(ctx, name, Enums.View.playlists, r.key ?: name, r.count) })
         }
     }
 }
@@ -235,7 +251,7 @@ fun ArtistDetail(ctx: Ctx, page: Page.Artist) {
                     .size(ui.px(Tok.detailRing + Tok.detailRingGap).dp())
                     .press({
                         ring = i
-                        playAndShow(ctx, Enums.View.artistAlbums, page.name, 0, shuffle)
+                        playSource(ctx, Enums.View.artistAlbums, page.name, page.songs ?: ctx.device.lib.pages[LibKey(Enums.View.artists, "")]?.rows?.values?.firstOrNull { (it.key ?: it.name) == page.name }?.count, shuffle)
                     }) { down = it }.testTag(if (shuffle) "artist.shuffle" else "artist.play"),
             ) {
                 Box(Modifier.at(ui.px(Tok.detailRingGap) / 2, ui.px(Tok.detailRingGap) / 2)) { Ring(Tok.detailRing, g, ring == i, pressed = down) }
@@ -245,7 +261,7 @@ fun ArtistDetail(ctx: Ctx, page: Page.Artist) {
         Pane(ctx, Enums.View.artistAlbums, page.name, ui.detailRowsTop, ui.detailListX) { _, r, _ ->
             val name = r.name ?: ""
             RowSpec(name, songs(r.count ?: 0), countLine = true, tap = { ctx.nav.push(Page.Album(r.key ?: "", name, page.name)) }) {
-                groupSheet(ctx, name, Enums.View.albumTracks, r.key ?: "")
+                groupSheet(ctx, name, Enums.View.albumTracks, r.key ?: "", r.count)
             }
         }
     }

@@ -248,6 +248,10 @@ object Remote : Control {
 
     override fun art(track: Long, px: Int): ImageBitmap? = thumbs?.image(track, px)
 
+    override fun log(message: String) {
+        Log.i(TAG, message)
+    }
+
     fun mediaArt(track: Long, px: Int): Bitmap? = thumbs?.media(track, px)
 
     fun onMediaArt(f: (() -> Unit)?) {
@@ -409,8 +413,11 @@ object Remote : Control {
         send(Msg.LIB_GET, Req.libGet(view, parent, offset, LIB_PAGE, rev), key, fail = { forget(key) })
     }
 
-    override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>) =
-        send(Msg.PLAY, Req.play(view, parent, if (tracks.isEmpty()) device.lib.rev else null, start, shuffle, tracks), "play view=$view parent=$parent start=$start")
+    override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>) {
+        send(Msg.PLAY, Req.play(view, parent, if (tracks.isEmpty()) device.lib.rev else null, start, shuffle, tracks), "play view=$view parent=$parent start=$start", failed = { code ->
+            if (code == Err.badValue && start > 0 && tracks.isEmpty()) play(view, parent, 0, shuffle, tracks)
+        })
+    }
 
     override fun queuePage(offset: Long) {
         val key = "queue $offset ${device.queue.rev}"
@@ -440,7 +447,7 @@ object Remote : Control {
 
     private fun forget(key: String) = synchronized(asked) { asked.remove(key) }
 
-    private fun send(type: Int, payload: ByteArray, what: String, ok: ((Node) -> Unit)? = null, fail: (() -> Unit)? = null) {
+    private fun send(type: Int, payload: ByteArray, what: String, ok: ((Node) -> Unit)? = null, fail: (() -> Unit)? = null, failed: ((Int) -> Unit)? = null) {
         val s = link?.session
         if (s == null) {
             Log.i(TAG, "$what: no session")
@@ -455,6 +462,7 @@ object Remote : Control {
             }
             Log.i(TAG, "$what -> $out")
             if (r is Session.Result.Ok) ok?.invoke(r.body) else fail?.invoke()
+            if (r is Session.Result.Failed) failed?.invoke(r.error.code)
         }
     }
 

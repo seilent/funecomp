@@ -57,6 +57,7 @@ interface Control {
     fun lyrics(on: Boolean) {}
     fun wantArt(slot: Int, track: Long, px: Int, album: String?) {}
     fun art(track: Long, px: Int): ImageBitmap? = null
+    fun log(message: String) {}
     fun firmwareCheck() {}
     fun firmwareDownload() {}
     fun firmwareCancel() {}

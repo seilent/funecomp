@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
 import net.seilent.funecomp.art.Thumbs
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.sim.Battery
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Options
@@ -391,6 +392,19 @@ class BackgroundTest {
 
     private fun title(): String? =
         shadowOf(app.getSystemService(NotificationManager::class.java)).getNotification(1)?.extras?.getCharSequence("android.title")?.toString()
+
+    @Test
+    fun aWholeSourcePlayPastTheEndIsSentAgainFromTheFirstTrack() {
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.lib.rev != null && Remote.device.playback.state.queueRev != null }
+        val rev = Remote.device.playback.state.queueRev!!
+        val songs = net.seilent.funecomp.sim.Library.synthetic().tracksOf(Enums.View.artistAlbums, "Utada Hikaru")!!.size.toLong()
+        Remote.play(Enums.View.artistAlbums, "Utada Hikaru", songs, false, emptyList())
+        waitFor { Remote.device.playback.state.queueRev != rev }
+        assertEquals(2, logs.count { " rx PLAY " in it })
+        assertEquals("Automatic", Remote.device.playback.state.title)
+        c.destroy()
+    }
 
     @Test
     fun startGate() {

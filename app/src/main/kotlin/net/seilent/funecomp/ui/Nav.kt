@@ -37,7 +37,7 @@ sealed interface Page {
     data object Scrobbling : Page
     data object Firmware : Page
     data object Lyrics : Page
-    data class Artist(val name: String) : Page
+    data class Artist(val name: String, val songs: Long? = null) : Page
     data class Album(val key: String, val title: String, val artist: String) : Page
     data class Eq(val output: Int) : Page
 }
