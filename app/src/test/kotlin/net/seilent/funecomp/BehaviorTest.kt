@@ -37,7 +37,7 @@ import net.seilent.funecomp.ui.statusText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
-import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -343,7 +343,7 @@ class BehaviorTest {
     }
 
     @Test
-    fun favoriteToggleDropsLibPagesAndReloadsTheOpenList() {
+    fun favoriteToggleDropsListPagesAndReloadsTheOpenList() {
         val (c, _) = start(listOf(Page.Home, Page.Playlists))
         val fav = LibKey(Enums.View.favorites, "")
         assertEquals(0L, c.device.lib.pages.getValue(fav).total)
@@ -353,7 +353,7 @@ class BehaviorTest {
         val gets = c.sent.count { it == "LIB_GET" }
         c.action(Enums.ActionCmd.favorite, song)
         assertNotEquals(rev, c.device.lib.rev)
-        assertNull(c.device.lib.pages[LibKey(Enums.View.songs, "")])
+        assertNotNull(c.device.lib.pages[LibKey(Enums.View.songs, "")])
         settle(500)
         assertTrue(c.sent.count { it == "LIB_GET" } > gets)
         assertEquals(1L, c.device.lib.pages.getValue(fav).total)

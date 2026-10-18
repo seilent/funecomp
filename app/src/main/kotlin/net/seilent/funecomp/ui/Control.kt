@@ -7,6 +7,7 @@ import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.proto.Profile
+import net.seilent.funecomp.proto.State
 
 enum class Phase { NONE, CONNECTING, LIVE, DOWN, STOPPED }
 
@@ -42,7 +43,8 @@ interface Control {
     fun set(key: String, value: String)
     fun draft(kind: Int, value: String? = null, minutes: Long? = null, unixS: Long? = null, zoneS: Int? = null)
     fun eqSet(output: Int, key: String? = null, ints: Profile? = null)
-    fun action(cmd: Int, track: Long? = null)
+    fun action(cmd: Int, track: Long? = null, done: (Int?, String?) -> Unit = { _, _ -> })
+    fun favorite(s: State, toast: (String, String) -> Unit) {}
     fun bonded(): List<Bonded> = emptyList()
     fun choose(address: String) {}
     fun askPermission() {}

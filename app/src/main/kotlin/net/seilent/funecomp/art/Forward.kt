@@ -42,7 +42,7 @@ class Forward(
         fun holds(mark: Any): Boolean
     }
 
-    private class Known(val session: Session, val libRev: Long?, val names: MutableSet<String>, val budget: Sweep.Budget) {
+    private class Known(val session: Session, val rev: Long?, val names: MutableSet<String>, val budget: Sweep.Budget) {
         var swept: Any? = null
     }
 
@@ -75,7 +75,7 @@ class Forward(
         val l = if (todo.isEmpty()) null else listed?.takeIf { it.session === s && it.records.containsAll(ids) }?.listing ?: pusher.listing()?.also { l ->
             listed = Listed(s, l, ids)
             val cap = l.cap
-            if (cap != null && known?.session !== s) known = Known(s, device().lib.rev, HashSet(l.names), Sweep.Budget(l.bytes ?: 0, cap))
+            if (cap != null && known?.session !== s) known = Known(s, device().lib.dataRev, HashSet(l.names), Sweep.Budget(l.bytes ?: 0, cap))
         }
         if (todo.isNotEmpty() && l == null) {
             if (s.closedReason != null) return ArtPusher.Report(ArtPusher.Stop.CLOSED)
@@ -182,8 +182,8 @@ class Forward(
     private fun sweep(s: Session, pusher: ArtPusher, keep: () -> Boolean): ArtPusher.Report {
         var restarts = 0
         while (true) {
-            val rev = device().lib.rev
-            val k = known?.takeIf { it.session === s && it.libRev == rev } ?: run {
+            val rev = device().lib.dataRev
+            val k = known?.takeIf { it.session === s && it.rev == rev } ?: run {
                 val l = pusher.listing() ?: return ArtPusher.Report(if (s.closedReason != null) ArtPusher.Stop.CLOSED else ArtPusher.Stop.PREEMPTED)
                 log("art list names=${l.names.size} bytes=${l.bytes} cap=${l.cap}")
                 val cap = l.cap ?: return ArtPusher.Report(ArtPusher.Stop.DONE)
@@ -213,7 +213,7 @@ class Forward(
         fun report(stop: ArtPusher.Stop) = ArtPusher.Report(stop, pushed, stored, missing, failed).also { say("sweep", it) }
         for (row in Sweep.order(rows.filter { real(it.name) })) {
             if (!keep()) return report(ArtPusher.Stop.PREEMPTED)
-            if (device().lib.rev != rev) return null
+            if (device().lib.dataRev != rev) return null
             if (!sweeping() || known !== k) {
                 cut = true
                 break
@@ -246,7 +246,7 @@ class Forward(
         while (true) {
             if (!keep() || s.closedReason != null) return Rows.Stop
             val lib = device().lib
-            if (lib.rev != rev) return Rows.Restart
+            if (lib.dataRev != rev) return Rows.Restart
             val list = lib.pages[key]
             val missing = if (list == null) 0L else (0L until list.total).firstOrNull { it !in list.rows }
             if (list != null && missing == null) return Rows.Got(list.rows.values.map { Sweep.Row(it.name ?: "", it.mbid, it.count ?: 0) })

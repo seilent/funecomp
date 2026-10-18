@@ -10,16 +10,16 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply 6d000101010001040046444350020200010003020002000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
-hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff010000000000000e0400070000000f040003000000
+hex hello_reply 74000101010001040046444350020200010003020003000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff010000000000000e0400070000000f04000300000010040004000000
 re hello_reply hello
-dec hello_reply 0.len 109
+dec hello_reply 0.len 116
 dec hello_reply 0.type HELLO
 dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 2
+dec hello_reply 0.body.minor 3
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -32,6 +32,7 @@ dec hello_reply 0.body.busyMs 5000
 dec hello_reply 0.body.features 511
 dec hello_reply 0.body.libRev 7
 dec hello_reply 0.body.settingsRev 3
+dec hello_reply 0.body.snapRev 4
 act hello_reply accept
 vec ping app
 hex ping 000002040200
@@ -259,16 +260,17 @@ dec queue_artists 0.body.item[1].artists[0] 宇多田ヒカル
 dec queue_artists 0.body.item[1].mbids[0]
 act queue_artists accept
 vec lib_page dev
-hex lib_page 7e0015000a000104000700000002010003030c0055746164612048696b617275040400000000000504000200000006010000072500010a004669727374204c6f
-hex lib_page 76650204000c000000030800c900000000000000040300323031072700010c00424144e383a2e383bce383890204000e0000000308002d010000000000000403
-hex lib_page 00333031
-dec lib_page 0.len 126
+hex lib_page 850015000a000104000700000002010003030c0055746164612048696b61727508040004000000040400000000000504000200000006010000072500010a0046
+hex lib_page 69727374204c6f76650204000c000000030800c900000000000000040300323031072700010c00424144e383a2e383bce383890204000e0000000308002d0100
+hex lib_page 0000000000040300333031
+dec lib_page 0.len 133
 dec lib_page 0.type LIB
 dec lib_page 0.flags 0x00
 dec lib_page 0.seq 10
 dec lib_page 0.body.libRev 7
 dec lib_page 0.body.view artistAlbums
 dec lib_page 0.body.parent Utada Hikaru
+dec lib_page 0.body.snapRev 4
 dec lib_page 0.body.offset 0
 dec lib_page 0.body.total 2
 dec lib_page 0.body.more false
@@ -1090,6 +1092,28 @@ dec state_comp2 0.body.volumeStepPct 5
 dec state_comp2 0.body.lyrics true
 dec state_comp2 0.body.maxVolumePct 80
 act state_comp2 accept
+vec state_fav dev
+hex state_fav 1a001000290003080065000000000000000c0100001f01000120040004000000
+dec state_fav 0.len 26
+dec state_fav 0.type STATE
+dec state_fav 0.flags 0x00
+dec state_fav 0.seq 41
+dec state_fav 0.body.track 101
+dec state_fav 0.body.playing false
+dec state_fav 0.body.favorite true
+dec state_fav 0.body.snapRev 4
+act state_fav accept
+vec state_unfav dev
+hex state_unfav 1a0010002a0003080065000000000000000c0100001f01000020040004000000
+dec state_unfav 0.len 26
+dec state_unfav 0.type STATE
+dec state_unfav 0.flags 0x00
+dec state_unfav 0.seq 42
+dec state_unfav 0.body.track 101
+dec state_unfav 0.body.playing false
+dec state_unfav 0.body.favorite false
+dec state_unfav 0.body.snapRev 4
+act state_unfav accept
 vec volume_percent app
 hex volume_percent 04002104290003010023
 dec volume_percent 0.len 4
@@ -1884,3 +1908,47 @@ dec upd_abort 0.seq 53
 dec upd_abort 0.body.offset 14037952
 dec upd_abort 0.body.code offsetMismatch
 act upd_abort accept
+vec lrc_put_snap app
+hex lrc_put_snap 47002a043600010800650000000000000005040004000000032b005b30303a31322e30305d4669727374206c696e650a5b30303a31372e32305d5365636f6e64
+hex lrc_put_snap 206c696e650a04040008820ea7
+dec lrc_put_snap 0.len 71
+dec lrc_put_snap 0.type LRC_PUT
+dec lrc_put_snap 0.flags 0x04
+dec lrc_put_snap 0.seq 54
+dec lrc_put_snap 0.body.track 101
+dec lrc_put_snap 0.body.snapRev 4
+dec lrc_put_snap 0.body.text 5b30303a31322e30305d4669727374206c696e650a5b30303a31372e32305d5365636f6e64206c696e650a
+dec lrc_put_snap 0.body.crc 2802745864
+act lrc_put_snap accept
+vec play_view_snap app
+hex play_view_snap 16002504370001010001070400040000000404000000000005010001
+dec play_view_snap 0.len 22
+dec play_view_snap 0.type PLAY
+dec play_view_snap 0.flags 0x04
+dec play_view_snap 0.seq 55
+dec play_view_snap 0.body.view albums
+dec play_view_snap 0.body.snapRev 4
+dec play_view_snap 0.body.start 0
+dec play_view_snap 0.body.shuffle true
+act play_view_snap accept
+vec lib_get_snap_stale app
+hex lib_get_snap_stale 19002704380001010001030400000000000404006400000006040003000000
+dec lib_get_snap_stale 0.len 25
+dec lib_get_snap_stale 0.type LIB_GET
+dec lib_get_snap_stale 0.flags 0x04
+dec lib_get_snap_stale 0.seq 56
+dec lib_get_snap_stale 0.body.view albums
+dec lib_get_snap_stale 0.body.offset 0
+dec lib_get_snap_stale 0.body.count 100
+dec lib_get_snap_stale 0.body.snapRev 3
+act lib_get_snap_stale accept
+vec lib_get_snap_stale_error dev
+hex lib_get_snap_stale_error 0f0027033800010100070208007374616c65526576
+re lib_get_snap_stale_error lib_get_snap_stale
+dec lib_get_snap_stale_error 0.len 15
+dec lib_get_snap_stale_error 0.type LIB_GET
+dec lib_get_snap_stale_error 0.flags 0x03
+dec lib_get_snap_stale_error 0.seq 56
+dec lib_get_snap_stale_error 0.body.code 7
+dec lib_get_snap_stale_error 0.body.text staleRev
+act lib_get_snap_stale_error accept

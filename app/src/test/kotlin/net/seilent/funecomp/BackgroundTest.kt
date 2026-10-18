@@ -10,10 +10,12 @@ import android.content.pm.ApplicationInfo
 import android.os.Looper
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.sim.Battery
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
+import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LyricsPlan
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
@@ -583,5 +585,61 @@ class BackgroundTest {
         a.restart().resume()
         assertEquals(LinkService::class.java.name, shadow.nextStartedService?.component?.className)
         a.pause().stop().destroy()
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun aHeartTapToastsFromTheStateAfterTheReplyAndKeepsTheThumbs() {
+        val dir = kotlin.io.path.createTempDirectory("art").toFile()
+        val lib = net.seilent.funecomp.sim.Library.synthetic()
+        val jpeg = java.awt.image.BufferedImage(600, 600, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        for (t in lib.tracks) javax.imageio.ImageIO.write(jpeg, "jpg", java.io.File(dir, "${lib.albumKey(t.id)}.jpg"))
+        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(listOf("stale-state")), artDir = dir, log = { logs += it }), lib)
+        sims += s
+        val c = Robolectric.buildService(LinkService::class.java, startIntent("tcp:127.0.0.1:${s.listen(0)}")).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
+        val st = Remote.device.playback.state
+        Remote.wantArt(Thumbs.NOW_PLAYING, st.track!!, Thumbs.SMALL, st.album)
+        waitFor { Remote.art(st.track!!, Thumbs.SMALL) != null }
+        val toasts = java.util.concurrent.CopyOnWriteArrayList<Pair<String, String>>()
+        val rev = Remote.device.lib.rev
+        Remote.favorite(st) { line, title -> toasts += line to title }
+        waitFor { toasts.isNotEmpty() && Remote.device.lib.rev != rev }
+        assertEquals(listOf(Heart.ADDED to st.title), toasts)
+        assertEquals(true, Remote.device.playback.state.favorite)
+        assertEquals(1, logs.count { it.contains("rx ACTION") })
+        val gets = logs.count { it.contains("rx ART_GET") }
+        Remote.wantArt(Thumbs.MEDIA, st.track!!, Thumbs.SMALL, st.album)
+        waitFor { Remote.mediaArt(st.track!!, Thumbs.SMALL) != null }
+        assertEquals(gets, logs.count { it.contains("rx ART_GET") })
+        c.destroy()
+    }
+
+    @Test
+    fun aHeartTapSendsNothingWithoutTheSnapRev() {
+        val s = Sim(Options(Board.of("v1"), minor = 2, log = { logs += it }))
+        sims += s
+        val c = Robolectric.buildService(LinkService::class.java, startIntent("tcp:127.0.0.1:${s.listen(0)}")).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
+        Remote.favorite(Remote.device.playback.state) { _, _ -> }
+        Thread.sleep(300)
+        assertEquals(0, logs.count { it.contains("rx ACTION") })
+        c.destroy()
+    }
+
+    @Test
+    fun anActionAnswersDoneOnce() {
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("refuse=ACTION")))).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
+        val calls = java.util.concurrent.CopyOnWriteArrayList<Pair<Int?, String?>>()
+        Remote.action(Enums.ActionCmd.favorite, Remote.device.playback.state.track) { code, text -> calls += code to text }
+        waitFor { calls.isNotEmpty() }
+        Thread.sleep(300)
+        assertEquals(listOf(Err.refused to "refused"), calls)
+        c.destroy()
+        Remote.stop()
+        val closed = ArrayList<Pair<Int?, String?>>()
+        Remote.action(Enums.ActionCmd.favorite, 1) { code, text -> closed += code to text }
+        assertEquals(listOf(-1 to null), closed)
     }
 }

@@ -15,6 +15,7 @@ import net.seilent.funecomp.proto.Settings
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.listView
 
 data class Playback(val state: State = State(), val receivedAt: Long = 0, val gateAt: Long? = null)
 
@@ -46,7 +47,19 @@ data class QueueMirror(val rev: Long? = null, val total: Long = 0, val items: Ma
 
 data class LibKey(val view: Int, val parent: String)
 
-data class LibMirror(val rev: Long? = null, val pages: Map<LibKey, LibList> = emptyMap())
+data class LibMirror(val rev: Long? = null, val pages: Map<LibKey, LibList> = emptyMap(), val snap: Long? = null) {
+    val dataRev: Long? get() = snap ?: rev
+
+    fun keyed(view: Int?) = snap != null && !listView(view)
+
+    fun libRev(view: Int?) = if (keyed(view)) null else rev
+
+    fun snapRev(view: Int?) = if (keyed(view)) snap else null
+
+    fun askKey(view: Int, parent: String, offset: Long) = "lib $view $parent $offset ${snapRev(view) ?: libRev(view)}"
+
+    fun lists(libRev: Long) = copy(rev = libRev, pages = pages.filterKeys { !listView(it.view) })
+}
 
 data class LibList(val total: Long = 0, val rows: Map<Long, LibRow> = emptyMap())
 
@@ -74,7 +87,7 @@ data class DeviceState(
         else -> this
     }
 
-    fun withHello(h: HelloReply) = DeviceState(hello = h, lib = LibMirror(h.libRev))
+    fun withHello(h: HelloReply) = DeviceState(hello = h, lib = LibMirror(h.libRev, snap = h.snapRev))
 
     fun withRtt(ms: Long) = copy(rttMs = rttMs?.let { minOf(it, ms) } ?: ms)
 
@@ -83,7 +96,13 @@ data class DeviceState(
         val started = s.playing == true && old.playing != true
         val gateAt = if (started || s.output != old.output) now else playback.gateAt
         val q = if (s.queueRev != null && s.queueRev != queue.rev) QueueMirror(s.queueRev) else queue
-        val l = if (s.libRev != null && s.libRev != lib.rev) LibMirror(s.libRev) else lib
+        val rev = s.libRev
+        val l = when {
+            s.snapRev != null && s.snapRev != lib.snap -> LibMirror(rev ?: lib.rev, snap = s.snapRev)
+            rev == null || rev == lib.rev -> lib
+            lib.snap != null -> lib.lists(rev)
+            else -> LibMirror(rev)
+        }
         return copy(playback = Playback(s, now, gateAt), queue = q, lib = l)
     }
 
@@ -119,7 +138,13 @@ data class DeviceState(
     }
 
     fun withLib(l: Lib): DeviceState {
-        val base = if (l.libRev == lib.rev) lib else LibMirror(l.libRev)
+        val base = when {
+            l.snapRev != lib.snap -> LibMirror(l.libRev, snap = l.snapRev)
+            l.libRev == lib.rev -> lib
+            lib.snap == null -> LibMirror(l.libRev)
+            listView(l.view) -> lib.lists(l.libRev)
+            else -> lib
+        }
         val key = LibKey(l.view, l.parent ?: "")
         val old = base.pages[key] ?: LibList()
         val rows = old.rows + l.rows.mapIndexed { i, r -> l.page.offset + i to r }

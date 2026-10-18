@@ -116,9 +116,10 @@ object Lyrics {
                 done += w.track
                 continue
             }
-            val rev = Remote.device.playback.state.libRev ?: Remote.device.hello?.libRev ?: return
+            val snap = Remote.device.lib.snap
+            val rev = if (snap != null) null else Remote.device.playback.state.libRev ?: Remote.device.hello?.libRev ?: return
             if (gen != generation) return
-            val code = put(w.track, rev, bytes)
+            val code = put(w.track, rev, snap, bytes)
             if (gen != generation) return
             if (code != Err.busy && code != NO_REPLY) done += w.track
         }
@@ -126,10 +127,10 @@ object Lyrics {
 
     fun network() = breaker.network()
 
-    private fun put(track: Long, libRev: Long, bytes: ByteArray): Int? {
+    private fun put(track: Long, libRev: Long?, snapRev: Long?, bytes: ByteArray): Int? {
         val latch = CountDownLatch(1)
         val code = AtomicReference<Int?>(NO_REPLY)
-        Remote.lrcPut(track, libRev, bytes, CRC32().apply { update(bytes) }.value) {
+        Remote.lrcPut(track, libRev, snapRev, bytes, CRC32().apply { update(bytes) }.value) {
             code.set(it)
             latch.countDown()
         }

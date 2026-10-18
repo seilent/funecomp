@@ -16,6 +16,7 @@ import java.io.File
 class OldPeerTest {
     private val v10 = table("/proto-1.0.txt")
     private val v11 = table("/proto-1.1.txt")
+    private val v12 = table("/proto-1.2.txt")
 
     private fun table(name: String): Map<String, Map<Int, Field>> = run {
         val text = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
@@ -91,11 +92,30 @@ class OldPeerTest {
     }
 
     @Test
+    fun protocol13FramesDecodeWithThe12TablesToEmptyFields() {
+        val st = State.from(Node.decode("STATE", body("state_fav"), v12))
+        assertEquals(101L, st.track)
+        assertNull(st.favorite)
+        assertNull(st.snapRev)
+        val now = State.from(Node.decode("STATE", body("state_fav")))
+        assertEquals(true, now.favorite)
+        assertEquals(4L, now.snapRev)
+
+        assertNull(HelloReply.from(Node.decode("HELLO.reply", body("hello_reply"), v12)).snapRev)
+        assertEquals(4L, HelloReply.from(Node.decode("HELLO.reply", body("hello_reply"))).snapRev)
+        assertNull(Lib.from(Node.decode("LIB", body("lib_page"), v12)).snapRev)
+        assertEquals(4L, Lib.from(Node.decode("LIB", body("lib_page"))).snapRev)
+    }
+
+    @Test
     fun requestBuildersMatchTheVectors() {
         assertArrayEquals(body("art_get"), Req.artGet(101, 512))
         assertArrayEquals(body("art_get_have"), Req.artGet(101, 256, have = 2400070225))
         val text = "[00:12.00]First line\n[00:17.20]Second line\n".toByteArray()
         assertArrayEquals(body("lrc_put"), Req.lrcPut(101, 7, text, 2802745864))
+        assertArrayEquals(body("lrc_put_snap"), Req.lrcPut(101, null, text, 2802745864, snapRev = 4))
+        assertArrayEquals(body("play_view_snap"), Req.play(Enums.View.albums, start = 0, shuffle = true, snapRev = 4))
+        assertArrayEquals(body("lib_get_snap_stale"), Req.libGet(Enums.View.albums, null, 0, 100, null, snapRev = 3))
         assertArrayEquals(body("lrc_del"), Req.lrcDel(101))
         assertArrayEquals(body("upd_begin"), Req.updBegin("v1", 28043264, "9e107d9d372bb6826bd81d3542a419d6"))
         assertArrayEquals(body("upd_end"), Req.updEnd("9e107d9d372bb6826bd81d3542a419d6"))

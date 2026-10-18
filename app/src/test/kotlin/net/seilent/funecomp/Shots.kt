@@ -31,6 +31,7 @@ import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
@@ -74,6 +75,8 @@ class Shot(
     val wrong: Boolean = false,
     val blocked: List<ArtBlocks.Record> = emptyList(),
     val sources: Sources = Sources(),
+    val minor: Int = Proto.minor,
+    val faults: List<String> = emptyList(),
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -101,6 +104,11 @@ private fun playing(c: SimControl) {
     c.transport(Enums.TransportCmd.shuffle, on = true)
     c.transport(Enums.TransportCmd.repeat, repeat = Enums.Repeat.all)
     c.transport(Enums.TransportCmd.seek, seekMs = 61_000)
+}
+
+private fun favorite(c: SimControl) {
+    playing(c)
+    c.action(Enums.ActionCmd.favorite, c.device.playback.state.track)
 }
 
 private fun held(c: SimControl) {
@@ -169,6 +177,15 @@ val SHOTS = listOf(
     Shot("nowplaying-backdrop", pages = NP, prep = ::playing, backdrop = true),
     Shot("nowplaying-overlay", pages = NP, prep = ::playing, after = 450) { it.overlay.show() },
     Shot("nowplaying-linkdown", pages = NP, prep = ::playing, link = LinkView(Phase.DOWN, "AP80", everLive = true)),
+    Shot("heart-unlit", pages = NP, prep = ::playing),
+    Shot("heart-lit", pages = NP, prep = ::favorite),
+    Shot("heart-unknown", pages = NP, prep = ::playing, faults = listOf("favs-busy=1")),
+    Shot("heart-none", pages = NP, prep = ::emptyQueue),
+    Shot("heart-12", pages = NP, prep = ::playing, minor = 2),
+    Shot("heart-added", pages = NP, prep = ::playing, after = 600) { rule.onNodeWithTag("np.heart").performClick() },
+    Shot("heart-removed", pages = NP, prep = ::favorite, after = 600) { rule.onNodeWithTag("np.heart").performClick() },
+    Shot("heart-busy", pages = NP, prep = ::playing, faults = listOf("favs-busy=1"), after = 600) { rule.onNodeWithTag("np.heart").performClick() },
+    Shot("heart-unreadable", pages = NP, prep = ::playing, faults = listOf("favs-busy=1:favorites not readable"), after = 600) { rule.onNodeWithTag("np.heart").performClick() },
     Shot("nav-quickback", pages = HOME) {
         rule.onNodeWithTag("home.music").performClick()
         settle(100)
@@ -393,7 +410,7 @@ class Shots {
             for (shot in SHOTS) {
                 if (only.isNotEmpty() && only.split(',').none { "${shot.name}-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue
-                val c = SimControl(shot.board, artDir = if (shot.art) covers else null)
+                val c = SimControl(shot.board, artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults)
                 shot.prep(c)
                 control = c
                 shell = Shell(Nav(shot.pages))

@@ -38,7 +38,7 @@ class DeviceTest {
         Device(Options(Board.of(board), Faults(faults.toList())), Library.synthetic()) { t }
 
     private fun req(d: Device, type: Int, payload: ByteArray, out: Sink = Sink()) =
-        d.request(type, Node.decode(Msg.info.getValue(type).name, payload), out)
+        d.request(type, Node.decode(Msg.info.getValue(type).name, payload), out).also { if (it is Answer.Ok && it.state) out.push(Msg.STATE, d.state()) }
 
     private fun ok(a: Answer) = (a as? Answer.Ok ?: throw AssertionError("failed: ${(a as Answer.Fail).code} ${a.text}")).payload
 

@@ -120,7 +120,7 @@ fun App(
             }
             Stack(nav) { page ->
                 when (page) {
-                    Page.NowPlaying -> NowPlaying(device, control, { nav.pop() }, { nav.push(Page.Queue) }, art) { held -> artSheet(ctx, held) }
+                    Page.NowPlaying -> NowPlaying(device, control, shell.toast, { nav.pop() }, { nav.push(Page.Queue) }, art) { held -> artSheet(ctx, held) }
                     Page.Home -> Home(homeItems(device, link, sources)) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)

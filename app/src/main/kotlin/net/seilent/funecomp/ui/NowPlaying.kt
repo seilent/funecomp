@@ -48,6 +48,7 @@ import kotlinx.coroutines.delay
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.Heart
 
 private const val BACKDROP_FADE_MS = 2000
 
@@ -130,7 +131,7 @@ fun BackRing(onBack: () -> Unit) {
 }
 
 @Composable
-fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueue: () -> Unit, art: BackdropArt? = null, onBackdrop: ((BackdropArt) -> Unit)? = null) {
+fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack: () -> Unit, onQueue: () -> Unit, art: BackdropArt? = null, onBackdrop: ((BackdropArt) -> Unit)? = null) {
     val ui = LocalUi.current
     val s = device.playback.state
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -242,8 +243,8 @@ fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueu
             RoleText(t, Roles.npNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
         }
         val repeat = s.repeat ?: Enums.Repeat.off
-        val glyphs = listOf(GlyphName.SHUFFLE, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT)
-        val ons = listOf(s.shuffle == true, repeat != Enums.Repeat.off)
+        val glyphs = listOfNotNull(GlyphName.SHUFFLE, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, GlyphName.HEART.takeIf { Heart.shown(device.hello, s) })
+        val ons = listOf(s.shuffle == true, repeat != Enums.Repeat.off, Heart.lit(s))
         val hitW = ui.px(ui.npRingCenter(1) - ui.npRingCenter(0))
         val hitH = minOf(hitW, 2 * (ringY - titleBottom)).coerceAtLeast(0f)
         glyphs.forEachIndexed { i, g ->
@@ -251,15 +252,18 @@ fun NowPlaying(device: DeviceState, control: Control, onBack: () -> Unit, onQueu
             val focused = ringFocus == i
             var swaps by remember { mutableIntStateOf(0) }
             var down by remember { mutableStateOf(false) }
-            Box(Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(if (focused) 1f else idleAlpha)) {
+            val lit = if (i == 2) Modifier.testTag(if (ons[i]) "np.heart.on" else "np.heart.off") else Modifier
+            Box(Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(if (focused) 1f else idleAlpha).then(lit)) {
                 Ring(Tok.npRing, g, focused, toggle = true, on = ons[i], swaps = swaps, pressed = down)
             }
             Box(
-                Modifier.at(cx, ringY, 0.5f, 0.5f).size(hitW.dp(), hitH.dp()).testTag(if (i == 0) "np.shuffle" else "np.repeat").press({
+                Modifier.at(cx, ringY, 0.5f, 0.5f).size(hitW.dp(), hitH.dp()).testTag(listOf("np.shuffle", "np.repeat", "np.heart")[i]).press({
                     ringFocus = i
                     swaps++
                     if (i == 0) {
                         control.transport(Enums.TransportCmd.shuffle, on = s.shuffle != true)
+                    } else if (i == 2) {
+                        control.favorite(s) { line, title -> toast.show(line, title) }
                     } else {
                         val next = when (repeat) {
                             Enums.Repeat.off -> Enums.Repeat.all

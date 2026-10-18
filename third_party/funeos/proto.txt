@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 2
+const minor 3
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -140,6 +140,7 @@ tag HELLO.reply 12 busyMs u32 one
 tag HELLO.reply 13 features u64 one
 tag HELLO.reply 14 libRev u32 one
 tag HELLO.reply 15 settingsRev u32 one
+tag HELLO.reply 16 snapRev u32 one
 msg PING 0x02 both req
 msg BYE 0x03 dev push
 tag BYE 1 reason BYE_REASON one
@@ -176,6 +177,8 @@ tag STATE 27 volumePct u8 one
 tag STATE 28 volumeStepPct u8 one
 tag STATE 29 lyrics bool one
 tag STATE 30 maxVolumePct u8 one
+tag STATE 31 favorite bool one
+tag STATE 32 snapRev u32 one
 msg SCHEMA 0x11 dev push
 tag SCHEMA 1 pivot str one
 tag SCHEMA 2 offset u32 one
@@ -210,6 +213,7 @@ tag LIB 4 offset u32 one
 tag LIB 5 total u32 one
 tag LIB 6 more bool one
 tag LIB 7 row LibRow list
+tag LIB 8 snapRev u32 one
 msg TRANSPORT 0x20 app req
 tag TRANSPORT 1 cmd TRANSPORT_CMD one
 tag TRANSPORT 2 seekMs u32 one
@@ -244,6 +248,7 @@ tag PLAY 3 libRev u32 one
 tag PLAY 4 start u32 one
 tag PLAY 5 shuffle bool one
 tag PLAY 6 track u64 list
+tag PLAY 7 snapRev u32 one
 msg QUEUE_OP 0x26 app req
 tag QUEUE_OP 1 cmd QUEUE_CMD one
 tag QUEUE_OP 2 rev u32 one
@@ -258,6 +263,7 @@ tag LIB_GET 2 parent str one
 tag LIB_GET 3 offset u32 one
 tag LIB_GET 4 count u32 one
 tag LIB_GET 5 libRev u32 one
+tag LIB_GET 6 snapRev u32 one
 msg ACTION 0x28 app req
 tag ACTION 1 cmd ACTION_CMD one
 tag ACTION 2 track u64 one
@@ -277,6 +283,7 @@ tag LRC_PUT 1 track u64 one
 tag LRC_PUT 2 libRev u32 one
 tag LRC_PUT 3 text bytes one
 tag LRC_PUT 4 crc u32 one
+tag LRC_PUT 5 snapRev u32 one
 msg LRC_DEL 0x2b app req
 tag LRC_DEL 1 track u64 one
 msg UPD_BEGIN 0x2c app req

@@ -52,7 +52,7 @@ class Proto12Test {
             updDir = File(tmp.root, "upd"), battery = battery, cardFreeMiB = freeMiB, curve = board == "v1", maxPct = maxPct)
 
     private fun req(d: Device, type: Int, payload: ByteArray, out: Sink = Sink()) =
-        d.request(type, Node.decode(Msg.info.getValue(type).name, payload), out)
+        d.request(type, Node.decode(Msg.info.getValue(type).name, payload), out).also { if (it is Answer.Ok && it.state) out.push(Msg.STATE, d.state()) }
 
     private fun ok(a: Answer) = (a as? Answer.Ok ?: throw AssertionError("failed: ${(a as Answer.Fail).code} ${a.text}")).payload
 
@@ -237,6 +237,18 @@ class Proto12Test {
         e.updData(Node.decode("UPD_DATA", Req.updData(0, ByteArray(10) { 1 })), Sink())
         assertEquals(Err.crc, code(req(e, Msg.UPD_END, Req.updEnd(sum))))
         assertFalse(File(tmp.root, "upd/v1.upt").exists())
+    }
+
+    @Test
+    fun aSettingChangePushesStateAfterTheReply() {
+        val d = device(opts())
+        val during = Sink()
+        val a = d.request(Msg.SET, Node.decode("SET", Req.set("maxVolume=80\n")), during) as Answer.Ok
+        assertTrue(a.state)
+        assertTrue(during.of(Msg.STATE).isEmpty())
+        assertEquals(80, state(d).maxVolumePct)
+        val same = d.request(Msg.SET, Node.decode("SET", Req.set("maxVolume=80\n")), Sink()) as Answer.Ok
+        assertFalse(same.state)
     }
 
     @Test

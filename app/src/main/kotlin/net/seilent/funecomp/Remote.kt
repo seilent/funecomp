@@ -6,6 +6,8 @@ import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.net.Network
+import android.os.Handler
+import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
@@ -44,6 +46,7 @@ import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.state.ClockSync
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
 import net.seilent.funecomp.state.Wake
@@ -136,6 +139,9 @@ object Remote : Control {
     private val timer = Executors.newSingleThreadScheduledExecutor { Thread(it, "clock").apply { isDaemon = true } }
     private var transition: ScheduledFuture<*>? = null
     @Volatile private var thumbs: ThumbWorker? = null
+    private val heart = Heart()
+    @Volatile private var heartToast: ((String, String) -> Unit)? = null
+    private val main = Handler(Looper.getMainLooper())
 
     fun debuggable(context: Context) = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
@@ -379,7 +385,8 @@ object Remote : Control {
     private fun libPage(s: Session, offset: Long, rev: Long?): Session.Result {
         val key = "lib ${Enums.View.artists}  $offset $rev"
         once(key)
-        val r = s.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", offset, LIB_PAGE, rev))
+        val snap = device.lib.keyed(Enums.View.artists)
+        val r = s.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", offset, LIB_PAGE, rev.takeUnless { snap }, rev.takeIf { snap }))
         if (r !is Session.Result.Ok) forget(key)
         return r
     }
@@ -476,6 +483,8 @@ object Remote : Control {
 
     private fun drop() {
         generation++
+        heart.down()
+        heartToast = null
         spec = null
         synchronized(asked) { asked.clear() }
         art?.stop()
@@ -495,9 +504,9 @@ object Remote : Control {
     override fun volumePercent(pct: Int, done: () -> Unit) =
         send(Msg.VOLUME, Req.volume(percent = pct), "volume percent $pct", ok = { done() }, fail = done)
 
-    fun lrcPut(track: Long, libRev: Long, text: ByteArray, crc: Long, done: (Int?) -> Unit) {
+    fun lrcPut(track: Long, libRev: Long?, snapRev: Long?, text: ByteArray, crc: Long, done: (Int?) -> Unit) {
         val s = link?.session ?: return done(-1)
-        s.request(Msg.LRC_PUT, Req.lrcPut(track, libRev, text, crc)) { r ->
+        s.request(Msg.LRC_PUT, Req.lrcPut(track, libRev, text, crc, snapRev)) { r ->
             Log.i(TAG, "lrc put ${java.lang.Long.toUnsignedString(track)} ${text.size} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
             done(
                 when (r) {
@@ -513,14 +522,15 @@ object Remote : Control {
     fun volumeSet(n: Int) = send(Msg.VOLUME, Req.volume(set = n), "volume set $n")
 
     override fun libGet(view: Int, parent: String, offset: Long) {
-        val rev = device.lib.rev
-        val key = "lib $view $parent $offset $rev"
+        val lib = device.lib
+        val key = lib.askKey(view, parent, offset)
         if (!once(key)) return
-        send(Msg.LIB_GET, Req.libGet(view, parent, offset, LIB_PAGE, rev), key, fail = { forget(key) })
+        send(Msg.LIB_GET, Req.libGet(view, parent, offset, LIB_PAGE, lib.libRev(view), lib.snapRev(view)), key, fail = { forget(key) })
     }
 
     override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>) {
-        send(Msg.PLAY, Req.play(view, parent, if (tracks.isEmpty()) device.lib.rev else null, start, shuffle, tracks), "play view=$view parent=$parent start=$start", failed = { code ->
+        val lib = device.lib.takeIf { tracks.isEmpty() }
+        send(Msg.PLAY, Req.play(view, parent, lib?.libRev(view), start, shuffle, tracks, lib?.snapRev(view)), "play view=$view parent=$parent start=$start", failed = { code ->
             if (code == Err.badValue && start > 0 && tracks.isEmpty()) play(view, parent, 0, shuffle, tracks)
         })
     }
@@ -547,17 +557,33 @@ object Remote : Control {
     override fun eqSet(output: Int, key: String?, ints: Profile?) =
         send(Msg.EQ_SET, Req.eqSet(output, key, ints), "eq set output=$output key=$key")
 
-    override fun action(cmd: Int, track: Long?) = send(Msg.ACTION, Req.action(cmd, track), "action ${Enums.ActionCmd.names[cmd]}")
+    override fun action(cmd: Int, track: Long?, done: (Int?, String?) -> Unit) =
+        send(Msg.ACTION, Req.action(cmd, track), "action ${Enums.ActionCmd.names[cmd]}", done = done)
+
+    override fun favorite(s: State, toast: (String, String) -> Unit) {
+        if (device.hello?.snapRev == null) return
+        heartToast = toast
+        val t = heart.tap(s) ?: return
+        action(Enums.ActionCmd.favorite, t.track) { code, text ->
+            heartShow(heart.replied(t, code, text, SystemClock.elapsedRealtime()))
+            if (code == null) timer.schedule({ heartShow(heart.tick(t, SystemClock.elapsedRealtime())) }, Heart.WINDOW_MS, TimeUnit.MILLISECONDS)
+        }
+    }
+
+    private fun heartShow(t: Heart.Toast?) {
+        if (t != null) main.post { heartToast?.invoke(t.line, t.title) }
+    }
 
     private fun once(key: String) = synchronized(asked) { asked.add(key) }
 
     private fun forget(key: String) = synchronized(asked) { asked.remove(key) }
 
-    private fun send(type: Int, payload: ByteArray, what: String, ok: ((Node) -> Unit)? = null, fail: (() -> Unit)? = null, failed: ((Int) -> Unit)? = null) {
+    private fun send(type: Int, payload: ByteArray, what: String, ok: ((Node) -> Unit)? = null, fail: (() -> Unit)? = null, failed: ((Int) -> Unit)? = null, done: ((Int?, String?) -> Unit)? = null) {
         val s = link?.session
         if (s == null) {
             Log.i(TAG, "$what: no session")
             fail?.invoke()
+            done?.invoke(-1, null)
             return
         }
         s.request(type, payload) { r ->
@@ -569,6 +595,11 @@ object Remote : Control {
             Log.i(TAG, "$what -> $out")
             if (r is Session.Result.Ok) ok?.invoke(r.body) else fail?.invoke()
             if (r is Session.Result.Failed) failed?.invoke(r.error.code)
+            when (r) {
+                is Session.Result.Ok -> done?.invoke(null, null)
+                is Session.Result.Failed -> done?.invoke(r.error.code, r.error.text)
+                else -> done?.invoke(-1, null)
+            }
         }
     }
 
@@ -628,7 +659,7 @@ object Remote : Control {
             if (!live) return
             artKey = null
             thumbs?.let { t ->
-                hello.libRev?.let { t.rev(it) }
+                (hello.snapRev ?: hello.libRev)?.let { t.rev(it) }
                 t.session()
             }
             update { it.withHello(hello) }
@@ -657,7 +688,8 @@ object Remote : Control {
             if (type == Msg.LIB || type == Msg.QUEUE) synchronized(asked) { asked.removeAll { k -> k.startsWith(if (type == Msg.LIB) "lib " else "queue ") } }
             if (type != Msg.STATE) return
             val s = State.from(body)
-            s.libRev?.let { r -> if (r != old.libRev) thumbs?.rev(r) }
+            (s.snapRev ?: s.libRev)?.let { r -> if (r != (old.snapRev ?: old.libRev)) thumbs?.rev(r) }
+            heartShow(heart.state(s))
             Scrobbles.state(s, System.currentTimeMillis())
             Firmwares.state()
             onState?.invoke()
@@ -684,6 +716,7 @@ object Remote : Control {
         override fun onClosed(reason: String) {
             if (!live) return
             update { it.copy(hello = null) }
+            heart.down()
             art?.cancel()
             clockOff()
             Lyrics.session()

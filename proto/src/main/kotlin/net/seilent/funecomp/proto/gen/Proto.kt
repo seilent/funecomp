@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "5f888cdd246b434d803f3e51ae315384d406709d"
-    const val PROTO_SHA256 = "23ab3f638a8113c269fd954e514df40db7fab259c2542483bc3aa22bf9785ff3"
-    const val VECTORS_SHA256 = "f53007cf6364e0b4d230af0444cf52e3d16bb9c82219129d31dc83aea804ef7a"
+    const val COMMIT = "f95575cb7c5621c51807f3d9a698e55c47d0f867"
+    const val PROTO_SHA256 = "7eda669f143aac4b1e449a03b908179776b0459d705150bf5441d7a38b1d57bc"
+    const val VECTORS_SHA256 = "4befd4975d6522f6c2ba68c9fc7888f44e16bfee0477f98866be0f57fe268b15"
     const val TOKENS_SHA256 = "6ec9e3b80e9c857e924e2a26602d9fd282176337545ef938b4f7113a332f4bd5"
     const val TOKENSV1_SHA256 = "7463c4af8a045b4e5f2561bd4ff488de8edc667358e266ce781950ddac2e35a0"
 }
@@ -18,7 +18,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 2
+    const val minor = 3
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -311,6 +311,7 @@ object Tags {
         const val features = 13
         const val libRev = 14
         const val settingsRev = 15
+        const val snapRev = 16
     }
     object Bye {
         const val reason = 1
@@ -348,6 +349,8 @@ object Tags {
         const val volumeStepPct = 28
         const val lyrics = 29
         const val maxVolumePct = 30
+        const val favorite = 31
+        const val snapRev = 32
     }
     object Schema {
         const val pivot = 1
@@ -387,6 +390,7 @@ object Tags {
         const val total = 5
         const val more = 6
         const val row = 7
+        const val snapRev = 8
     }
     object Transport {
         const val cmd = 1
@@ -431,6 +435,7 @@ object Tags {
         const val start = 4
         const val shuffle = 5
         const val track = 6
+        const val snapRev = 7
     }
     object QueueOp {
         const val cmd = 1
@@ -447,6 +452,7 @@ object Tags {
         const val offset = 3
         const val count = 4
         const val libRev = 5
+        const val snapRev = 6
     }
     object Action {
         const val cmd = 1
@@ -471,6 +477,7 @@ object Tags {
         const val libRev = 2
         const val text = 3
         const val crc = 4
+        const val snapRev = 5
     }
     object LrcDel {
         const val track = 1
@@ -609,6 +616,7 @@ object Tags {
             13 to Field(13, "features", Base.U64, null, false),
             14 to Field(14, "libRev", Base.U32, null, false),
             15 to Field(15, "settingsRev", Base.U32, null, false),
+            16 to Field(16, "snapRev", Base.U32, null, false),
         ),
         "BYE" to mapOf(
             1 to Field(1, "reason", Base.ENUM, "BYE_REASON", false),
@@ -646,6 +654,8 @@ object Tags {
             28 to Field(28, "volumeStepPct", Base.U8, null, false),
             29 to Field(29, "lyrics", Base.BOOL, null, false),
             30 to Field(30, "maxVolumePct", Base.U8, null, false),
+            31 to Field(31, "favorite", Base.BOOL, null, false),
+            32 to Field(32, "snapRev", Base.U32, null, false),
         ),
         "SCHEMA" to mapOf(
             1 to Field(1, "pivot", Base.STR, null, false),
@@ -685,6 +695,7 @@ object Tags {
             5 to Field(5, "total", Base.U32, null, false),
             6 to Field(6, "more", Base.BOOL, null, false),
             7 to Field(7, "row", Base.RECORD, "LibRow", true),
+            8 to Field(8, "snapRev", Base.U32, null, false),
         ),
         "TRANSPORT" to mapOf(
             1 to Field(1, "cmd", Base.ENUM, "TRANSPORT_CMD", false),
@@ -729,6 +740,7 @@ object Tags {
             4 to Field(4, "start", Base.U32, null, false),
             5 to Field(5, "shuffle", Base.BOOL, null, false),
             6 to Field(6, "track", Base.U64, null, true),
+            7 to Field(7, "snapRev", Base.U32, null, false),
         ),
         "QUEUE_OP" to mapOf(
             1 to Field(1, "cmd", Base.ENUM, "QUEUE_CMD", false),
@@ -745,6 +757,7 @@ object Tags {
             3 to Field(3, "offset", Base.U32, null, false),
             4 to Field(4, "count", Base.U32, null, false),
             5 to Field(5, "libRev", Base.U32, null, false),
+            6 to Field(6, "snapRev", Base.U32, null, false),
         ),
         "ACTION" to mapOf(
             1 to Field(1, "cmd", Base.ENUM, "ACTION_CMD", false),
@@ -769,6 +782,7 @@ object Tags {
             2 to Field(2, "libRev", Base.U32, null, false),
             3 to Field(3, "text", Base.BYTES, null, false),
             4 to Field(4, "crc", Base.U32, null, false),
+            5 to Field(5, "snapRev", Base.U32, null, false),
         ),
         "LRC_DEL" to mapOf(
             1 to Field(1, "track", Base.U64, null, false),

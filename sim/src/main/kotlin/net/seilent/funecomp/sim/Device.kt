@@ -22,6 +22,7 @@ import net.seilent.funecomp.proto.Settings
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.UpdAbort
 import net.seilent.funecomp.proto.UpdBeginReply
+import net.seilent.funecomp.proto.listView
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
@@ -43,7 +44,7 @@ interface Out {
 }
 
 sealed class Answer {
-    class Ok(val payload: ByteArray = ByteArray(0)) : Answer()
+    class Ok(val payload: ByteArray = ByteArray(0), val state: Boolean = false) : Answer()
     class Fail(val code: Int, val text: String, val refused: List<String> = emptyList()) : Answer()
 }
 
@@ -113,11 +114,13 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private var shown: String? = null
     private val v11: Boolean get() = opts.minor >= 1
     private val v12: Boolean get() = opts.minor >= 2
+    private val v13: Boolean get() = opts.minor >= 3
     private val started = clock()
     private var lastBattery = -1
     private val lyrics = HashSet<Long>()
     private val arts = HashMap<Pair<Long, Int>, Art>()
     private var upd: Upd? = null
+    private var favsBusy = faults.favsBusy
 
     init {
         opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f -> f.name.removeSuffix(".lrc").toULongOrNull()?.let { lyrics += it.toLong() } }
@@ -158,6 +161,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     fun helloReply() = HelloReply(
         faults.major, opts.minor, board.name, "sim.${board.name}", board.screenW, board.screenH,
         board.backdropW, board.backdropH, Proto.maxPayload, opts.idleMs, opts.busyMs, faults.features, lib.rev, settingsRev,
+        if (v13) lib.snapRev else null,
     )
 
     private fun allowed(type: Int) = net.seilent.funecomp.proto.Groups.allowed(type, faults.features)
@@ -209,6 +213,8 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             if (v12) prefs.getValue("volumeStep").toIntOrNull() ?: 5 else null,
             if (v12 && t != null) t.id in lyrics else null,
             if (v12) prefs.getValue("maxVolume").toIntOrNull() ?: 100 else null,
+            if (v13 && t != null && favsBusy == 0) t.id in lib.favorites else null,
+            if (v13) lib.snapRev else null,
         ).encode()
     }
 
@@ -283,12 +289,12 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
 
     fun request(type: Int, body: Node, out: Out): Answer = synchronized(lock) {
         when (type) {
-            Msg.TRANSPORT -> transport(body, out)
-            Msg.VOLUME -> volume(body, out)
+            Msg.TRANSPORT -> transport(body)
+            Msg.VOLUME -> volume(body)
             Msg.SET -> set(body, out)
             Msg.DRAFT -> draft(body, out)
             Msg.EQ_SET -> eqSet(body, out)
-            Msg.PLAY -> play(body, out)
+            Msg.PLAY -> play(body)
             Msg.QUEUE_OP -> queueOp(body, out)
             Msg.LIB_GET -> libGet(body, out)
             Msg.ACTION -> action(body, out)
@@ -297,20 +303,28 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             Msg.IMG_LIST -> imgList(body)
             Msg.IMG_DEL -> imgDel(body)
             Msg.ART_GET -> artGet(body)
-            Msg.LRC_PUT -> lrcPut(body, out)
-            Msg.LRC_DEL -> lrcDel(body, out)
+            Msg.LRC_PUT -> lrcPut(body)
+            Msg.LRC_DEL -> lrcDel(body)
             Msg.UPD_BEGIN -> updBegin(body)
             Msg.UPD_END -> updEnd(body)
             else -> Answer.Fail(Err.unknown, "unknown")
         }
     }
 
-    private fun changed(out: Out): Answer {
-        send(out, Msg.STATE, state())
-        return Answer.Ok()
+    private fun changed() = Answer.Ok(state = true)
+
+    private fun revCode(b: Node, libTag: Int, snapTag: Int, list: Boolean, need: Boolean): Int? {
+        val snap = if (v13) b.long(snapTag) else null
+        val rev = b.long(libTag)
+        if (snap != null && list && rev == null) return Err.badValue
+        if (snap != null && !list) return if (snap == lib.snapRev) null else Err.staleRev
+        if (rev == null) return if (need) Err.staleRev else null
+        return if (rev == lib.rev) null else Err.staleRev
     }
 
-    private fun transport(b: Node, out: Out): Answer {
+    private fun revFail(code: Int) = Answer.Fail(code, if (code == Err.staleRev) "stale rev" else "bad rev")
+
+    private fun transport(b: Node): Answer {
         mark()
         when (b.int(Tags.Transport.cmd)) {
             Enums.TransportCmd.toggle -> playing = !playing
@@ -329,7 +343,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             else -> return Answer.Fail(Err.badValue, "no cmd")
         }
         positionAt = now()
-        return changed(out)
+        return changed()
     }
 
     private val steps: IntArray = IntArray(101).also { t ->
@@ -357,7 +371,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         return n.coerceIn(0, FULL_VOLUME)
     }
 
-    private fun volume(b: Node, out: Out): Answer {
+    private fun volume(b: Node): Answer {
         val set = b.int(Tags.Volume.set)
         val step = b.int(Tags.Volume.step)
         val pct = if (v12) b.int(Tags.Volume.percent) else null
@@ -368,7 +382,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             step != null -> stepVolume(volume, step, prefs.getValue("volumeStep").toIntOrNull() ?: 5)
             else -> return Answer.Fail(Err.badValue, "no set or step")
         }.coerceIn(0, maxVolume)
-        return changed(out)
+        return changed()
     }
 
     private val readOnlyToSet = setOf("usbMode", "btCodec", "btCodecHeadphones")
@@ -411,14 +425,14 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             }
         }
         if (kept.isEmpty()) return Answer.Fail(Err.refused, "refused", refused)
-        if (next != prefs) {
+        val differs = next != prefs
+        if (differs) {
             prefs.putAll(next)
             settingsRev++
             volume = volume.coerceAtMost(maxVolume)
-            send(out, Msg.STATE, state())
         }
         pushSettings(out)
-        return Answer.Ok(SetReply(settingsRev, kept, refused).encode())
+        return Answer.Ok(SetReply(settingsRev, kept, refused).encode(), state = differs)
     }
 
     private fun draft(b: Node, out: Out): Answer {
@@ -453,8 +467,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         }
         settingsRev++
         pushSettings(out)
-        send(out, Msg.STATE, state())
-        return Answer.Ok(net.seilent.funecomp.proto.tlv { enum(Tags.DraftReply.status, Enums.DraftStatus.done) })
+        return Answer.Ok(net.seilent.funecomp.proto.tlv { enum(Tags.DraftReply.status, Enums.DraftStatus.done) }, state = true)
     }
 
     private fun eqSet(b: Node, out: Out): Answer {
@@ -479,7 +492,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         return p.preamp10 in -240..0 && p.bands.size <= 10 && p.bands.all { ok(it) }
     }
 
-    private fun play(b: Node, out: Out): Answer {
+    private fun play(b: Node): Answer {
         val ids = b.longs(Tags.Play.track)
         val list: List<Long> = if (ids.isNotEmpty()) {
             if (ids.size > Proto.playMaxTracks) return Answer.Fail(Err.tooBig, "too many tracks")
@@ -487,7 +500,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             ids
         } else {
             val view = b.int(Tags.Play.view) ?: return Answer.Fail(Err.badValue, "no view")
-            if (b.long(Tags.Play.libRev) != lib.rev) return Answer.Fail(Err.staleRev, "stale rev")
+            revCode(b, Tags.Play.libRev, Tags.Play.snapRev, listView(view), true)?.let { return revFail(it) }
             lib.tracksOf(view, b.str(Tags.Play.parent) ?: "") ?: return Answer.Fail(Err.staleRev, "stale rev")
         }
         if (list.isEmpty()) return Answer.Fail(Err.badValue, "nothing to play")
@@ -501,7 +514,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         positionMs = 0
         positionAt = now()
         queueRev++
-        return changed(out)
+        return changed()
     }
 
     private fun queuePage(out: Out, offset: Int, count: Int) {
@@ -572,23 +585,22 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         }
         positionAt = now()
         queueRev++
-        return changed(out)
+        return changed()
     }
 
     private fun libGet(b: Node, out: Out): Answer {
         val view = b.int(Tags.LibGet.view) ?: return Answer.Fail(Err.badValue, "no view")
-        val libRev = b.long(Tags.LibGet.libRev)
-        if (libRev != null && libRev != lib.rev) return Answer.Fail(Err.staleRev, "stale rev")
+        revCode(b, Tags.LibGet.libRev, Tags.LibGet.snapRev, listView(view), false)?.let { return revFail(it) }
         val parent = b.str(Tags.LibGet.parent) ?: ""
         val rows = lib.rows(view, parent)?.map { if (v11) it else it.copy(mbid = null) } ?: return Answer.Fail(Err.staleRev, "stale rev")
         val offset = n(b.long(Tags.LibGet.offset), 0)
         if (offset > rows.size) return Answer.Fail(Err.badValue, "offset past end")
         val end = minOf(rows.size, offset + n(b.long(Tags.LibGet.count), 100))
-        val fixed = Lib(lib.rev, view, parent, PageInfo(0, 0, false), emptyList()).encode().size + 8
+        val fixed = Lib(lib.rev, view, parent, PageInfo(0, 0, false), emptyList(), if (v13) lib.snapRev else null).encode().size + 8
         var at = offset
         do {
             val n = PageInfo.fill(rows.map { it.size }, at, fixed, count = end - at)
-            send(out, Msg.LIB, Lib(lib.rev, view, parent, PageInfo(at.toLong(), rows.size.toLong(), at + n < rows.size), rows.subList(at, at + n)).encode())
+            send(out, Msg.LIB, Lib(lib.rev, view, parent, PageInfo(at.toLong(), rows.size.toLong(), at + n < rows.size), rows.subList(at, at + n), if (v13) lib.snapRev else null).encode())
             at += n
         } while (at < end)
         return Answer.Ok()
@@ -596,7 +608,10 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
 
     private fun action(b: Node, out: Out): Answer {
         when (b.int(Tags.Action.cmd)) {
-            Enums.ActionCmd.rescan -> lib.rev++
+            Enums.ActionCmd.rescan -> {
+                lib.rev++
+                lib.snapRev++
+            }
             Enums.ActionCmd.shuffleLibrary -> {
                 queue = lib.tracks.map { it.id }.shuffled().toMutableList()
                 slot = 0
@@ -609,12 +624,17 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             Enums.ActionCmd.favorite -> {
                 val id = b.long(Tags.Action.track) ?: return Answer.Fail(Err.badValue, "no track")
                 if (id !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
+                if (favsBusy > 0) {
+                    favsBusy--
+                    return Answer.Fail(Err.busy, faults.favsBusyText)
+                }
+                if (faults.staleState) send(out, Msg.STATE, state())
                 if (!lib.favorites.add(id)) lib.favorites.remove(id)
                 lib.rev++
             }
             else -> return Answer.Fail(Err.badValue, "no cmd")
         }
-        return changed(out)
+        return changed()
     }
 
     private fun fold(name: String) = name.trim().lowercase()
@@ -798,9 +818,10 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         return Art(crc(jpeg), s, s, jpeg, f.lastModified() to f.length())
     }
 
-    private fun lrcPut(b: Node, out: Out): Answer {
+    private fun lrcPut(b: Node): Answer {
         val track = b.long(Tags.LrcPut.track) ?: return Answer.Fail(Err.badValue, "no track")
-        if (b.long(Tags.LrcPut.libRev) != lib.rev) return Answer.Fail(Err.staleRev, "stale rev")
+        if (b.long(Tags.LrcPut.libRev) == null && (!v13 || b.long(Tags.LrcPut.snapRev) == null)) return Answer.Fail(Err.badValue, "no rev")
+        revCode(b, Tags.LrcPut.libRev, Tags.LrcPut.snapRev, false, true)?.let { return revFail(it) }
         if (track !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
         val text = b.bytes(Tags.LrcPut.text) ?: return Answer.Fail(Err.badValue, "no text")
         if (text.size > Proto.lrcMaxBytes) return Answer.Fail(Err.tooBig, "too big")
@@ -809,15 +830,13 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         opts.lrcDir?.let { File(it.apply { mkdirs() }, "${java.lang.Long.toUnsignedString(track)}.lrc").writeBytes(text) }
         lyrics += track
         opts.log("stored lrc track=${java.lang.Long.toUnsignedString(track)} bytes=${text.size}")
-        if (queue.getOrNull(slot) == track) send(out, Msg.STATE, state())
-        return Answer.Ok()
+        return Answer.Ok(state = queue.getOrNull(slot) == track)
     }
 
-    private fun lrcDel(b: Node, out: Out): Answer {
+    private fun lrcDel(b: Node): Answer {
         val track = b.long(Tags.LrcDel.track) ?: return Answer.Fail(Err.badValue, "no track")
         opts.lrcDir?.let { File(it, "${java.lang.Long.toUnsignedString(track)}.lrc").delete() }
-        if (lyrics.remove(track) && queue.getOrNull(slot) == track) send(out, Msg.STATE, state())
-        return Answer.Ok()
+        return Answer.Ok(state = lyrics.remove(track) && queue.getOrNull(slot) == track)
     }
 
     private fun updName() = if (board.name == "v1") "v1.upt" else "update.upt"

@@ -14,15 +14,19 @@ import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Req
+import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Answer
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Device
+import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Out
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LIB_PAGE
@@ -30,16 +34,34 @@ import net.seilent.funecomp.ui.PickedFile
 import java.io.ByteArrayOutputStream
 import java.io.File
 
-class SimControl(board: String, lib: Library = Library.synthetic(), private val now: () -> Long = { 0L }, artDir: File? = null) : Control {
-    val sim = Device(Options(Board.of(board), artDir = artDir), lib, now)
+class SimControl(
+    board: String,
+    lib: Library = Library.synthetic(),
+    private val now: () -> Long = { 0L },
+    artDir: File? = null,
+    minor: Int = Proto.minor,
+    faults: List<String> = emptyList(),
+) : Control {
+    val sim = Device(Options(Board.of(board), Faults(faults), artDir = artDir, minor = minor), lib, now)
     var device by mutableStateOf(DeviceState())
     val sent = ArrayList<String>()
     val failed = ArrayList<Int>()
+    val actions = ArrayList<Pair<Int, Long?>>()
+    private val heart = Heart()
+    private var toast: ((String, String) -> Unit)? = null
+    var holdReply = false
+    var reply: (() -> Unit)? = null
 
     private val out = object : Out {
         override fun push(type: Int, payload: ByteArray) {
-            device = device.reduce(type, Node.decode(Msg.info.getValue(type).name, payload), now())
+            val body = Node.decode(Msg.info.getValue(type).name, payload)
+            device = device.reduce(type, body, now())
+            if (type == Msg.STATE) show(heart.state(State.from(body)))
         }
+    }
+
+    private fun show(t: Heart.Toast?) {
+        if (t != null) toast?.invoke(t.line, t.title)
     }
 
     init {
@@ -47,10 +69,16 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
         sim.greet(out)
     }
 
-    private fun req(type: Int, payload: ByteArray): Answer {
+    private fun call(type: Int, payload: ByteArray): Answer {
         sent += Msg.info.getValue(type).name
         return sim.request(type, Node.decode(Msg.info.getValue(type).name, payload), out).also { if (it is Answer.Fail) failed += it.code }
     }
+
+    private fun after(a: Answer) {
+        if (a is Answer.Ok && a.state) out.push(Msg.STATE, sim.state())
+    }
+
+    private fun req(type: Int, payload: ByteArray): Answer = call(type, payload).also { after(it) }
 
     override fun transport(cmd: Int, seekMs: Long?, on: Boolean?, repeat: Int?) {
         req(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat))
@@ -72,11 +100,12 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
     var hold = false
 
     override fun libGet(view: Int, parent: String, offset: Long) {
-        req(Msg.LIB_GET, Req.libGet(view, parent, offset, LIB_PAGE, device.lib.rev))
+        req(Msg.LIB_GET, Req.libGet(view, parent, offset, LIB_PAGE, device.lib.libRev(view), device.lib.snapRev(view)))
     }
 
     override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>) {
-        req(Msg.PLAY, Req.play(view, parent, if (tracks.isEmpty()) device.lib.rev else null, start, shuffle, tracks))
+        val lib = device.lib.takeIf { tracks.isEmpty() }
+        req(Msg.PLAY, Req.play(view, parent, lib?.libRev(view), start, shuffle, tracks, lib?.snapRev(view)))
     }
 
     override fun queuePage(offset: Long) {
@@ -99,8 +128,26 @@ class SimControl(board: String, lib: Library = Library.synthetic(), private val 
         req(Msg.EQ_SET, Req.eqSet(output, key, ints))
     }
 
-    override fun action(cmd: Int, track: Long?) {
-        req(Msg.ACTION, Req.action(cmd, track))
+    override fun action(cmd: Int, track: Long?, done: (Int?, String?) -> Unit) {
+        actions += cmd to track
+        val a = call(Msg.ACTION, Req.action(cmd, track))
+        val finish = {
+            if (a is Answer.Fail) done(a.code, a.text) else done(null, null)
+            after(a)
+        }
+        if (holdReply) reply = finish else finish()
+    }
+
+    override fun favorite(s: State, toast: (String, String) -> Unit) {
+        this.toast = toast
+        val t = heart.tap(s) ?: return
+        action(Enums.ActionCmd.favorite, t.track) { code, text -> show(heart.replied(t, code, text, now())) }
+    }
+
+    fun release() {
+        val r = reply ?: return
+        reply = null
+        r()
     }
 
     var bonds = listOf(Bonded("AP80", "00:00:00:00:00:03", true), Bonded("V1", "00:00:00:00:00:01", true), Bonded("WH-1000XM4", "00:00:00:00:00:02"))

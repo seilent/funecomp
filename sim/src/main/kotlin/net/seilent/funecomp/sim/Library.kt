@@ -23,6 +23,7 @@ class Library(val tracks: List<Track>) {
     val byId: Map<Long, Track> = tracks.associateBy { it.id }
     val favorites = LinkedHashSet<Long>()
     var rev = 1L
+    var snapRev = 1L
 
     private val albums: List<List<Track>> =
         tracks.groupBy { it.album to it.albumArtist }.values.toList()

@@ -41,6 +41,9 @@ class Faults(specs: List<String>) {
     var updAbortAt: Long? = null
     val enums = ArrayList<EnumFault>()
     var features = Groups.all
+    var favsBusy = 0
+    var favsBusyText = "busy"
+    var staleState = false
 
     init {
         for (spec in specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }) {
@@ -64,6 +67,11 @@ class Faults(specs: List<String>) {
                 "abort-at" -> abortAt = v.toLong()
                 "upd-abort-at" -> updAbortAt = v.toLong()
                 "features" -> features = v.toLong()
+                "favs-busy" -> {
+                    favsBusy = v.substringBefore(':').toIntOrNull() ?: throw IllegalArgumentException("favs-busy: count missing in $v")
+                    favsBusyText = v.substringAfter(':', "busy")
+                }
+                "stale-state" -> staleState = true
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')

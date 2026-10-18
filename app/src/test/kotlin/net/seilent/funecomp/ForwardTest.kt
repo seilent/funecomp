@@ -119,7 +119,10 @@ class ForwardTest {
             true
         },
         { sweeping() && !breaker.open },
-        { s, offset, rev -> s.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", offset, LIB_PAGE, rev)) },
+        { s, offset, rev ->
+            val snap = device.lib.keyed(Enums.View.artists)
+            s.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", offset, LIB_PAGE, rev.takeUnless { snap }, rev.takeIf { snap }))
+        },
         breaker,
         marks = marks,
         blocks = blocks,
@@ -197,6 +200,34 @@ class ForwardTest {
         }
         assertEquals(3, logged.count { it == "art sweep kept" })
         assertEquals(20, stores().size)
+    }
+
+    private fun favorite(s: Session) {
+        val rev = device.lib.rev
+        assertTrue(s.call(Msg.ACTION, Req.action(Enums.ActionCmd.favorite, device.playback.state.track)) is Session.Result.Ok)
+        val end = System.nanoTime() + 5_000_000_000L
+        while (device.lib.rev == rev && System.nanoTime() < end) Thread.sleep(10)
+    }
+
+    @Test
+    fun aHeartTapKeepsTheSweepAndAMinor2PeerRelists() {
+        for (minor in listOf(3, 2)) {
+            val (_, port) = sim(30, minor)
+            val s = session(port)
+            val logged: MutableList<String> = Collections.synchronizedList(ArrayList())
+            val f = forward(Lookups(), marks = Kept(), log = { logged += it })
+            assertEquals(ArtPusher.Stop.DONE, f.run(s) { true }.stop)
+            favorite(s)
+            val pages = pages()
+            assertEquals(ArtPusher.Stop.DONE, f.run(s) { true }.stop)
+            if (minor == 3) {
+                assertEquals(pages, pages())
+                assertEquals(1, logged.count { it == "art sweep kept" })
+            } else {
+                assertTrue(pages() > pages)
+            }
+            lines.clear()
+        }
     }
 
     @Test

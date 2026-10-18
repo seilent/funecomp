@@ -1,5 +1,6 @@
 package net.seilent.funecomp.proto
 
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
@@ -64,6 +65,7 @@ data class HelloReply(
     val features: Long,
     val libRev: Long?,
     val settingsRev: Long?,
+    val snapRev: Long? = null,
 ) {
     fun has(group: String) = Groups.bit(group)?.let { (features ushr it) and 1L == 1L } ?: false
 
@@ -83,6 +85,7 @@ data class HelloReply(
         u64(Tags.HelloReply.features, features)
         u32(Tags.HelloReply.libRev, libRev)
         u32(Tags.HelloReply.settingsRev, settingsRev)
+        u32(Tags.HelloReply.snapRev, snapRev)
     }
 
     companion object {
@@ -101,6 +104,7 @@ data class HelloReply(
             n.long(Tags.HelloReply.features) ?: 0L,
             n.long(Tags.HelloReply.libRev),
             n.long(Tags.HelloReply.settingsRev),
+            n.long(Tags.HelloReply.snapRev),
         )
     }
 }
@@ -181,6 +185,8 @@ data class State(
     val volumeStepPct: Int? = null,
     val lyrics: Boolean? = null,
     val maxVolumePct: Int? = null,
+    val favorite: Boolean? = null,
+    val snapRev: Long? = null,
 ) {
     fun encode() = tlv {
         enum(Tags.State.source, source)
@@ -213,6 +219,8 @@ data class State(
         u8(Tags.State.volumeStepPct, volumeStepPct)
         bool(Tags.State.lyrics, lyrics)
         u8(Tags.State.maxVolumePct, maxVolumePct)
+        bool(Tags.State.favorite, favorite)
+        u32(Tags.State.snapRev, snapRev)
     }
 
     companion object {
@@ -247,6 +255,8 @@ data class State(
             n.int(Tags.State.volumeStepPct),
             n.bool(Tags.State.lyrics),
             n.int(Tags.State.maxVolumePct),
+            n.bool(Tags.State.favorite),
+            n.long(Tags.State.snapRev),
         )
     }
 }
@@ -457,11 +467,14 @@ data class LibRow(val name: String?, val count: Long?, val first: Long?, val key
     val size: Int get() = TlvWriter().rec(Tags.Lib.row) { write(this) }.size
 }
 
-data class Lib(val libRev: Long, val view: Int, val parent: String?, val page: PageInfo, val rows: List<LibRow>) {
+fun listView(view: Int?) = view == Enums.View.playlists || view == Enums.View.favorites
+
+data class Lib(val libRev: Long, val view: Int, val parent: String?, val page: PageInfo, val rows: List<LibRow>, val snapRev: Long? = null) {
     fun encode() = tlv {
         u32(Tags.Lib.libRev, libRev)
         enum(Tags.Lib.view, view)
         str(Tags.Lib.parent, parent)
+        u32(Tags.Lib.snapRev, snapRev)
         u32(Tags.Lib.offset, page.offset)
         u32(Tags.Lib.total, page.total)
         bool(Tags.Lib.more, page.more)
@@ -477,6 +490,7 @@ data class Lib(val libRev: Long, val view: Int, val parent: String?, val page: P
             n.nodes(Tags.Lib.row).map {
                 LibRow(it.str(Tags.LibRow.name), it.long(Tags.LibRow.count), it.long(Tags.LibRow.first), it.str(Tags.LibRow.key), it.str(Tags.LibRow.mbid))
             },
+            n.long(Tags.Lib.snapRev),
         )
     }
 }

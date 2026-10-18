@@ -34,10 +34,11 @@ object Req {
         ints?.let { p -> rec(Tags.EqSet.ints) { p.write(this) } }
     }
 
-    fun play(view: Int? = null, parent: String? = null, libRev: Long? = null, start: Long? = null, shuffle: Boolean? = null, tracks: List<Long> = emptyList()) = tlv {
+    fun play(view: Int? = null, parent: String? = null, libRev: Long? = null, start: Long? = null, shuffle: Boolean? = null, tracks: List<Long> = emptyList(), snapRev: Long? = null) = tlv {
         enum(Tags.Play.view, view)
         str(Tags.Play.parent, parent)
         u32(Tags.Play.libRev, libRev)
+        u32(Tags.Play.snapRev, snapRev)
         u32(Tags.Play.start, start)
         bool(Tags.Play.shuffle, shuffle)
         tracks.forEach { u64(Tags.Play.track, it) }
@@ -53,12 +54,13 @@ object Req {
         tracks.forEach { u64(Tags.QueueOp.track, it) }
     }
 
-    fun libGet(view: Int, parent: String?, offset: Long, count: Long, libRev: Long?) = tlv {
+    fun libGet(view: Int, parent: String?, offset: Long, count: Long, libRev: Long?, snapRev: Long? = null) = tlv {
         enum(Tags.LibGet.view, view)
         str(Tags.LibGet.parent, parent)
         u32(Tags.LibGet.offset, offset)
         u32(Tags.LibGet.count, count)
         u32(Tags.LibGet.libRev, libRev)
+        u32(Tags.LibGet.snapRev, snapRev)
     }
 
     fun action(cmd: Int, track: Long? = null) = tlv {
@@ -97,9 +99,10 @@ object Req {
         u32(Tags.ArtGet.have, have)
     }
 
-    fun lrcPut(track: Long, libRev: Long, text: ByteArray, crc: Long) = tlv {
+    fun lrcPut(track: Long, libRev: Long?, text: ByteArray, crc: Long, snapRev: Long? = null) = tlv {
         u64(Tags.LrcPut.track, track)
         u32(Tags.LrcPut.libRev, libRev)
+        u32(Tags.LrcPut.snapRev, snapRev)
         bytes(Tags.LrcPut.text, text)
         u32(Tags.LrcPut.crc, crc)
     }
