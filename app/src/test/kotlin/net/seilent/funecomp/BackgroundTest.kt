@@ -11,6 +11,7 @@ import android.os.Looper
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Battery
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Options
@@ -58,14 +59,14 @@ class BackgroundTest {
 
     private val logs = java.util.concurrent.CopyOnWriteArrayList<String>()
 
-    private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList(), updDir: java.io.File? = null): String {
-        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, updDir = updDir, log = { logs += it }))
+    private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList(), updDir: java.io.File? = null, minor: Int = Proto.minor): String {
+        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, updDir = updDir, minor = minor, log = { logs += it }))
         sims += s
         return "tcp:127.0.0.1:${s.listen(0)}"
     }
 
-    private fun waitFor(cond: () -> Boolean) {
-        val end = System.currentTimeMillis() + 5000
+    private fun waitFor(ms: Long = 5000, cond: () -> Boolean) {
+        val end = System.currentTimeMillis() + ms
         while (!cond()) {
             check(System.currentTimeMillis() < end) { "timed out" }
             shadowOf(Looper.getMainLooper()).idle()
@@ -225,6 +226,123 @@ class BackgroundTest {
         }
         assertEquals(first, logs.count { it.contains("rx LRC_PUT") })
         Lyrics.set(false)
+        c.destroy()
+    }
+
+    private val syntheticPlainBody = "{\"plainLyrics\":\"First line\\nSecond line\\n\",\"syncedLyrics\":null,\"instrumental\":false}"
+    private val syntheticSyncedBody = "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}"
+    private val head = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim.Library.synthetic().tracks.first().id)
+
+    private fun lyricsFrom(body: String): MutableList<String> {
+        java.io.File(app.filesDir, "lyrics").deleteRecursively()
+        val calls = java.util.Collections.synchronizedList(ArrayList<String>())
+        Lyrics.init(app, net.seilent.funecomp.artist.Http { url, _ ->
+            calls += url
+            net.seilent.funecomp.artist.Response(200, body.toByteArray())
+        })
+        Lyrics.set(true)
+        return calls
+    }
+
+    private fun live(spec: String): org.robolectric.android.controller.ServiceController<LinkService> {
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(spec)).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE }
+        Remote.queuePage(0)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+        return c
+    }
+
+    private fun stored() = logs.filter { it.startsWith("stored lrc") }
+
+    @Test
+    fun aPlainOnlyTrackGetsOnePlainPutOnA14Device() {
+        lyricsFrom(syntheticPlainBody)
+        val c = live(sim())
+        waitFor { stored().size >= 3 }
+        Thread.sleep(1500)
+        val s = stored()
+        assertTrue(s.any { it.startsWith("stored lrc track=$head ") })
+        assertTrue(s.all { it.endsWith("kind=plain") })
+        assertEquals(s.map { it.substringBefore(" bytes") }.toSet().size, s.size)
+        assertEquals(s.size, logs.count { it.contains("rx LRC_PUT") })
+        Lyrics.set(false)
+        c.destroy()
+    }
+
+    private fun plainDir() = kotlin.io.path.createTempDirectory("lrc").toFile().also { it.resolve("$head.lrc").writeText("Device words\n") }
+
+    @Test
+    fun aDevicePlainGetsNoPlainPut() {
+        lyricsFrom(syntheticPlainBody)
+        val c = live(sim(lrcDir = plainDir()))
+        waitFor { stored().size >= 3 }
+        Thread.sleep(1500)
+        assertTrue(stored().none { it.startsWith("stored lrc track=$head ") })
+        assertEquals(stored().size, logs.count { it.contains("rx LRC_PUT") })
+        Lyrics.set(false)
+        c.destroy()
+    }
+
+    @Test
+    fun aDevicePlainStillGetsASyncedPut() {
+        lyricsFrom(syntheticSyncedBody)
+        val c = live(sim(lrcDir = plainDir()))
+        waitFor { stored().any { it.startsWith("stored lrc track=$head ") } }
+        assertTrue(stored().single { it.startsWith("stored lrc track=$head ") }.endsWith("kind=synced"))
+        Lyrics.set(false)
+        c.destroy()
+    }
+
+    @Test
+    fun aMinor3DeviceGetsNoPlainPut() {
+        val calls = lyricsFrom(syntheticPlainBody)
+        val c = live(sim(minor = 3))
+        waitFor(30_000) { calls.size >= 1 + LyricsPlan.AHEAD }
+        Thread.sleep(1500)
+        assertEquals(0, logs.count { it.contains("rx LRC_PUT") })
+        Lyrics.set(false)
+        c.destroy()
+    }
+
+    @Test
+    fun aRefusedPlainPutIsNotSentAgain() {
+        lyricsFrom(syntheticPlainBody)
+        val c = live(sim(faults = listOf("refuse=LRC_PUT")))
+        val end = System.currentTimeMillis() + 30_000
+        while (logs.count { it.contains("rx LRC_PUT") } < 1 + LyricsPlan.AHEAD) {
+            check(System.currentTimeMillis() < end) { "puts: ${logs.count { it.contains("rx LRC_PUT") }}" }
+            shadowOf(Looper.getMainLooper()).idle()
+            Thread.sleep(50)
+        }
+        Thread.sleep(500)
+        val first = logs.count { it.contains("rx LRC_PUT") }
+        assertEquals(1 + LyricsPlan.AHEAD, first)
+        repeat(3) {
+            Lyrics.poke()
+            Remote.queuePage(0)
+            Thread.sleep(300)
+        }
+        assertEquals(first, logs.count { it.contains("rx LRC_PUT") })
+        Lyrics.set(false)
+        c.destroy()
+    }
+
+    @Test
+    fun aFileErrorEndsTheTrackWithoutTrippingTheBreaker() {
+        val calls = lyricsFrom(syntheticPlainBody)
+        val blocked = java.io.File(app.filesDir, "lyrics")
+        blocked.writeText("not a dir")
+        val c = live(sim())
+        waitFor(30_000) {
+            Lyrics.poke()
+            Thread.sleep(200)
+            calls.toSet().size >= 1 + LyricsPlan.AHEAD
+        }
+        Thread.sleep(1500)
+        assertEquals(calls.toSet().size, calls.size)
+        assertEquals(0, logs.count { it.contains("rx LRC_PUT") })
+        Lyrics.set(false)
+        blocked.delete()
         c.destroy()
     }
 

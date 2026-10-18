@@ -165,7 +165,7 @@ class Proto12Test {
 
     @Test
     fun lrcPutRules() {
-        val d = device(opts())
+        val d = device(opts(minor = 3))
         val text = "[00:12.00]First line\n[00:17.20]Second line\n".toByteArray()
         assertEquals(Err.staleRev, code(req(d, Msg.LRC_PUT, Req.lrcPut(track, lib.rev + 1, text, crc(text)))))
         assertEquals(Err.crc, code(req(d, Msg.LRC_PUT, Req.lrcPut(track, lib.rev, text, crc(text) + 1))))

@@ -16,6 +16,8 @@ class Lrclib(
     mono: () -> Long = { System.nanoTime() / 1_000_000 },
     random: Random = Random.Default,
 ) {
+    data class Found(val text: String, val synced: Boolean)
+
     data class Query(val track: String, val artist: String, val album: String?, val durationMs: Long?) {
         val key: String get() = hash("$track\n$artist\n${album ?: ""}\n${durationMs?.let { seconds(it) } ?: ""}")
     }
@@ -23,32 +25,52 @@ class Lrclib(
     private val api = Api(http, "funecomp/$version (https://github.com/seilent/funecomp)", RateLimiter(INTERVAL_MS, mono), sleep, tries = TRIES, jitter = { random.nextDouble() * JITTER })
 
     @Synchronized
-    fun get(q: Query): String? {
+    fun get(q: Query): Found? {
         if (!enabled()) return null
         val hit = File(dir, "${q.key}.lrc")
-        if (hit.isFile) return hit.readText()
+        if (hit.isFile) return Found(read(hit), true)
+        val txt = File(dir, "${q.key}.txt")
         val miss = File(dir, "${q.key}.miss")
         if (miss.isFile) {
-            val lines = miss.readText().lines()
-            if (lines.getOrNull(1) == CLEANED && clock() - (lines[0].trim().toLongOrNull() ?: 0) in 0 until MISS_MS) return null
+            val lines = read(miss).lines()
+            if (lines.getOrNull(1) == CLEANED && clock() - (lines[0].trim().toLongOrNull() ?: 0) in 0 until MISS_MS) {
+                return if (txt.isFile) Found(read(txt), false) else null
+            }
         }
         val j = api.json(url(q.track, q.artist, q.durationMs))
-        var synced = synced(j)
         val d = q.durationMs
-        if (synced == null && d != null && j?.get("instrumental")?.bool != true) synced = split(q, d)
+        val first = synced(j)
+        val second = if (first == null && d != null && j?.get("instrumental")?.bool != true) split(q, d) else null
+        val found = first ?: second?.takeIf { it.synced } ?: plain(j) ?: second
         dir.mkdirs()
-        if (synced == null) save(miss, "${clock()}\n$CLEANED") else save(hit, synced)
-        return synced
+        when {
+            found == null -> {
+                delete(txt)
+                save(miss, "${clock()}\n$CLEANED")
+            }
+            found.synced -> {
+                save(hit, found.text)
+                delete(txt)
+                delete(miss)
+            }
+            else -> {
+                save(txt, found.text)
+                save(miss, "${clock()}\n$CLEANED")
+            }
+        }
+        return found
     }
 
-    private fun synced(j: J?): String? = j?.get("syncedLyrics")?.str?.takeIf { it.isNotBlank() && j["instrumental"].bool != true }
+    private fun synced(j: J?): Found? = j?.get("syncedLyrics")?.str?.takeIf { it.isNotBlank() && j["instrumental"].bool != true }?.let { Found(it, true) }
 
-    private fun split(q: Query, durationMs: Long): String? {
+    private fun plain(j: J?): Found? = j?.get("plainLyrics")?.str?.takeIf { it.isNotBlank() && j["instrumental"].bool != true }?.let { Found(it, false) }
+
+    private fun split(q: Query, durationMs: Long): Found? {
         val (track, artist) = LyricNames.split(q.track, q.artist) ?: return null
         val j = api.json(url(track, artist, durationMs)) ?: return null
         val d = j["duration"].double ?: return null
         if (LyricNames.fold(j["trackName"].str ?: "") != LyricNames.fold(track) || abs(d - seconds(durationMs)) > MATCH_S) return null
-        return synced(j)
+        return synced(j) ?: plain(j)
     }
 
     private fun url(track: String, artist: String, durationMs: Long?): String = buildString {
@@ -58,11 +80,25 @@ class Lrclib(
 
     private fun save(f: File, text: String) {
         val tmp = File(f.path + ".tmp")
-        tmp.writeText(text)
+        try {
+            tmp.writeText(text)
+        } catch (e: IOException) {
+            throw LyricsFileException("write ${tmp.name}", e)
+        }
         if (!tmp.renameTo(f)) {
             f.delete()
-            if (!tmp.renameTo(f)) throw IOException("rename ${f.name}")
+            if (!tmp.renameTo(f)) throw LyricsFileException("rename ${f.name}")
         }
+    }
+
+    private fun read(f: File): String = try {
+        f.readText()
+    } catch (e: IOException) {
+        throw LyricsFileException("read ${f.name}", e)
+    }
+
+    private fun delete(f: File) {
+        if (f.exists() && !f.delete()) throw LyricsFileException("delete ${f.name}")
     }
 
     companion object {
@@ -72,10 +108,12 @@ class Lrclib(
         private const val JITTER = 0.3
         private const val TRIES = 6
         private const val MATCH_S = 2.0
-        private const val CLEANED = "cleaned=1"
+        private const val CLEANED = "cleaned=2"
 
         private fun seconds(ms: Long) = (ms + 500) / 1000
 
         private fun hash(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).take(12).joinToString("") { "%02x".format(it) }
     }
 }
+
+class LyricsFileException(message: String, cause: Throwable? = null) : IOException(message, cause)

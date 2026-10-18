@@ -187,6 +187,7 @@ data class State(
     val maxVolumePct: Int? = null,
     val favorite: Boolean? = null,
     val snapRev: Long? = null,
+    val lyricsPlain: Boolean? = null,
 ) {
     fun encode() = tlv {
         enum(Tags.State.source, source)
@@ -218,6 +219,7 @@ data class State(
         u8(Tags.State.volumePct, volumePct)
         u8(Tags.State.volumeStepPct, volumeStepPct)
         bool(Tags.State.lyrics, lyrics)
+        bool(Tags.State.lyricsPlain, lyricsPlain)
         u8(Tags.State.maxVolumePct, maxVolumePct)
         bool(Tags.State.favorite, favorite)
         u32(Tags.State.snapRev, snapRev)
@@ -257,6 +259,7 @@ data class State(
             n.int(Tags.State.maxVolumePct),
             n.bool(Tags.State.favorite),
             n.long(Tags.State.snapRev),
+            n.bool(Tags.State.lyricsPlain),
         )
     }
 }
@@ -418,6 +421,7 @@ data class QueueItem(
     val album: String? = null,
     val durationMs: Long? = null,
     val lyrics: Boolean? = null,
+    val lyricsPlain: Boolean? = null,
 ) {
     fun write(o: TlvWriter) = o.apply {
         u64(Tags.QueueItem.track, track)
@@ -427,6 +431,7 @@ data class QueueItem(
         str(Tags.QueueItem.album, album)
         u32(Tags.QueueItem.durationMs, durationMs)
         bool(Tags.QueueItem.lyrics, lyrics)
+        bool(Tags.QueueItem.lyricsPlain, lyricsPlain)
     }
 
     val size: Int get() = TlvWriter().rec(Tags.Queue.item) { write(this) }.size
@@ -449,6 +454,7 @@ data class Queue(val rev: Long, val page: PageInfo, val items: List<QueueItem>) 
                 QueueItem(
                     it.long(Tags.QueueItem.track) ?: 0, it.str(Tags.QueueItem.title), it.strs(Tags.QueueItem.artists), it.strs(Tags.QueueItem.mbids),
                     it.str(Tags.QueueItem.album), it.long(Tags.QueueItem.durationMs), it.bool(Tags.QueueItem.lyrics),
+                    it.bool(Tags.QueueItem.lyricsPlain),
                 )
             },
         )

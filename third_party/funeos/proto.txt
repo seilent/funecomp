@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 3
+const minor 4
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -179,6 +179,7 @@ tag STATE 29 lyrics bool one
 tag STATE 30 maxVolumePct u8 one
 tag STATE 31 favorite bool one
 tag STATE 32 snapRev u32 one
+tag STATE 33 lyricsPlain bool one
 msg SCHEMA 0x11 dev push
 tag SCHEMA 1 pivot str one
 tag SCHEMA 2 offset u32 one
@@ -358,6 +359,7 @@ tag QueueItem 4 mbids str list
 tag QueueItem 5 album str one
 tag QueueItem 6 durationMs u32 one
 tag QueueItem 7 lyrics bool one
+tag QueueItem 8 lyricsPlain bool one
 tag LibRow 1 name str one
 tag LibRow 2 count u32 one
 tag LibRow 3 first u64 one

@@ -504,10 +504,10 @@ object Remote : Control {
     override fun volumePercent(pct: Int, done: () -> Unit) =
         send(Msg.VOLUME, Req.volume(percent = pct), "volume percent $pct", ok = { done() }, fail = done)
 
-    fun lrcPut(track: Long, libRev: Long?, snapRev: Long?, text: ByteArray, crc: Long, done: (Int?) -> Unit) {
+    fun lrcPut(track: Long, libRev: Long?, snapRev: Long?, text: ByteArray, crc: Long, synced: Boolean, done: (Int?) -> Unit) {
         val s = link?.session ?: return done(-1)
         s.request(Msg.LRC_PUT, Req.lrcPut(track, libRev, text, crc, snapRev)) { r ->
-            Log.i(TAG, "lrc put ${java.lang.Long.toUnsignedString(track)} ${text.size} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
+            Log.i(TAG, "lrc put ${java.lang.Long.toUnsignedString(track)} ${text.size} ${if (synced) "synced" else "plain"} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
             done(
                 when (r) {
                     is Session.Result.Ok -> null

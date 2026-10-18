@@ -10,7 +10,7 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply 74000101010001040046444350020200010003020003000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply 74000101010001040046444350020200010003020004000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
 hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff010000000000000e0400070000000f04000300000010040004000000
 re hello_reply hello
 dec hello_reply 0.len 116
@@ -19,7 +19,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 3
+dec hello_reply 0.body.minor 4
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -1952,3 +1952,56 @@ dec lib_get_snap_stale_error 0.seq 56
 dec lib_get_snap_stale_error 0.body.code 7
 dec lib_get_snap_stale_error 0.body.text staleRev
 act lib_get_snap_stale_error accept
+vec state_lyrics_plain dev
+hex state_lyrics_plain 1e001000390003080065000000000000000c0100001d0100002101000120040004000000
+dec state_lyrics_plain 0.len 30
+dec state_lyrics_plain 0.type STATE
+dec state_lyrics_plain 0.flags 0x00
+dec state_lyrics_plain 0.seq 57
+dec state_lyrics_plain 0.body.track 101
+dec state_lyrics_plain 0.body.playing false
+dec state_lyrics_plain 0.body.lyrics false
+dec state_lyrics_plain 0.body.lyricsPlain true
+dec state_lyrics_plain 0.body.snapRev 4
+act state_lyrics_plain accept
+vec queue_lyrics_plain dev
+hex queue_lyrics_plain 510014003a000104000f00000002040000000000030400020000000401000005190001080065000000000000000203004f6e6507010000080100010519000108
+hex queue_lyrics_plain 00660000000000000002030054776f0701000108010000
+dec queue_lyrics_plain 0.len 81
+dec queue_lyrics_plain 0.type QUEUE
+dec queue_lyrics_plain 0.flags 0x00
+dec queue_lyrics_plain 0.seq 58
+dec queue_lyrics_plain 0.body.rev 15
+dec queue_lyrics_plain 0.body.offset 0
+dec queue_lyrics_plain 0.body.total 2
+dec queue_lyrics_plain 0.body.more false
+dec queue_lyrics_plain 0.body.item[0].track 101
+dec queue_lyrics_plain 0.body.item[0].title One
+dec queue_lyrics_plain 0.body.item[0].lyrics false
+dec queue_lyrics_plain 0.body.item[0].lyricsPlain true
+dec queue_lyrics_plain 0.body.item[1].track 102
+dec queue_lyrics_plain 0.body.item[1].title Two
+dec queue_lyrics_plain 0.body.item[1].lyrics true
+dec queue_lyrics_plain 0.body.item[1].lyricsPlain false
+act queue_lyrics_plain accept
+vec lrc_put_plain app
+hex lrc_put_plain 33002a043b000108006500000000000000050400040000000317004669727374206c696e650a5365636f6e64206c696e650a0404004c8d9147
+dec lrc_put_plain 0.len 51
+dec lrc_put_plain 0.type LRC_PUT
+dec lrc_put_plain 0.flags 0x04
+dec lrc_put_plain 0.seq 59
+dec lrc_put_plain 0.body.track 101
+dec lrc_put_plain 0.body.snapRev 4
+dec lrc_put_plain 0.body.text 4669727374206c696e650a5365636f6e64206c696e650a
+dec lrc_put_plain 0.body.crc 1200721228
+act lrc_put_plain accept
+vec lrc_put_plain_error dev
+hex lrc_put_plain_error 0e002a033b000101000402070072656675736564
+re lrc_put_plain_error lrc_put_plain
+dec lrc_put_plain_error 0.len 14
+dec lrc_put_plain_error 0.type LRC_PUT
+dec lrc_put_plain_error 0.flags 0x03
+dec lrc_put_plain_error 0.seq 59
+dec lrc_put_plain_error 0.body.code 4
+dec lrc_put_plain_error 0.body.text refused
+act lrc_put_plain_error accept

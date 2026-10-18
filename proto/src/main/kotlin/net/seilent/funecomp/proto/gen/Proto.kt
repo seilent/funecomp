@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "f95575cb7c5621c51807f3d9a698e55c47d0f867"
-    const val PROTO_SHA256 = "7eda669f143aac4b1e449a03b908179776b0459d705150bf5441d7a38b1d57bc"
-    const val VECTORS_SHA256 = "4befd4975d6522f6c2ba68c9fc7888f44e16bfee0477f98866be0f57fe268b15"
+    const val COMMIT = "e5435533925123749fadff9f955731d8f094b5e7"
+    const val PROTO_SHA256 = "e9b2a728eef00485f940ee3d132e1e2f77d2ef87c0c1a6c2785a4f78e9a2f44a"
+    const val VECTORS_SHA256 = "55ec88554c54fd10ede6571d5bed7a42e98f20fc123bc2ca14e82d624a1ceaae"
     const val TOKENS_SHA256 = "6ec9e3b80e9c857e924e2a26602d9fd282176337545ef938b4f7113a332f4bd5"
     const val TOKENSV1_SHA256 = "7463c4af8a045b4e5f2561bd4ff488de8edc667358e266ce781950ddac2e35a0"
 }
@@ -18,7 +18,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 3
+    const val minor = 4
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -351,6 +351,7 @@ object Tags {
         const val maxVolumePct = 30
         const val favorite = 31
         const val snapRev = 32
+        const val lyricsPlain = 33
     }
     object Schema {
         const val pivot = 1
@@ -581,6 +582,7 @@ object Tags {
         const val album = 5
         const val durationMs = 6
         const val lyrics = 7
+        const val lyricsPlain = 8
     }
     object LibRow {
         const val name = 1
@@ -656,6 +658,7 @@ object Tags {
             30 to Field(30, "maxVolumePct", Base.U8, null, false),
             31 to Field(31, "favorite", Base.BOOL, null, false),
             32 to Field(32, "snapRev", Base.U32, null, false),
+            33 to Field(33, "lyricsPlain", Base.BOOL, null, false),
         ),
         "SCHEMA" to mapOf(
             1 to Field(1, "pivot", Base.STR, null, false),
@@ -886,6 +889,7 @@ object Tags {
             5 to Field(5, "album", Base.STR, null, false),
             6 to Field(6, "durationMs", Base.U32, null, false),
             7 to Field(7, "lyrics", Base.BOOL, null, false),
+            8 to Field(8, "lyricsPlain", Base.BOOL, null, false),
         ),
         "LibRow" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),

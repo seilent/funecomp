@@ -117,16 +117,21 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private val v11: Boolean get() = opts.minor >= 1
     private val v12: Boolean get() = opts.minor >= 2
     private val v13: Boolean get() = opts.minor >= 3
+    private val v14: Boolean get() = opts.minor >= 4
     private val started = clock()
     private var lastBattery = -1
-    private val lyrics = HashSet<Long>()
+    private val have = HashMap<Long, Have>()
     private val arts = HashMap<Pair<Long, Int>, Art>()
     private var upd: Upd? = null
     private var favsBusy = faults.favsBusy
 
     init {
-        opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f -> f.name.removeSuffix(".lrc").toULongOrNull()?.let { lyrics += it.toLong() } }
+        opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f ->
+            f.name.removeSuffix(".lrc").toULongOrNull()?.let { have[it.toLong()] = if (SYNCED.containsMatchIn(f.readText())) Have.Synced else Have.Plain }
+        }
     }
+
+    private enum class Have { Synced, Plain }
 
     class Art(val crc: Long, val w: Int, val h: Int, val bytes: ByteArray, val source: Pair<Long, Long>)
     class Upd(val board: String, val size: Long, val md5: String, val part: File)
@@ -213,10 +218,11 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             if (v12) opts.cardTotalMiB else null,
             if (v12) volumePercent(volume) else null,
             if (v12) prefs.getValue("volumeStep").toIntOrNull() ?: 5 else null,
-            if (v12 && t != null) t.id in lyrics else null,
+            if (v12 && t != null) have[t.id] == Have.Synced else null,
             if (v12) prefs.getValue("maxVolume").toIntOrNull() ?: 100 else null,
             if (v13 && t != null && favsBusy == 0) t.id in lib.favorites else null,
             if (v13) lib.snapRev else null,
+            if (v14 && t != null) have[t.id] == Have.Plain else null,
         ).encode()
     }
 
@@ -523,7 +529,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         val items = queue.map { id ->
             val t = lib.byId[id]
             when {
-                v12 && t != null -> QueueItem(id, t.title, t.artists, t.mbids, t.album, t.durationMs, id in lyrics)
+                v12 && t != null -> QueueItem(id, t.title, t.artists, t.mbids, t.album, t.durationMs, have[id] == Have.Synced, if (v14) have[id] == Have.Plain else null)
                 v11 && t != null -> QueueItem(id, t.title, t.artists, t.mbids)
                 else -> QueueItem(id, t?.title)
             }
@@ -828,17 +834,21 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         val text = b.bytes(Tags.LrcPut.text) ?: return Answer.Fail(Err.badValue, "no text")
         if (text.size > Proto.lrcMaxBytes) return Answer.Fail(Err.tooBig, "too big")
         if (b.long(Tags.LrcPut.crc) != crc(text)) return Answer.Fail(Err.crc, "crc")
-        if (!SYNCED.containsMatchIn(String(text, Charsets.UTF_8))) return Answer.Fail(Err.badValue, "not synced lrc")
+        val s = String(text, Charsets.UTF_8)
+        val synced = SYNCED.containsMatchIn(s)
+        if (!synced && !v14) return Answer.Fail(Err.badValue, "not synced lrc")
+        if (s.isBlank()) return Answer.Fail(Err.badValue, "empty")
+        if (!synced && have[track] == Have.Synced) return Answer.Fail(Err.refused, "refused")
         opts.lrcDir?.let { File(it.apply { mkdirs() }, "${java.lang.Long.toUnsignedString(track)}.lrc").writeBytes(text) }
-        lyrics += track
-        opts.log("stored lrc track=${java.lang.Long.toUnsignedString(track)} bytes=${text.size}")
+        have[track] = if (synced) Have.Synced else Have.Plain
+        opts.log("stored lrc track=${java.lang.Long.toUnsignedString(track)} bytes=${text.size} kind=${if (synced) "synced" else "plain"}")
         return Answer.Ok(state = queue.getOrNull(slot) == track)
     }
 
     private fun lrcDel(b: Node): Answer {
         val track = b.long(Tags.LrcDel.track) ?: return Answer.Fail(Err.badValue, "no track")
         opts.lrcDir?.let { File(it, "${java.lang.Long.toUnsignedString(track)}.lrc").delete() }
-        return Answer.Ok(state = lyrics.remove(track) && queue.getOrNull(slot) == track)
+        return Answer.Ok(state = have.remove(track) != null && queue.getOrNull(slot) == track)
     }
 
     private fun updName() = if (board.name == "v1") "v1.upt" else "update.upt"

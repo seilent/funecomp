@@ -17,6 +17,7 @@ class OldPeerTest {
     private val v10 = table("/proto-1.0.txt")
     private val v11 = table("/proto-1.1.txt")
     private val v12 = table("/proto-1.2.txt")
+    private val v13 = table("/proto-1.3.txt")
 
     private fun table(name: String): Map<String, Map<Int, Field>> = run {
         val text = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
@@ -108,12 +109,29 @@ class OldPeerTest {
     }
 
     @Test
+    fun protocol14FramesDecodeWithThe13TablesToEmptyFields() {
+        val st = State.from(Node.decode("STATE", body("state_lyrics_plain"), v13))
+        assertEquals(false, st.lyrics)
+        assertNull(st.lyricsPlain)
+        val now = State.from(Node.decode("STATE", body("state_lyrics_plain")))
+        assertEquals(false, now.lyrics)
+        assertEquals(true, now.lyricsPlain)
+
+        val q = Queue.from(Node.decode("QUEUE", body("queue_lyrics_plain"), v13))
+        assertEquals(listOf(false, true), q.items.map { it.lyrics })
+        assertTrue(q.items.all { it.lyricsPlain == null })
+        val q14 = Queue.from(Node.decode("QUEUE", body("queue_lyrics_plain")))
+        assertEquals(listOf(false to true, true to false), q14.items.map { it.lyrics to it.lyricsPlain })
+    }
+
+    @Test
     fun requestBuildersMatchTheVectors() {
         assertArrayEquals(body("art_get"), Req.artGet(101, 512))
         assertArrayEquals(body("art_get_have"), Req.artGet(101, 256, have = 2400070225))
         val text = "[00:12.00]First line\n[00:17.20]Second line\n".toByteArray()
         assertArrayEquals(body("lrc_put"), Req.lrcPut(101, 7, text, 2802745864))
         assertArrayEquals(body("lrc_put_snap"), Req.lrcPut(101, null, text, 2802745864, snapRev = 4))
+        assertArrayEquals(body("lrc_put_plain"), Req.lrcPut(101, null, "First line\nSecond line\n".toByteArray(), 1200721228, snapRev = 4))
         assertArrayEquals(body("play_view_snap"), Req.play(Enums.View.albums, start = 0, shuffle = true, snapRev = 4))
         assertArrayEquals(body("lib_get_snap_stale"), Req.libGet(Enums.View.albums, null, 0, 100, null, snapRev = 3))
         assertArrayEquals(body("lrc_del"), Req.lrcDel(101))

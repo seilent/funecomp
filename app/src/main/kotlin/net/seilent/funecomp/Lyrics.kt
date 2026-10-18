@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.Lrclib
+import net.seilent.funecomp.artist.LyricsFileException
 import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.proto.gen.Err
@@ -98,19 +99,23 @@ object Lyrics {
                 return
             }
             if (breaker.open) return
-            val text = try {
+            val found = try {
                 l.get(Lrclib.Query(w.title, w.artist, w.album, w.durationMs)).also { breaker.result(false) }
+            } catch (e: LyricsFileException) {
+                Log.w(Remote.TAG, "lyrics ${w.title}: $e")
+                done += w.track
+                return
             } catch (e: IOException) {
                 Log.w(Remote.TAG, "lyrics ${w.title}: $e")
                 breaker.result(true)
                 return
             }
             if (!on) return
-            if (text == null) {
+            if (found == null || !found.synced && !w.plain) {
                 done += w.track
                 continue
             }
-            val bytes = text.toByteArray(Charsets.UTF_8)
+            val bytes = found.text.toByteArray(Charsets.UTF_8)
             if (bytes.size > Proto.lrcMaxBytes) {
                 Log.i(Remote.TAG, "lyrics ${w.title}: ${bytes.size} bytes over ${Proto.lrcMaxBytes}, skipped")
                 done += w.track
@@ -119,7 +124,7 @@ object Lyrics {
             val snap = Remote.device.lib.snap
             val rev = if (snap != null) null else Remote.device.playback.state.libRev ?: Remote.device.hello?.libRev ?: return
             if (gen != generation) return
-            val code = put(w.track, rev, snap, bytes)
+            val code = put(w.track, rev, snap, bytes, found.synced)
             if (gen != generation) return
             if (code != Err.busy && code != NO_REPLY) done += w.track
         }
@@ -127,10 +132,10 @@ object Lyrics {
 
     fun network() = breaker.network()
 
-    private fun put(track: Long, libRev: Long?, snapRev: Long?, bytes: ByteArray): Int? {
+    private fun put(track: Long, libRev: Long?, snapRev: Long?, bytes: ByteArray, synced: Boolean): Int? {
         val latch = CountDownLatch(1)
         val code = AtomicReference<Int?>(NO_REPLY)
-        Remote.lrcPut(track, libRev, snapRev, bytes, CRC32().apply { update(bytes) }.value) {
+        Remote.lrcPut(track, libRev, snapRev, bytes, CRC32().apply { update(bytes) }.value, synced) {
             code.set(it)
             latch.countDown()
         }
