@@ -53,8 +53,8 @@ class BehaviorTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun start(pages: List<Page>, link: LinkView = LinkView(Phase.LIVE), firmware: FirmwareView = FirmwareView()): Pair<SimControl, Shell> {
-        val c = SimControl("ap80")
+    private fun start(pages: List<Page>, link: LinkView = LinkView(Phase.LIVE), firmware: FirmwareView = FirmwareView(), board: String = "ap80"): Pair<SimControl, Shell> {
+        val c = SimControl(board)
         val shell = Shell(Nav(pages))
         rule.mainClock.autoAdvance = false
         rule.setContent {
@@ -328,6 +328,46 @@ class BehaviorTest {
         settle(300)
         assertEquals(1, c.sent.count { it == "DRAFT" })
     }
+
+    private fun row(tag: String, vararg texts: String) {
+        for (t in texts) rule.onNode(hasText(t) and hasAnyAncestor(hasTestTag(tag))).assertExists()
+    }
+
+    private fun deviceRows(board: String, brightness: String) {
+        start(listOf(Page.Home, Page.Settings), board = board)
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.crossfeed"))
+        rule.mainClock.autoAdvance = false
+        settle(1000)
+        row("set.crossfeed", "CROSSFEED", "OFF")
+        for (p in listOf("library", "display")) {
+            rule.onNodeWithTag("pivot.$p").performClick()
+            settle(1000)
+        }
+        row("set.brightness", "BRIGHTNESS", brightness)
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.artistPhoto"))
+        rule.mainClock.autoAdvance = false
+        settle(1000)
+        row("set.artistPhoto", "ARTIST PHOTO", "ON")
+        if (board == "v1") row("set.size", "SIZE", "STANDARD") else row("set.scale", "SCALE", "1.5")
+        for (p in listOf("power", "system")) {
+            rule.onNodeWithTag("pivot.$p").performClick()
+            settle(1000)
+        }
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.about"))
+        rule.mainClock.autoAdvance = false
+        settle(1000)
+        assertEquals(board == "v1", rule.onAllNodesWithTag("set.wifi").fetchSemanticsNodes().isNotEmpty())
+        if (board == "v1") row("set.wifi", "WI-FI")
+    }
+
+    @Test
+    fun deviceRowsOnTheAp80() = deviceRows("ap80", "55%")
+
+    @Test
+    fun deviceRowsOnTheV1() = deviceRows("v1", "35%")
 
     @Test
     fun popKeepsThePageBelow() {

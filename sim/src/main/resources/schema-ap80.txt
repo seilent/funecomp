@@ -9,6 +9,7 @@ output	sampleRate	info	SAMPLE RATE	-	AUTO	-	readOnly
 output	replaygain	choice	REPLAYGAIN	off,track,album	OFF,TRACK,ALBUM	-	-
 output	crossfade	steps	CROSSFADE	0,1,2,3,5	OFF,1 S,2 S,3 S,5 S	-	-
 output	eq	info	EQ	-	OFF	-	readOnly
+output	crossfeed	choice	CROSSFEED	off,default,chuMoy,janMeier	OFF,DEFAULT,CHU MOY,JAN MEIER	-	-
 output	playThrough	choice	PLAY THROUGH	off,folders,albums	OFF,FOLDERS,ALBUMS	-	-
 output	resume	choice	RESUME	off,track,position	OFF,TRACK,POSITION	-	-
 output	autoNowPlaying	toggle	AUTO NOW PLAYING	off,on	OFF,ON	-	-
@@ -16,12 +17,14 @@ output	pairPhone	action	PAIR A PHONE	-	-	-	readOnly
 library	folders	info	LIBRARY FOLDERS	-	1 ON	-	readOnly
 library	rescan	action	RESCAN LIBRARY	-	-	-	-
 library	format	action	FORMAT CARD	-	-	-	readOnly
+display	brightness	steps	BRIGHTNESS	10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	10%,15%,20%,25%,30%,35%,40%,45%,50%,55%,60%,65%,70%,75%,80%,85%,90%,95%,100%	-	-
 display	accentHue	range	ACCENT	-	-	0,350,10	-
 display	scale	info	SCALE	-	1.5	-	readOnly
 display	saverSeconds	steps	SAVER	10,15,30,60,120,300	10 S,15 S,30 S,1 MIN,2 MIN,5 MIN	-	-
 display	clock	choice	CLOCK	24h,12h,off	24H,12H,OFF	-	-
 display	batteryPercent	toggle	BATTERY PERCENT	off,on	OFF,ON	-	-
 display	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-
+display	artistPhoto	toggle	ARTIST PHOTO	off,on	OFF,ON	-	-
 power	screenOffSeconds	steps	SCREEN OFF AFTER	0,60,120,300,600,1800	OFF,1 MIN,2 MIN,5 MIN,10 MIN,30 MIN	-	-
 power	sleep	draft	SLEEP TIMER	0,15,30,45,60,90,120	OFF,15 MIN,30 MIN,45 MIN,60 MIN,90 MIN,120 MIN	-	-
 power	idleShutdownMinutes	steps	IDLE SHUTDOWN	0,5,10,30,60	OFF,5 MIN,10 MIN,30 MIN,60 MIN	-	-

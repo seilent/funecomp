@@ -211,12 +211,20 @@ val SHOTS = listOf(
     Shot("album-art", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru"), prep = ::playing, art = true),
     Shot("settings-output", pages = HOME + Page.Settings),
     Shot("settings-output-v1", board = "v1", pages = HOME + Page.Settings),
+    Shot("settings-crossfeed", pages = HOME + Page.Settings) { scrollTo("set.crossfeed") },
     Shot("settings-edit", pages = HOME + Page.Settings) { rule.onNodeWithTag("set.volumeStep").performClick() },
     Shot("settings-display", pages = HOME + Page.Settings) {
         for (p in listOf("library", "display")) {
             rule.onNodeWithTag("pivot.$p").performClick()
             settle(1000)
         }
+    },
+    Shot("settings-artistphoto-v1", board = "v1", pages = HOME + Page.Settings) {
+        for (p in listOf("library", "display")) {
+            rule.onNodeWithTag("pivot.$p").performClick()
+            settle(1000)
+        }
+        scrollTo("set.artistPhoto")
     },
     Shot("settings-power", pages = HOME + Page.Settings) {
         for (p in listOf("library", "display", "power")) {
@@ -225,6 +233,12 @@ val SHOTS = listOf(
         }
     },
     Shot("settings-system", pages = HOME + Page.Settings) {
+        for (p in listOf("library", "display", "power", "system")) {
+            rule.onNodeWithTag("pivot.$p").performClick()
+            settle(1000)
+        }
+    },
+    Shot("settings-system-v1", board = "v1", pages = HOME + Page.Settings) {
         for (p in listOf("library", "display", "power", "system")) {
             rule.onNodeWithTag("pivot.$p").performClick()
             settle(1000)

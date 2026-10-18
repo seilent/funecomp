@@ -69,6 +69,60 @@ class DeviceTest {
     }
 
     @Test
+    fun crossfeedBrightnessAndArtistPhotoRowsOnBothBoards() {
+        for ((b, bright) in listOf("ap80" to "55", "v1" to "35")) {
+            val d = device(b)
+            val keys = d.rows.map { it.key }
+            assertEquals(keys.indexOf("eq") + 1, keys.indexOf("crossfeed"))
+            val display = d.rows.filter { it.pivot == "display" }.map { it.key }
+            assertEquals("brightness", display.first())
+            assertEquals("artistPhoto", display.last())
+            val xf = d.rows.first { it.key == "crossfeed" }
+            assertEquals(Enums.RowKind.choice, xf.kind)
+            assertEquals(listOf("off", "default", "chuMoy", "janMeier"), xf.values)
+            assertEquals(listOf("OFF", "DEFAULT", "CHU MOY", "JAN MEIER"), xf.words)
+            val br = d.rows.first { it.key == "brightness" }
+            assertEquals(Enums.RowKind.steps, br.kind)
+            assertEquals((10..100 step 5).map { it.toString() }, br.values)
+            assertEquals((10..100 step 5).map { "$it%" }, br.words)
+            assertEquals(Enums.RowKind.toggle, d.rows.first { it.key == "artistPhoto" }.kind)
+            val out = Sink()
+            d.greet(out)
+            val text = Settings.from(out.of(Msg.SETTINGS).single()).text.lines()
+            assertTrue("crossfeed=off" in text && "brightness=$bright" in text && "artistPhoto=on" in text)
+            val set = Sink()
+            val r = SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("crossfeed=chuMoy\nbrightness=72\nartistPhoto=off\n"), set))))
+            assertEquals(listOf("crossfeed", "brightness", "artistPhoto"), r.kept)
+            val s = Settings.from(set.of(Msg.SETTINGS).single()).text.lines()
+            assertTrue("crossfeed=chuMoy" in s && "brightness=70" in s && "artistPhoto=off" in s)
+            assertEquals(listOf("crossfeed"), fail(req(d, Msg.SET, Req.set("crossfeed=bs2b\n"))).refused)
+        }
+    }
+
+    @Test
+    fun sizeAndWifiOnlyOnTheV1() {
+        val v1 = device("v1")
+        val ap80 = device("ap80")
+        val size = v1.rows.first { it.key == "size" }
+        assertEquals(Enums.RowKind.draft, size.kind)
+        assertEquals(listOf("standard", "large"), size.values)
+        assertEquals(listOf("STANDARD", "LARGE"), size.words)
+        assertEquals(listOf(Enums.RowFlag.readOnly, Enums.RowFlag.boardOnly, Enums.RowFlag.restart), size.flags)
+        val keys = v1.rows.map { it.key }
+        assertEquals(keys.indexOf("dateTime") + 1, keys.indexOf("wifi"))
+        val wifi = v1.rows.first { it.key == "wifi" }
+        assertEquals(Enums.RowKind.info, wifi.kind)
+        assertEquals(listOf(Enums.RowFlag.readOnly, Enums.RowFlag.boardOnly), wifi.flags)
+        assertTrue(v1.rows.none { it.key == "scale" })
+        assertTrue(ap80.rows.any { it.key == "scale" } && ap80.rows.none { it.key == "size" || it.key == "wifi" })
+        for (d in listOf(v1, ap80)) assertTrue(d.rows.none { it.key in setOf("whenIdle", "btCodecHeadphones", "binary", "track", "pcm", "update") })
+        val out = Sink()
+        v1.greet(out)
+        assertTrue("size=standard" in Settings.from(out.of(Msg.SETTINGS).single()).text.lines())
+        assertEquals(listOf("size"), fail(req(v1, Msg.SET, Req.set("size=large\n"))).refused)
+    }
+
+    @Test
     fun setMergesPlainRowsOnly() {
         val d = device()
         val out = Sink()
