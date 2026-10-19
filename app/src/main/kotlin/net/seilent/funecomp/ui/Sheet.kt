@@ -34,6 +34,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.delay
 import net.seilent.funecomp.proto.gen.Tok
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 @Stable
@@ -51,8 +52,10 @@ class SheetState {
         private set
     private var pick: (Int) -> Unit = {}
     private var dismiss: () -> Unit = {}
+    private var owner: Any? = null
 
-    fun open(title: String, items: List<String>, focus: Int = 0, info: List<String> = emptyList(), onDismiss: () -> Unit = {}, pick: (Int) -> Unit) {
+    fun open(title: String, items: List<String>, focus: Int = 0, info: List<String> = emptyList(), onDismiss: () -> Unit = {}, owner: Any? = null, pick: (Int) -> Unit) {
+        this.owner = owner
         this.title = title
         this.info = info
         this.items = items
@@ -63,7 +66,8 @@ class SheetState {
         shown = true
     }
 
-    fun openEntry(title: String, entry: @Composable () -> Unit) {
+    fun openEntry(title: String, owner: Any? = null, entry: @Composable () -> Unit) {
+        this.owner = owner
         this.title = title
         this.info = emptyList()
         this.items = listOf("")
@@ -81,9 +85,14 @@ class SheetState {
         pick(i)
     }
 
+    fun closeIf(owner: Any) {
+        if (shown && this.owner == owner) close(dismissed = false)
+    }
+
     fun close(dismissed: Boolean = true) {
         if (!shown) return
         shown = false
+        owner = null
         val d = dismiss
         dismiss = {}
         if (dismissed) d()
@@ -110,7 +119,9 @@ fun Sheet(state: SheetState) {
     val panelH = minOf(wanted, screenH)
     val p = progress.value
     val panelY = screenH - panelH + (1f - p) * panelH
-    val list = remember(state.title, state.items, state.shown) { LazyListState(state.focus) }
+    val listH = floor((panelH - edge - titleH).coerceAtLeast(0f) / pitch) * pitch
+    val rows = (listH / pitch).toInt()
+    val list = remember(state.title, state.items, state.shown) { LazyListState(if (state.focus + lead < rows) 0 else state.focus + lead) }
     Box(Modifier.fillMaxSize().testTag("sheet")) {
         val b = LocalBleed.current
         Box(Modifier.fillMaxSize().bleed(b).background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha * p)).press({ if (state.shown) state.close() }))
@@ -123,7 +134,7 @@ fun Sheet(state: SheetState) {
                 .alpha(p).clipToBounds(),
         ) {
             if (state.title.isNotEmpty()) RoleText(state.title, Roles.dialogTitle, Modifier.at(edge, edge).width((ui.px(ui.w) - 2 * edge).dp()).clipToBounds())
-            Box(Modifier.offset { IntOffset(0, (edge + titleH).roundToInt()) }.size(ui.px(ui.w).dp(), (panelH - edge - titleH).coerceAtLeast(0f).dp())) {
+            Box(Modifier.offset { IntOffset(0, (edge + titleH).roundToInt()) }.size(ui.px(ui.w).dp(), listH.dp())) {
             LazyColumn(
                 Modifier.fillMaxSize(),
                 state = list,

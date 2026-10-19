@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -68,6 +69,7 @@ private const val FLAT_FIRST_GRID = 4
 private const val FLAT_GRID_STEP = 6
 private const val FLAT_Q100 = 140
 private const val MILLI = 1000
+private const val TYPE_VALUE = "type value"
 
 fun Row.word(v: String?): String {
     if (v == null) return words.firstOrNull() ?: ""
@@ -129,28 +131,68 @@ fun Row.editable() = !RowRules.readOnly(this) && when (kind) {
     else -> false
 }
 
-fun Row.step(v: String?, dir: Int): String? {
-    if (kind == Enums.RowKind.range) {
-        val lo = min ?: 0
-        val st = (step ?: 1).coerceAtLeast(1)
-        val at = (((v?.toIntOrNull() ?: lo) - lo).toFloat() / st).roundToInt()
-        val count = max?.let { (it - lo) / st + 1 }
-        val next = if (key == ACCENT_KEY && count != null) ((at + dir) % count + count) % count else at + dir
-        return (lo + next * st).coerceIn(lo, max ?: Int.MAX_VALUE).toString()
-    }
-    if (values.isEmpty()) return v
-    val i = values.indexOf(v).let { if (it < 0) 0 else it }
-    val j = i + dir
-    if (key == ACCENT_KEY) return values[(j % values.size + values.size) % values.size]
-    if (kind == Enums.RowKind.toggle) return values[(j % values.size + values.size) % values.size]
-    return values[j.coerceIn(0, values.size - 1)]
+fun Row.step(v: String?, dir: Int): String {
+    val lo = min ?: 0
+    val st = (step ?: 1).coerceAtLeast(1)
+    val at = (((v?.toIntOrNull() ?: lo) - lo).toFloat() / st).roundToInt()
+    val count = max?.let { (it - lo) / st + 1 }
+    val next = if (key == ACCENT_KEY && count != null) ((at + dir) % count + count) % count else at + dir
+    return (lo + next * st).coerceIn(lo, max ?: Int.MAX_VALUE).toString()
 }
 
 fun draftKind(key: String?): Int? =
     if (key == CLOCK_KEY) Enums.DraftKind.clock else Enums.DraftKind.names.entries.firstOrNull { it.value == key }?.key
 
-private class Edit(val key: String, val original: String?, val draft: Boolean) {
-    var stepped = false
+private class Edit(val key: String, val original: String?)
+
+class Selector(val items: List<String>, val focus: Int, val info: List<String>, val typed: Boolean)
+
+sealed class Send {
+    data class Set(val key: String, val value: String) : Send()
+    data class Draft(val kind: Int, val value: String) : Send()
+    data class Minutes(val minutes: Long) : Send()
+    data class Refuse(val field: String, val range: String) : Send()
+}
+
+private fun Row.sleep() = key == SLEEP_KEY && kind == Enums.RowKind.draft
+
+fun Row.selects() = editable() && kind != Enums.RowKind.range && kind != Enums.RowKind.toggle
+
+fun Row.selector(live: String?, minutes: Int): Selector {
+    val items = values.map { word(it) }
+    if (!sleep()) return Selector(items, values.indexOf(live).coerceAtLeast(0), emptyList(), false)
+    val typed = max?.let { it > (min ?: 0) } == true
+    val info = if (minutes > 0) listOf(sleepText(this, minutes)) else emptyList()
+    return Selector(if (typed) items + TYPE_VALUE else items, values.indexOf(sleepStart(this, minutes)).coerceAtLeast(0), info, typed)
+}
+
+fun Row.picked(i: Int, live: String?, minutes: Int): Send? {
+    val v = values.getOrNull(i) ?: return null
+    if (sleep()) {
+        val m = v.toLongOrNull() ?: return null
+        return if (m == 0L && minutes == 0) null else Send.Minutes(m)
+    }
+    if (v == live) return null
+    if (kind == Enums.RowKind.draft) return draftKind(key)?.let { Send.Draft(it, v) }
+    return key?.let { Send.Set(it, v) }
+}
+
+fun Row.flip(live: String?): Send? {
+    if (values.isEmpty()) return null
+    val i = values.indexOf(live)
+    val v = if (i < 0) values[0] else values[(i + 1) % values.size]
+    return if (v == live) null else key?.let { Send.Set(it, v) }
+}
+
+fun Row.refusal() = Send.Refuse((label ?: key ?: "").lowercase(), "${min ?: 0} to ${max ?: min ?: 0}")
+
+fun Row.typedMinutes(text: String, minutes: Int): Send? {
+    val lo = min ?: 0
+    val hi = max ?: lo
+    val t = text.trim()
+    val n = if (t.isNotEmpty() && t.all { it in '0'..'9' }) t.toIntOrNull() else null
+    if (n == null || n !in lo..hi) return refusal()
+    return if (n == 0 && minutes == 0) null else Send.Minutes(n.toLong())
 }
 
 fun Row.actionCmd(): Int? = Enums.ActionCmd.names.entries.firstOrNull { it.value == key }?.key
@@ -167,6 +209,10 @@ fun profileName(device: net.seilent.funecomp.state.DeviceState, output: Int): St
     }
 }
 
+private class Opened(val token: Any, val row: Row)
+
+private fun Row.same(o: Row) = values == o.values && words == o.words && flags == o.flags && kind == o.kind && min == o.min && max == o.max
+
 @Composable
 fun SettingsPage(ctx: Ctx) {
     val ui = LocalUi.current
@@ -176,23 +222,55 @@ fun SettingsPage(ctx: Ctx) {
     val values = ctx.device.settings.values
     var edit by remember { mutableStateOf<Edit?>(null) }
     var editValue by remember { mutableStateOf<String?>(null) }
+    val live by rememberUpdatedState(ctx.device)
+    var opened by remember { mutableStateOf<Opened?>(null) }
+    var serial by remember { mutableIntStateOf(0) }
     val eqOn = ctx.device.has("eq")
-    fun confirm() {
-        val e = edit ?: return
-        val v = editValue
-        if (e.draft && v != null) {
-            val kind = draftKind(e.key)
-            if (kind == Enums.DraftKind.sleep) {
-                if (e.stepped) ctx.control.draft(kind, minutes = v.toLongOrNull())
-            } else if (kind != null && v != e.original) {
-                ctx.control.draft(kind, value = v)
+    LaunchedEffect(ctx.device.schema.rows) {
+        val o = opened ?: return@LaunchedEffect
+        val now = live.schema.rows.firstOrNull { it.key == o.row.key }
+        if (now == null || !now.same(o.row)) {
+            ctx.sheet.closeIf(o.token)
+            opened = null
+        }
+    }
+    fun minutesLeft() = SleepLeft.minutes(live.sleepLeftMs(SystemClock.elapsedRealtime()))
+    fun send(s: Send?, row: Row) {
+        when (s) {
+            is Send.Set -> ctx.control.set(s.key, s.value)
+            is Send.Draft -> ctx.control.draft(s.kind, value = s.value)
+            is Send.Minutes -> ctx.control.draft(Enums.DraftKind.sleep, minutes = s.minutes) { code, _ ->
+                if (code == Err.badValue) row.refusal().let { ctx.toast.show(it.field, it.range) }
+            }
+            is Send.Refuse -> ctx.toast.show(s.field, s.range)
+            null -> {}
+        }
+    }
+    fun typeMinutes(r: Row, token: Any) {
+        val hint = minutesLeft().toString()
+        ctx.sheet.openEntry((r.label ?: r.key ?: "").lowercase(), owner = token) {
+            Entry("", unit = r.words.lastOrNull()?.substringAfterLast(' ', "")?.lowercase().orEmpty(), keyboard = KeyboardType.Number, hint = hint) { text ->
+                val s = r.typedMinutes(text, minutesLeft())
+                if (s !is Send.Refuse) ctx.sheet.close()
+                send(s, r)
             }
         }
+    }
+    fun select(r: Row) {
+        val key = r.key ?: return
+        val token = key to ++serial
+        val sel = r.selector(values[key], minutesLeft())
+        opened = Opened(token, r)
+        ctx.sheet.open((r.label ?: key).lowercase(), sel.items, sel.focus, sel.info, owner = token) { i ->
+            if (sel.typed && i == sel.items.lastIndex) typeMinutes(r, token) else send(r.picked(i, live.settings.values[key], minutesLeft()), r)
+        }
+    }
+    fun confirm() {
         edit = null
     }
     fun revert() {
         val e = edit ?: return
-        if (!e.draft && e.original != null && editValue != e.original) ctx.control.set(e.key, e.original)
+        if (e.original != null && editValue != e.original) ctx.control.set(e.key, e.original)
         edit = null
     }
     BackHandler(edit != null) { confirm() }
@@ -214,13 +292,13 @@ fun SettingsPage(ctx: Ctx) {
                     val editing = edit?.key == key
                     val v = if (editing) editValue else values[key]
                     val eqRow = key == EQ_KEY && eqOn
-                    val sleepRow = key == SLEEP_KEY && r.kind == Enums.RowKind.draft
+                    val sleepRow = r.sleep()
                     val minutes = if (sleepRow) sleepMinutes(ctx.device) else 0
                     SettingsRow(
                         r.label ?: key,
                         when {
                             eqRow -> profileName(ctx.device, activeEqOutput(ctx.device))
-                            sleepRow && !editing -> sleepText(r, minutes)
+                            sleepRow -> sleepText(r, minutes)
                             else -> r.display(v)
                         },
                         Modifier.enter { i }.testTag("set.$key"),
@@ -239,8 +317,7 @@ fun SettingsPage(ctx: Ctx) {
                                 val next = r.step(editValue, if (x < 0.5f) -1 else 1)
                                 if (next != editValue) {
                                     editValue = next
-                                    edit?.stepped = true
-                                    if (r.kind != Enums.RowKind.draft && next != null) ctx.control.set(key, next)
+                                    ctx.control.set(key, next)
                                 }
                             }
                             eqRow -> ctx.nav.push(Page.Eq(activeEqOutput(ctx.device)))
@@ -249,11 +326,13 @@ fun SettingsPage(ctx: Ctx) {
                                 ctx.control.draft(Enums.DraftKind.clock, unixS = now / MILLI, zoneS = java.util.TimeZone.getDefault().getOffset(now) / MILLI)
                             }
                             r.kind == Enums.RowKind.action -> r.actionCmd()?.let { ctx.control.action(it) }
-                            r.editable() -> {
-                                val start = if (sleepRow) sleepStart(r, minutes) else values[key] ?: r.values.firstOrNull()
-                                edit = Edit(key, start, r.kind == Enums.RowKind.draft)
-                                editValue = start
+                            !r.editable() -> {}
+                            r.kind == Enums.RowKind.toggle -> send(r.flip(values[key]), r)
+                            r.kind == Enums.RowKind.range -> {
+                                edit = Edit(key, values[key])
+                                editValue = values[key]
                             }
+                            r.selects() -> select(r)
                         }
                     }
                 }
@@ -472,7 +551,7 @@ fun typed(ctx: Ctx, title: String, start: String, min: Float, max: Float, unit: 
 fun TextEntry(start: String, secret: Boolean = false, done: (String) -> Unit) = Entry(start, secret = secret, done = done)
 
 @Composable
-fun Entry(start: String, unit: String = "", secret: Boolean = false, done: (String) -> Unit) {
+fun Entry(start: String, unit: String = "", secret: Boolean = false, keyboard: KeyboardType = KeyboardType.Ascii, hint: String = "", done: (String) -> Unit) {
     var text by remember { mutableStateOf(start) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -486,8 +565,14 @@ fun Entry(start: String, unit: String = "", secret: Boolean = false, done: (Stri
             singleLine = true,
             cursorBrush = SolidColor(Accent),
             visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { done(text) }),
+            decorationBox = { field ->
+                Box {
+                    if (text.isEmpty() && hint.isNotEmpty()) RoleText(hint, Roles.dialogItem, Modifier, alpha = Tok.alpha_low)
+                    field()
+                }
+            },
         )
         if (unit.isNotEmpty()) RoleText(" $unit", Roles.dialogItem, Modifier, alpha = Roles.dialogItem.dim)
     }

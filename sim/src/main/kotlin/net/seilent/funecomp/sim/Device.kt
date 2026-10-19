@@ -508,7 +508,9 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             }
             Enums.DraftKind.sleep -> {
                 val m = b.long(Tags.Draft.minutes) ?: return Answer.Fail(Err.badValue, "no minutes")
-                if (m !in listOf(0L, 15L, 30L, 45L, 60L, 90L, 120L)) return Answer.Fail(Err.badValue, "bad minutes")
+                val r = rows.firstOrNull { it.key == "sleep" }
+                val ok = r?.max?.let { m in (r.min ?: 0).toLong()..it } ?: (m.toString() in r?.values.orEmpty())
+                if (!ok) return Answer.Fail(Err.badValue, "bad minutes")
                 sleepLeftS = m * 60
                 sleepSetAt = now()
             }

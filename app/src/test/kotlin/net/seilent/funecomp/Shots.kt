@@ -14,10 +14,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performScrollToNode
@@ -256,7 +258,38 @@ val SHOTS = listOf(
     Shot("settings-output", pages = HOME + Page.Settings),
     Shot("settings-output-v1", board = "v1", pages = HOME + Page.Settings),
     Shot("settings-crossfeed", pages = HOME + Page.Settings) { scrollTo("set.crossfeed") },
-    Shot("settings-edit", pages = HOME + Page.Settings) { rule.onNodeWithTag("set.volumeStep").performClick() },
+    Shot("settings-edit", pages = HOME + Page.Settings) {
+        rule.onNodeWithTag("set.balance").performClick()
+        settle(300)
+        rule.onNodeWithTag("set.balance").performTouchInput { click(centerRight) }
+    },
+    Shot("settings-pick-volumestep", pages = HOME + Page.Settings) { rule.onNodeWithTag("set.volumeStep").performClick() },
+    Shot("settings-pick-maxvolume", pages = HOME + Page.Settings) { rule.onNodeWithTag("set.maxVolume").performClick() },
+    Shot("settings-pick-poweron", pages = HOME + Page.Settings, prep = { it.set("powerOnVolume", "70") }) { rule.onNodeWithTag("set.powerOnVolume").performClick() },
+    Shot("settings-pick-crossfeed", pages = HOME + Page.Settings) {
+        scrollTo("set.crossfeed")
+        rule.onNodeWithTag("set.crossfeed").performClick()
+    },
+    Shot("settings-pick-filter-v1", board = "v1", pages = HOME + Page.Settings, prep = { it.set("digitalFilter", "3") }) {
+        scrollTo("set.digitalFilter")
+        rule.onNodeWithTag("set.digitalFilter").performClick()
+    },
+    Shot("settings-pick-usbmode", pages = HOME + Page.Settings) {
+        for (p in listOf("library", "display", "power", "system")) {
+            rule.onNodeWithTag("pivot.$p").performClick()
+            settle(1000)
+        }
+        scrollTo("set.usbMode")
+        rule.onNodeWithTag("set.usbMode").performClick()
+    },
+    Shot("settings-toggle", pages = HOME + Page.Settings) {
+        for (p in listOf("library", "display")) {
+            rule.onNodeWithTag("pivot.$p").performClick()
+            settle(1000)
+        }
+        scrollTo("set.quickplay")
+        rule.onNodeWithTag("set.quickplay").performClick()
+    },
     Shot("settings-display", pages = HOME + Page.Settings) {
         for (p in listOf("library", "display")) {
             rule.onNodeWithTag("pivot.$p").performClick()
@@ -284,13 +317,28 @@ val SHOTS = listOf(
     },
     Shot("settings-sleep", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) { power(this) },
     Shot("settings-sleep-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) { power(this) },
-    Shot("settings-sleep-edit", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) {
+    Shot("settings-pick-sleep", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) {
         power(this)
         rule.onNodeWithTag("set.sleep").performClick()
     },
-    Shot("settings-sleep-edit-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) {
+    Shot("settings-pick-sleep-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) {
         power(this)
         rule.onNodeWithTag("set.sleep").performClick()
+    },
+    Shot("settings-sleep-entry", pages = HOME + Page.Settings, prep = sleep(45, 61_000), ime = AEQ_IME) {
+        power(this)
+        rule.onNodeWithTag("set.sleep").performClick()
+        settle(600)
+        it.sheet.accept(it.sheet.items.lastIndex)
+    },
+    Shot("settings-sleep-refused", pages = HOME + Page.Settings, prep = sleep(45, 61_000), ime = AEQ_IME) {
+        power(this)
+        rule.onNodeWithTag("set.sleep").performClick()
+        settle(600)
+        it.sheet.accept(it.sheet.items.lastIndex)
+        settle(600)
+        rule.onNodeWithTag("entry").performTextInput("1000")
+        rule.onNodeWithTag("entry").performImeAction()
     },
     Shot("settings-sleep-wide", pages = HOME + Page.Settings, prep = sleep(120, 0)) { power(this) },
     Shot("settings-sleep-wide-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(120, 0)) { power(this) },

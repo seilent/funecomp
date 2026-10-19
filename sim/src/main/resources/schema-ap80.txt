@@ -27,7 +27,7 @@ display	batteryPercent	toggle	BATTERY PERCENT	off,on	OFF,ON	-	-
 display	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-
 display	artistPhoto	toggle	ARTIST PHOTO	off,on	OFF,ON	-	-
 power	screenOffSeconds	steps	SCREEN OFF AFTER	0,60,120,300,600,1800	OFF,1 MIN,2 MIN,5 MIN,10 MIN,30 MIN	-	-
-power	sleep	draft	SLEEP TIMER	0,15,30,45,60,90,120	OFF,15 MIN,30 MIN,45 MIN,60 MIN,90 MIN,120 MIN	-	-
+power	sleep	draft	SLEEP TIMER	0,15,30,45,60,90,120	OFF,15 MIN,30 MIN,45 MIN,60 MIN,90 MIN,120 MIN	0,999	-
 power	idleShutdownMinutes	steps	IDLE SHUTDOWN	0,5,10,30,60	OFF,5 MIN,10 MIN,30 MIN,60 MIN	-	-
 power	lockKnob	toggle	LOCK KNOB	off,on	OFF,ON	-	-
 power	screenOffKeys	choice	SCREEN OFF KEYS	all,play,none	ALL,PLAY ONLY,NONE	-	-

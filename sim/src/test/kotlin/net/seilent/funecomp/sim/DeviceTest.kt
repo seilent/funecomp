@@ -184,6 +184,21 @@ class DeviceTest {
         val sleep = Sink()
         ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, minutes = 30), sleep))
         assertEquals(1800L, State.from(sleep.of(Msg.STATE).last()).sleepLeftS)
+        ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, minutes = 37), sleep))
+        assertEquals(2220L, State.from(sleep.of(Msg.STATE).last()).sleepLeftS)
+        ok(req(v1, Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, minutes = 999), sleep))
+        assertEquals(59940L, State.from(sleep.of(Msg.STATE).last()).sleepLeftS)
+        assertEquals(Err.badValue, fail(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, minutes = 1000))).code)
+        assertEquals(Err.badValue, fail(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, minutes = -1))).code)
+    }
+
+    @Test
+    fun draftSleepTakesTheRowMin() {
+        val d = Device(Options(Board("ap80", 360, 480, 360, 480, "schema-sleepmin.txt")), Library.synthetic()) { t }
+        assertEquals(Err.badValue, fail(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, minutes = 4))).code)
+        val out = Sink()
+        ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, minutes = 5), out))
+        assertEquals(300L, State.from(out.of(Msg.STATE).last()).sleepLeftS)
     }
 
     @Test
@@ -195,6 +210,8 @@ class DeviceTest {
         d.greet(greet)
         val row = greet.of(Msg.SCHEMA).flatMap { Schema.from(it).rows }.single { it.key == "sleep" }
         assertEquals(listOf("OFF", "15 MIN", "30 MIN", "45 MIN", "60 MIN", "90 MIN", "120 MIN"), row.words)
+        assertEquals(0 to 999, row.min to row.max)
+        assertEquals(null, row.step)
         t += 61_000
         assertEquals(1739L, State.from(Node.decode("STATE", d.state())).sleepLeftS)
         t = 1000L + 1_800_000

@@ -46,8 +46,9 @@ class SimControl(
     minor: Int = Proto.minor,
     faults: List<String> = emptyList(),
     cardEq: List<String> = emptyList(),
+    schema: String? = null,
 ) : Control {
-    val sim = Device(Options(Board.of(board), Faults(faults), artDir = artDir, minor = minor, cardEq = cardEq), lib, now)
+    val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, Faults(faults), artDir = artDir, minor = minor, cardEq = cardEq), lib, now)
     var device by mutableStateOf(DeviceState())
     val sent = ArrayList<String>()
     val failed = ArrayList<Int>()
@@ -127,8 +128,9 @@ class SimControl(
         req(Msg.SET, Req.set("$key=$value\n"))
     }
 
-    override fun draft(kind: Int, value: String?, minutes: Long?, unixS: Long?, zoneS: Int?) {
-        req(Msg.DRAFT, Req.draft(kind, value, minutes = minutes, unixS = unixS, zoneS = zoneS))
+    override fun draft(kind: Int, value: String?, minutes: Long?, unixS: Long?, zoneS: Int?, done: (Int?, String?) -> Unit) {
+        val a = req(Msg.DRAFT, Req.draft(kind, value, minutes = minutes, unixS = unixS, zoneS = zoneS))
+        if (a is Answer.Fail) done(a.code, a.text) else done(null, null)
     }
 
     override fun eqSet(output: Int, key: String?, ints: Profile?) {

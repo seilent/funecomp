@@ -16,7 +16,6 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -25,7 +24,6 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
@@ -330,19 +328,6 @@ class BehaviorTest {
         rule.onNodeWithTag("home.music").performClick()
         settle(1500)
         rule.onNodeWithTag("hub.music").assertIsDisplayed()
-    }
-
-    @Test
-    fun tapBelowTheRowsConfirmsADraft() {
-        val (c, _) = start(listOf(Page.Home, Page.Settings))
-        rule.onNodeWithTag("set.btCodec").performClick()
-        settle(300)
-        rule.onNodeWithTag("set.btCodec").performTouchInput { click(centerRight) }
-        settle(300)
-        assertTrue(c.sent.none { it == "DRAFT" })
-        rule.onRoot().performTouchInput { click(bottomCenter.copy(y = bottom - 10f)) }
-        settle(300)
-        assertEquals(1, c.sent.count { it == "DRAFT" })
     }
 
     private fun row(tag: String, vararg texts: String) {

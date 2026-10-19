@@ -552,8 +552,8 @@ object Remote : Control {
         update { it.withSetReply(r.rev) }
     })
 
-    override fun draft(kind: Int, value: String?, minutes: Long?, unixS: Long?, zoneS: Int?) =
-        send(Msg.DRAFT, Req.draft(kind, value, minutes = minutes, unixS = unixS, zoneS = zoneS), "draft ${Enums.DraftKind.names[kind]}")
+    override fun draft(kind: Int, value: String?, minutes: Long?, unixS: Long?, zoneS: Int?, done: (Int?, String?) -> Unit) =
+        send(Msg.DRAFT, Req.draft(kind, value, minutes = minutes, unixS = unixS, zoneS = zoneS), "draft ${Enums.DraftKind.names[kind]}", done = { code, text -> main.post { done(code, text) } })
 
     override fun eqSet(output: Int, key: String?, ints: Profile?) =
         send(Msg.EQ_SET, Req.eqSet(output, key, ints), "eq set output=$output key=$key")
