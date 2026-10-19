@@ -1,8 +1,9 @@
 package net.seilent.funecomp.artist
 
 import java.io.IOException
+import java.util.zip.CRC32
 
-class Art(val jpeg: ByteArray, val w: Int, val h: Int, val name: String, val mbid: String?, val source: String, val credit: Credit?)
+class Art(val jpeg: ByteArray, val w: Int, val h: Int, val name: String, val mbid: String?, val source: String, val credit: Credit?, val wrongArtist: Boolean = false)
 
 class ArtistArt(
     private val http: Http,
@@ -56,11 +57,12 @@ class ArtistArt(
         if (hit != null && blocked(hit)) {
             cache.drop(key)
         } else if (hit != null) {
-            cache.rendered(key, w, h)?.let { return Art(it, w, h, hit.name, hit.mbid, hit.source, hit.credit) }
+            val wrong = tag == null && wrongArtistOffered(hit, name)
+            cache.rendered(key, w, h)?.let { return Art(it, w, h, hit.name, hit.mbid, hit.source, hit.credit, wrong) }
             val jpeg = cache.source(key)?.let { Backdrop.render(codec, it, w, h) }
             if (jpeg != null) {
                 cache.putRendered(key, w, h, jpeg)
-                return Art(jpeg, w, h, hit.name, hit.mbid, hit.source, hit.credit)
+                return Art(jpeg, w, h, hit.name, hit.mbid, hit.source, hit.credit, wrong)
             }
         }
         val keyHash = keyHash(on)
@@ -77,7 +79,7 @@ class ArtistArt(
             due(now)
             return null
         }
-        return keep(name, key, found, w, h, now)
+        return keep(name, tag, key, found, w, h, now)
     }
 
     @Throws(IOException::class)
@@ -92,7 +94,7 @@ class ArtistArt(
         } catch (e: IOException) {
             null
         }
-        return if (found == null) get(name, mbid, w, h) else keep(name, key, found, w, h, now)
+        return if (found == null) get(name, mbid, w, h) else keep(name, tag, key, found, w, h, now)
     }
 
     private fun find(name: String, tag: String?, id: String?, key: String, w: Int, h: Int, on: Set<String>, now: Long): Found? {
@@ -106,10 +108,11 @@ class ArtistArt(
         return null
     }
 
-    private fun keep(name: String, key: String, f: Found, w: Int, h: Int, now: Long): Art {
-        cache.putHit(ArtCache.Entry(key, name.trim(), f.mbid, f.c.source, f.c.credit, f.c.url, now, f.c.id, ArtCache.sha256(f.src), f.by), f.src)
+    private fun keep(name: String, tag: String?, key: String, f: Found, w: Int, h: Int, now: Long): Art {
+        val e = ArtCache.Entry(key, name.trim(), f.mbid, f.c.source, f.c.credit, f.c.url, now, f.c.id, ArtCache.sha256(f.src), f.by)
+        cache.putHit(e, f.src)
         cache.putRendered(key, w, h, f.jpeg)
-        return Art(f.jpeg, w, h, name.trim(), f.mbid, f.c.source, f.c.credit)
+        return Art(f.jpeg, w, h, name.trim(), f.mbid, f.c.source, f.c.credit, tag == null && wrongArtistOffered(e, name))
     }
 
     fun blocked(e: ArtCache.Entry): Boolean = blocks.blocked(e.key, e.source, ImageIds.of(e), cache.sha(e), e.name)
@@ -125,6 +128,22 @@ class ArtistArt(
         val by = resolvedBy(e)
         return by.isNotEmpty() && e.mbid != null && cache.mbid(by)?.mbid == e.mbid
     }
+
+    fun wrongArtistOffered(e: ArtCache.Entry, name: String): Boolean = wrongArtistOffered(e) && resolves(resolvedBy(e), name)
+
+    fun resolves(by: String, name: String): Boolean {
+        val f = Names.fold(by)
+        return f == Names.fold(name) || Names.variants(name).any { Names.fold(it) == f }
+    }
+
+    fun candidates(name: String, mbid: String?): List<ArtCache.Entry> {
+        val f = Names.fold(name)
+        val m = Names.mbid(mbid)
+        val all = cache.entries().filter { Names.fold(it.name) == f || (m != null && it.mbid == m) } + listOfNotNull(cache.hit(keyOf(name, mbid)))
+        return all.distinctBy { it.key }
+    }
+
+    fun renderedCrc(e: ArtCache.Entry, w: Int, h: Int): Long? = cache.rendered(e.key, w, h)?.let { CRC32().apply { update(it) }.value }
 
     fun forgetName(name: String) = cache.forgetName(name)
 

@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Credit
+import net.seilent.funecomp.artist.Http
+import net.seilent.funecomp.artist.Names
+import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
@@ -27,13 +30,16 @@ import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.File
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -79,6 +85,41 @@ class ArtBlockUiTest {
     }
 
     private fun backdrop(e: ArtCache.Entry, wrong: Boolean) = BackdropArt(ImageBitmap(8, 8), null, e, wrong)
+
+    @After
+    fun tearDown() = Remote.resetArtist()
+
+    private fun sheetFor(slot: String, key: String, name: String, by: String, vararg names: Pair<String, String?>): List<String> {
+        val app = RuntimeEnvironment.getApplication()
+        val c = ArtCache(File(app.filesDir, "art"))
+        names.forEach { (n, m) -> c.putMbid(n, m, System.currentTimeMillis()) }
+        c.putHit(ArtCache.Entry(key, name, names.firstNotNullOf { it.second }, "commons", null, "u", 1, "File:A.jpg", "s", by), byteArrayOf(1))
+        val a = Remote.artist(app, Http { _, _ -> Response(404, ByteArray(0)) })
+        val e = a.withSha(c.hit(key)!!)
+        val shell = start(listOf(Page.Home, Page.NowPlaying), backdrop(e, a.wrongArtistOffered(e, slot)))
+        rule.onNodeWithTag("np.backdrop").performTouchInput { longClick() }
+        settle(500)
+        return shell.sheet.items
+    }
+
+    private val utada = "b539e453-c4fe-47e3-8a07-8517eac74429"
+
+    @Test
+    fun theSecondNameOnASearchedMbidGetsOnlyBlockImage() {
+        assertEquals(listOf("block image"), sheetFor("Utada Hikaru", utada, "宇多田ヒカル", "宇多田ヒカル", "宇多田ヒカル" to utada, "Utada Hikaru" to utada))
+    }
+
+    @Test
+    fun theResolverNameGetsWrongArtist() {
+        assertEquals(listOf("block image", "wrong artist"), sheetFor("宇多田ヒカル", utada, "宇多田ヒカル", "宇多田ヒカル", "宇多田ヒカル" to utada, "Utada Hikaru" to utada))
+    }
+
+    @Test
+    fun aVariantWinGetsWrongArtist() {
+        val vtuber = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
+        val items = sheetFor(vtuber, "name:${Names.fold(vtuber)}", vtuber, "空星きらめ", "空星きらめ" to "0e7b3c4f-1f2a-4b5c-8d6e-7f8091a2b3c4", vtuber to null)
+        assertEquals(listOf("block image", "wrong artist"), items)
+    }
 
     @Test
     fun aLongPressOnTheBackdropOpensTheBlockSheet() {

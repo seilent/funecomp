@@ -41,6 +41,7 @@ class Faults(specs: List<String>) {
     var updAbortAt: Long? = null
     val enums = ArrayList<EnumFault>()
     var features = Groups.all
+    var askBlock: Pair<Int, Long>? = null
     var favsBusy = 0
     var favsBusyText = "busy"
     var staleState = false
@@ -71,6 +72,11 @@ class Faults(specs: List<String>) {
                 "favs-busy" -> {
                     favsBusy = v.substringBefore(':').toIntOrNull() ?: throw IllegalArgumentException("favs-busy: count missing in $v")
                     favsBusyText = v.substringAfter(':', "busy")
+                }
+                "ask-block" -> {
+                    val cmd = Enums.BlockCmd.names.entries.firstOrNull { it.value == v.substringBefore('@') }?.key
+                        ?: throw IllegalArgumentException("ask-block: unknown cmd in $v")
+                    askBlock = cmd to (v.substringAfter('@', "").toLongOrNull() ?: throw IllegalArgumentException("ask-block: delay missing in $v"))
                 }
                 "stale-state" -> staleState = true
                 "eq-hidden" -> eqHidden += v
@@ -112,6 +118,7 @@ class Options(
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
         if (minor < 5) faults.features = faults.features and Groups.mask("eqPresets").inv()
+        if (minor < 6) faults.features = faults.features and Groups.mask("artBlock").inv()
     }
 
     companion object {

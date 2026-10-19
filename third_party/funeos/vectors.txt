@@ -10,8 +10,8 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply 74000101010001040046444350020200010003020005000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
-hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff030000000000000e0400070000000f04000300000010040004000000
+hex hello_reply 74000101010001040046444350020200010003020006000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff070000000000000e0400070000000f04000300000010040004000000
 re hello_reply hello
 dec hello_reply 0.len 116
 dec hello_reply 0.type HELLO
@@ -19,7 +19,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 5
+dec hello_reply 0.body.minor 6
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -29,7 +29,7 @@ dec hello_reply 0.body.backdropH 480
 dec hello_reply 0.body.maxPayload 16384
 dec hello_reply 0.body.idleMs 30000
 dec hello_reply 0.body.busyMs 5000
-dec hello_reply 0.body.features 1023
+dec hello_reply 0.body.features 2047
 dec hello_reply 0.body.libRev 7
 dec hello_reply 0.body.settingsRev 3
 dec hello_reply 0.body.snapRev 4
@@ -2163,3 +2163,63 @@ dec eq_presets 0.body.offset 0
 dec eq_presets 0.body.total 2
 dec eq_presets 0.body.more false
 act eq_presets accept
+vec hello_feat app
+hex hello_feat 2400010401000104004644435002020001000302000600040500302e312e300508000004000000000000
+dec hello_feat 0.len 36
+dec hello_feat 0.type HELLO
+dec hello_feat 0.flags 0x04
+dec hello_feat 0.seq 1
+dec hello_feat 0.body.magic 1346585670
+dec hello_feat 0.body.major 1
+dec hello_feat 0.body.minor 6
+dec hello_feat 0.body.appVersion 0.1.0
+dec hello_feat 0.body.features 1024
+act hello_feat accept
+vec art_block dev
+hex art_block 41003804010001010000020c0055746164612048696b61727503240061316232633364342d303030302d343030302d383030302d303030303030303030303031
+hex art_block 040400aebb5d91
+dec art_block 0.len 65
+dec art_block 0.type ART_BLOCK
+dec art_block 0.flags 0x04
+dec art_block 0.seq 1
+dec art_block 0.body.cmd blockImage
+dec art_block 0.body.name Utada Hikaru
+dec art_block 0.body.mbid a1b2c3d4-0000-4000-8000-000000000001
+dec art_block 0.body.crc 2438839214
+act art_block accept
+vec art_block_reply app
+hex art_block_reply 000038010100
+re art_block_reply art_block
+dec art_block_reply 0.len 0
+dec art_block_reply 0.type ART_BLOCK
+dec art_block_reply 0.flags 0x01
+dec art_block_reply 0.seq 1
+act art_block_reply accept
+vec art_block_error_stale app
+hex art_block_error_stale 100038030100010100070209007374616c6520726576
+re art_block_error_stale art_block
+dec art_block_error_stale 0.len 16
+dec art_block_error_stale 0.type ART_BLOCK
+dec art_block_error_stale 0.flags 0x03
+dec art_block_error_stale 0.seq 1
+dec art_block_error_stale 0.body.code 7
+dec art_block_error_stale 0.body.text stale rev
+act art_block_error_stale accept
+vec img_begin_meta app
+hex img_begin_meta 75003004400001010000020c0055746164612048696b61727503240061316232633364342d303030302d343030302d383030302d303030303030303030303031
+hex img_begin_meta 04040018000000050400aebb5d910602008001070200e0010801000109110057696b696d6564696120436f6d6d6f6e730a08004a616e6520446f65
+dec img_begin_meta 0.len 117
+dec img_begin_meta 0.type IMG_BEGIN
+dec img_begin_meta 0.flags 0x04
+dec img_begin_meta 0.seq 64
+dec img_begin_meta 0.body.kind artist
+dec img_begin_meta 0.body.name Utada Hikaru
+dec img_begin_meta 0.body.mbid a1b2c3d4-0000-4000-8000-000000000001
+dec img_begin_meta 0.body.total 24
+dec img_begin_meta 0.body.crc 2438839214
+dec img_begin_meta 0.body.w 384
+dec img_begin_meta 0.body.h 480
+dec img_begin_meta 0.body.wrongArtist true
+dec img_begin_meta 0.body.source Wikimedia Commons
+dec img_begin_meta 0.body.credit Jane Doe
+act img_begin_meta accept

@@ -12,6 +12,8 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.CRC32
 
+data class ImgMeta(val wrongArtist: Boolean, val source: String, val credit: String?)
+
 class ImagePush(
     private val session: Session,
     private val name: String,
@@ -19,6 +21,7 @@ class ImagePush(
     private val jpeg: ByteArray,
     private val w: Int,
     private val h: Int,
+    private val meta: ImgMeta? = null,
     private val gate: () -> Boolean = { true },
 ) {
     sealed class Outcome {
@@ -40,7 +43,7 @@ class ImagePush(
             val crc = crc32(jpeg.size)
             val latch = CountDownLatch(1)
             val result = AtomicReference<Session.Result>(Session.Result.Closed)
-            session.request(Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, name, mbid, total, crc, w, h)) {
+            session.request(Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, name, mbid, total, crc, w, h, meta?.wrongArtist, meta?.source, meta?.credit)) {
                 armed.set(true)
                 result.set(it)
                 latch.countDown()

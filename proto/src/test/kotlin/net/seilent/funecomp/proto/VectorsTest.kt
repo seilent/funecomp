@@ -183,6 +183,7 @@ class VectorsTest {
             Msg.LIB -> Lib.from(n).encode()
             Msg.IMG_ABORT -> ImgAbort.from(n).encode()
             Msg.UPD_ABORT -> UpdAbort.from(n).encode()
+            Msg.ART_BLOCK -> ArtBlock.from(n).encode()
             else -> null
         }
     }

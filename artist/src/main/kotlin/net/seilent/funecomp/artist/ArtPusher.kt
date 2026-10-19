@@ -1,6 +1,7 @@
 package net.seilent.funecomp.artist
 
 import net.seilent.funecomp.link.ImagePush
+import net.seilent.funecomp.link.ImgMeta
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.proto.ImgEntry
 import net.seilent.funecomp.proto.ImgListReply
@@ -95,9 +96,10 @@ class ArtPusher(
                 gated = true
                 continue
             }
+            val meta = if (hello.has("artBlock")) ImgMeta(a.wrongArtist, Sources.label(a.source), a.credit?.author?.takeIf { it.isNotBlank() }) else null
             var tries = 0
             while (true) {
-                when (val o = ImagePush(session, name, a.mbid, a.jpeg, w, h, gate).run()) {
+                when (val o = ImagePush(session, name, a.mbid, a.jpeg, w, h, meta, gate).run()) {
                     is ImagePush.Outcome.Done -> pushed[name] = o.from
                     is ImagePush.Outcome.Have -> stored += name
                     is ImagePush.Outcome.Gated -> gated = true

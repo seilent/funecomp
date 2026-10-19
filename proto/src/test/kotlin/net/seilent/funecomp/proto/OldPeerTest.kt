@@ -5,6 +5,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.proto.gen.Field
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.gen.Tags
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -19,6 +20,7 @@ class OldPeerTest {
     private val v12 = table("/proto-1.2.txt")
     private val v13 = table("/proto-1.3.txt")
     private val v14 = table("/proto-1.4.txt")
+    private val v15 = table("/proto-1.5.txt")
 
     private fun table(name: String): Map<String, Map<Int, Field>> = run {
         val text = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
@@ -135,6 +137,47 @@ class OldPeerTest {
 
         assertEquals("/data/flatdap/eq/HD 650.txt", EqPresetReply.from(Node.decode("EQ_PRESET.reply", body("eq_preset_save_reply"))).key)
         assertNull(EqPresetReply.from(Node.decode("EQ_PRESET.reply", body("eq_preset_remove_reply"))).key)
+    }
+
+    @Test
+    fun protocol16FramesDecodeWithThe15TablesToEmptyFields() {
+        assertNull(v15["ART_BLOCK"])
+        assertEquals(listOf(8, 9, 10), Node.decode("IMG_BEGIN", body("img_begin_meta"), v15).unknownTags)
+        assertEquals(listOf(5), Node.decode("HELLO", body("hello_feat"), v15).unknownTags)
+        assertNull(Hello.from(Node.decode("HELLO", body("hello_feat"), v15)).features)
+        assertEquals(1024L, Hello.from(Node.decode("HELLO", body("hello_feat"))).features)
+        assertFalse(Groups.allowed(Msg.ART_BLOCK, Groups.all and (1L shl Feature.artBlock).inv()))
+        assertTrue(Groups.allowed(Msg.ART_BLOCK, Groups.mask("artBlock")))
+        assertEquals(10, Feature.artBlock)
+    }
+
+    @Test
+    fun artBlockBuildersMatchTheVectors() {
+        val mbid = "a1b2c3d4-0000-4000-8000-000000000001"
+        assertArrayEquals(body("hello_feat"), Hello(1, 6, "0.1.0", 1024).encode())
+        assertArrayEquals(body("art_block"), ArtBlock(Enums.BlockCmd.blockImage, "Utada Hikaru", mbid, 2438839214).encode())
+        assertEquals(ArtBlock(Enums.BlockCmd.blockImage, "Utada Hikaru", mbid, 2438839214), ArtBlock.from(Node.decode("ART_BLOCK", body("art_block"))))
+        val meta = body("img_begin_meta")
+        assertArrayEquals(meta, Req.imgBegin(Enums.ImgKind.artist, "Utada Hikaru", mbid, 24, 2438839214, 384, 480, true, "Wikimedia Commons", "Jane Doe"))
+        val plain = Req.imgBegin(Enums.ImgKind.artist, "Utada Hikaru", mbid, 24, 2438839214, 384, 480)
+        assertArrayEquals(meta.copyOf(plain.size), plain)
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 7), Tlv.parse(plain).map { it.tag })
+        val no = Req.imgBegin(Enums.ImgKind.artist, "Utada Hikaru", mbid, 24, 2438839214, 384, 480, false, null, null)
+        assertArrayEquals(plain + byteArrayOf(8, 1, 0, 0), no)
+    }
+
+    @Test
+    fun metaStringsAreCutAt256BytesOnACodePoint() {
+        assertEquals(256, Req.cap("a".repeat(300))!!.toByteArray().size)
+        assertEquals("a".repeat(255), Req.cap("a".repeat(255) + "あ"))
+        assertEquals(255, Req.cap("あ".repeat(100))!!.toByteArray().size)
+        assertEquals("a".repeat(256), Req.cap("a".repeat(256)))
+        assertNull(Req.cap(null))
+        val begin = Req.imgBegin(Enums.ImgKind.artist, "A", null, 1, 1, 2, 2, true, "あ".repeat(100), "b".repeat(300))
+        val n = Node.decode("IMG_BEGIN", begin)
+        assertEquals("あ".repeat(85), n.str(Tags.ImgBegin.source))
+        assertEquals("b".repeat(256), n.str(Tags.ImgBegin.credit))
+        assertNull(Node.decode("IMG_BEGIN", Req.imgBegin(Enums.ImgKind.artist, "A", null, 1, 1, 2, 2, false, null, null)).str(Tags.ImgBegin.source))
     }
 
     @Test

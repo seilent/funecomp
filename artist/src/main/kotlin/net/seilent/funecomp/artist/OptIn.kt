@@ -42,6 +42,17 @@ data class Sources(
         const val DISCOGS = "discogs"
         const val YOUTUBE = "youtube"
         const val DEEZER = "deezer"
+
+        private val LABELS = mapOf(
+            Wikimedia.SOURCE to "commons",
+            THE_AUDIO_DB to "theaudiodb",
+            DISCOGS to "discogs",
+            FANART_TV to "fanart.tv",
+            YOUTUBE to "youtube",
+            DEEZER to "deezer",
+        )
+
+        fun label(id: String) = LABELS[id] ?: id
     }
 }
 

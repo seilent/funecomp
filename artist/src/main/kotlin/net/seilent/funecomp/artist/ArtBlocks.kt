@@ -19,6 +19,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         override val name: String,
         override val at: Long,
         val applied: Set<String> = emptySet(),
+        val crc: Long? = null,
     ) : Record
 
     data class Reject(
@@ -28,6 +29,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         override val name: String,
         override val at: Long,
         val applied: Set<String> = emptySet(),
+        val crc: Long? = null,
     ) : Record
 
     data class Push(val name: String, val mbid: String?, val done: Set<String> = emptySet())
@@ -83,6 +85,20 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
     }
 
     @Synchronized
+    fun covering(wrongArtist: Boolean, name: String, keys: Set<String>, mbid: String?, crc: Long, device: String?): Record? {
+        val f = Names.fold(name)
+        val m = Names.mbid(mbid)
+        return records().firstOrNull { r ->
+            val (rc, applied) = when (r) {
+                is Block -> r.crc to r.applied
+                is Reject -> r.crc to r.applied
+            }
+            (r is Reject) == wrongArtist && (r.key in keys || Names.fold(r.name) == f || (m != null && r.mbid == m)) &&
+                (rc == crc || (rc == null && device != null && device !in applied))
+        }
+    }
+
+    @Synchronized
     fun pushes(device: String): List<Push> = pushes.filter { device !in it.done }
 
     @Synchronized
@@ -100,8 +116,8 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
 
     @Synchronized
     fun encode(): String = buildString {
-        for (b in blocks) line("block", b.key, b.mbid ?: "", b.source, b.id, b.sha, b.name, b.at.toString(), b.applied.joinToString(","))
-        for (r in rejects) line("reject", r.key, r.mbid ?: "", r.resolvedBy, r.name, r.at.toString(), r.applied.joinToString(","))
+        for (b in blocks) line("block", b.key, b.mbid ?: "", b.source, b.id, b.sha, b.name, b.at.toString(), b.applied.joinToString(","), *listOfNotNull(b.crc?.toString()).toTypedArray())
+        for (r in rejects) line("reject", r.key, r.mbid ?: "", r.resolvedBy, r.name, r.at.toString(), r.applied.joinToString(","), *listOfNotNull(r.crc?.toString()).toTypedArray())
         for (p in pushes) line("push", p.name, p.mbid ?: "", p.done.joinToString(","))
     }
 
@@ -126,8 +142,8 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
             if (l.isBlank()) continue
             val p = l.split('\t').map { unescape(it) }
             val ok = when (p[0]) {
-                "block" -> p.size == 9 && p[7].toLongOrNull() != null && blocks.add(Block(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5], p[6], p[7].toLong(), set(p[8])))
-                "reject" -> p.size == 7 && p[5].toLongOrNull() != null && rejects.add(Reject(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5].toLong(), set(p[6])))
+                "block" -> (p.size == 9 || p.size == 10) && p[7].toLongOrNull() != null && blocks.add(Block(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5], p[6], p[7].toLong(), set(p[8]), p.getOrNull(9)?.toLongOrNull()))
+                "reject" -> (p.size == 7 || p.size == 8) && p[5].toLongOrNull() != null && rejects.add(Reject(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5].toLong(), set(p[6]), p.getOrNull(7)?.toLongOrNull()))
                 "push" -> p.size == 4 && pushes.add(Push(p[1], p[2].ifEmpty { null }, set(p[3])))
                 else -> false
             }

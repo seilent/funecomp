@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "2d0b01d18f5a62b95bc53690b6b35b3892231a51"
-    const val PROTO_SHA256 = "52147ba9ee4f321cde4f0748fe75fae72c5b490fd3c186a6aff43571c3cca29e"
-    const val VECTORS_SHA256 = "8d7c9a38ef96d9f6de9f4473ce084430ccafb6815b6620323209018b528f75d2"
+    const val COMMIT = "258e76b5daa26232e99e1f8522887c9a260cf7fd"
+    const val PROTO_SHA256 = "d00d811bca24ab725859e2f9aaa9a4cd20afc3df045b3f97918956edc548be17"
+    const val VECTORS_SHA256 = "59ed30292fdb3f357cbe5d6180eddf8e09ea8e6664681a2f60846965c9993849"
     const val TOKENS_SHA256 = "6ec9e3b80e9c857e924e2a26602d9fd282176337545ef938b4f7113a332f4bd5"
     const val TOKENSV1_SHA256 = "7463c4af8a045b4e5f2561bd4ff488de8edc667358e266ce781950ddac2e35a0"
 }
@@ -18,7 +18,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 5
+    const val minor = 6
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -82,6 +82,7 @@ object Msg {
     const val IMG_DEL = 0x35
     const val IMG_ABORT = 0x36
     const val EQ_PRESET = 0x37
+    const val ART_BLOCK = 0x38
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -115,6 +116,7 @@ object Msg {
         IMG_DEL to MsgInfo(IMG_DEL, "IMG_DEL", "app", false),
         IMG_ABORT to MsgInfo(IMG_ABORT, "IMG_ABORT", "dev", true),
         EQ_PRESET to MsgInfo(EQ_PRESET, "EQ_PRESET", "app", false),
+        ART_BLOCK to MsgInfo(ART_BLOCK, "ART_BLOCK", "dev", false),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -146,7 +148,8 @@ object Feature {
     const val update = 7
     const val clockAuto = 8
     const val eqPresets = 9
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets")
+    const val artBlock = 10
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock")
 }
 
 object Enums {
@@ -277,6 +280,11 @@ object Enums {
         const val rename = 2
         val names: Map<Int, String> = mapOf(0 to "save", 1 to "remove", 2 to "rename")
     }
+    object BlockCmd {
+        const val blockImage = 0
+        const val wrongArtist = 1
+        val names: Map<Int, String> = mapOf(0 to "blockImage", 1 to "wrongArtist")
+    }
     val byName: Map<String, Map<Int, String>> = mapOf(
         "SOURCE" to Source.names,
         "OUTPUT" to Output.names,
@@ -296,6 +304,7 @@ object Enums {
         "IMG_KIND" to ImgKind.names,
         "ABORT_CODE" to AbortCode.names,
         "EQ_PRESET_OP" to EqPresetOp.names,
+        "BLOCK_CMD" to BlockCmd.names,
     )
 }
 
@@ -305,6 +314,7 @@ object Tags {
         const val major = 2
         const val minor = 3
         const val appVersion = 4
+        const val features = 5
     }
     object HelloReply {
         const val magic = 1
@@ -521,6 +531,9 @@ object Tags {
         const val crc = 5
         const val w = 6
         const val h = 7
+        const val wrongArtist = 8
+        const val source = 9
+        const val credit = 10
     }
     object ImgBeginReply {
         const val offset = 1
@@ -563,6 +576,12 @@ object Tags {
     }
     object EqPresetReply {
         const val key = 1
+    }
+    object ArtBlock {
+        const val cmd = 1
+        const val name = 2
+        const val mbid = 3
+        const val crc = 4
     }
     object Error {
         const val code = 1
@@ -624,6 +643,7 @@ object Tags {
             2 to Field(2, "major", Base.U16, null, false),
             3 to Field(3, "minor", Base.U16, null, false),
             4 to Field(4, "appVersion", Base.STR, null, false),
+            5 to Field(5, "features", Base.U64, null, false),
         ),
         "HELLO.reply" to mapOf(
             1 to Field(1, "magic", Base.U32, null, false),
@@ -840,6 +860,9 @@ object Tags {
             5 to Field(5, "crc", Base.U32, null, false),
             6 to Field(6, "w", Base.U16, null, false),
             7 to Field(7, "h", Base.U16, null, false),
+            8 to Field(8, "wrongArtist", Base.BOOL, null, false),
+            9 to Field(9, "source", Base.STR, null, false),
+            10 to Field(10, "credit", Base.STR, null, false),
         ),
         "IMG_BEGIN.reply" to mapOf(
             1 to Field(1, "offset", Base.U32, null, false),
@@ -882,6 +905,12 @@ object Tags {
         ),
         "EQ_PRESET.reply" to mapOf(
             1 to Field(1, "key", Base.STR, null, false),
+        ),
+        "ART_BLOCK" to mapOf(
+            1 to Field(1, "cmd", Base.ENUM, "BLOCK_CMD", false),
+            2 to Field(2, "name", Base.STR, null, false),
+            3 to Field(3, "mbid", Base.STR, null, false),
+            4 to Field(4, "crc", Base.U32, null, false),
         ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),

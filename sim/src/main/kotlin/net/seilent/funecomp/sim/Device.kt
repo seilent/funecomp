@@ -142,13 +142,15 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private var queueRev = 1L
     private var lastStateAt = 0L
 
-    class Stored(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, var at: Long)
+    data class Meta(val wrong: Boolean?, val source: String?, val credit: String?)
+    class Stored(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, var at: Long, var meta: Meta)
     class Partial(val name: String, val total: Long, val crc: Long, val w: Int, val h: Int, val data: ByteArrayOutputStream = ByteArrayOutputStream())
 
     private val images = LinkedHashMap<String, Stored>()
     private val partials = HashMap<String, Partial>()
     private var push: Partial? = null
     private var pushMbid: String? = null
+    private var pushMeta = Meta(null, null, null)
     private var pushDropped = false
     private var abortFired = false
     private var updAbortFired = false
@@ -180,6 +182,8 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         private set
 
     val stored: Map<String, Stored> get() = synchronized(lock) { images.toMap() }
+
+    val pushing: String? get() = synchronized(lock) { push?.name }
 
     private fun flat() = Profile(0, emptyList())
 
@@ -761,7 +765,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         return changed()
     }
 
-    private fun fold(name: String) = name.trim().lowercase()
+    internal fun fold(name: String) = name.trim().lowercase()
 
     private fun crc(b: ByteArray, n: Int = b.size) = CRC32().apply { update(b, 0, n) }.value
 
@@ -783,7 +787,12 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         if (w != board.backdropW || h != board.backdropH) return Answer.Fail(Err.badValue, "wrong size")
         push?.let { if (!pushDropped) abort(out, it, Enums.AbortCode.superseded) }
         val key = fold(name)
+        val meta = Meta(b.bool(Tags.ImgBegin.wrongArtist), b.str(Tags.ImgBegin.source), b.str(Tags.ImgBegin.credit))
         images[key]?.let { if (it.crc == sum && it.bytes.size.toLong() == total) {
+            if (it.meta != meta) {
+                it.meta = meta
+                opts.log("meta name=${it.name} ${line(meta)}")
+            }
             push = null
             return Answer.Ok(ImgBeginReply(total, sum).encode())
         } }
@@ -797,6 +806,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         }
         push = p
         pushMbid = b.str(Tags.ImgBegin.mbid)
+        pushMeta = meta
         pushDropped = false
         val bytes = p.data.toByteArray()
         return Answer.Ok(ImgBeginReply(bytes.size.toLong(), if (bytes.isEmpty()) 0 else crc(bytes)).encode())
@@ -838,15 +848,17 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             return Answer.Fail(Err.badValue, "not baseline or wrong size")
         }
         partials.remove(key)
-        images[key] = Stored(p.name, pushMbid, p.crc, bytes, ++storeClock)
+        images[key] = Stored(p.name, pushMbid, p.crc, bytes, ++storeClock, pushMeta)
         evict(key)
         opts.imgDir?.let { dir ->
             val f = File(dir.apply { mkdirs() }, "%08x.jpg".format(p.crc))
             f.writeBytes(bytes)
-            opts.log("stored name=${p.name} mbid=${pushMbid ?: ""} ${p.w}x${p.h} bytes=${bytes.size} file=${f.path}")
+            opts.log("stored name=${p.name} mbid=${pushMbid ?: ""} ${p.w}x${p.h} bytes=${bytes.size} ${line(pushMeta)} file=${f.path}")
         }
         return Answer.Ok()
     }
+
+    private fun line(m: Meta) = "wrong=${if (m.wrong == true) 1 else 0} source=${m.source ?: ""} credit=${m.credit ?: ""}"
 
     private fun bytes() = images.values.sumOf { it.bytes.size.toLong() }
 

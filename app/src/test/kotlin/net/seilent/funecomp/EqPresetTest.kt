@@ -297,7 +297,7 @@ class EqPresetTest {
 
     @Test
     fun aMinor5PeerWithoutTheBitKeepsTheCancelOnlyConfirm() {
-        val (c, shell) = start(faults = listOf("features=${Groups.all and Groups.mask("eqPresets").inv()}"))
+        val (c, shell) = start(minor = 5, faults = listOf("features=${Groups.all and Groups.mask("eqPresets").inv()}"))
         assertEquals(5, c.device.hello?.minor)
         oldConfirm(c, shell)
     }

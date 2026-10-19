@@ -39,6 +39,7 @@ class Session(
         val busyCapMs: Long = Proto.busyCapMs.toLong(),
         val tickMs: Long = 50,
         val outQueueBytes: Int = 65536,
+        val features: Long = 0,
     )
 
     interface Listener {
@@ -47,6 +48,7 @@ class Session(
         fun onBye(bye: Bye) {}
         fun onRtt(ms: Long) {}
         fun onClosed(reason: String) {}
+        fun onRequest(type: Int, body: Node, responder: Responder): Boolean = false
     }
 
     sealed class Result {
@@ -129,7 +131,7 @@ class Session(
         writer.start()
         schedule { t.scheduleAtFixedRate({ tick() }, config.tickMs, config.tickMs, TimeUnit.MILLISECONDS) }
         if (closedReason != null) t.shutdownNow()
-        enqueueRequest(Msg.HELLO, Hello(Proto.major, Proto.minor, config.appVersion).encode(), config.helloTimeoutMs) { r ->
+        enqueueRequest(Msg.HELLO, Hello(Proto.major, Proto.minor, config.appVersion, config.features.takeIf { it != 0L }).encode(), config.helloTimeoutMs) { r ->
             when (r) {
                 is Result.Ok -> {
                     val h = HelloReply.from(r.body)
@@ -268,6 +270,8 @@ class Session(
 
     private fun reply(f: Frame, flags: Int, payload: ByteArray = ByteArray(0)) = send(Frame(f.type, flags, f.seq, payload), wait = false)
 
+    internal fun answer(type: Int, seq: Int, flags: Int, payload: ByteArray) = send(Frame(type, flags, seq, payload), wait = false)
+
     private fun handle(f: Frame) {
         val now = clock()
         synchronized(lock) { rxAt = now }
@@ -301,7 +305,7 @@ class Session(
         }
         if (f.wantsReply) {
             if (f.type == Msg.PING) reply(f, Proto.flagReply)
-            else reply(f, Proto.flagReply or Proto.flagError, ErrorReply(Err.unknown, "unknown").encode())
+            else if (!asked(f, body)) reply(f, Proto.flagReply or Proto.flagError, ErrorReply(Err.unknown, "unknown").encode())
             return
         }
         val h = hello ?: return
@@ -309,6 +313,13 @@ class Session(
         if (f.type == Msg.IMG_ABORT) abortListener?.invoke(ImgAbort.from(body))
         if (f.type == Msg.UPD_ABORT) updAbortListener?.invoke(UpdAbort.from(body))
         listener.onPush(f.type, body)
+    }
+
+    private fun asked(f: Frame, body: Node): Boolean {
+        val h = hello ?: return false
+        if (Msg.info[f.type]?.dir !in setOf("dev", "both")) return false
+        if (!Groups.allowed(f.type, h.features) || !Groups.allowed(f.type, config.features)) return false
+        return listener.onRequest(f.type, body, Responder(this, f.type, f.seq))
     }
 
     private fun tick() {

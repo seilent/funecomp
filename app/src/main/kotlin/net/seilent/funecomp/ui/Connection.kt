@@ -121,21 +121,10 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleVi
 
 private class Toggle(val title: String, val on: Boolean, val tag: String, val flip: (Sources) -> Sources)
 
-private val SOURCE_NAMES = mapOf(
-    Wikimedia.SOURCE to "commons",
-    Sources.THE_AUDIO_DB to "theaudiodb",
-    Sources.DISCOGS to "discogs",
-    Sources.FANART_TV to "fanart.tv",
-    Sources.YOUTUBE to "youtube",
-    Sources.DEEZER to "deezer",
-)
-
-fun sourceName(id: String) = SOURCE_NAMES[id] ?: id
-
 fun artSheet(ctx: Ctx, held: BackdropArt) {
     val e = held.entry ?: return
     val items = listOf("block image") + if (held.wrongArtist) listOf("wrong artist") else emptyList()
-    val info = listOf(listOfNotNull(sourceName(e.source), e.credit?.author?.takeIf { it.isNotBlank() }).joinToString(", "))
+    val info = listOf(listOfNotNull(Sources.label(e.source), e.credit?.author?.takeIf { it.isNotBlank() }).joinToString(", "))
     ctx.sheet.open(e.name, items, info = info) {
         if (it == 0) ctx.control.blockArt(e) else ctx.control.wrongArtist(e)
     }
@@ -199,13 +188,13 @@ fun ArtistArtPage(
                     id in sources.enabled -> "on"
                     else -> "off"
                 }
-                SettingsRow(sourceName(id), value, Modifier.enter { i }.testTag("art.order.$j"), focused = focus == i) {
+                SettingsRow(Sources.label(id), value, Modifier.enter { i }.testTag("art.order.$j"), focused = focus == i) {
                     focus = i
                     val moves = buildList {
                         if (j > 0) add("move up" to -1)
                         if (j < sources.order.size - 1) add("move down" to 1)
                     }
-                    ctx.sheet.open(sourceName(id), moves.map { it.first }) { k -> onSources(sources.moved(id, moves[k].second)) }
+                    ctx.sheet.open(Sources.label(id), moves.map { it.first }) { k -> onSources(sources.moved(id, moves[k].second)) }
                 }
             }
             if (blocked.isNotEmpty()) {
@@ -213,7 +202,7 @@ fun ArtistArtPage(
                 itemsIndexed(blocked, key = { _, r -> "blocked ${r.javaClass.simpleName} ${r.key} ${r.at}" }) { j, r ->
                     val i = blockedAt + 1 + j
                     val lines = when (r) {
-                        is ArtBlocks.Block -> listOf(sourceName(r.source))
+                        is ArtBlocks.Block -> listOf(Sources.label(r.source))
                         is ArtBlocks.Reject -> listOf("wrong artist")
                     }
                     CreditRow(r.name, lines, Modifier.enter { i }.testTag("art.blocked.$j"), focused = focus == i) {

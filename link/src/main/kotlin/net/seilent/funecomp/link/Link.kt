@@ -116,6 +116,8 @@ class Link(
                 override fun onRtt(ms: Long) = listener.onRtt(ms)
 
                 override fun onClosed(reason: String) = listener.onClosed(reason)
+
+                override fun onRequest(type: Int, body: Node, responder: Responder) = listener.onRequest(type, body, responder)
             }, config, clock)
             val live = lock.withLock {
                 session = s

@@ -1,11 +1,14 @@
 package net.seilent.funecomp.sim
 
+import net.seilent.funecomp.proto.ArtBlock
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.CompletableFuture
 
 class Sim(private val opts: Options, lib: Library = Library.synthetic()) {
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 }
@@ -77,6 +80,20 @@ class Sim(private val opts: Options, lib: Library = Library.synthetic()) {
             isDaemon = true
             start()
         }
+    }
+
+    fun block(cmd: Int, name: String): ArtBlock {
+        val s = device.stored[device.fold(name)] ?: error("$name not stored")
+        return ArtBlock(cmd, s.name, s.mbid?.takeIf { it.isNotEmpty() }, s.crc)
+    }
+
+    fun askBlock(cmd: Int, name: String): String = askBlock(block(cmd, name))
+
+    fun askBlock(q: ArtBlock): String {
+        val c = current?.takeIf { it.closed == null && it.asks } ?: error("no connection with art block")
+        val done = CompletableFuture<String>()
+        check(c.ask(Msg.ART_BLOCK, q.encode(), Proto.requestTimeoutMs.toLong()) { done.complete(it) }) { "an ask is pending" }
+        return done.get()
     }
 
     fun stop() {

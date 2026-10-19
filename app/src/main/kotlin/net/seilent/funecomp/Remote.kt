@@ -31,11 +31,14 @@ import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.link.Link
+import net.seilent.funecomp.link.Responder
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
 import net.seilent.funecomp.link.Transport
+import net.seilent.funecomp.proto.ArtBlock
 import net.seilent.funecomp.proto.Bye
 import net.seilent.funecomp.proto.EqPresetReply
+import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
@@ -61,6 +64,7 @@ import java.time.ZoneId
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 object Remote : Control {
     const val TAG = "Funecomp"
@@ -74,10 +78,18 @@ object Remote : Control {
     private const val ART_WAKE_MS = 60_000L
     private const val TRANSITION_PAD_MS = 1_000L
     private val SECRET = Regex("(api_key|key|token|secret)=[^&]*")
+    private val ASK_ERRORS = mapOf(
+        Err.badValue to "bad value",
+        Err.busy to "busy",
+        Err.refused to "wrong artist not offered",
+        Err.staleRev to "stale rev",
+        Err.notFound to "not found",
+    )
     private val codec = BitmapCodec { Log.i(TAG, it) }
     private val decoded = Memo<BackdropArt>()
     private val faces = Memo<Found>(FACES)
     internal var forgetting: () -> Unit = {}
+    internal var queuedAsk: () -> Unit = {}
 
     internal var faced: (ByteArray, (() -> Pair<Double, Double>?) -> Pair<Double, Double>?) -> Pair<Bitmap, Pair<Double, Double>?>? =
         { src, face -> codec.faced(src, BACKDROP_SIDE, face) }
@@ -115,6 +127,7 @@ object Remote : Control {
         private set
 
     private val backdropLock = Any()
+    private val blockedLock = Any()
     private val blockExec = Executors.newSingleThreadExecutor { Thread(it, "artblock").apply { isDaemon = true } }
     private val refreshLock = Any()
     private var refreshNames = HashSet<String>()
@@ -131,7 +144,7 @@ object Remote : Control {
     @Volatile private var artKey: List<Any?>? = null
     @Volatile private var backdropFor: List<String>? = null
     @Volatile private var shown = false
-    @Volatile private var trigger = 0
+    private val trigger = AtomicInteger()
     @Volatile private var online = true
     private val breaker = Sweep.Breaker(SystemClock::elapsedRealtime)
     private var wake: Wake? = null
@@ -169,7 +182,7 @@ object Remote : Control {
             phase(Phase.CONNECTING)
             Log.i(TAG, "link $spec")
             wake(context)
-            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), clock = SystemClock::elapsedRealtime)
+            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(features = Groups.mask("artBlock")), SystemClock::elapsedRealtime)
             link = l
             art = worker(context, l)
             l.start()
@@ -215,7 +228,7 @@ object Remote : Control {
 
     fun shown(on: Boolean) {
         shown = on
-        if (on) trigger++
+        if (on) trigger.incrementAndGet()
         if (!on) {
             backdrop = null
             backdropFor = null
@@ -291,7 +304,7 @@ object Remote : Control {
             val blocks = ArtBlocks(File(c.filesDir, "artblock.tsv")) { Log.w(TAG, it) }
             ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks).also {
                 artist = it
-                blocked = blocks.records()
+                showBlocked { blocks.records() }
                 Thread({ credits = it.credits() }, "art-credits").apply { isDaemon = true }.start()
             }
         }
@@ -299,7 +312,7 @@ object Remote : Control {
 
     internal fun resetArtist() = synchronized(lock) {
         artist = null
-        blocked = emptyList()
+        showBlocked { emptyList() }
     }
 
     fun sourcesChanged() = art?.want()
@@ -309,7 +322,7 @@ object Remote : Control {
             refreshFor = device.playback.state.artists
             refreshNames = HashSet(device.playback.state.artists)
         }
-        trigger++
+        trigger.incrementAndGet()
         art?.want()
     }
 
@@ -318,25 +331,65 @@ object Remote : Control {
         refreshNames.remove(name)
     }
 
-    override fun blockArt(e: ArtCache.Entry) {
+    override fun blockArt(e: ArtCache.Entry) = blockArt(e, null)
+
+    override fun wrongArtist(e: ArtCache.Entry) = wrongArtist(e, null)
+
+    private fun blockArt(e: ArtCache.Entry, crc: Long?) {
         val a = artist ?: return
-        a.blocks.add(ArtBlocks.Block(e.key, e.mbid, e.source, ImageIds.of(e), e.sha, e.name, System.currentTimeMillis()))
+        val s = a.withSha(e)
+        a.blocks.add(ArtBlocks.Block(s.key, s.mbid, s.source, ImageIds.of(s), s.sha, s.name, System.currentTimeMillis(), crc = crc))
         Log.i(TAG, "art block ${e.name} ${e.source} ${ImageIds.of(e)}")
         blockedArt(a) { a.forget(e) }
     }
 
-    override fun wrongArtist(e: ArtCache.Entry) {
+    private fun wrongArtist(e: ArtCache.Entry, crc: Long?) {
         val a = artist ?: return
         val by = a.resolvedBy(e)
-        a.blocks.add(ArtBlocks.Reject(e.key, e.mbid, by, e.name, System.currentTimeMillis()))
+        a.blocks.add(ArtBlocks.Reject(e.key, e.mbid, by, e.name, System.currentTimeMillis(), crc = crc))
         Log.i(TAG, "art wrong artist ${e.name} ${e.mbid} by $by")
         blockedArt(a) { a.forget(e) }
+    }
+
+    private fun artAsk(q: ArtBlock, dev: String?, w: Int?, h: Int?, r: Responder) {
+        val cmd = q.cmd
+        val name = q.name?.takeIf { it.isNotBlank() }
+        val crc = q.crc
+        val code = if (cmd == null || name == null || crc == null) Err.badValue else artAsk(cmd == Enums.BlockCmd.wrongArtist, name, Names.mbid(q.mbid), crc, dev, w, h)
+        if (code == null) r.ok() else r.error(code, ASK_ERRORS.getValue(code))
+        Log.i(TAG, "art ask ${Enums.BlockCmd.names[cmd ?: -1]} $name -> ${code ?: "ok"}")
+    }
+
+    private fun artAsk(wrong: Boolean, name: String, mbid: String?, crc: Long, dev: String?, w: Int?, h: Int?): Int? {
+        val a = artist ?: return Err.busy
+        val found = a.candidates(name, mbid).map { it to if (w != null && h != null) a.renderedCrc(it, w, h) else null }
+        var hits = found.filter { it.second == crc }.map { it.first }
+        if (hits.size > 1 && mbid != null) hits = hits.filter { it.mbid == mbid }.ifEmpty { hits }
+        if (wrong) {
+            val s = device.playback.state
+            val i = s.artists.indexOfFirst { Names.fold(it) == Names.fold(name) }
+            if (i >= 0 && !s.mbids.getOrNull(i).isNullOrBlank()) return Err.refused
+            if (hits.any { !a.wrongArtistOffered(a.withSha(it), name) }) return Err.refused
+        }
+        if (hits.isNotEmpty()) {
+            for (e in hits) {
+                val done = if (wrong) e.mbid in a.blocks.rejected(a.resolvedBy(e)) else a.blocked(a.withSha(e))
+                if (done) Log.i(TAG, "art ask ${e.name} already recorded")
+                else if (wrong) wrongArtist(e, crc)
+                else blockArt(e, crc)
+            }
+            return null
+        }
+        val keys = found.mapTo(HashSet()) { it.first.key } + a.keyOf(name, mbid)
+        val r = a.blocks.covering(wrong, name, keys, mbid, crc, dev)
+        if (r != null) return if (r is ArtBlocks.Reject && !a.resolves(r.resolvedBy, name)) Err.refused else null
+        return if (found.any { it.second != null }) Err.staleRev else Err.notFound
     }
 
     override fun unblock(r: ArtBlocks.Record) {
         val a = artist ?: return
         Log.i(TAG, "art unblock ${r.name}")
-        blocked = blocked - r
+        showBlocked { blocked - r }
         blockExec.execute {
             forgetting()
             if (r is ArtBlocks.Reject) {
@@ -347,25 +400,27 @@ object Remote : Control {
             a.forget(r.key)
             a.blocks.remove(r)
             a.blocks.save()
-            blocked = a.blocks.records()
-            trigger++
+            showBlocked { a.blocks.records() }
+            trigger.incrementAndGet()
             art?.want()
         }
     }
+
+    private fun showBlocked(list: () -> List<ArtBlocks.Record>) = synchronized(blockedLock) { blocked = list() }
 
     private fun blockedArt(a: ArtistArt, forget: () -> Unit) {
         synchronized(backdropLock) {
             backdrop = null
             backdropFor = null
         }
-        blocked = a.blocks.records()
-        trigger++
+        showBlocked { a.blocks.records() }
+        trigger.incrementAndGet()
         blockExec.execute {
             forgetting()
             a.blocks.save()
             forget()
             decoded.clear()
-            trigger++
+            trigger.incrementAndGet()
             art?.want()
             credits = a.credits()
         }
@@ -421,7 +476,7 @@ object Remote : Control {
             { s, run -> forward.run(s, run::live) },
             { final -> !shown || showBackdrop(a, final) },
             { if (shown) fetch(a) },
-            trigger = { trigger },
+            trigger = { trigger.get() },
             onHttp = { url ->
                 Log.i(TAG, "art http ${url.replace(SECRET, "$1=x")}")
                 if (PushGate.open(device, SystemClock.elapsedRealtime())) wake?.hold(ART, ART_WAKE_MS)
@@ -467,7 +522,7 @@ object Remote : Control {
             return false
         }
         val full = a.withSha(e)
-        val wrong = a.wrongArtistOffered(full) && s.mbids.getOrNull(found.first).isNullOrBlank()
+        val wrong = a.wrongArtistOffered(full, s.artists[found.first]) && s.mbids.getOrNull(found.first).isNullOrBlank()
         val id = "${e.key}@${e.at}"
         val art = decoded.get(id) {
             a.source(e)?.let { src -> faced(src) { detect -> faces.get(id) { Found(detect()) }?.at } }?.let { (bmp, face) ->
@@ -709,13 +764,23 @@ object Remote : Control {
             val key = listOf(s.artists, s.output, s.queueRev, s.slot)
             if (key != artKey) {
                 artKey = key
-                trigger++
+                trigger.incrementAndGet()
                 art?.want()
             }
         }
 
         override fun onRtt(ms: Long) {
             if (live) update { it.withRtt(ms) }
+        }
+
+        override fun onRequest(type: Int, body: Node, responder: Responder): Boolean {
+            if (!live || type != Msg.ART_BLOCK) return false
+            val q = ArtBlock.from(body)
+            val dev = spec
+            val h = device.hello
+            blockExec.execute { artAsk(q, dev, h?.backdropW, h?.backdropH, responder) }
+            queuedAsk()
+            return true
         }
 
         override fun onBye(bye: Bye) {

@@ -1,5 +1,6 @@
 package net.seilent.funecomp.sim
 
+import net.seilent.funecomp.proto.ArtBlock
 import net.seilent.funecomp.proto.Bye
 import net.seilent.funecomp.proto.ErrorReply
 import net.seilent.funecomp.proto.Frame
@@ -38,6 +39,30 @@ class Conn(
     private var rxAt = clock()
     private val startAt = clock()
     private var pingSeq: Int? = null
+    private var appFeatures = 0L
+    private var asked = false
+    private val ticker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "sim-tick-$id").apply { isDaemon = true } }
+
+    private class Ask(val type: Int, val seq: Int, val deadline: Long, val done: (String) -> Unit)
+
+    private var ask: Ask? = null
+
+    val asks: Boolean get() = Groups.allowed(Msg.ART_BLOCK, appFeatures) && Groups.allowed(Msg.ART_BLOCK, faults.features)
+
+    fun ask(type: Int, body: ByteArray, timeoutMs: Long, done: (String) -> Unit): Boolean {
+        val s = synchronized(lock) {
+            if (closed != null || ask != null) return false
+            nextSeq().also { ask = Ask(type, it, clock() + timeoutMs, done) }
+        }
+        write(Frame(type, Proto.flagWant, s, body))
+        return true
+    }
+
+    private fun answered(seq: Int?, result: String) {
+        val a = synchronized(lock) { ask?.takeIf { seq == null || it.seq == seq }?.also { ask = null } } ?: return
+        log("ask ${name(a.type)} seq=${a.seq} -> $result")
+        a.done(result)
+    }
 
     @Volatile var closed: String? = null
         private set
@@ -93,6 +118,7 @@ class Conn(
             if (closed != null) return
             closed = reason
         }
+        answered(null, "closed")
         try {
             closer()
         } catch (_: Exception) {
@@ -102,8 +128,7 @@ class Conn(
 
     fun run() {
         log("open")
-        val t = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "sim-tick-$id").apply { isDaemon = true } }
-        t.scheduleAtFixedRate({ tick() }, 50, 50, TimeUnit.MILLISECONDS)
+        ticker.scheduleAtFixedRate({ tick() }, 50, 50, TimeUnit.MILLISECONDS)
         val reader = FrameReader()
         val buf = ByteArray(8192)
         try {
@@ -125,13 +150,14 @@ class Conn(
         } catch (e: Exception) {
             close("io: ${e.message}")
         } finally {
-            t.shutdownNow()
+            ticker.shutdownNow()
         }
     }
 
     private fun tick() {
         if (closed != null) return
         val now = clock()
+        if (synchronized(lock) { ask?.let { now >= it.deadline } } == true) answered(null, "timeout")
         if (!helloDone) {
             if (now - startAt >= opts.helloTimeoutMs) close("helloTimeout")
             return
@@ -164,6 +190,9 @@ class Conn(
     private fun accept(f: Frame, body: Node) {
         if (f.isReply) {
             if (f.type == Msg.PING && f.seq == pingSeq) pingSeq = null
+            if (synchronized(lock) { ask?.let { it.type == f.type && it.seq == f.seq } } == true) {
+                answered(f.seq, if (f.isError) ErrorReply.from(body).let { "error ${it.code} ${it.text ?: ""}".trim() } else "ok")
+            }
             return
         }
         if (f.type == Msg.HELLO) return hello(f, body)
@@ -180,19 +209,32 @@ class Conn(
         if (f.type in faults.refuse) return error(f, Err.refused, "refused")
         if ((faults.busy[f.type]?.getAndDecrement() ?: 0) > 0) return error(f, Err.busy, "busy")
         if (faults.stallMs > 0) Thread.sleep(faults.stallMs)
+        val pushing = if (f.type == Msg.IMG_END) device.pushing else null
         when (val a = device.request(f.type, body, this)) {
             is Answer.Ok -> {
                 reply(f, a.payload)
                 if (a.state) push(Msg.STATE, device.state())
+                if (pushing != null) askLater(pushing)
             }
             is Answer.Fail -> error(f, a.code, a.text, a.refused)
         }
     }
 
+    private fun askLater(name: String) {
+        val (cmd, ms) = faults.askBlock ?: return
+        if (asked || !asks) return
+        asked = true
+        ticker.schedule({
+            val s = device.stored.values.firstOrNull { it.name == name } ?: return@schedule log("ask-block: $name not stored")
+            ask(Msg.ART_BLOCK, ArtBlock(cmd, s.name, s.mbid?.takeIf { it.isNotEmpty() }, s.crc).encode(), Proto.requestTimeoutMs.toLong()) {}
+        }, ms, TimeUnit.MILLISECONDS)
+    }
+
     private fun hello(f: Frame, body: Node) {
         if (helloDone || !f.wantsReply) return
         val h = Hello.from(body)
-        log("hello app major=${h.major} minor=${h.minor} version=${h.appVersion}")
+        appFeatures = h.features ?: 0
+        log("hello app major=${h.major} minor=${h.minor} version=${h.appVersion} features=$appFeatures")
         if (faults.stallMs > 0) Thread.sleep(faults.stallMs)
         if (closed != null) return
         if (h.major != faults.major) return bye(Enums.ByeReason.version, faults.major, Proto.minor)

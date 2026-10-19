@@ -294,4 +294,91 @@ class BlockTest {
         val other = ArtCache.Entry(utada, "Other", utada, Wikimedia.SOURCE, null, "https://upload.wikimedia.org/x.png", 0)
         assertFalse(art().wrongArtistOffered(other))
     }
+
+    private val vtuber = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
+    private val kirame = "0e7b3c4f-1f2a-4b5c-8d6e-7f8091a2b3c4"
+
+    private fun seed(key: String, name: String, mbid: String?, by: String, w: Int = 240, h: Int = 320): ArtCache.Entry {
+        val src = Images.jpeg(Images.photo(600, 800), 92)
+        val e = ArtCache.Entry(key, name, mbid, Wikimedia.SOURCE, Credit("Jane Doe", "CC BY 4.0", ""), "https://upload.wikimedia.org/$name.jpg", 1, "File:$name.jpg", "", by)
+        cache.putHit(e, src)
+        cache.putRendered(key, w, h, Backdrop.render(AwtCodec(), src, w, h)!!)
+        return cache.hit(key)!!
+    }
+
+    private fun sharedMbid(): ArtCache.Entry {
+        cache.putMbid("宇多田ヒカル", utada, time.now)
+        cache.putMbid("Utada Hikaru", utada, time.now)
+        return seed(utada, "宇多田ヒカル", utada, "宇多田ヒカル")
+    }
+
+    private fun variant(): ArtCache.Entry {
+        cache.putMbid(vtuber, null, time.now)
+        cache.putMbid("空星きらめ", kirame, time.now)
+        return seed("name:${Names.fold(vtuber)}", vtuber, kirame, "空星きらめ")
+    }
+
+    @Test
+    fun wrongArtistIsOfferedOnlyUnderTheResolverName() {
+        val e = sharedMbid()
+        assertTrue(art().wrongArtistOffered(e, "宇多田ヒカル"))
+        assertFalse(art().wrongArtistOffered(e, "Utada Hikaru"))
+        assertTrue(art().get("宇多田ヒカル", null, 240, 320)!!.wrongArtist)
+        assertFalse(art().get("Utada Hikaru", null, 240, 320)!!.wrongArtist)
+        assertFalse(art().get("宇多田ヒカル", utada, 240, 320)!!.wrongArtist)
+        val v = variant()
+        assertTrue(art().wrongArtistOffered(v, vtuber))
+        assertTrue(art().get(vtuber, null, 240, 320)!!.wrongArtist)
+        assertTrue("missing ${http.missing}", http.calls.isEmpty())
+    }
+
+    @Test
+    fun candidatesAreTheFoldedNameTheKeyAndTheMbid() {
+        val e = sharedMbid()
+        assertEquals(listOf(e.key), art().candidates("Utada Hikaru", utada).map { it.key })
+        assertEquals(listOf(e.key), art().candidates("Utada Hikaru", null).map { it.key })
+        assertEquals(listOf(e.key), art().candidates("Hikki", utada.uppercase()).map { it.key })
+        assertEquals(listOf(e.key), art().candidates(" 宇多田ヒカル ", null).map { it.key })
+        assertTrue(art().candidates("Radiohead", radiohead).isEmpty())
+        val crc = java.util.zip.CRC32().apply { update(cache.rendered(e.key, 240, 320)!!) }.value
+        assertEquals(crc, art().renderedCrc(e, 240, 320))
+        assertNull(art().renderedCrc(e, 360, 480))
+    }
+
+    @Test
+    fun oldLinesLoadWithNoCrcAndNewLinesRoundTrip() {
+        val f = java.io.File(tmp.root, "old.tsv")
+        f.writeText("block\tk\t\tdeezer\tx\ts\tA\t1\tdev\nreject\tm\tm\tA\tA\t2\t\n")
+        val old = ArtBlocks(f)
+        assertEquals(2, old.records().size)
+        assertTrue(old.records().all { (it as? ArtBlocks.Block)?.crc == null && (it as? ArtBlocks.Reject)?.crc == null })
+        old.add(ArtBlocks.Block("k2", null, "deezer", "y", "s", "B", 3, crc = 2438839214))
+        old.add(ArtBlocks.Reject("m2", "m2", "B", "B", 4, crc = 7))
+        old.save()
+        assertEquals(listOf(9, 10, 7, 8), f.readLines().map { it.split('\t').size })
+        val again = ArtBlocks(f).records()
+        assertEquals(old.records(), again)
+        assertEquals(2438839214, again.filterIsInstance<ArtBlocks.Block>().single { it.key == "k2" }.crc)
+    }
+
+    @Test
+    fun coveringNeedsTheKindAndTheCrcOrAPendingCrclessRecord() {
+        val b = ArtBlocks.Block("k", utada, "deezer", "x", "s", "A", 1, crc = 5)
+        val old = ArtBlocks.Block("k3", null, "deezer", "x", "s", "C", 2)
+        val r = ArtBlocks.Reject(utada, utada, "A", "A", 3, crc = 9)
+        listOf(b, old, r).forEach { blocks.add(it) }
+        assertEquals(b, blocks.covering(false, "a", emptySet(), null, 5, "dev"))
+        assertEquals(b, blocks.covering(false, "Z", setOf("k"), null, 5, "dev"))
+        assertEquals(b, blocks.covering(false, "Z", emptySet(), utada.uppercase(), 5, "dev"))
+        assertNull(blocks.covering(false, "Z", emptySet(), radiohead, 5, "dev"))
+        assertNull(blocks.covering(false, "A", setOf("k"), utada, 6, "dev"))
+        assertNull(blocks.covering(true, "A", setOf("k"), utada, 5, "dev"))
+        assertEquals(r, blocks.covering(true, "A", emptySet(), null, 9, "dev"))
+        assertNull(blocks.covering(false, "A", emptySet(), null, 9, "dev"))
+        assertEquals(old, blocks.covering(false, "C", emptySet(), null, 123, "dev"))
+        blocks.applied(old, "dev")
+        assertNull(blocks.covering(false, "C", emptySet(), null, 123, "dev"))
+        assertNotNull(blocks.covering(false, "C", emptySet(), null, 123, "other"))
+        assertNull(blocks.covering(false, "C", emptySet(), null, 123, null))
+    }
 }

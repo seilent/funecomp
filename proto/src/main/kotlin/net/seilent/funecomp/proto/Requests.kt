@@ -3,6 +3,16 @@ package net.seilent.funecomp.proto
 import net.seilent.funecomp.proto.gen.Tags
 
 object Req {
+    const val META_BYTES = 256
+
+    fun cap(s: String?, max: Int = META_BYTES): String? {
+        val b = s?.toByteArray(Charsets.UTF_8) ?: return null
+        if (b.size <= max) return s
+        var n = max
+        while (n > 0 && b[n].toInt() and 0xC0 == 0x80) n--
+        return String(b, 0, n, Charsets.UTF_8)
+    }
+
     fun transport(cmd: Int, seekMs: Long? = null, on: Boolean? = null, repeat: Int? = null) = tlv {
         enum(Tags.Transport.cmd, cmd)
         u32(Tags.Transport.seekMs, seekMs)
@@ -77,7 +87,7 @@ object Req {
         u64(Tags.Action.track, track)
     }
 
-    fun imgBegin(kind: Int, name: String, mbid: String?, total: Long, crc: Long, w: Int, h: Int) = tlv {
+    fun imgBegin(kind: Int, name: String, mbid: String?, total: Long, crc: Long, w: Int, h: Int, wrongArtist: Boolean? = null, source: String? = null, credit: String? = null) = tlv {
         enum(Tags.ImgBegin.kind, kind)
         str(Tags.ImgBegin.name, name)
         str(Tags.ImgBegin.mbid, mbid)
@@ -85,6 +95,9 @@ object Req {
         u32(Tags.ImgBegin.crc, crc)
         u16(Tags.ImgBegin.w, w)
         u16(Tags.ImgBegin.h, h)
+        bool(Tags.ImgBegin.wrongArtist, wrongArtist)
+        str(Tags.ImgBegin.source, cap(source))
+        str(Tags.ImgBegin.credit, cap(credit))
     }
 
     fun imgData(offset: Long, data: ByteArray) = tlv {

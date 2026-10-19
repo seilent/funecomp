@@ -20,6 +20,7 @@ object Groups {
         "update" to setOf(Msg.UPD_BEGIN, Msg.UPD_DATA, Msg.UPD_END, Msg.UPD_ABORT),
         "clockAuto" to emptySet(),
         "eqPresets" to setOf(Msg.EQ_PRESET),
+        "artBlock" to setOf(Msg.ART_BLOCK),
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -38,16 +39,17 @@ object Groups {
     val all: Long get() = mask(*members.keys.filter { bit(it) != null }.toTypedArray())
 }
 
-data class Hello(val major: Int, val minor: Int, val appVersion: String?) {
+data class Hello(val major: Int, val minor: Int, val appVersion: String?, val features: Long? = null) {
     fun encode() = tlv {
         u32(Tags.Hello.magic, Proto.magic.toLong())
         u16(Tags.Hello.major, major)
         u16(Tags.Hello.minor, minor)
         str(Tags.Hello.appVersion, appVersion)
+        u64(Tags.Hello.features, features)
     }
 
     companion object {
-        fun from(n: Node) = Hello(n.int(Tags.Hello.major) ?: -1, n.int(Tags.Hello.minor) ?: -1, n.str(Tags.Hello.appVersion))
+        fun from(n: Node) = Hello(n.int(Tags.Hello.major) ?: -1, n.int(Tags.Hello.minor) ?: -1, n.str(Tags.Hello.appVersion), n.long(Tags.Hello.features))
     }
 }
 
@@ -589,6 +591,19 @@ data class ArtGetReply(val crc: Long?, val total: Long?, val w: Int?, val h: Int
             n.long(Tags.ArtGetReply.offset) ?: 0,
             n.bytes(Tags.ArtGetReply.data),
         )
+    }
+}
+
+data class ArtBlock(val cmd: Int?, val name: String?, val mbid: String?, val crc: Long?) {
+    fun encode() = tlv {
+        enum(Tags.ArtBlock.cmd, cmd)
+        str(Tags.ArtBlock.name, name)
+        str(Tags.ArtBlock.mbid, mbid)
+        u32(Tags.ArtBlock.crc, crc)
+    }
+
+    companion object {
+        fun from(n: Node) = ArtBlock(n.int(Tags.ArtBlock.cmd), n.str(Tags.ArtBlock.name), n.str(Tags.ArtBlock.mbid), n.long(Tags.ArtBlock.crc))
     }
 }
 

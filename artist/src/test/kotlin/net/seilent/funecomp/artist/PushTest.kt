@@ -8,7 +8,9 @@ import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
+import net.seilent.funecomp.sim.Device
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
@@ -35,8 +37,8 @@ class PushTest {
         sims.forEach { it.stop() }
     }
 
-    private fun sim(vararg faults: String, board: String = "ap80"): Pair<Sim, Int> {
-        val s = Sim(Options(Board.of(board), Faults(faults.toList()), 30_000, 5_000, 5_000))
+    private fun sim(vararg faults: String, board: String = "ap80", minor: Int = Proto.minor): Pair<Sim, Int> {
+        val s = Sim(Options(Board.of(board), Faults(faults.toList()), 30_000, 5_000, 5_000, minor = minor))
         sims += s
         return s to s.listen(0)
     }
@@ -258,5 +260,46 @@ class PushTest {
         assertTrue("got $r", r is ImagePush.Outcome.Done)
         assertEquals(0L, (r as ImagePush.Outcome.Done).from)
         assertEquals(crc, sim.device.stored.getValue("ichiko aoba").crc)
+    }
+
+    private fun meta(minor: Int, a: Art): Device.Meta {
+        val (sim, port) = sim(minor = minor)
+        ArtPusher(session(port), { _, _, _, _ -> a }) { true }.run(listOf(a.name to null))
+        return sim.device.stored.values.single().meta
+    }
+
+    @Test
+    fun theImgBeginMetaGoesOutOnlyWithTheArtBlockBit() {
+        val img = noise(360, 480, 3)
+        val credit = Credit("Jane Doe", "CC BY 4.0", "")
+        assertEquals(Device.Meta(true, "fanart.tv", "Jane Doe"), meta(Proto.minor, Art(img, 360, 480, "Ado", null, Sources.FANART_TV, credit, true)))
+        assertEquals(Device.Meta(false, "commons", null), meta(Proto.minor, Art(img, 360, 480, "Ado", null, Wikimedia.SOURCE, Credit(" ", "CC BY 4.0", ""))))
+        assertEquals(Device.Meta(null, null, null), meta(5, Art(img, 360, 480, "Ado", null, Sources.FANART_TV, credit, true)))
+    }
+
+    @Test
+    fun thePushTagsWrongArtistOnlyUnderTheResolverName() {
+        val time = FakeTime()
+        val cache = ArtCache(tmp.newFolder())
+        val utada = "b539e453-c4fe-47e3-8a07-8517eac74429"
+        val vtuber = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
+        val kirame = "0e7b3c4f-1f2a-4b5c-8d6e-7f8091a2b3c4"
+        fun seed(key: String, name: String, mbid: String, by: String) {
+            val src = Images.jpeg(Images.photo(600, 800), 92)
+            cache.putHit(ArtCache.Entry(key, name, mbid, Wikimedia.SOURCE, null, "https://upload.wikimedia.org/$name.jpg", 1, "File:$name.jpg", "", by), src)
+            cache.putRendered(key, 240, 320, Backdrop.render(AwtCodec(), src, 240, 320)!!)
+        }
+        cache.putMbid("宇多田ヒカル", utada, time.now)
+        cache.putMbid("Utada Hikaru", utada, time.now)
+        seed(utada, "宇多田ヒカル", utada, "宇多田ヒカル")
+        cache.putMbid(vtuber, null, time.now)
+        cache.putMbid("空星きらめ", kirame, time.now)
+        seed("name:${Names.fold(vtuber)}", vtuber, kirame, "空星きらめ")
+        val lookup = ArtistArt(Fixtures(), AwtCodec(), cache, { Sources() }, "0.1.0", { time.now }, time.sleep, { time.now })
+        val (sim, port) = sim(board = "v1")
+        val r = ArtPusher(session(port), lookup::get) { true }.run(listOf("Utada Hikaru" to null, "宇多田ヒカル" to null, vtuber to null))
+        assertEquals(3, r.pushed.size + r.stored.size)
+        val stored = sim.device.stored.values.associate { it.name to it.meta.wrong }
+        assertEquals(mapOf("Utada Hikaru" to false, "宇多田ヒカル" to true, vtuber to true), stored)
     }
 }
