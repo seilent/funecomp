@@ -10,8 +10,8 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply 74000101010001040046444350020200010003020008000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
-hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff1f0000000000000e0400070000000f04000300000010040004000000
+hex hello_reply 74000101010001040046444350020200010003020009000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff3f0000000000000e0400070000000f04000300000010040004000000
 re hello_reply hello
 dec hello_reply 0.len 116
 dec hello_reply 0.type HELLO
@@ -19,7 +19,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 8
+dec hello_reply 0.body.minor 9
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -29,7 +29,7 @@ dec hello_reply 0.body.backdropH 480
 dec hello_reply 0.body.maxPayload 16384
 dec hello_reply 0.body.idleMs 30000
 dec hello_reply 0.body.busyMs 5000
-dec hello_reply 0.body.features 8191
+dec hello_reply 0.body.features 16383
 dec hello_reply 0.body.libRev 7
 dec hello_reply 0.body.settingsRev 3
 dec hello_reply 0.body.snapRev 4
@@ -2360,3 +2360,107 @@ dec art_pick_error_refused 0.seq 1
 dec art_pick_error_refused 0.body.code 4
 dec art_pick_error_refused 0.body.text open the phone app
 act art_pick_error_refused accept
+vec img_begin_origin app
+hex img_begin_origin 79003004420001010000020c0055746164612048696b61727503240061316232633364342d303030302d343030302d383030302d303030303030303030303031
+hex img_begin_origin 04040018000000050400aebb5d910602008001070200e0010801000109110057696b696d6564696120436f6d6d6f6e730a08004a616e6520446f650b010001
+dec img_begin_origin 0.len 121
+dec img_begin_origin 0.type IMG_BEGIN
+dec img_begin_origin 0.flags 0x04
+dec img_begin_origin 0.seq 66
+dec img_begin_origin 0.body.kind artist
+dec img_begin_origin 0.body.name Utada Hikaru
+dec img_begin_origin 0.body.mbid a1b2c3d4-0000-4000-8000-000000000001
+dec img_begin_origin 0.body.total 24
+dec img_begin_origin 0.body.crc 2438839214
+dec img_begin_origin 0.body.w 384
+dec img_begin_origin 0.body.h 480
+dec img_begin_origin 0.body.wrongArtist true
+dec img_begin_origin 0.body.source Wikimedia Commons
+dec img_begin_origin 0.body.credit Jane Doe
+dec img_begin_origin 0.body.origin phone
+act img_begin_origin accept
+vec img_begin_origin_library app
+hex img_begin_origin_library 2f003004430001010000020c0055746164612048696b61727504040018000000050400aebb5d910602008001070200e0010b010000
+dec img_begin_origin_library 0.len 47
+dec img_begin_origin_library 0.type IMG_BEGIN
+dec img_begin_origin_library 0.flags 0x04
+dec img_begin_origin_library 0.seq 67
+dec img_begin_origin_library 0.body.kind artist
+dec img_begin_origin_library 0.body.name Utada Hikaru
+dec img_begin_origin_library 0.body.total 24
+dec img_begin_origin_library 0.body.crc 2438839214
+dec img_begin_origin_library 0.body.w 384
+dec img_begin_origin_library 0.body.h 480
+dec img_begin_origin_library 0.body.origin library
+act img_begin_origin_library accept
+vec img_begin_origin_bad app
+hex img_begin_origin_bad 2f003004440001010000020c0055746164612048696b61727504040018000000050400aebb5d910602008001070200e0010b010002
+dec img_begin_origin_bad 0.len 47
+dec img_begin_origin_bad 0.type IMG_BEGIN
+dec img_begin_origin_bad 0.flags 0x04
+dec img_begin_origin_bad 0.seq 68
+dec img_begin_origin_bad 0.body.kind artist
+dec img_begin_origin_bad 0.body.name Utada Hikaru
+dec img_begin_origin_bad 0.body.total 24
+dec img_begin_origin_bad 0.body.crc 2438839214
+dec img_begin_origin_bad 0.body.w 384
+dec img_begin_origin_bad 0.body.h 480
+dec img_begin_origin_bad 0.body.origin 2
+act img_begin_origin_bad reply
+vec img_begin_origin_bad_error dev
+hex img_begin_origin_bad_error 100030034400010100020209006261642076616c7565
+re img_begin_origin_bad_error img_begin_origin_bad
+dec img_begin_origin_bad_error 0.len 16
+dec img_begin_origin_bad_error 0.type IMG_BEGIN
+dec img_begin_origin_bad_error 0.flags 0x03
+dec img_begin_origin_bad_error 0.seq 68
+dec img_begin_origin_bad_error 0.body.code 2
+dec img_begin_origin_bad_error 0.body.text bad value
+act img_begin_origin_bad_error accept
+vec img_tag app
+hex img_tag 13003b044500010c0055746164612048696b61727502010000
+dec img_tag 0.len 19
+dec img_tag 0.type IMG_TAG
+dec img_tag 0.flags 0x04
+dec img_tag 0.seq 69
+dec img_tag 0.body.name Utada Hikaru
+dec img_tag 0.body.origin library
+act img_tag accept
+vec img_tag_reply dev
+hex img_tag_reply 00003b014500
+re img_tag_reply img_tag
+dec img_tag_reply 0.len 0
+dec img_tag_reply 0.type IMG_TAG
+dec img_tag_reply 0.flags 0x01
+dec img_tag_reply 0.seq 69
+act img_tag_reply accept
+vec img_tag_error_notfound dev
+hex img_tag_error_notfound 10003b0345000101000a0209006e6f7420666f756e64
+re img_tag_error_notfound img_tag
+dec img_tag_error_notfound 0.len 16
+dec img_tag_error_notfound 0.type IMG_TAG
+dec img_tag_error_notfound 0.flags 0x03
+dec img_tag_error_notfound 0.seq 69
+dec img_tag_error_notfound 0.body.code 10
+dec img_tag_error_notfound 0.body.text not found
+act img_tag_error_notfound accept
+vec img_list_origin dev
+hex img_list_origin 5a0034011200010400000000000204000300000003010000041300010c0055746164612048696b6172750301000004100001050047656d6d6103010000030100
+hex img_list_origin 0104060001030048616c05080000770100000000000608000000000800000000
+re img_list_origin img_list
+dec img_list_origin 0.len 90
+dec img_list_origin 0.type IMG_LIST
+dec img_list_origin 0.flags 0x01
+dec img_list_origin 0.seq 18
+dec img_list_origin 0.body.offset 0
+dec img_list_origin 0.body.total 3
+dec img_list_origin 0.body.more false
+dec img_list_origin 0.body.entry[0].name Utada Hikaru
+dec img_list_origin 0.body.entry[0].origin[0] library
+dec img_list_origin 0.body.entry[1].name Gemma
+dec img_list_origin 0.body.entry[1].origin[0] library
+dec img_list_origin 0.body.entry[1].origin[1] phone
+dec img_list_origin 0.body.entry[2].name Hal
+dec img_list_origin 0.body.bytes 96000
+dec img_list_origin 0.body.cap 134217728
+act img_list_origin accept

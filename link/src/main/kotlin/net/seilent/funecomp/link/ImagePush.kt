@@ -22,6 +22,7 @@ class ImagePush(
     private val w: Int,
     private val h: Int,
     private val meta: ImgMeta? = null,
+    private val origin: Int? = null,
     private val gate: () -> Boolean = { true },
 ) {
     sealed class Outcome {
@@ -43,7 +44,7 @@ class ImagePush(
             val crc = crc32(jpeg.size)
             val latch = CountDownLatch(1)
             val result = AtomicReference<Session.Result>(Session.Result.Closed)
-            session.request(Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, name, mbid, total, crc, w, h, meta?.wrongArtist, meta?.source, meta?.credit)) {
+            session.request(Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, name, mbid, total, crc, w, h, meta?.wrongArtist, meta?.source, meta?.credit, origin)) {
                 armed.set(true)
                 result.set(it)
                 latch.countDown()

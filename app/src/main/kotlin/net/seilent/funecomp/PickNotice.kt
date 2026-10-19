@@ -24,12 +24,10 @@ object PickNotice {
         if (!nm.areNotificationsEnabled() || nm.getNotificationChannel(CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE) return false
         val nonce = UUID.randomUUID().toString()
         prefs(c).edit().putString(NONCE, nonce).apply()
-        val open = PendingIntent.getActivity(
-            c, REQUEST,
-            Intent(c, Main::class.java).setAction(Main.ACTION_PICK_ART).putExtra(Main.EXTRA_PICK_NAME, target.name)
-                .putExtra(Main.EXTRA_PICK_MBID, target.mbid).putExtra(Main.EXTRA_PICK_NONCE, nonce),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
+        val intent = Intent(c, Main::class.java).setAction(Main.ACTION_PICK_ART).putExtra(Main.EXTRA_PICK_NAME, target.name)
+            .putExtra(Main.EXTRA_PICK_MBID, target.mbid).putExtra(Main.EXTRA_PICK_NONCE, nonce)
+        target.origin?.let { intent.putExtra(Main.EXTRA_PICK_ORIGIN, it) }
+        val open = PendingIntent.getActivity(c, REQUEST, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         nm.notify(
             ID,
             Notification.Builder(c, CHANNEL)

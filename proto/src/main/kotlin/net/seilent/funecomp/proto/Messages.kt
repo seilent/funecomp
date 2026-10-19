@@ -24,6 +24,7 @@ object Groups {
         "artBlock" to setOf(Msg.ART_BLOCK),
         "lyricsGet" to setOf(Msg.LYR_GET),
         "artPick" to setOf(Msg.ART_PICK),
+        "imgOrigin" to setOf(Msg.IMG_TAG),
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -534,10 +535,11 @@ data class ImgBeginReply(val offset: Long, val crc: Long) {
     }
 }
 
-data class ImgEntry(val name: String, val mbid: String?) {
+data class ImgEntry(val name: String, val mbid: String?, val origins: List<Int> = emptyList()) {
     val size: Int get() = TlvWriter().rec(Tags.ImgListReply.entry) {
         str(Tags.ImgEntry.name, name)
         str(Tags.ImgEntry.mbid, mbid)
+        origins.forEach { enum(Tags.ImgEntry.origin, it) }
     }.size
 }
 
@@ -550,6 +552,7 @@ data class ImgListReply(val page: PageInfo, val entries: List<ImgEntry>, val byt
             rec(Tags.ImgListReply.entry) {
                 str(Tags.ImgEntry.name, e.name)
                 str(Tags.ImgEntry.mbid, e.mbid)
+                e.origins.forEach { enum(Tags.ImgEntry.origin, it) }
             }
         }
         u64(Tags.ImgListReply.bytes, bytes)
@@ -559,7 +562,7 @@ data class ImgListReply(val page: PageInfo, val entries: List<ImgEntry>, val byt
     companion object {
         fun from(n: Node) = ImgListReply(
             PageInfo.read(n, Tags.ImgListReply.offset, Tags.ImgListReply.total, Tags.ImgListReply.more),
-            n.nodes(Tags.ImgListReply.entry).map { ImgEntry(it.str(Tags.ImgEntry.name) ?: "", it.str(Tags.ImgEntry.mbid)) },
+            n.nodes(Tags.ImgListReply.entry).map { ImgEntry(it.str(Tags.ImgEntry.name) ?: "", it.str(Tags.ImgEntry.mbid), it.ints(Tags.ImgEntry.origin)) },
             n.long(Tags.ImgListReply.bytes),
             n.long(Tags.ImgListReply.cap),
         )

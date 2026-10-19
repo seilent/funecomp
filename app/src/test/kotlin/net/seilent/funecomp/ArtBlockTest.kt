@@ -12,7 +12,10 @@ import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.ArtBlock
+import net.seilent.funecomp.proto.Node
+import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
@@ -418,6 +421,82 @@ class ArtBlockTest {
         assertEquals("ok", s.askBlock(q))
         assertEquals(1, blocks().size)
         assertTrue(!deleted(utadaJa))
+    }
+
+    @Test
+    fun aDeviceBlockPushesTheNextCandidateWithTheAskOriginAndTheStateMbid() {
+        val hold = CountDownLatch(1)
+        app.getSharedPreferences(Main.ART_PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean("theaudiodb", true).commit()
+        Remote.artist(app, Http { url, h ->
+            if (url == fanart) hold.await(10, TimeUnit.SECONDS)
+            chain.get(url, h)
+        })
+        val s = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }), track(utadaEn, mbids = listOf(mbid)))
+        sims += s
+        Remote.shown(true)
+        val c = link(s.listen(0))
+        waitFor(10_000) { stored().isNotEmpty() }
+        Thread.sleep(300)
+        s.device.begins.clear()
+        assertEquals("ok", s.askBlock(s.block(block, utadaEn).copy(mbid = "6a3b5c7d-0000-4000-8000-000000000009")))
+        s.source(Enums.Source.phone)
+        waitFor { Remote.device.playback.state.source == Enums.Source.phone }
+        hold.countDown()
+        waitFor(10_000) { stored().size >= 2 }
+        assertEquals(utadaEn to Enums.ImgOrigin.library, s.device.begins.first())
+        assertTrue(lines.last { it.startsWith("stored name=Utada Hikaru ") }.startsWith("stored name=Utada Hikaru mbid=$mbid "))
+        waitFor { File(app.filesDir, "artblock.tsv").readText().contains("origin\t$utadaEn\t$mbid\tlibrary\n") }
+        c.destroy()
+    }
+
+    @Test
+    fun aDeviceWrongArtistRecordsAPushWithNoMbid() {
+        seed("name:${Names.fold(vtuber)}", vtuber, kirame, "空星きらめ", vtuber to null, "空星きらめ" to kirame)
+        val s = asking(track(vtuber), vtuber)
+        assertEquals("ok", s.askBlock(wrong, vtuber))
+        waitFor { deleted(vtuber) }
+        waitFor { File(app.filesDir, "artblock.tsv").readText().contains("origin\t$vtuber\t\tlibrary\n") }
+        assertTrue(File(app.filesDir, "artblock.tsv").readLines().any { it.startsWith("push\t$vtuber\t\t") })
+        Thread.sleep(500)
+        assertTrue(lines.indexOfLast { it.startsWith("stored name=$vtuber ") } < lines.indexOf("deleted name=$vtuber"))
+    }
+
+    @Test
+    fun theRetagWaitsForAFirmwareUpload() {
+        Remote.artist(app, http)
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        val s = Sim(Options(Board.of("v1"), log = { lines += it }), track(utadaJa))
+        sims += s
+        val c = link(s.listen(0))
+        waitFor(10_000) { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null && lines.any { "rx IMG_LIST" in it } }
+        Thread.sleep(500)
+        val hold = CountDownLatch(1)
+        Firmwares.send(Firmwares.Source("held.upt", 1000) {
+            hold.await(30, TimeUnit.SECONDS)
+            java.io.ByteArrayInputStream(ByteArray(1000))
+        })
+        waitFor { Firmwares.sending }
+        val img = ByteArrayOutputStream().also { javax.imageio.ImageIO.write(java.awt.image.BufferedImage(240, 320, java.awt.image.BufferedImage.TYPE_INT_RGB), "jpg", it) }.toByteArray()
+        val crc = java.util.zip.CRC32().apply { update(img) }.value
+        val sink = object : net.seilent.funecomp.sim.Out {
+            override fun push(type: Int, payload: ByteArray) {}
+        }
+        s.device.request(Msg.IMG_BEGIN, Node.decode("IMG_BEGIN", Req.imgBegin(Enums.ImgKind.artist, utadaJa, null, img.size.toLong(), crc, 240, 320)), sink)
+        s.device.imgData(Node.decode("IMG_DATA", Req.imgData(0, img)), sink)
+        s.device.request(Msg.IMG_END, Node.decode("IMG_END", Req.imgEnd(crc)), sink)
+        val rev = Remote.device.lib.dataRev
+        s.rescan(s.device.lib)
+        waitFor { Remote.device.lib.dataRev != rev }
+        Remote.sourcesChanged()
+        Thread.sleep(1500)
+        assertTrue(Firmwares.sending)
+        assertTrue(lines.none { it.startsWith("tag name=") })
+        hold.countDown()
+        waitFor(10_000) { !Firmwares.sending }
+        waitFor(10_000) { lines.any { it == "tag name=$utadaJa origin=library" } }
+        c.destroy()
+        Firmwares.reset()
     }
 
     private fun held(): Pair<CountDownLatch, Sim> {

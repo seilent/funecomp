@@ -21,6 +21,7 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
+import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Wikimedia
@@ -126,7 +127,7 @@ private class Toggle(val title: String, val on: Boolean, val tag: String, val fl
 fun artSheet(ctx: Ctx, held: BackdropArt?, picks: List<ArtPicks.Pick> = emptyList()) {
     val e = held?.entry ?: return artistChooser(ctx)
     val s = ctx.device.playback.state
-    val target = PickFor(e.name, s.mbids.getOrNull(s.artists.indexOfFirst { Names.fold(it) == Names.fold(e.name) }))
+    val target = PickFor(e.name, s.mbids.getOrNull(s.artists.indexOfFirst { Names.fold(it) == Names.fold(e.name) }), origin = ArtPusher.origin(s.source))
     val pick = picks.firstOrNull { it.cacheKey == e.key }
     val items = if (pick != null) listOf(PICK_IMAGE, UNDO_PICK) else listOf(BLOCK_IMAGE) + (if (held.wrongArtist) listOf(WRONG_ARTIST) else emptyList()) + PICK_IMAGE
     val info = listOf(listOfNotNull(Sources.label(e.source), e.credit?.author?.takeIf { it.isNotBlank() }).joinToString(", "))

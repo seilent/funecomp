@@ -7,6 +7,7 @@ import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Sweep
+import net.seilent.funecomp.link.ImagePush
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
 import net.seilent.funecomp.proto.HelloReply
@@ -14,6 +15,7 @@ import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
@@ -23,6 +25,7 @@ import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.LIB_PAGE
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -102,12 +105,14 @@ class ForwardTest {
     private fun forward(
         looked: Lookups,
         sweeping: () -> Boolean = { true },
+        retagging: () -> Boolean = { true },
         breaker: Sweep.Breaker = Sweep.Breaker({ 0L }),
         fail: Boolean = false,
         missing: (String) -> Boolean = { false },
         marks: Forward.Marks? = null,
         blocks: Forward.Blocks? = null,
         log: (String) -> Unit = {},
+        onLibGet: (Session) -> Unit = {},
     ) = Forward(
         { device },
         { n, m, w, h ->
@@ -120,7 +125,9 @@ class ForwardTest {
             true
         },
         { sweeping() && !breaker.open },
+        retagging,
         { s, offset, rev ->
+            onLibGet(s)
             val snap = device.lib.keyed(Enums.View.artists)
             s.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", offset, LIB_PAGE, rev.takeUnless { snap }, rev.takeIf { snap }))
         },
@@ -212,7 +219,7 @@ class ForwardTest {
 
     @Test
     fun aHeartTapKeepsTheSweepAndAMinor2PeerRelists() {
-        for (minor in listOf(3, 2)) {
+        for (minor in listOf(Proto.minor, 3, 2)) {
             val (_, port) = sim(30, minor)
             val s = session(port)
             val logged: MutableList<String> = Collections.synchronizedList(ArrayList())
@@ -221,7 +228,7 @@ class ForwardTest {
             favorite(s)
             val pages = pages()
             assertEquals(ArtPusher.Stop.DONE, f.run(s) { true }.stop)
-            if (minor == 3) {
+            if (minor >= 3) {
                 assertEquals(pages, pages())
                 assertEquals(1, logged.count { it == "art sweep kept" })
             } else {
@@ -483,7 +490,7 @@ class ForwardTest {
         sims += s0
         val s = session(s0.listen(0))
         forward(Lookups()).run(s) { true }
-        assertEquals(setOf("tsuki", "ｔｓｕｋｉ"), s0.device.stored.keys)
+        assertEquals(setOf("tsuki", "ＴＳＵＫＩ"), s0.device.stored.keys)
         val records = ArtBlocks()
         val keyOf = { n: String, m: String? -> Names.mbid(m) ?: if (Names.fold(n) == "tsuki") dj else "name:${Names.fold(n)}" }
         records.add(ArtBlocks.Block("name:tsuki", null, "youtube", "x", "", "TSUKI", 1))
@@ -491,7 +498,7 @@ class ForwardTest {
         val b = Forward.Blocks(records, { "tcp:A" }, keyOf)
         forward(Lookups(), missing = { it == "TSUKI" }, blocks = b).run(s) { true }
         assertEquals(listOf("TSUKI"), deleted())
-        assertEquals(setOf("ｔｓｕｋｉ"), s0.device.stored.keys)
+        assertEquals(setOf("ＴＳＵＫＩ"), s0.device.stored.keys)
         assertTrue(records.pending("tcp:A").isEmpty())
         assertTrue(records.pushes("tcp:A").isEmpty())
         val before = stores().count { it == "TSUKI" }
@@ -511,7 +518,7 @@ class ForwardTest {
         sims += s0
         val s = session(s0.listen(0))
         forward(Lookups()).run(s) { true }
-        assertEquals(setOf("tsuki", "ｔｓｕｋｉ"), s0.device.stored.keys)
+        assertEquals(setOf("tsuki", "ＴＳＵＫＩ"), s0.device.stored.keys)
         val keyOf = { n: String, m: String? -> Names.mbid(m) ?: "name:${Names.fold(n)}" }
         val only = ArtBlocks()
         only.add(ArtBlocks.Block(dj, dj, "youtube", "x", "", "TSUKI", 1))
@@ -523,5 +530,196 @@ class ForwardTest {
         forward(Lookups(), missing = { true }, blocks = Forward.Blocks(both, { "tcp:B" }, keyOf)).run(s) { true }
         assertEquals(setOf("TSUKI", "ＴＳＵＫＩ"), deleted().drop(1).toSet())
         assertTrue(both.pending("tcp:B").isEmpty())
+    }
+
+    private fun origins(sim: Sim): Map<String, Int?> = sim.device.begins.toList().toMap()
+
+    private fun firstOrigins(sim: Sim): Map<String, Int?> = sim.device.begins.toList().distinctBy { it.first }.toMap()
+
+    private fun source(sim: Sim, v: Int) {
+        sim.source(v)
+        val end = System.nanoTime() + 5_000_000_000L
+        while (device.playback.state.source != v && System.nanoTime() < end) Thread.sleep(10)
+        assertEquals(v, device.playback.state.source)
+    }
+
+    private val library = Enums.ImgOrigin.library
+    private val phone = Enums.ImgOrigin.phone
+
+    @Test
+    fun theCurrentStageTakesTheSourceAndTheQueueAndSweepTakeLibrary() {
+        for (src in listOf(Enums.Source.phone, Enums.Source.local)) {
+            val (sim, port) = sim(30, Proto.minor)
+            val s = session(port)
+            source(sim, src)
+            assertEquals(ArtPusher.Stop.DONE, forward(Lookups()).run(s) { true }.stop)
+            val o = firstOrigins(sim)
+            assertEquals(30, o.size)
+            assertEquals(if (src == Enums.Source.phone) phone else library, o.getValue("Artist 001"))
+            assertTrue((2..30).all { o.getValue("Artist %03d".format(it)) == library })
+        }
+    }
+
+    @Test
+    fun anUnknownSourceSendsNoOriginAndAMinor8DeviceGetsNone() {
+        val (sim, port) = sim(10, Proto.minor, Options.IMG_CAP, "enum=STATE.source=7")
+        forward(Lookups()).run(session(port)) { true }
+        val o = firstOrigins(sim)
+        assertEquals(null, o.getValue("Artist 001"))
+        assertTrue((2..10).all { o.getValue("Artist %03d".format(it)) == library })
+        lines.clear()
+        val (old, oldPort) = sim(30, 8)
+        val r = forward(Lookups()).run(session(oldPort)) { true }
+        assertEquals(ArtPusher.Stop.DONE, r.stop)
+        assertEquals(30, old.device.stored.size)
+        assertTrue(old.device.begins.all { it.second == null })
+        assertTrue(lines.none { "rx IMG_TAG" in it })
+    }
+
+    @Test
+    fun aRecordKeepsItsOriginAndAnOriginlessOneTakesTheRows() {
+        val s0 = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = tmp.newFolder()), Library((1..12).map { i ->
+            Library.track(if (i == 12) "BoA" else "Artist %03d".format(i), "Album $i", "Song $i", 1, 200_000)
+        }))
+        sims += s0
+        val s = session(s0.listen(0))
+        forward(Lookups()).run(s) { true }
+        val records = ArtBlocks()
+        records.addPush("Artist 010", null, phone)
+        records.addPush("Artist 011", null)
+        records.addPush("Nobody", null)
+        records.addPush("ＢｏＡ", null)
+        s0.device.begins.clear()
+        forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
+        val o = firstOrigins(s0)
+        assertEquals(phone, o.getValue("Artist 010"))
+        assertEquals(library, o.getValue("Artist 011"))
+        assertEquals(phone, o.getValue("Nobody"))
+        assertEquals(phone, o.getValue("ＢｏＡ"))
+        assertTrue(records.pushes("tcp:A").isEmpty())
+        records.addPush("BOA", null)
+        forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertEquals(library, firstOrigins(s0).getValue("BOA"))
+    }
+
+    @Test
+    fun unreadableRowsLeaveAnOriginlessRecordPending() {
+        val (sim, port) = sim(10, Proto.minor, Options.IMG_CAP, "busy=LIB_GET:1000")
+        val s = session(port)
+        val records = ArtBlocks()
+        records.addPush("Nobody", null)
+        records.addPush("Somebody", null, phone)
+        val logs: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val r = forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A"), log = { logs += it }).run(s) { true }
+        assertEquals(ArtPusher.Stop.DONE, r.stop)
+        assertTrue("art unblock rows failed" in logs)
+        assertEquals(listOf("Nobody"), records.pushes("tcp:A").map { it.name })
+        val o = firstOrigins(sim)
+        assertFalse("Nobody" in o)
+        assertEquals(phone, o.getValue("Somebody"))
+        assertEquals(library, o.getValue("Artist 001"))
+    }
+
+    private fun tagLib(vararg names: String) = Library(
+        (1..6).map { Library.track("Artist %03d".format(it), "Album $it", "Song $it", 1, 200_000) } +
+            names.mapIndexed { i, n -> Library.track(n, "Other $i", "Tune $i", 1, 200_000) },
+    )
+
+    private fun tagSim(lib: Library, minor: Int = Proto.minor, vararg faults: String): Pair<Sim, Session> {
+        val s = Sim(Options(Board.of("v1"), Faults(faults.toList()), log = { lines += it }, imgDir = tmp.newFolder(), minor = minor), lib)
+        sims += s
+        return s to session(s.listen(0))
+    }
+
+    private fun seed(s: Session, name: String, origin: Int? = null) =
+        assertTrue(name, ImagePush(s, name, null, jpeg(240, 320), 240, 320, origin = origin).run() is ImagePush.Outcome.Done)
+
+    private fun tags() = synchronized(lines) { lines.filter { it.startsWith("tag name=") }.map { it.removePrefix("tag name=") } }
+
+    @Test
+    fun theRetagTagsUntaggedLibraryNamesByTheDeviceFoldWithTheListedName() {
+        val (sim, s) = tagSim(tagLib("Gemma", "むト", "BoA", "Lead", "Phoned", "Libbed"))
+        listOf("gemma", "むﾄ", "ＢｏＡ", "Stranger", " Lead").forEach { seed(s, it) }
+        seed(s, "Phoned", phone)
+        seed(s, "Libbed", library)
+        val logs: MutableList<String> = Collections.synchronizedList(ArrayList())
+        assertEquals(ArtPusher.Stop.DONE, forward(Lookups(), log = { logs += it }).run(s) { true }.stop)
+        assertEquals(setOf("gemma origin=library", " Lead origin=library"), tags().toSet())
+        assertEquals(2, tags().size)
+        assertTrue("art tag tagged=2 gone=0 of 5" in logs)
+        assertEquals(1, sim.device.stored.getValue("gemma").origins)
+        assertEquals(0, sim.device.stored.getValue("ＢｏＡ").origins)
+    }
+
+    @Test
+    fun aGoneEntryIsPushedByTheSweepInTheSameRun() {
+        val (sim, s) = tagSim(tagLib("Gemma"))
+        seed(s, "Gemma")
+        var deleted = false
+        val logs: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val f = forward(Lookups(), log = { logs += it }, onLibGet = { ss ->
+            if (!deleted) {
+                deleted = true
+                assertTrue(ss.call(Msg.IMG_DEL, Req.imgDel("Gemma")) is Session.Result.Ok)
+            }
+        })
+        sim.device.begins.clear()
+        f.run(s) { true }
+        assertTrue("art tag tagged=0 gone=1 of 1" in logs)
+        assertEquals(library, origins(sim).getValue("Gemma"))
+        assertEquals(1, sim.device.stored.getValue("gemma").origins)
+    }
+
+    @Test
+    fun aBusyTagEndsThePassWithoutTheKeptMarkAndTheNextRunTags() {
+        val (_, s) = tagSim(tagLib("Gemma"), Proto.minor, "busy=IMG_TAG:1")
+        seed(s, "gemma")
+        val logs: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val f = forward(Lookups(), marks = Kept(), log = { logs += it })
+        f.run(s) { true }
+        assertTrue(logs.none { it.startsWith("art tag tagged") })
+        assertTrue(tags().isEmpty())
+        f.run(s) { true }
+        assertTrue("art tag tagged=1 gone=0 of 1" in logs)
+        assertTrue(logs.none { it == "art sweep kept" })
+        f.run(s) { true }
+        assertEquals(1, logs.count { it == "art sweep kept" })
+        assertEquals(1, tags().size)
+    }
+
+    @Test
+    fun theRetagStopsWhenTheAppComesOnScreenAndRunsWithTheSweepOff() {
+        val (_, s) = tagSim(tagLib("Gemma", "Hal"))
+        seed(s, "gemma")
+        seed(s, "hal")
+        var checks = 0
+        forward(Lookups(), retagging = { checks++ < 2 }).run(s) { true }
+        assertEquals(1, tags().size)
+        val (_, shown) = tagSim(tagLib("Gemma"))
+        seed(shown, "gemma")
+        lines.clear()
+        forward(Lookups(), sweeping = { false }, retagging = { false }).run(shown) { true }
+        assertTrue(tags().isEmpty())
+        forward(Lookups(), sweeping = { false }).run(shown) { true }
+        assertEquals(listOf("gemma origin=library"), tags())
+    }
+
+    @Test
+    fun aChangedRescanPrunesTheJoinedPhotoAndTheSweepPushesTheSplitNames() {
+        val fill = (1..6).map { Library.track("Artist %03d".format(it), "Album $it", "Song $it", 1, 200_000) }
+        val (sim, s) = tagSim(Library(fill + Library.track("Gemma, Hal", "Duets", "One", 1, 200_000)))
+        val f = forward(Lookups(), marks = Kept())
+        f.run(s) { true }
+        assertTrue("gemma, hal" in sim.device.stored.keys)
+        val rev = device.lib.dataRev
+        sim.rescan(Library(fill + Library.track("Gemma, Hal", "Duets", "One", 1, 200_000, albumArtist = "")))
+        val end = System.nanoTime() + 5_000_000_000L
+        while (device.lib.dataRev == rev && System.nanoTime() < end) Thread.sleep(10)
+        assertTrue("pruned name=Gemma, Hal" in lines)
+        sim.device.begins.clear()
+        f.run(s) { true }
+        assertEquals(mapOf("Gemma" to library, "Hal" to library), origins(sim).filterKeys { !it.startsWith("Artist") })
+        assertTrue(listOf("gemma", "hal").all { it in sim.device.stored.keys })
+        assertFalse("gemma, hal" in sim.device.stored.keys)
     }
 }

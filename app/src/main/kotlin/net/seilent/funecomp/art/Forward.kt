@@ -12,6 +12,7 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.state.ArtKey
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LibKey
 import java.io.IOException
@@ -21,6 +22,7 @@ class Forward(
     private val art: (String, String?, Int, Int) -> Art?,
     private val gate: () -> Boolean,
     private val sweeping: () -> Boolean,
+    private val retagging: () -> Boolean,
     private val libGet: (Session, Long, Long?) -> Session.Result,
     private val breaker: Sweep.Breaker,
     private val online: () -> Boolean = { true },
@@ -42,8 +44,9 @@ class Forward(
         fun holds(mark: Any): Boolean
     }
 
-    private class Known(val session: Session, val rev: Long?, val names: MutableSet<String>, val budget: Sweep.Budget) {
+    private class Known(val session: Session, val rev: Long?, val names: MutableSet<String>, val budget: Sweep.Budget, val untagged: MutableSet<String>) {
         var swept: Any? = null
+        var tagged = false
     }
 
     private class Listed(val session: Session, val listing: ArtPusher.Listing, val records: Set<Pair<String, Long>>)
@@ -56,15 +59,16 @@ class Forward(
         val pusher = ArtPusher(s, ::lookup, keep, gate)
         blocks?.let { b -> b.device()?.let { dev -> unblocked(s, pusher, keep, b, dev)?.let { return it } } }
         val st = device().playback.state
-        val now = pusher.run(ArtPusher.order(st).filter { real(it.first) })
+        val now = pusher.run(ArtPusher.order(st).filter { real(it.first) }, origin = ArtPusher.origin(st.source))
         note(s, "current", now)
         if (now.stop != ArtPusher.Stop.DONE) return now
         val up = upcoming(s, st).filter { real(it.first) }
         if (up.isNotEmpty()) {
-            val q = pusher.run(up)
+            val q = pusher.run(up, origin = Enums.ImgOrigin.library)
             note(s, "queue", q)
             if (q.stop != ArtPusher.Stop.DONE) return q
         }
+        if (retagging() && s.hello?.has("imgOrigin") == true) retag(s, pusher, keep)?.let { return it }
         if (!sweeping()) return now
         return sweep(s, pusher, keep)
     }
@@ -75,7 +79,7 @@ class Forward(
         val l = if (todo.isEmpty()) null else listed?.takeIf { it.session === s && it.records.containsAll(ids) }?.listing ?: pusher.listing()?.also { l ->
             listed = Listed(s, l, ids)
             val cap = l.cap
-            if (cap != null && known?.session !== s) known = Known(s, device().lib.dataRev, HashSet(l.names), Sweep.Budget(l.bytes ?: 0, cap))
+            if (cap != null && known?.session !== s) known = Known(s, device().lib.dataRev, HashSet(l.names), Sweep.Budget(l.bytes ?: 0, cap), untagged(l))
         }
         if (todo.isNotEmpty() && l == null) {
             if (s.closedReason != null) return ArtPusher.Report(ArtPusher.Stop.CLOSED)
@@ -93,6 +97,7 @@ class Forward(
                     log("art del $n -> ${if (res is Session.Result.Failed) "error ${res.error.code}" else res.javaClass.simpleName.lowercase()}")
                     if (res is Session.Result.Ok) {
                         k?.names?.remove(n)
+                        k?.untagged?.remove(n)
                         l.names.remove(n)
                     } else {
                         ok = false
@@ -103,8 +108,24 @@ class Forward(
             b.records.save()
         }
         val pushes = b.records.pushes(dev)
+        val origins = s.hello?.has("imgOrigin") == true
+        var lib: Set<String>? = null
+        var skip = false
         for (p in pushes) {
-            val r = pusher.run(listOf(p.name to p.mbid))
+            if (origins && p.origin == null && lib == null) {
+                if (skip) continue
+                val got = rows(s, device().lib.dataRev, keep)
+                if (got !is Rows.Got) {
+                    if (s.closedReason != null) return ArtPusher.Report(ArtPusher.Stop.CLOSED)
+                    if (!keep()) return ArtPusher.Report(ArtPusher.Stop.PREEMPTED)
+                    log("art unblock rows failed")
+                    skip = true
+                    continue
+                }
+                lib = got.names()
+            }
+            val origin = p.origin ?: lib?.let { if (ArtKey.fold(p.name) in it) Enums.ImgOrigin.library else Enums.ImgOrigin.phone }
+            val r = pusher.run(listOf(p.name to p.mbid), origin = origin)
             note(s, "unblock", r)
             if (p.name in r.pushed || p.name in r.stored || p.name in r.missing) b.records.pushed(p, dev)
             if (r.stop != ArtPusher.Stop.DONE) {
@@ -113,6 +134,53 @@ class Forward(
             }
         }
         if (pushes.isNotEmpty()) b.records.save()
+        return null
+    }
+
+    private fun untagged(l: ArtPusher.Listing): MutableSet<String> =
+        l.entries.filter { it.origins.isEmpty() && it.name.isNotBlank() }.mapTo(LinkedHashSet()) { it.name }
+
+    private fun stopped(s: Session) = ArtPusher.Report(if (s.closedReason != null) ArtPusher.Stop.CLOSED else ArtPusher.Stop.PREEMPTED)
+
+    private fun retag(s: Session, pusher: ArtPusher, keep: () -> Boolean): ArtPusher.Report? {
+        val rev = device().lib.dataRev
+        val k = known?.takeIf { it.session === s && it.rev == rev } ?: run {
+            val l = pusher.listing() ?: return if (s.closedReason != null || !keep()) stopped(s) else null
+            log("art list names=${l.names.size} bytes=${l.bytes} cap=${l.cap}")
+            val cap = l.cap ?: return null
+            Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l)).also { known = it }
+        }
+        if (k.tagged) return null
+        val lib = when (val got = rows(s, rev, keep)) {
+            is Rows.Got -> got.names()
+            is Rows.Stop -> return if (s.closedReason != null || !keep()) stopped(s) else null
+            is Rows.Restart -> return null
+        }
+        val total = k.untagged.size
+        var tagged = 0
+        var gone = 0
+        for (name in k.untagged.toList()) {
+            if (!keep()) return ArtPusher.Report(ArtPusher.Stop.PREEMPTED)
+            if (!retagging() || known !== k || device().lib.dataRev != rev) return null
+            if (ArtKey.fold(name) !in lib) continue
+            val r = s.call(Msg.IMG_TAG, Req.imgTag(name, Enums.ImgOrigin.library))
+            when {
+                r is Session.Result.Ok -> tagged++
+                r is Session.Result.Closed -> return ArtPusher.Report(ArtPusher.Stop.CLOSED)
+                r is Session.Result.Failed && r.error.code == Err.notFound -> {
+                    k.names.remove(name)
+                    gone++
+                }
+                r is Session.Result.Failed && r.error.code == Err.busy -> {
+                    log("art tag $name -> error ${Err.busy}")
+                    return null
+                }
+                else -> log("art tag $name -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
+            }
+            k.untagged.remove(name)
+        }
+        k.tagged = true
+        log("art tag tagged=$tagged gone=$gone of $total")
         return null
     }
 
@@ -136,7 +204,9 @@ class Forward(
     }
 
     private sealed class Rows {
-        class Got(val rows: List<Sweep.Row>) : Rows()
+        class Got(val rows: List<Sweep.Row>) : Rows() {
+            fun names(): Set<String> = rows.mapTo(HashSet()) { ArtKey.fold(it.name) }
+        }
         object Restart : Rows()
         object Stop : Rows()
     }
@@ -188,7 +258,7 @@ class Forward(
                 val l = pusher.listing() ?: return ArtPusher.Report(if (s.closedReason != null) ArtPusher.Stop.CLOSED else ArtPusher.Stop.PREEMPTED)
                 log("art list names=${l.names.size} bytes=${l.bytes} cap=${l.cap}")
                 val cap = l.cap ?: return ArtPusher.Report(ArtPusher.Stop.DONE)
-                Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap)).also { known = it }
+                Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l)).also { known = it }
             }
             if (k.swept?.let { marks?.holds(it) } == true) {
                 log("art sweep kept")
@@ -224,7 +294,7 @@ class Forward(
                 break
             }
             if (row.name in k.names) continue
-            val r = pusher.run(listOf(row.name to row.mbid), k.names)
+            val r = pusher.run(listOf(row.name to row.mbid), k.names, Enums.ImgOrigin.library)
             pushed += r.pushed
             stored += r.stored
             missing += r.missing
@@ -237,7 +307,7 @@ class Forward(
             }
             if (++count % CREDITS_EVERY == 0) progress()
         }
-        if (!cut && !gated && failed.isEmpty() && known === k) k.swept = marks?.mark()
+        if (!cut && !gated && failed.isEmpty() && known === k && (k.tagged || s.hello?.has("imgOrigin") != true)) k.swept = marks?.mark()
         return report(if (gated) ArtPusher.Stop.GATE else ArtPusher.Stop.DONE)
     }
 

@@ -1,5 +1,6 @@
 package net.seilent.funecomp.artist
 
+import net.seilent.funecomp.proto.gen.Enums
 import java.io.File
 
 class ArtBlocks(private val file: File? = null, private val log: (String) -> Unit = {}) {
@@ -32,7 +33,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         val crc: Long? = null,
     ) : Record
 
-    data class Push(val name: String, val mbid: String?, val done: Set<String> = emptySet())
+    data class Push(val name: String, val mbid: String?, val done: Set<String> = emptySet(), val origin: Int? = null)
 
     private val blocks = ArrayList<Block>()
     private val rejects = ArrayList<Reject>()
@@ -62,9 +63,9 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
     }
 
     @Synchronized
-    fun addPush(name: String, mbid: String?) {
+    fun addPush(name: String, mbid: String?, origin: Int? = null) {
         pushes.removeAll { Names.fold(it.name) == Names.fold(name) }
-        pushes += Push(name, Names.mbid(mbid))
+        pushes += Push(name, Names.mbid(mbid), origin = origin)
     }
 
     @Synchronized
@@ -124,7 +125,10 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
     fun encode(): String = buildString {
         for (b in blocks) line("block", b.key, b.mbid ?: "", b.source, b.id, b.sha, b.name, b.at.toString(), b.applied.joinToString(","), *listOfNotNull(b.crc?.toString()).toTypedArray())
         for (r in rejects) line("reject", r.key, r.mbid ?: "", r.resolvedBy, r.name, r.at.toString(), r.applied.joinToString(","), *listOfNotNull(r.crc?.toString()).toTypedArray())
-        for (p in pushes) line("push", p.name, p.mbid ?: "", p.done.joinToString(","))
+        for (p in pushes) {
+            line("push", p.name, p.mbid ?: "", p.done.joinToString(","))
+            p.origin?.let { o -> Enums.ImgOrigin.names[o]?.let { line("origin", p.name, p.mbid ?: "", it) } }
+        }
     }
 
     @Synchronized
@@ -151,10 +155,19 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
                 "block" -> (p.size == 9 || p.size == 10) && p[7].toLongOrNull() != null && blocks.add(Block(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5], p[6], p[7].toLong(), set(p[8]), p.getOrNull(9)?.toLongOrNull()))
                 "reject" -> (p.size == 7 || p.size == 8) && p[5].toLongOrNull() != null && rejects.add(Reject(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5].toLong(), set(p[6]), p.getOrNull(7)?.toLongOrNull()))
                 "push" -> p.size == 4 && pushes.add(Push(p[1], p[2].ifEmpty { null }, set(p[3])))
+                "origin" -> p.size == 4 && origin(p[1], p[2].ifEmpty { null }, p[3])
                 else -> false
             }
             if (!ok) log("artblock skipped line ${l.take(80)}")
         }
+    }
+
+    private fun origin(name: String, mbid: String?, word: String): Boolean {
+        val o = Enums.ImgOrigin.names.entries.firstOrNull { it.value == word }?.key ?: return false
+        val i = pushes.indexOfLast { it.name == name && it.mbid == mbid }
+        if (i < 0) return false
+        pushes[i] = pushes[i].copy(origin = o)
+        return true
     }
 
     private fun StringBuilder.line(vararg f: String) {

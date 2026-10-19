@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "aa889207b75d3c38da36b0d563a7abcd55364529"
-    const val PROTO_SHA256 = "1d7abaedfab289cefdc1881e7d0d14c49fced83b7789e2ebd917053ef2792b9e"
-    const val VECTORS_SHA256 = "da97c236afb7ac07e56a223eb742290ffc2d3651fe5acd04860429079641d5ce"
+    const val COMMIT = "0fad790d9d8cd3adcd5c0f451a162e06ec940a5f"
+    const val PROTO_SHA256 = "7990b0d513ae392a4ea4ebf465c2bcd56ec9c92dd73ffd0afecb2ed5d5fbef80"
+    const val VECTORS_SHA256 = "0946b2d0e61618f3c7ee0692bc7de8949d572a5b3ce1d5aa28c658a8ed466c37"
     const val TOKENS_SHA256 = "8e5139fd329bc087d3acad8adade94bf6be643218cb1bd614c151dc524318d97"
     const val TOKENSV1_SHA256 = "4d1e0faa1738981ea062534988859dcc18ba9eaf8d09412831e301de0fb47e14"
 }
@@ -18,7 +18,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 8
+    const val minor = 9
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -86,6 +86,7 @@ object Msg {
     const val ART_BLOCK = 0x38
     const val LYR_GET = 0x39
     const val ART_PICK = 0x3a
+    const val IMG_TAG = 0x3b
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -122,6 +123,7 @@ object Msg {
         ART_BLOCK to MsgInfo(ART_BLOCK, "ART_BLOCK", "dev", false),
         LYR_GET to MsgInfo(LYR_GET, "LYR_GET", "app", false),
         ART_PICK to MsgInfo(ART_PICK, "ART_PICK", "dev", false),
+        IMG_TAG to MsgInfo(IMG_TAG, "IMG_TAG", "app", false),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -156,7 +158,8 @@ object Feature {
     const val artBlock = 10
     const val lyricsGet = 11
     const val artPick = 12
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick")
+    const val imgOrigin = 13
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin")
 }
 
 object Enums {
@@ -297,6 +300,11 @@ object Enums {
         const val plain = 1
         val names: Map<Int, String> = mapOf(0 to "synced", 1 to "plain")
     }
+    object ImgOrigin {
+        const val library = 0
+        const val phone = 1
+        val names: Map<Int, String> = mapOf(0 to "library", 1 to "phone")
+    }
     val byName: Map<String, Map<Int, String>> = mapOf(
         "SOURCE" to Source.names,
         "OUTPUT" to Output.names,
@@ -318,6 +326,7 @@ object Enums {
         "EQ_PRESET_OP" to EqPresetOp.names,
         "BLOCK_CMD" to BlockCmd.names,
         "LYRICS_KIND" to LyricsKind.names,
+        "IMG_ORIGIN" to ImgOrigin.names,
     )
 }
 
@@ -548,6 +557,7 @@ object Tags {
         const val wrongArtist = 8
         const val source = 9
         const val credit = 10
+        const val origin = 11
     }
     object ImgBeginReply {
         const val offset = 1
@@ -617,6 +627,10 @@ object Tags {
     object ArtPickReply {
         const val shown = 1
     }
+    object ImgTag {
+        const val name = 1
+        const val origin = 2
+    }
     object Error {
         const val code = 1
         const val text = 2
@@ -670,6 +684,7 @@ object Tags {
     object ImgEntry {
         const val name = 1
         const val mbid = 2
+        const val origin = 3
     }
     object LyrLine {
         const val ms = 1
@@ -902,6 +917,7 @@ object Tags {
             8 to Field(8, "wrongArtist", Base.BOOL, null, false),
             9 to Field(9, "source", Base.STR, null, false),
             10 to Field(10, "credit", Base.STR, null, false),
+            11 to Field(11, "origin", Base.ENUM, "IMG_ORIGIN", false),
         ),
         "IMG_BEGIN.reply" to mapOf(
             1 to Field(1, "offset", Base.U32, null, false),
@@ -971,6 +987,10 @@ object Tags {
         "ART_PICK.reply" to mapOf(
             1 to Field(1, "shown", Base.BOOL, null, false),
         ),
+        "IMG_TAG" to mapOf(
+            1 to Field(1, "name", Base.STR, null, false),
+            2 to Field(2, "origin", Base.ENUM, "IMG_ORIGIN", false),
+        ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),
             2 to Field(2, "text", Base.STR, null, false),
@@ -1024,6 +1044,7 @@ object Tags {
         "ImgEntry" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
             2 to Field(2, "mbid", Base.STR, null, false),
+            3 to Field(3, "origin", Base.ENUM, "IMG_ORIGIN", true),
         ),
         "LyrLine" to mapOf(
             1 to Field(1, "ms", Base.U32, null, false),

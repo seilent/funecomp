@@ -58,7 +58,7 @@ class ArtPusher(
         }
     }
 
-    fun run(artists: List<Pair<String, String?>>, have: Set<String> = emptySet()): Report {
+    fun run(artists: List<Pair<String, String?>>, have: Set<String> = emptySet(), origin: Int? = null): Report {
         val hello = session.hello
         val w = hello?.backdropW
         val h = hello?.backdropH
@@ -69,6 +69,7 @@ class ArtPusher(
         val failed = ArrayList<String>()
         fun report(stop: Stop) = Report(stop, pushed, stored, missing, failed)
         val seen = HashSet<String>()
+        val tag = origin.takeIf { hello.has("imgOrigin") }
         var gated = false
         for ((name, mbid) in artists) {
             if (name.isBlank() || !seen.add(name)) continue
@@ -99,7 +100,7 @@ class ArtPusher(
             val meta = if (hello.has("artBlock")) ImgMeta(a.wrongArtist, Sources.label(a.source), a.credit?.author?.takeIf { it.isNotBlank() }) else null
             var tries = 0
             while (true) {
-                when (val o = ImagePush(session, name, a.mbid, a.jpeg, w, h, meta, gate).run()) {
+                when (val o = ImagePush(session, name, a.mbid, a.jpeg, w, h, meta, tag, gate).run()) {
                     is ImagePush.Outcome.Done -> pushed[name] = o.from
                     is ImagePush.Outcome.Have -> stored += name
                     is ImagePush.Outcome.Gated -> gated = true
@@ -125,6 +126,12 @@ class ArtPusher(
         const val NAMES = 10
         private val finalAborts = setOf(Enums.AbortCode.busy, Enums.AbortCode.noSpace, Enums.AbortCode.superseded)
         private val finalErrors = setOf(Err.busy, Err.noSpace)
+
+        fun origin(source: Int?): Int? = when (source) {
+            Enums.Source.local -> Enums.ImgOrigin.library
+            Enums.Source.phone -> Enums.ImgOrigin.phone
+            else -> null
+        }
 
         fun order(state: State, upcoming: List<Pair<String, String?>> = emptyList()): List<Pair<String, String?>> =
             state.artists.mapIndexed { i, n -> n to state.mbids.getOrNull(i)?.takeIf { it.isNotBlank() } } + upcoming

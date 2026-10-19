@@ -1,5 +1,6 @@
 package net.seilent.funecomp.sim
 
+import net.seilent.funecomp.proto.gen.Enums
 import java.io.File
 import java.time.LocalTime
 import kotlin.system.exitProcess
@@ -7,7 +8,7 @@ import kotlin.system.exitProcess
 private const val USAGE = "usage: sim --board ap80|v1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
-    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--quiet]"
+    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -29,6 +30,8 @@ fun main(args: Array<String>) {
     var curve: String? = null
     var maxPct: String? = null
     val cardEq = ArrayList<String>()
+    var source: String? = null
+    var rescanLib: String? = null
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -54,6 +57,8 @@ fun main(args: Array<String>) {
             "--curve" -> curve = value()
             "--max-pct" -> maxPct = value()
             "--card-eq" -> cardEq += value().split(',').filter { it.isNotEmpty() }
+            "--source" -> source = value()
+            "--rescan-lib" -> rescanLib = value()
             "--quiet" -> quiet = true
             else -> {
                 System.err.println(USAGE)
@@ -87,6 +92,8 @@ fun main(args: Array<String>) {
         curve?.let { it == "v1" } ?: (b.name == "v1"),
         maxPct?.toInt(),
         cardEq,
+        source?.let { v -> Enums.Source.names.entries.firstOrNull { it.value == v }?.key ?: throw IllegalArgumentException("source must be local or phone, not $v") } ?: base.source,
+        rescanLib?.let { Library.load(File(it)) },
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {

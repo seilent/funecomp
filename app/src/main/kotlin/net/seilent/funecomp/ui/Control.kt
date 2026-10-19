@@ -37,7 +37,7 @@ data class LinkView(
 )
 
 @Immutable
-data class PickFor(val name: String, val mbid: String? = null, val library: Boolean = false)
+data class PickFor(val name: String, val mbid: String? = null, val library: Boolean = false, val origin: Int? = null)
 
 class BrowseTile(val tile: Tile, val image: ImageBitmap)
 

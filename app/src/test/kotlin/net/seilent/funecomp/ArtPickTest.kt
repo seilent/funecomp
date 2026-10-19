@@ -171,6 +171,7 @@ class ArtPickTest {
         assertEquals(Sources.YOUTUBE, r.source)
         waitFor { deleted("TSUKI") == 1 }
         assertEquals(ArtPicks.NONE, Remote.picks.single().kind)
+        waitFor { File(app.filesDir, "artblock.tsv").readLines().count { it.startsWith("push\tTSUKI\t") } == 1 && File(app.filesDir, "artblock.tsv").readText().contains("origin\tTSUKI\t\tlibrary\n") }
         assertEquals("ok", s.askBlock(q))
         assertEquals(1, Remote.blocked.size)
         Thread.sleep(800)
@@ -181,6 +182,40 @@ class ArtPickTest {
         waitFor { Remote.picks.singleOrNull()?.kind == ArtPicks.IMAGE }
         waitFor { stored("TSUKI").size >= 3 }
         assertEquals(crc(ArtCache(File(app.filesDir, "art")).rendered("pick:name:tsuki", 240, 320)!!), stored("TSUKI").last())
+        c.destroy()
+    }
+
+    @Test
+    fun aLibraryViewPickPushesLibraryWithoutReadingTheRows() {
+        val s = sim(*(1L..8L).map { track(it, "Other $it") }.toTypedArray(), track(9, "TSUKI"))
+        Remote.shown(true)
+        val c = link(s)
+        waitFor { Remote.phase == Phase.LIVE }
+        Thread.sleep(500)
+        Remote.pick(PickFor("TSUKI", library = true), offer())
+        waitFor { stored("TSUKI").isNotEmpty() }
+        assertEquals("TSUKI" to Enums.ImgOrigin.library, s.device.begins.single { it.first == "TSUKI" })
+        assertTrue(lines.none { "rx LIB_GET" in it })
+        c.destroy()
+    }
+
+    @Test
+    fun aPickKeepsItsOriginAndItsUndoTakesTheRows() {
+        val s = sim(track(1, "TSUKI"))
+        Remote.shown(true)
+        val c = link(s)
+        waitFor { Remote.phase == Phase.LIVE && stored("TSUKI").isNotEmpty() }
+        Thread.sleep(300)
+        s.device.begins.clear()
+        Remote.pick(PickFor("TSUKI", origin = Enums.ImgOrigin.phone), offer())
+        waitFor { stored("TSUKI").size >= 2 }
+        assertEquals("TSUKI" to Enums.ImgOrigin.phone, s.device.begins.first())
+        assertTrue(lines.none { "rx LIB_GET" in it })
+        s.device.begins.clear()
+        Remote.undoPick(Remote.picks.single())
+        waitFor { stored("TSUKI").size >= 3 }
+        assertEquals("TSUKI" to Enums.ImgOrigin.library, s.device.begins.first())
+        assertTrue(lines.any { "rx LIB_GET" in it })
         c.destroy()
     }
 

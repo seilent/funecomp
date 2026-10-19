@@ -23,6 +23,7 @@ class OldPeerTest {
     private val v15 = table("/proto-1.5.txt")
     private val v16 = table("/proto-1.6.txt")
     private val v17 = table("/proto-1.7.txt")
+    private val v18 = table("/proto-1.8.txt")
 
     private fun table(name: String): Map<String, Map<Int, Field>> = run {
         val text = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
@@ -175,7 +176,43 @@ class OldPeerTest {
         assertFalse(Groups.allowed(Msg.ART_PICK, Groups.all and (1L shl Feature.artPick).inv()))
         assertTrue(Groups.allowed(Msg.ART_PICK, Groups.mask("artPick")))
         assertEquals(12, Feature.artPick)
-        assertEquals(8191L, Groups.all)
+    }
+
+    @Test
+    fun protocol19FramesDecodeWithThe18TablesToEmptyFields() {
+        assertNull(v18["IMG_TAG"])
+        assertEquals(listOf(11), Node.decode("IMG_BEGIN", body("img_begin_origin"), v18).unknownTags)
+        assertEquals(listOf(1, 2), Node.decode("IMG_TAG", body("img_tag"), v18).unknownTags)
+        val old = ImgListReply.from(Node.decode("IMG_LIST.reply", body("img_list_origin"), v18))
+        assertEquals(listOf("Utada Hikaru", "Gemma", "Hal"), old.entries.map { it.name })
+        assertTrue(old.entries.all { it.origins.isEmpty() })
+        assertEquals(listOf(listOf(3), listOf(3, 3), emptyList()), Node.decode("IMG_LIST.reply", body("img_list_origin"), v18).nodes(Tags.ImgListReply.entry).map { it.unknownTags })
+        assertFalse(Groups.allowed(Msg.IMG_TAG, Groups.all and (1L shl Feature.imgOrigin).inv()))
+        assertTrue(Groups.allowed(Msg.IMG_TAG, Groups.mask("imgOrigin")))
+        assertEquals(13, Feature.imgOrigin)
+        assertEquals(16383L, Groups.all)
+    }
+
+    @Test
+    fun imgOriginBuildersMatchTheVectors() {
+        val mbid = "a1b2c3d4-0000-4000-8000-000000000001"
+        assertArrayEquals(body("img_begin_origin"), Req.imgBegin(Enums.ImgKind.artist, "Utada Hikaru", mbid, 24, 2438839214, 384, 480, true, "Wikimedia Commons", "Jane Doe", Enums.ImgOrigin.phone))
+        assertArrayEquals(body("img_begin_origin_library"), Req.imgBegin(Enums.ImgKind.artist, "Utada Hikaru", null, 24, 2438839214, 384, 480, origin = Enums.ImgOrigin.library))
+        assertArrayEquals(body("img_begin_meta"), Req.imgBegin(Enums.ImgKind.artist, "Utada Hikaru", mbid, 24, 2438839214, 384, 480, true, "Wikimedia Commons", "Jane Doe", null))
+        assertArrayEquals(body("img_tag"), Req.imgTag("Utada Hikaru", Enums.ImgOrigin.library))
+        assertEquals(10, ErrorReply.from(Node.decode("error", body("img_tag_error_notfound"))).code)
+        assertEquals(2, ErrorReply.from(Node.decode("error", body("img_begin_origin_bad_error"))).code)
+        val list = ImgListReply.from(Node.decode("IMG_LIST.reply", body("img_list_origin")))
+        assertEquals(
+            listOf(
+                ImgEntry("Utada Hikaru", null, listOf(Enums.ImgOrigin.library)),
+                ImgEntry("Gemma", null, listOf(Enums.ImgOrigin.library, Enums.ImgOrigin.phone)),
+                ImgEntry("Hal", null),
+            ),
+            list.entries,
+        )
+        assertArrayEquals(body("img_list_origin"), list.encode())
+        assertEquals(listOf(22, 19, 9), list.entries.map { it.size })
     }
 
     @Test

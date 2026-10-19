@@ -119,6 +119,8 @@ class Options(
     val curve: Boolean = board.name == "v1",
     val maxPct: Int? = null,
     val cardEq: List<String> = emptyList(),
+    val source: Int = Enums.Source.local,
+    val rescanLib: Library? = null,
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
@@ -126,6 +128,7 @@ class Options(
         if (minor < 6) faults.features = faults.features and Groups.mask("artBlock").inv()
         if (minor < 7) faults.features = faults.features and Groups.mask("lyricsGet").inv()
         if (minor < 8) faults.features = faults.features and Groups.mask("artPick").inv()
+        if (minor < 9) faults.features = faults.features and Groups.mask("imgOrigin").inv()
     }
 
     companion object {

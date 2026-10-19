@@ -24,6 +24,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import net.seilent.funecomp.art.Forward
+import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.artist.Sources
@@ -52,7 +53,7 @@ internal var browseCols: (Float) -> Int = { Tok.gridCols.toInt() }
 
 fun artistChooser(ctx: Ctx) {
     val s = ctx.device.playback.state
-    val artists = s.artists.withIndex().filter { (_, n) -> n.isNotBlank() && n.trim().lowercase() !in Forward.PLACEHOLDERS }.map { (i, n) -> PickFor(n, s.mbids.getOrNull(i)) }
+    val artists = s.artists.withIndex().filter { (_, n) -> n.isNotBlank() && n.trim().lowercase() !in Forward.PLACEHOLDERS }.map { (i, n) -> PickFor(n, s.mbids.getOrNull(i), origin = ArtPusher.origin(s.source)) }
     when (artists.size) {
         0 -> {}
         1 -> pickSheet(ctx, artists.single())

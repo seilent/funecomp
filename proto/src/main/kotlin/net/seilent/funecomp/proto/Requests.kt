@@ -87,7 +87,7 @@ object Req {
         u64(Tags.Action.track, track)
     }
 
-    fun imgBegin(kind: Int, name: String, mbid: String?, total: Long, crc: Long, w: Int, h: Int, wrongArtist: Boolean? = null, source: String? = null, credit: String? = null) = tlv {
+    fun imgBegin(kind: Int, name: String, mbid: String?, total: Long, crc: Long, w: Int, h: Int, wrongArtist: Boolean? = null, source: String? = null, credit: String? = null, origin: Int? = null) = tlv {
         enum(Tags.ImgBegin.kind, kind)
         str(Tags.ImgBegin.name, name)
         str(Tags.ImgBegin.mbid, mbid)
@@ -98,6 +98,7 @@ object Req {
         bool(Tags.ImgBegin.wrongArtist, wrongArtist)
         str(Tags.ImgBegin.source, cap(source))
         str(Tags.ImgBegin.credit, cap(credit))
+        enum(Tags.ImgBegin.origin, origin)
     }
 
     fun imgData(offset: Long, data: ByteArray) = tlv {
@@ -113,6 +114,11 @@ object Req {
     }
 
     fun imgDel(name: String) = tlv { str(Tags.ImgDel.name, name) }
+
+    fun imgTag(name: String, origin: Int) = tlv {
+        str(Tags.ImgTag.name, name)
+        enum(Tags.ImgTag.origin, origin)
+    }
 
     fun artGet(track: Long, px: Int, offset: Long = 0, have: Long? = null) = tlv {
         u64(Tags.ArtGet.track, track)

@@ -23,6 +23,9 @@ import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Tile
+import net.seilent.funecomp.proto.Node
+import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Track
 import net.seilent.funecomp.state.DeviceState
@@ -158,8 +161,35 @@ class ArtPickUiTest {
         tap("sheet.item.1")
         assertEquals("Other", shell.sheet.title)
         tap("sheet.item.1")
-        assertEquals(Page.Browse(PickFor("Other", dj)), shell.nav.top)
+        assertEquals(Page.Browse(PickFor("Other", dj, origin = Enums.ImgOrigin.library)), shell.nav.top)
         assertEquals("browse Other $dj", calls.single())
+    }
+
+    private fun phone(c: SimControl) {
+        c.sim.source(Enums.Source.phone)
+        c.device = c.device.reduce(Msg.STATE, Node.decode("STATE", c.sim.state()), 0)
+        settle(300)
+    }
+
+    @Test
+    fun anInAppPickOfAPlayingArtistTakesThePhoneSource() {
+        val (shell, c) = start(listOf(Page.Home, Page.NowPlaying))
+        phone(c)
+        hold("np.backdrop")
+        tap("sheet.item.1")
+        tap("sheet.item.1")
+        assertEquals(Page.Browse(PickFor("Other", dj, origin = Enums.ImgOrigin.phone)), shell.nav.top)
+    }
+
+    @Test
+    fun theBackdropSheetPickTakesThePhoneSource() {
+        val e = ArtCache.Entry("name:tsuki", "TSUKI", null, Sources.DEEZER, null, "u", 1)
+        val (shell, c) = start(listOf(Page.Home, Page.NowPlaying), BackdropArt(ImageBitmap(8, 8), null, e))
+        phone(c)
+        hold("np.backdrop")
+        tap("sheet.item.1")
+        tap("sheet.item.1")
+        assertEquals(Page.Browse(PickFor("TSUKI", "", origin = Enums.ImgOrigin.phone)), shell.nav.top)
     }
 
     @Test

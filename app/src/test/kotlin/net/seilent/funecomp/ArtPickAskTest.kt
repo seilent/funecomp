@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
 import net.seilent.funecomp.proto.ArtPick
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
@@ -160,6 +161,53 @@ class ArtPickAskTest {
         assertEquals(Page.NowPlaying, cold.get().shell.nav.top)
         assertEquals("TSUKI", cold.get().shell.sheet.title)
         cold.pause().stop().destroy()
+    }
+
+    private fun offer() = net.seilent.funecomp.artist.Offer(net.seilent.funecomp.artist.ArtPicks.IMAGE, net.seilent.funecomp.artist.Sources.YOUTUBE, "https://yt3.googleusercontent.com/a=s900", "https://yt3.googleusercontent.com/a", null, null, "TSUKI", jpeg())
+
+    private fun jpeg(): ByteArray {
+        val img = java.awt.image.BufferedImage(600, 800, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        val g = img.createGraphics()
+        g.color = java.awt.Color(30, 160, 60)
+        g.fillRect(0, 0, 600, 800)
+        g.dispose()
+        return java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(img, "jpg", it) }.toByteArray()
+    }
+
+    private fun pickedOrigin(s: Sim, target: PickFor): Pair<String, Int?> {
+        s.source(Enums.Source.phone)
+        waitFor { Remote.device.playback.state.source == Enums.Source.phone }
+        s.device.begins.clear()
+        Remote.pick(target, offer())
+        waitFor { s.device.begins.isNotEmpty() }
+        return s.device.begins.first()
+    }
+
+    @Test
+    fun anAskTakesTheSourceItCameWithOnTheSheetAndTheNotice() {
+        Remote.artist(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
+        val s = live()
+        val a = main()
+        assertEquals("ok shown=true", ask(s, "TSUKI"))
+        waitFor { a.get().shell.sheet.shown }
+        a.get().shell.sheet.accept(1)
+        waitFor { a.get().shell.nav.top is Page.Browse }
+        val target = (a.get().shell.nav.top as Page.Browse).target
+        assertEquals(PickFor("TSUKI", origin = Enums.ImgOrigin.library), target)
+        a.pause().stop().destroy()
+        assertEquals("TSUKI" to Enums.ImgOrigin.library, pickedOrigin(s, target))
+        s.source(Enums.Source.local)
+        waitFor { Remote.device.playback.state.source == Enums.Source.local }
+        assertEquals("ok shown=false", ask(s, "TSUKI"))
+        assertEquals(Enums.ImgOrigin.library, tapped().getIntExtra(Main.EXTRA_PICK_ORIGIN, -1))
+        val cold = Robolectric.buildActivity(Main::class.java, tapped()).create().start().resume().visible()
+        waitFor { cold.get().shell.sheet.shown }
+        cold.get().shell.sheet.accept(1)
+        waitFor { cold.get().shell.nav.top is Page.Browse }
+        val tap = (cold.get().shell.nav.top as Page.Browse).target
+        assertEquals(PickFor("TSUKI", origin = Enums.ImgOrigin.library), tap)
+        cold.pause().stop().destroy()
+        assertEquals("TSUKI" to Enums.ImgOrigin.library, pickedOrigin(s, tap))
     }
 
     @Test

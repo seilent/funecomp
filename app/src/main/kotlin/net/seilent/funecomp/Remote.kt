@@ -200,7 +200,7 @@ object Remote : Control {
             phase(Phase.CONNECTING)
             Log.i(TAG, "link $spec")
             wake(context)
-            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(features = Groups.mask("artBlock", "artPick")), SystemClock::elapsedRealtime)
+            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(features = Groups.mask("artBlock", "artPick", "imgOrigin")), SystemClock::elapsedRealtime)
             link = l
             art = worker(context, l)
             l.start()
@@ -361,52 +361,56 @@ object Remote : Control {
 
     override fun wrongArtist(e: ArtCache.Entry) = wrongArtist(e, null)
 
-    private fun blockArt(e: ArtCache.Entry, crc: Long?) {
+    private fun blockArt(e: ArtCache.Entry, crc: Long?, after: () -> Unit = {}) {
         val a = artist ?: return
         val s = a.withSha(e)
         a.blocks.add(ArtBlocks.Block(s.key, s.mbid, s.source, ImageIds.of(s), s.sha, s.name, System.currentTimeMillis(), crc = crc))
+        after()
         Log.i(TAG, "art block ${e.name} ${e.source} ${ImageIds.of(e)}")
         blockedArt(a) { a.forget(e) }
     }
 
-    private fun wrongArtist(e: ArtCache.Entry, crc: Long?) {
+    private fun wrongArtist(e: ArtCache.Entry, crc: Long?, after: () -> Unit = {}) {
         val a = artist ?: return
         val by = a.resolvedBy(e)
         a.blocks.add(ArtBlocks.Reject(e.key, e.mbid, by, e.name, System.currentTimeMillis(), crc = crc))
+        after()
         Log.i(TAG, "art wrong artist ${e.name} ${e.mbid} by $by")
         blockedArt(a) { a.forget(e) }
     }
 
-    private fun artAsk(q: ArtBlock, dev: String?, w: Int?, h: Int?, r: Responder) {
+    private fun artAsk(q: ArtBlock, st: State, dev: String?, w: Int?, h: Int?, r: Responder) {
         val cmd = q.cmd
         val name = q.name?.takeIf { it.isNotBlank() }
         val crc = q.crc
-        val code = if (cmd == null || name == null || crc == null) Err.badValue else artAsk(cmd == Enums.BlockCmd.wrongArtist, name, Names.mbid(q.mbid), crc, dev, w, h)
+        val code = if (cmd == null || name == null || crc == null) Err.badValue else artAsk(cmd == Enums.BlockCmd.wrongArtist, name, Names.mbid(q.mbid), crc, st, dev, w, h)
         if (code == null) r.ok() else r.error(code, ASK_ERRORS.getValue(code))
         Log.i(TAG, "art ask ${Enums.BlockCmd.names[cmd ?: -1]} $name -> ${code ?: "ok"}")
     }
 
-    private fun artAsk(wrong: Boolean, name: String, mbid: String?, crc: Long, dev: String?, w: Int?, h: Int?): Int? {
+    private fun artAsk(wrong: Boolean, name: String, mbid: String?, crc: Long, st: State, dev: String?, w: Int?, h: Int?): Int? {
         val a = artist ?: return Err.busy
         val found = a.candidates(name, mbid).map { it to if (w != null && h != null) a.renderedCrc(it, w, h) else null }
         var hits = found.filter { it.second == crc }.map { it.first }
         if (hits.size > 1 && mbid != null) hits = hits.filter { it.mbid == mbid }.ifEmpty { hits }
+        val i = st.artists.indexOfFirst { Names.fold(it) == Names.fold(name) }
+        val stMbid = st.mbids.getOrNull(i)?.takeIf { it.isNotBlank() }
         if (wrong) {
-            val s = device.playback.state
-            val i = s.artists.indexOfFirst { Names.fold(it) == Names.fold(name) }
-            if (i >= 0 && !s.mbids.getOrNull(i).isNullOrBlank()) return Err.refused
+            if (stMbid != null) return Err.refused
             if (hits.any { !a.wrongArtistOffered(a.withSha(it), name) }) return Err.refused
         }
         if (hits.isNotEmpty()) {
+            val origin = ArtPusher.origin(st.source)
+            val push = { a.blocks.addPush(name, if (wrong) null else stMbid ?: mbid, origin) }
             for (e in hits) {
                 if (!wrong && a.picked(e)) {
-                    blockPick(e, crc)
+                    blockPick(e, crc, origin)
                     continue
                 }
                 val done = if (wrong) e.mbid in a.blocks.rejected(a.resolvedBy(e)) else a.blocked(a.withSha(e))
                 if (done) Log.i(TAG, "art ask ${e.name} already recorded")
-                else if (wrong) wrongArtist(e, crc)
-                else blockArt(e, crc)
+                else if (wrong) wrongArtist(e, crc, push)
+                else blockArt(e, crc, push)
             }
             return null
         }
@@ -416,14 +420,14 @@ object Remote : Control {
         return if (found.any { it.second != null }) Err.staleRev else Err.notFound
     }
 
-    private fun blockPick(e: ArtCache.Entry, crc: Long?) {
+    private fun blockPick(e: ArtCache.Entry, crc: Long?, origin: Int?) {
         val a = artist ?: return
         val p = a.picks.byCache(e.key) ?: return
         val s = a.withSha(e)
         val at = System.currentTimeMillis()
         p.keys.forEach { k -> a.blocks.add(ArtBlocks.Block(k, p.mbid, s.source, ImageIds.of(s), s.sha, p.name, at, crc = crc)) }
         a.picks.add(p.copy(kind = ArtPicks.NONE, was = p.kind, failedAt = null))
-        a.blocks.addPush(p.name, p.mbid)
+        a.blocks.addPush(p.name, p.mbid, origin)
         Log.i(TAG, "art block pick ${p.name} ${s.source} ${ImageIds.of(s)}")
         showPicks { a.picks.list() }
         blockedArt(a) {
@@ -440,7 +444,7 @@ object Remote : Control {
             Log.i(TAG, "art pick ask $name -> $code")
             return
         }
-        val target = PickFor(name, Names.mbid(q.mbid))
+        val target = PickFor(name, Names.mbid(q.mbid), origin = ArtPusher.origin(device.playback.state.source))
         main.post {
             val shown = pickAsk?.invoke(target) == true
             val c = app
@@ -514,7 +518,7 @@ object Remote : Control {
             a.picks.list().filter { o -> o.keys.any { it in p.keys } }.forEach { a.forget(it.cacheKey) }
             a.picks.add(p)
             offer.src?.let { a.store(p, it) }
-            a.blocks.addPush(p.name, mbid)
+            a.blocks.addPush(p.name, mbid, if (target.library) Enums.ImgOrigin.library else target.origin)
         }
     }
 
@@ -639,6 +643,7 @@ object Remote : Control {
             },
             ::gate,
             { !shown && online && !breaker.open },
+            { !shown && !Firmwares.sending },
             ::libPage,
             breaker,
             { online },
@@ -968,7 +973,8 @@ object Remote : Control {
             val q = ArtBlock.from(body)
             val dev = spec
             val h = device.hello
-            blockExec.execute { artAsk(q, dev, h?.backdropW, h?.backdropH, responder) }
+            val st = device.playback.state
+            blockExec.execute { artAsk(q, st, dev, h?.backdropW, h?.backdropH, responder) }
             queuedAsk()
             return true
         }

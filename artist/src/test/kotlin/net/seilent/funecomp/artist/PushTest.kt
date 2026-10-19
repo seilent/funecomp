@@ -268,6 +268,25 @@ class PushTest {
         return sim.device.stored.values.single().meta
     }
 
+    private fun origin(minor: Int, origin: Int?): List<Pair<String, Int?>> {
+        val (sim, port) = sim(minor = minor)
+        val a = art("Ado", noise(360, 480, 4), 360, 480)
+        ArtPusher(session(port), { _, _, _, _ -> a }) { true }.run(listOf("Ado" to null), origin = origin)
+        return sim.device.begins.toList()
+    }
+
+    @Test
+    fun theImgBeginOriginGoesOutOnlyWithTheImgOriginBit() {
+        assertEquals(listOf("Ado" to Enums.ImgOrigin.phone), origin(Proto.minor, Enums.ImgOrigin.phone))
+        assertEquals(listOf("Ado" to Enums.ImgOrigin.library), origin(Proto.minor, Enums.ImgOrigin.library))
+        assertEquals(listOf("Ado" to null), origin(Proto.minor, null))
+        assertEquals(listOf("Ado" to null), origin(8, Enums.ImgOrigin.phone))
+        assertEquals(Enums.ImgOrigin.library, ArtPusher.origin(Enums.Source.local))
+        assertEquals(Enums.ImgOrigin.phone, ArtPusher.origin(Enums.Source.phone))
+        assertEquals(null, ArtPusher.origin(null))
+        assertEquals(null, ArtPusher.origin(7))
+    }
+
     @Test
     fun theImgBeginMetaGoesOutOnlyWithTheArtBlockBit() {
         val img = noise(360, 480, 3)

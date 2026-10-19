@@ -1,5 +1,6 @@
 package net.seilent.funecomp.artist
 
+import net.seilent.funecomp.proto.gen.Enums
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
@@ -359,6 +360,28 @@ class BlockTest {
         val again = ArtBlocks(f).records()
         assertEquals(old.records(), again)
         assertEquals(2438839214, again.filterIsInstance<ArtBlocks.Block>().single { it.key == "k2" }.crc)
+    }
+
+    @Test
+    fun pushOriginsRoundTripOnTheirOwnLine() {
+        val f = java.io.File(tmp.root, "origin.tsv")
+        val logs = ArrayList<String>()
+        val b = ArtBlocks(f)
+        b.addPush("Gemma", null, Enums.ImgOrigin.phone)
+        b.addPush("BoA", "b539e453-c4fe-47e3-8a07-8517eac74429", Enums.ImgOrigin.library)
+        b.addPush("Hal", null)
+        b.save()
+        assertEquals(
+            listOf("push\tGemma\t\t", "origin\tGemma\t\tphone", "push\tBoA\tb539e453-c4fe-47e3-8a07-8517eac74429\t", "origin\tBoA\tb539e453-c4fe-47e3-8a07-8517eac74429\tlibrary", "push\tHal\t\t"),
+            f.readLines(),
+        )
+        val c = ArtBlocks(f)
+        assertEquals(b.pushes("x"), c.pushes("x"))
+        assertEquals(listOf(Enums.ImgOrigin.phone, Enums.ImgOrigin.library, null), c.pushes("x").map { it.origin })
+        f.writeText("push\tGemma\t\t\npush\tHal\t\t\norigin\tHal\t\tradio\norigin\tNobody\t\tphone\norigin\tGemma\tm\tphone\n")
+        val d = ArtBlocks(f) { logs += it }
+        assertEquals(listOf(ArtBlocks.Push("Gemma", null), ArtBlocks.Push("Hal", null)), d.pushes("x"))
+        assertEquals(3, logs.size)
     }
 
     @Test

@@ -308,7 +308,7 @@ class Main : ComponentActivity() {
     private fun pickFrom(intent: Intent?) {
         if (intent?.action != ACTION_PICK_ART || !PickNotice.take(this, intent.getStringExtra(EXTRA_PICK_NONCE))) return
         val name = intent.getStringExtra(EXTRA_PICK_NAME)?.takeIf { it.isNotBlank() } ?: return
-        shell.pick = PickFor(name, intent.getStringExtra(EXTRA_PICK_MBID))
+        shell.pick = PickFor(name, intent.getStringExtra(EXTRA_PICK_MBID), origin = intent.getIntExtra(EXTRA_PICK_ORIGIN, -1).takeIf { it >= 0 })
     }
 
     private fun debugPage(name: String): List<Page>? {
@@ -388,6 +388,7 @@ class Main : ComponentActivity() {
         const val EXTRA_PICK_NAME = "pickName"
         const val EXTRA_PICK_MBID = "pickMbid"
         const val EXTRA_PICK_NONCE = "pickNonce"
+        const val EXTRA_PICK_ORIGIN = "pickOrigin"
         private const val BATTERY_ASKED = "batteryAsked"
         const val PREFS = "link"
         const val WANTED = "wanted"

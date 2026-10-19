@@ -35,6 +35,7 @@ import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.gen.TokBoard
+import net.seilent.funecomp.state.ArtKey
 import net.seilent.funecomp.state.AutoEq
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
@@ -63,6 +64,8 @@ private const val ART_QUALITY = 0.85f
 private const val UPDATE_BATTERY_MIN = 50
 private const val MIB = 1L shl 20
 private const val UPDATE_RESERVE = 64L shl 20
+private const val LIBRARY = 1
+private const val PHONE = 2
 private val SYNCED = Regex("^\\[[0-9]+:[0-9]{2}(\\.[0-9]+)?]", RegexOption.MULTILINE)
 private val STAMP = Regex("^\\[([0-9]+):([0-9]{2}(\\.[0-9]+)?)]")
 private val ID_TAG = Regex("^\\[[A-Za-z]+:.*]$")
@@ -137,7 +140,9 @@ private fun whole(v: Float): String {
     return n.toString()
 }
 
-class Device(private val opts: Options, val lib: Library, private val clock: () -> Long) {
+class Device(private val opts: Options, lib: Library, private val clock: () -> Long) {
+    @Volatile var lib: Library = lib
+        private set
     private val board = opts.board
     private val faults = opts.faults
     private val lock = Any()
@@ -191,8 +196,8 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private var lastStateAt = 0L
 
     data class Meta(val wrong: Boolean?, val source: String?, val credit: String?)
-    class Stored(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, var at: Long, var meta: Meta)
-    class Partial(val name: String, val total: Long, val crc: Long, val w: Int, val h: Int, val data: ByteArrayOutputStream = ByteArrayOutputStream())
+    class Stored(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, var at: Long, var meta: Meta, var origins: Int = 0)
+    class Partial(val name: String, val total: Long, val crc: Long, val w: Int, val h: Int, val data: ByteArrayOutputStream = ByteArrayOutputStream(), var origins: Int = 0)
 
     private val images = LinkedHashMap<String, Stored>()
     private val partials = HashMap<String, Partial>()
@@ -209,6 +214,10 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private val v13: Boolean get() = opts.minor >= 3
     private val v14: Boolean get() = opts.minor >= 4
     private val v15: Boolean get() = opts.minor >= 5
+    private val v19: Boolean get() = opts.minor >= 9
+    private var source = opts.source
+    private var rescanLib = opts.rescanLib
+    val begins: MutableList<Pair<String, Int?>> = java.util.Collections.synchronizedList(ArrayList())
     private val started = clock()
     private var lastBattery = -1
     private val lyrs = HashMap<Long, Lyr>()
@@ -307,7 +316,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         val bat = battery()
         lastBattery = bat
         State(
-            Enums.Source.local, Enums.Output.wired, t?.id, t?.title, t?.artist, t?.artists.orEmpty(),
+            source, Enums.Output.wired, t?.id, t?.title, t?.artist, t?.artists.orEmpty(),
             t?.mbids.orEmpty(), t?.durationMs, position(), sample, now(), playing, shuffle, repeat,
             volume, maxVolume, bat, queueRev, slot.toLong(), queue.size.toLong(), lib.rev, t?.album, sleepLeft(),
             if (v12) opts.battery.charging else null,
@@ -416,6 +425,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             Msg.IMG_END -> imgEnd(body)
             Msg.IMG_LIST -> imgList(body)
             Msg.IMG_DEL -> imgDel(body)
+            Msg.IMG_TAG -> imgTag(body)
             Msg.ART_GET -> artGet(body)
             Msg.LRC_PUT -> lrcPut(body)
             Msg.LRC_DEL -> lrcDel(body)
@@ -790,10 +800,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
 
     private fun action(b: Node, out: Out): Answer {
         when (b.int(Tags.Action.cmd)) {
-            Enums.ActionCmd.rescan -> {
-                lib.rev++
-                lib.snapRev++
-            }
+            Enums.ActionCmd.rescan -> rescan(rescanLib.also { rescanLib = null })
             Enums.ActionCmd.shuffleLibrary -> {
                 if (lib.tracks.isEmpty()) return Answer.Fail(Err.noLibrary, "no library")
                 queue = lib.tracks.map { it.id }.shuffled().toMutableList()
@@ -820,7 +827,44 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         return changed()
     }
 
-    internal fun fold(name: String) = name.trim().lowercase()
+    internal fun fold(name: String) = ArtKey.fold(name)
+
+    fun source(v: Int) = synchronized(lock) { source = v }
+
+    fun rescan(next: Library?) = synchronized(lock) {
+        val old = lib
+        if (next != null) {
+            next.rev = old.rev
+            next.snapRev = old.snapRev
+            next.favorites += old.favorites.filter { it in next.byId }
+            lib = next
+            queue = next.tracks.map { it.id }.toMutableList()
+            slot = 0
+            queueRev++
+        }
+        lib.rev++
+        lib.snapRev++
+        if (v19) prune()
+    }
+
+    private fun prune() {
+        val keep = lib.rows(Enums.View.artists, "").orEmpty().mapTo(HashSet()) { fold(it.name ?: "") }
+        val joined = lib.tracks.filter { it.artists.size > 1 && it.albumArtist.isBlank() }.mapTo(HashSet()) { fold(it.artist) }
+        val gone = images.entries.filter { (k, v) -> v.name.isNotBlank() && k !in keep && (v.origins == LIBRARY || (v.origins == 0 && k in joined)) }
+        for ((k, v) in gone) {
+            images.remove(k)
+            opts.imgDir?.let { dir -> if (images.values.none { it.crc == v.crc }) File(dir, "%08x.jpg".format(v.crc)).delete() }
+            opts.log("pruned name=${v.name}")
+        }
+    }
+
+    private fun originBit(b: Node, tag: Int): Int = when (b.int(tag)) {
+        null -> 0
+        Enums.ImgOrigin.phone -> PHONE
+        else -> LIBRARY
+    }
+
+    private fun origins(bits: Int) = listOfNotNull(Enums.ImgOrigin.library.takeIf { bits and LIBRARY != 0 }, Enums.ImgOrigin.phone.takeIf { bits and PHONE != 0 })
 
     private fun crc(b: ByteArray, n: Int = b.size) = CRC32().apply { update(b, 0, n) }.value
 
@@ -843,6 +887,11 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         push?.let { if (!pushDropped) abort(out, it, Enums.AbortCode.superseded) }
         val key = fold(name)
         val meta = Meta(b.bool(Tags.ImgBegin.wrongArtist), b.str(Tags.ImgBegin.source), b.str(Tags.ImgBegin.credit))
+        val bit = if (v19) originBit(b, Tags.ImgBegin.origin) else 0
+        val origin = b.int(Tags.ImgBegin.origin)
+        begins += name to origin
+        opts.log("begin name=$name origin=${origin?.let { Enums.ImgOrigin.names[it] } ?: ""}")
+        images[key]?.let { it.origins = it.origins or bit }
         images[key]?.let { if (it.crc == sum && it.bytes.size.toLong() == total) {
             if (it.meta != meta) {
                 it.meta = meta
@@ -853,6 +902,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         } }
         val kept = partials[key]?.takeIf { it.name == name && it.total == total && it.crc == sum && it.w == w && it.h == h }
         val p = kept ?: Partial(name, total, sum, w, h).also { partials[key] = it }
+        p.origins = p.origins or bit
         val whole = p.data.size() / chunk * chunk
         if (whole != p.data.size()) {
             val bytes = p.data.toByteArray().copyOf(whole)
@@ -903,7 +953,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             return Answer.Fail(Err.badValue, "not baseline or wrong size")
         }
         partials.remove(key)
-        images[key] = Stored(p.name, pushMbid, p.crc, bytes, ++storeClock, pushMeta)
+        images[key] = Stored(p.name, pushMbid, p.crc, bytes, ++storeClock, pushMeta, (images[key]?.origins ?: 0) or p.origins)
         evict(key)
         opts.imgDir?.let { dir ->
             val f = File(dir.apply { mkdirs() }, "%08x.jpg".format(p.crc))
@@ -926,7 +976,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     }
 
     private fun imgList(b: Node): Answer {
-        val all = images.values.map { ImgEntry(it.name, it.mbid) }
+        val all = images.values.map { ImgEntry(it.name, it.mbid, if (v19) origins(it.origins) else emptyList()) }
         val offset = n(b.long(Tags.ImgList.offset), 0).coerceAtMost(all.size)
         val count = n(b.long(Tags.ImgList.count), 100)
         val size = if (v11) bytes() else null
@@ -945,6 +995,15 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         }
         opts.imgDir?.let { dir -> if (images.values.none { it.crc == old.crc }) File(dir, "%08x.jpg".format(old.crc)).delete() }
         opts.log("deleted name=$name")
+        return Answer.Ok()
+    }
+
+    private fun imgTag(b: Node): Answer {
+        val name = b.str(Tags.ImgTag.name)?.takeIf { it.isNotEmpty() }
+        if (name == null || b.int(Tags.ImgTag.origin) == null) return Answer.Fail(Err.badValue, "bad value")
+        val s = images[fold(name)] ?: return Answer.Fail(Err.notFound, "not found").also { opts.log("tag absent name=$name") }
+        s.origins = s.origins or originBit(b, Tags.ImgTag.origin)
+        opts.log("tag name=$name origin=${Enums.ImgOrigin.names[b.int(Tags.ImgTag.origin)]}")
         return Answer.Ok()
     }
 

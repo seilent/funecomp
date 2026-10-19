@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 8
+const minor 9
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -56,6 +56,7 @@ feature eqPresets 9
 feature artBlock 10
 feature lyricsGet 11
 feature artPick 12
+feature imgOrigin 13
 enum SOURCE 0 local
 enum SOURCE 1 phone
 enum OUTPUT 0 wired
@@ -133,6 +134,8 @@ enum BLOCK_CMD 0 blockImage
 enum BLOCK_CMD 1 wrongArtist
 enum LYRICS_KIND 0 synced
 enum LYRICS_KIND 1 plain
+enum IMG_ORIGIN 0 library
+enum IMG_ORIGIN 1 phone
 msg HELLO 0x01 app req
 tag HELLO 1 magic u32 one
 tag HELLO 2 major u16 one
@@ -326,6 +329,7 @@ tag IMG_BEGIN 7 h u16 one
 tag IMG_BEGIN 8 wrongArtist bool one
 tag IMG_BEGIN 9 source str one
 tag IMG_BEGIN 10 credit str one
+tag IMG_BEGIN 11 origin IMG_ORIGIN one
 tag IMG_BEGIN.reply 1 offset u32 one
 tag IMG_BEGIN.reply 2 crc u32 one
 msg IMG_DATA 0x32 app push
@@ -375,6 +379,9 @@ msg ART_PICK 0x3a dev req
 tag ART_PICK 1 name str one
 tag ART_PICK 2 mbid str one
 tag ART_PICK.reply 1 shown bool one
+msg IMG_TAG 0x3b app req
+tag IMG_TAG 1 name str one
+tag IMG_TAG 2 origin IMG_ORIGIN one
 tag error 1 code u8 one
 tag error 2 text str one
 tag error 3 refused str list
@@ -413,5 +420,6 @@ tag LibRow 4 key str one
 tag LibRow 5 mbid str one
 tag ImgEntry 1 name str one
 tag ImgEntry 2 mbid str one
+tag ImgEntry 3 origin IMG_ORIGIN list
 tag LyrLine 1 ms u32 one
 tag LyrLine 2 text str one
