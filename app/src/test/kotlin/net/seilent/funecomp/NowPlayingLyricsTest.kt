@@ -1,5 +1,6 @@
 package net.seilent.funecomp
 
+import android.os.SystemClock
 import android.view.View
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
@@ -11,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -29,6 +31,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.ui.ExpOut6
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Control
@@ -47,6 +51,8 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowSystemClock
+import java.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -214,22 +220,142 @@ class NowPlayingLyricsTest {
         assertEquals(Page.Queue, shell.nav.top)
     }
 
-    private fun at(ms: Long) {
+    private var anchor = 0L to 0L
+
+    private fun playAt(ms: Long, playing: Boolean = true) {
         val s = c.device.playback.state
-        c.device = c.device.withState(s.copy(positionMs = ms), 0)
+        val now = SystemClock.elapsedRealtime()
+        c.device = c.device.copy(rttMs = null).withState(s.copy(positionMs = ms, playing = playing, sentMs = null, sampleMs = null), now)
+        if (playing) anchor = now to ms
+    }
+
+    private fun advance(ms: Long) {
+        var left = ms
+        while (left > 0) {
+            val step = minOf(16L, left)
+            val target = SystemClock.elapsedRealtime() + step
+            rule.mainClock.advanceTimeBy(step)
+            val now = SystemClock.elapsedRealtime()
+            if (now < target) ShadowSystemClock.advanceBy(Duration.ofMillis(target - now))
+            left -= step
+        }
+    }
+
+    private fun sinceStamp(stamp: Long) = SystemClock.elapsedRealtime() - anchor.first + anchor.second - stamp
+
+    private fun top(text: String) = rule.onNodeWithText(text).fetchSemanticsNode().positionInRoot.y
+
+    private val slideMs = Tok.motion_lyricSlide
+
+    private fun rise(): Float = (top("line 9") - top("line 3")) / (6 * Tok.npNextPitch) * Tok.npLyricPitch
+
+    private fun between(at: String, got: Float, end: Float, rise: Float, e: Long) {
+        val lo = end + rise * (1f - ExpOut6.transform(((e + 16) / slideMs).coerceIn(0f, 1f))) - 1.5f
+        val hi = end + rise * (1f - ExpOut6.transform(((e - 16) / slideMs).coerceIn(0f, 1f))) + 1.5f
+        assertTrue("$at: $got not in $lo..$hi at $e ms", got in lo..hi)
+    }
+
+    private fun intoLine1() {
+        start()
+        enterBy("np.art")
+        playAt(19_000)
+        advance(100)
+        rule.onNodeWithTag("np.lyric.current.1").assertTextEquals("line 1")
+    }
+
+    private fun midAndEnd(at: String, stamp: Long) {
+        val e = sinceStamp(stamp)
+        val mid = top("line 2")
+        advance(400)
+        val end = top("line 2")
+        between(at, mid, end, rise(), e)
+        assertTrue("$at: $mid moves to $end", mid > end + 1f)
     }
 
     @Test
-    fun aNewCopyInsideTheLineDipStartsFresh() {
-        start()
-        at(105_000)
-        enterBy("np.art")
-        rule.onNodeWithText("line 10").assertIsDisplayed()
-        at(5_000)
-        lyrics = LyricsFetch.Show.Lines(c.device.playback.state.track!!, LyricsFetch.Copy(1, Enums.LyricsKind.synced, synced.take(3)))
-        settle(50)
-        settle(1000)
-        rule.onNodeWithText("line 0").assertIsDisplayed()
+    fun aLineReachedByTheEstimateSlidesOnTheCurve() {
+        intoLine1()
+        advance(1075)
+        midAndEnd("line 2 near d / 2", 20_000)
+    }
+
+    @Test
+    fun aChangeCaughtLateRunsTheRestOfTheSlide() {
+        intoLine1()
+        playAt(20_100)
+        advance(75)
+        midAndEnd("line 2 caught 100 ms late", 20_000)
+    }
+
+    @Test
+    fun aPausedStatePastTheNextStampSnaps() {
+        intoLine1()
+        playAt(20_500, playing = false)
+        advance(32)
+        val snapped = top("line 2")
+        advance(400)
+        assertEquals(top("line 2"), snapped, 0.5f)
+    }
+
+    @Test
+    fun aSeekTwoLinesOnOrBackShowsBAtOnce() {
+        intoLine1()
+        playAt(39_000)
+        advance(32)
+        val on = top("line 3")
+        advance(400)
+        assertEquals(top("line 3"), on, 0.5f)
+        playAt(9_000)
+        advance(32)
+        val back = top("line 0")
+        advance(400)
+        assertEquals(top("line 0"), back, 0.5f)
+    }
+
+    @Test
+    fun aPauseMidSlideFinishesIt() {
+        intoLine1()
+        advance(950)
+        playAt(sinceStamp(0), playing = false)
+        advance(125)
+        midAndEnd("paused line 2", 20_000)
+    }
+
+    @Test
+    fun aNewCopyMidSlideStartsFresh() {
+        intoLine1()
+        advance(1000)
+        val two = (0 until 12).map { LyrLine(it * 10_000L, "two $it") }
+        lyrics = LyricsFetch.Show.Lines(c.device.playback.state.track!!, LyricsFetch.Copy(1, Enums.LyricsKind.synced, two))
+        advance(32)
+        val fresh = top("two 2")
+        advance(400)
+        assertEquals(top("two 2"), fresh, 0.5f)
+    }
+
+    @Test
+    fun aTrackChangeDoesNotSlide() {
+        intoLine1()
+        val next = c.device.playback.state.track!! + 1
+        lyrics = LyricsFetch.Show.Lines(next, LyricsFetch.Copy(1, Enums.LyricsKind.synced, synced))
+        c.device = c.device.withState(c.device.playback.state.copy(track = next, positionMs = 20_000), SystemClock.elapsedRealtime())
+        advance(32)
+        val fresh = top("line 2")
+        advance(400)
+        assertEquals(top("line 2"), fresh, 0.5f)
+    }
+
+    @Test
+    fun leavingTheModeMidSlideLeavesNoFrameLoop() {
+        intoLine1()
+        advance(950)
+        rule.onNodeWithTag("np.lyrics").performClick()
+        advance(1000)
+        assertFalse(exists("np.lyrics"))
+        assertFalse(exists("np.lyric.line.2"))
+        rule.mainClock.autoAdvance = true
+        rule.waitForIdle()
+        assertTrue(exists("np.title"))
     }
 
     @Test

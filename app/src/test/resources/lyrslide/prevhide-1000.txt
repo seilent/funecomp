@@ -1,0 +1,109 @@
+source funeos 486c89750b3238f761d7d53791341e6ed86e839c board v1 standard screen lyslide:12000:prevhide:1000 patch lyrgold.patch
+gold meta cp 2044723 np 1179648 top 5636096 bottom 16777216 u 65536 cur 65536 next 39322 low 26214
+gold line 0 0 1 1 Light on the water
+gold line 1 2000 1 2 Every road leads back home
+gold line 2 4000 1 2 Under a paper moon
+gold line 3 6000 4 8 We kept on running through the rain until the city lights went out and the morning came slow over the quiet field where nothing was left
+gold line 4 9000 1 1 Lights out
+gold line 5 10000 1 2 Across the quiet field
+gold slide 2 3 d 350
+gold t 0 p 0
+gold row 1 86 104 5636096 1179648 0 26214 0
+gold row 2 104 167 6815744 4089446 65536 0 1
+gold row 3 167 239 10905190 4718592 39322 0 1
+gold t 3277 p 17028
+gold row 1 86 95 5023088 1179648 0 19402 0
+gold row 2 95 146 6202736 3333402 31480 0 1
+gold row 3 146 240 9536138 6148943 18888 0 1
+gold t 6554 p 29643
+gold row 1 86 88 4568948 1179648 0 14356 0
+gold row 2 88 131 5748596 2773296 6250 0 1
+gold row 3 131 241 8521892 7208603 3750 0 1
+gold t 7537 p 32746
+gold row 1 86 87 4457240 1179648 0 13115 0
+gold row 2 87 127 5636888 2635523 44 0 1
+gold row 3 127 241 8272411 7469255 26 0 1
+gold t 13107 p 45910
+gold row 1 86 86 3983336 1179648 0 7850 0
+gold row 2 86 111 5162984 2051042 0 0 1
+gold row 3 111 241 7214026 8575031 0 26284 1
+gold t 32768 p 62428
+gold row 1 86 86 3388688 1179648 0 1243 0
+gold row 2 86 90 4568336 1317643 0 0 1
+gold row 3 90 242 5885979 9962543 0 59320 1
+gold t 65536 p 65536
+gold row 1 86 86 3276800 1179648 0 0 0
+gold row 2 86 86 4456448 1179648 0 0 1
+gold row 3 86 242 5636096 10223615 0 65536 1
+gold meta cp 2044723 np 1179648 top 5636096 bottom 16777216 u 65536 cur 65536 next 39322 low 26214
+gold line 0 0 1 1 Light on the water
+gold line 1 2000 1 2 Every road leads back home
+gold line 2 4000 1 2 Under a paper moon
+gold line 3 6000 4 8 We kept on running through the rain until the city lights went out and the morning came slow over the quiet field where nothing was left
+gold line 4 9000 1 1 Lights out
+gold line 5 10000 1 2 Across the quiet field
+gold slide 3 4 d 350
+gold t 0 p 0
+gold row 3 86 242 5636096 10223615 65536 0 1
+gold row 4 242 242 15859711 1179648 0 0 1
+gold row 5 260 260 17039359 1179648 0 0 0
+gold t 3277 p 17028
+gold row 3 86 221 5636096 8793263 31480 0 1
+gold row 4 221 233 14429359 1404417 0 0 1
+gold row 5 242 242 15833776 1179648 0 10216 0
+gold t 6554 p 29643
+gold row 3 86 205 5636096 7733603 6250 0 1
+gold row 4 205 227 13369699 1570935 0 0 1
+gold row 5 228 228 14940634 1179648 0 17785 0
+gold t 7537 p 32746
+gold row 3 86 201 5636096 7472951 44 0 1
+gold row 4 201 225 13109047 1611895 0 0 1
+gold row 5 225 225 14720942 1179648 0 19647 0
+gold t 13107 p 45910
+gold row 3 86 184 5636096 6367175 0 10513 1
+gold row 4 184 211 12003271 1785659 0 26284 1
+gold row 5 211 218 13788931 1179648 0 27546 0
+gold t 32768 p 62428
+gold row 3 86 162 5636096 4979663 0 23727 1
+gold row 4 162 193 10615759 2003697 0 59320 1
+gold row 5 193 209 12619457 1179648 0 37457 0
+gold t 65536 p 65536
+gold row 3 86 158 5636096 4718592 0 26214 1
+gold row 4 158 190 10354688 2044723 0 65536 1
+gold row 5 190 208 12399411 1179648 0 39322 0
+gold meta cp 2044723 np 1179648 top 5636096 bottom 16777216 u 65536 cur 65536 next 39322 low 26214
+gold line 0 0 1 1 Light on the water
+gold line 1 2000 1 2 Every road leads back home
+gold line 2 4000 1 2 Under a paper moon
+gold line 3 6000 4 8 We kept on running through the rain until the city lights went out and the morning came slow over the quiet field where nothing was left
+gold line 4 9000 1 1 Lights out
+gold line 5 10000 1 2 Across the quiet field
+gold slide 4 5 d 350
+gold t 0 p 0
+gold row 3 86 158 5636096 4718592 0 26214 0
+gold row 4 158 190 10354688 2044723 65536 0 1
+gold row 5 190 208 12399411 1179648 39322 0 1
+gold t 3277 p 17028
+gold row 3 86 140 4410080 4718592 0 19402 0
+gold row 4 140 168 9128672 1819953 31480 0 1
+gold row 5 168 197 10948625 1935691 18888 0 1
+gold t 6554 p 29643
+gold row 3 86 126 3501800 4718592 0 14356 0
+gold row 4 126 151 8220392 1653435 6250 0 1
+gold row 5 151 189 9873827 2495797 3750 0 1
+gold t 7537 p 32746
+gold row 3 86 123 3278384 4718592 0 13115 0
+gold row 4 123 147 7996976 1612475 44 0 1
+gold row 5 147 187 9609451 2633570 26 0 1
+gold t 13107 p 45910
+gold row 3 86 108 2330576 4718592 0 7850 0
+gold row 4 108 130 7049168 1438711 0 10513 1
+gold row 5 130 179 8487879 3218051 0 26284 1
+gold t 32768 p 62428
+gold row 3 86 90 1141280 4718592 0 1243 0
+gold row 4 90 109 5859872 1220673 0 23727 1
+gold row 5 109 169 7080545 3951450 0 59320 1
+gold t 65536 p 65536
+gold row 3 86 86 917504 4718592 0 0 0
+gold row 4 86 104 5636096 1179648 0 26214 1
+gold row 5 104 167 6815744 4089446 0 65536 1

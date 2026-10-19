@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -28,7 +29,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
+import kotlin.math.ceil
 import kotlin.math.roundToInt
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.ArtCache
@@ -407,20 +410,47 @@ private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: St
             }
         }
     }
-    val index = lines?.let { LyricsFetch.index(it, device.positionMs(at)) } ?: -1
+    val index = lines?.let { LyricsFetch.index(it, device.positionMs(maxOf(at, device.playback.receivedAt))) } ?: -1
     Box(surface.press({ onTap() }, onLong).testTag("np.lyrics")) {
         if (copy == null && lyrics != LyricsFetch.Show.None) return@Box
         key(s.track, copy) {
-            val dip = rememberDip(index.toString())
-            val shownIndex = dip.shown.toInt()
-            val rows = LyricRows.synced(lines?.map { it.text }, shownIndex, s.title ?: "", next, { t, big -> wrap(t, if (big) 0 else 1) }, room, Tok.npLyricPitch, Tok.npNextPitch)
-            Box(Modifier.fillMaxSize().dip(dip)) {
-                rows.forEachIndexed { n, r ->
-                    val current = r.kind == LyricRows.Kind.CURRENT
-                    val role = if (current) Roles.npTitle else Roles.npNext
-                    val pitch = if (current) Tok.npLyricPitch else Tok.npNextPitch
-                    val alpha = if (r.kind == LyricRows.Kind.PREVIOUS) Tok.alpha_low else role.alpha
-                    RoleText(r.text, role, Modifier.atBaseline(0f, ui.px(r.slot + (pitch + Tok.capHeight * role.size) / 2), w).testTag("np.lyric.${r.kind.name.lowercase()}.$n"), alpha = alpha)
+            var shown by remember { mutableIntStateOf(index) }
+            var slide by remember { mutableStateOf<LyricSlide.Slide?>(null) }
+            var frame by remember { mutableLongStateOf(0L) }
+            LaunchedEffect(index) {
+                withFrameMillis { ms ->
+                    slide = lines?.let { LyricSlide.start(shown, index, it.map { l -> l.ms ?: 0 }, device.positionMs(SystemClock.elapsedRealtime()), ms) }
+                    frame = ms
+                    shown = index
+                }
+                val run = slide ?: return@LaunchedEffect
+                while (!LyricSlide.done(run, frame)) withFrameMillis { frame = it }
+                slide = null
+            }
+            val texts = lines?.map { it.text }
+            val title = s.title ?: ""
+            val wrapRow = { t: String, big: Boolean -> wrap(t, if (big) 0 else 1) }
+            fun blocks(i: Int) = LyricRows.blocks(texts, i, title, next, wrapRow, room, Tok.npLyricPitch, Tok.npNextPitch)
+            val edge = { v: Float -> ceil(ui.px(v)) }
+            val run = slide
+            val draws = if (run == null || texts == null) {
+                LyricRows.column(null, blocks(shown), 1f, edge)
+            } else {
+                val (a, b) = LyricRows.pair(blocks(run.from), blocks(shown), { wrapRow(texts[it], false).size }, Tok.npNextPitch)
+                LyricRows.column(a, b, LyricSlide.p(run, frame), edge)
+            }
+            var n = 0
+            for (d in draws) {
+                Box(Modifier.offset { IntOffset(0, d.y0.roundToInt()) }.size(w.dp(), (d.y1 - d.y0).dp()).clipToBounds().testTag("np.lyric.line.${d.line}")) {
+                    for ((k, alpha) in d.forms) {
+                        val role = if (k.big) Roles.npTitle else Roles.npNext
+                        val kind = LyricRows.kind(k, shown).name.lowercase()
+                        LyricRows.lines(k, texts, title, next, wrapRow).forEachIndexed { i, t ->
+                            val baseline = ui.px(d.top + i * k.pitch + (k.pitch + Tok.capHeight * role.size) / 2) - d.y0
+                            if (alpha > 0f) RoleText(t, role, Modifier.atBaseline(0f, baseline, w).testTag("np.lyric.$kind.$n"), alpha = alpha)
+                            n++
+                        }
+                    }
                 }
             }
         }

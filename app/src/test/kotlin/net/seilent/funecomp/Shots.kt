@@ -16,7 +16,11 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.click
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -53,6 +57,7 @@ import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.FirmwareView
 import net.seilent.funecomp.ui.LinkView
+import net.seilent.funecomp.ui.LyricSlide
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
@@ -62,6 +67,7 @@ import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.TextEntry
 import net.seilent.funecomp.ui.browseCols
 import net.seilent.funecomp.ui.flatBand
+import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -70,6 +76,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import kotlin.math.exp
+import kotlin.math.ln
+import kotlin.math.roundToLong
 
 class Size(val name: String, val w: Int, val h: Int, val bars: WindowInsets = if (w > h) FLIP_LAND else FLIP_PORT)
 
@@ -250,6 +259,41 @@ private val PLAIN_TEXT = (SUNG.take(4) + "" + "[Chorus]" + SUNG.drop(5).take(4) 
 private val LONG_LINE = SUNG.take(7) + listOf("la ".repeat(1366).take(Proto.lyrLineMax)) + SUNG.drop(8)
 
 private val LONG_CURRENT = SUNG.take(7) + listOf("Morning comes slow over the river and the bridge we crossed when the city was loud and we were young and every road led back home to you") + SUNG.drop(8)
+
+private class Strip(val name: String, val lines: List<LyrLine>, val from: Long, val to: Long)
+
+private fun lyr(vararg v: Pair<Long, String>) = v.map { LyrLine(it.first, it.second) }
+
+private const val FOUR = "We kept on running through the rain until the city lights went out"
+
+private const val FIVE = "$FOUR and the morning came slow over the quiet field where nothing was left"
+
+private fun short(gap: Long) = lyr(
+    0L to "Light on the water", 2000L to "Every road leads back home", 4000L to "Lights out", 6000L to "Say my name again",
+    6000L + gap to "Under a paper moon", 7000L + gap to "Across the quiet field", 8000L + gap to "Nothing left to lose",
+)
+
+private val RAINY = lyr(
+    25080L to "雨音が窓をたたいてるなぁ", 27660L to "夜の街角で待っちゃうなぁ", 29290L to "空色に溶けちゃってるみたいな", 31860L to "きょうはまだ駅前にいるのかな",
+    36070L to "夕焼けが赤すぎて眩しいわ", 40540L to "延々と見たエミュレーション", 44090L to "カレーパン買いにいかないかね",
+)
+
+private val STRIPS = listOf(1000L, 350L, 200L, 120L, 80L).map { Strip("short-$it", short(it), 4000, 6000) } + listOf(
+    Strip("long4-1000", lyr(0L to "Light on the water", 2000L to "Every road leads back home", 4000L to "Under a paper moon", 6000L to FOUR, 9000L to "Lights out", 10000L to "Across the quiet field"), 4000, 6000),
+    Strip("fromlong-1000", lyr(0L to "Light on the water", 2000L to "Every road leads back home", 4000L to FOUR, 6000L to "Under a paper moon", 9000L to "Lights out", 10000L to "Across the quiet field"), 4000, 6000),
+    Strip("first-1000", lyr(6000L to "Light on the water", 8000L to "Every road leads back home", 10000L to "Hold on until the morning", 12000L to "Under a paper moon"), 5000, 6000),
+    Strip("cjk-1000", lyr(0L to "夜明けの空", 2000L to "君の声が聞こえる", 4000L to "紙の月の下で", 6000L to "遠くの街の灯りが消えるまで、僕らは雨の中を走り続けた", 9000L to "もう一度名前を呼んで", 12000L to "静かな野原"), 4000, 6000),
+    Strip("empty-1000", lyr(0L to "Light on the water", 2000L to "Every road leads back home", 4000L to "Under a paper moon", 6000L to "", 8000L to "Say my name again", 10000L to "Across the quiet field"), 4000, 6000),
+    Strip("prevhide-1000", lyr(0L to "Light on the water", 2000L to "Every road leads back home", 4000L to "Under a paper moon", 6000L to FIVE, 9000L to "Lights out", 10000L to "Across the quiet field"), 4000, 6000),
+    Strip("last-1000", lyr(0L to "Light on the water", 2000L to "Every road leads back home", 4000L to "Under a paper moon", 6000L to "Nothing left to lose"), 4000, 6000),
+    Strip("cue-1000", lyr(0L to "Every road leads back home", 500L to "Hold on until the morning", 1000L to "Under a paper moon", 1500L to "We were young and the night was ours"), 100, 500),
+    Strip("updown-a", RAINY, 27660, 29290),
+    Strip("updown-b", RAINY, 29290, 31860),
+    Strip("updown-c", lyr(6000L to "Light on the water", 8000L to "Every road leads back home tonight", 10000L to "Hold on until the morning", 12000L to "Under a paper moon", 14000L to "Across the quiet field", 16000L to "Nothing left to lose"), 6000, 8000),
+    Strip("snap-seek2", short(1000), 4000, 7000),
+    Strip("snap-back", short(1000), 6000, 4000),
+    Strip("snap-late300", short(1000), 4000, 6300),
+)
 
 private fun Shots.lyricsMode() {
     rule.onNodeWithTag("np.art").performClick()
@@ -766,5 +810,44 @@ class Shots {
                 if (shot.held) rule.onNodeWithTag("frame").performTouchInput { cancel() }
             }
         }
+        if (only.isEmpty()) return
+        for (size in SIZES) {
+            for (strip in STRIPS) {
+                val name = "lyrslide-${strip.name}-${size.name}"
+                if (only.split(',').none { name.contains(it) }) continue
+                val c = SimControl("ap80")
+                lyricsOn()(c)
+                pause(c, strip.from)
+                control = c
+                shell = Shell(Nav(NP))
+                frame = Shot(name, pages = NP, artEntry = HELD, lyrics = shown(strip.lines)) to size
+                settle(1000)
+                lyricsMode()
+                settle(1000)
+                val stamps = strip.lines.map { it.ms ?: 0 }
+                val d = LyricSlide.start(LyricsFetch.index(strip.lines, strip.from), LyricsFetch.index(strip.lines, strip.to), stamps, strip.to, 0)?.d
+                val es = ((0L..(d ?: Tok.motion_scroll.toLong()) + 25) step 25).toList() + listOfNotNull(d?.let { (it * HALF_T).roundToLong() })
+                val shot = { at: Long -> rule.onNodeWithTag("frame").captureRoboImage(File(dir, "$name/e%03d.png".format(at)).path) }
+                val before = column()
+                pause(c, strip.to)
+                rule.mainClock.advanceTimeByFrame()
+                rule.mainClock.advanceTimeByFrame()
+                assertEquals(name, d != null, column() == before)
+                val start = rule.mainClock.currentTime
+                for (at in es.sorted().distinct()) {
+                    rule.mainClock.advanceTimeBy(start + at - rule.mainClock.currentTime, ignoreFrameDuration = true)
+                    shot(at)
+                }
+            }
+        }
     }
+}
+
+private fun Shots.column() = rule.onAllNodes(hasAnyAncestor(hasTestTag("np.lyrics")) and hasText("", substring = true)).fetchSemanticsNodes().map { it.config.getOrNull(SemanticsProperties.Text).toString() to it.positionInRoot.y }
+
+private val HALF_T = 1f - ln(1f + (exp(6f) - 1f) / 2f) / 6f
+
+private fun pause(c: SimControl, ms: Long) {
+    val p = c.device.playback
+    c.device = c.device.copy(playback = p.copy(state = p.state.copy(playing = false, positionMs = ms)))
 }

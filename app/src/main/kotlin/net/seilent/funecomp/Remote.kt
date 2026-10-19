@@ -942,7 +942,7 @@ object Remote : Control {
             Scrobbles.state(s, System.currentTimeMillis())
             Firmwares.state()
             onState?.invoke()
-            Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB}")
+            Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB} pos=${s.positionMs} sent=${s.sentMs} sample=${s.sampleMs} rtt=${device.rttMs} at=$now")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
             val key = listOf(s.artists, s.output, s.queueRev, s.slot)
             if (key != artKey) {
@@ -953,7 +953,9 @@ object Remote : Control {
         }
 
         override fun onRtt(ms: Long) {
-            if (live) update { it.withRtt(ms) }
+            if (!live) return
+            update { it.withRtt(ms) }
+            Log.d(TAG, "rtt ms=$ms used=${device.rttMs} at=${SystemClock.elapsedRealtime()}")
         }
 
         override fun onRequest(type: Int, body: Node, responder: Responder): Boolean {
