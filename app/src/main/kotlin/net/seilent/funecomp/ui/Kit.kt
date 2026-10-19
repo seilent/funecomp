@@ -24,7 +24,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -38,7 +37,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.composed
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -64,7 +62,6 @@ private const val ROW_PRIMARY = "primary"
 private const val ROW_SECONDARY = "secondary"
 private const val ROW_NUMBER = "number"
 private const val ROW_TRAILING = "trailing"
-private const val ROW_DOT = "dot"
 private const val NS_PER_S = 1_000_000_000L
 
 @Composable
@@ -276,7 +273,6 @@ fun ListRow(
     countLine: Boolean = false,
     ring: Boolean = false,
     playing: Boolean = false,
-    playingDot: Boolean = false,
     focused: Boolean = false,
     width: Float? = null,
     onTap: () -> Unit = {},
@@ -298,11 +294,10 @@ fun ListRow(
         if (ring) Ring(Tok.rowRing, GlyphName.PLAY, focused, Modifier.at(ui.px(Tok.hubEdge), rowH / 2, ay = 0.5f))
         Layout(
             content = {
-                RoleText(primary, primaryRole, Modifier.layoutId(ROW_PRIMARY), color = c)
+                RoleText(primary, primaryRole, Modifier.layoutId(ROW_PRIMARY).testTag(ROW_PRIMARY), color = c)
                 if (secondary.isNotEmpty()) RoleText(secondary, secondaryRole, Modifier.layoutId(ROW_SECONDARY))
                 if (number.isNotEmpty()) RoleText(number, Roles.listCount, Modifier.layoutId(ROW_NUMBER))
                 if (trailing.isNotEmpty()) RoleText(trailing, Roles.listCount, Modifier.layoutId(ROW_TRAILING))
-                if (playingDot) Box(Modifier.layoutId(ROW_DOT).clip(CircleShape).background(Accent))
             },
             modifier = Modifier.fillMaxSize(),
         ) { m, cons ->
@@ -313,8 +308,6 @@ fun ListRow(
             val p = part(ROW_PRIMARY)!!.measure(Constraints(maxWidth = primaryW.roundToInt().coerceAtLeast(0)))
             val s = part(ROW_SECONDARY)?.measure(Constraints(maxWidth = (rowW - ui.px(Tok.hubEdge) - textX).roundToInt().coerceAtLeast(0)))
             val n = part(ROW_NUMBER)?.measure(Constraints())
-            val dotSide = ui.px(Tok.playingDot).roundToInt()
-            val dot = part(ROW_DOT)?.measure(Constraints.fixed(dotSide, dotSide))
             layout(cons.maxWidth, cons.maxHeight) {
                 val py = if (s != null) ui.px(Tok.rowTextInset).roundToInt() else ((rowH - p.height) / 2).roundToInt()
                 val baseline = py + p[FirstBaseline]
@@ -322,7 +315,6 @@ fun ListRow(
                 s?.place(textX.roundToInt(), (rowH - ui.px(Tok.rowTextInset) - s.height).roundToInt())
                 n?.place(ui.px(Tok.hubEdge).roundToInt(), baseline - n[FirstBaseline])
                 trailingP?.place(trailingX.roundToInt(), baseline - trailingP[FirstBaseline])
-                dot?.place(ui.px(Tok.hubEdge - Tok.playingDotOffset).roundToInt(), baseline - dotSide)
             }
         }
     }

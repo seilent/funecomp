@@ -32,6 +32,8 @@ abstract class GenTask : DefaultTask() {
         try {
             File(o, "Proto.kt").writeText(Gen.protoKt(dir))
             File(o, "Tok.kt").writeText(Gen.tokKt(dir))
+            File(o, "TokBoard.kt").writeText(Gen.tokBoardKt(dir))
+            logger.lifecycle("gen: board tokens ${Gen.boardTokens(dir).joinToString(" ")}")
         } catch (e: GenException) {
             throw GradleException(e.message ?: "gen failed")
         }
@@ -56,7 +58,7 @@ abstract class CheckGenTask : DefaultTask() {
         val dir = spec.get().asFile
         val have = committed.get().asFile
         val want = try {
-            mapOf("Proto.kt" to Gen.protoKt(dir), "Tok.kt" to Gen.tokKt(dir))
+            mapOf("Proto.kt" to Gen.protoKt(dir), "Tok.kt" to Gen.tokKt(dir), "TokBoard.kt" to Gen.tokBoardKt(dir))
         } catch (e: GenException) {
             throw GradleException(e.message ?: "gen failed")
         }

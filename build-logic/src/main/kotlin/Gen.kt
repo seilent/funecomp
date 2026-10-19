@@ -5,7 +5,6 @@ class GenException(message: String) : Exception(message)
 
 object Gen {
     val pinned = listOf("proto.txt", "vectors.txt", "tokens.txt", "tokens-v1.txt")
-    private val boardTokens = setOf("u", "minTextPx", "settings.filterCount")
     private val keywords = setOf(
         "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface", "is",
         "null", "object", "package", "return", "super", "this", "throw", "true", "try", "typealias", "typeof",
@@ -201,37 +200,74 @@ object Gen {
         return o.toString()
     }
 
-    fun tokKt(dir: File): String {
+    private class Tokens(val main: List<List<String>>, val v1: List<List<String>>, val board: Set<String>)
+
+    private val number = Regex("^-?[0-9]+(\\.[0-9]+)?$")
+    private val color = Regex("^#[0-9A-Fa-f]{6}$")
+
+    private class Lit(val type: String, val text: String)
+
+    private fun lit(v: String) = when {
+        number.matches(v) -> Lit("Float", "${v}f")
+        color.matches(v) -> Lit("Long", "0xFF${v.substring(1).uppercase()}L")
+        else -> Lit("String", quote(v))
+    }
+
+    private fun tokens(dir: File): Tokens {
         val main = fields(File(dir, "tokens.txt"))
         val v1 = fields(File(dir, "tokens-v1.txt"))
         for ((n, p) in main + v1) if (p.size != 3) throw GenException("tokens: line $n has ${p.size} fields, needs 3")
         if (main.map { it.second[0] } != v1.map { it.second[0] })
             throw GenException("tokens: tokens.txt and tokens-v1.txt name different tokens or order them differently")
-        for (i in main.indices) {
-            val a = main[i].second
-            if (a[0] !in boardTokens && a != v1[i].second)
-                throw GenException("tokens: ${a[0]} differs between tokens.txt and tokens-v1.txt and is not a board token")
-        }
+        val board = main.indices.filter { main[it].second != v1[it].second }.map { main[it].second[0] }.toSet()
+        return Tokens(main.map { it.second }, v1.map { it.second }, board)
+    }
+
+    fun boardTokens(dir: File): Set<String> = tokens(dir).board
+
+    private fun tokId(name: String) = ident(name.replace('.', '_'))
+
+    fun tokKt(dir: File): String {
+        val t = tokens(dir)
         val o = StringBuilder()
         o.append("package $pkg\n\n")
         o.append("object Tok {\n")
-        for ((_, p) in main) {
-            if (p[0] in boardTokens) continue
-            val id = ident(p[0].replace('.', '_'))
-            val v = p[1]
-            val lit = when {
-                Regex("^-?[0-9]+(\\.[0-9]+)?$").matches(v) -> "${v}f"
-                Regex("^#[0-9A-Fa-f]{6}$").matches(v) -> "0xFF${v.substring(1).uppercase()}L"
-                else -> quote(v)
-            }
-            o.append("    const val $id = $lit\n")
+        for (p in t.main) {
+            if (p[0] in t.board) continue
+            o.append("    const val ${tokId(p[0])} = ${lit(p[1]).text}\n")
         }
         o.append("}\n\n")
         o.append("object TokUnit {\n")
-        for ((_, p) in main) {
-            if (p[0] in boardTokens) continue
-            o.append("    const val ${ident(p[0].replace('.', '_'))} = ${quote(p[2])}\n")
+        for (p in t.main) {
+            if (p[0] in t.board) continue
+            o.append("    const val ${tokId(p[0])} = ${quote(p[2])}\n")
         }
+        o.append("}\n")
+        return o.toString()
+    }
+
+    fun tokBoardKt(dir: File): String {
+        val t = tokens(dir)
+        val main = t.main.filter { it[0] in t.board }
+        val v1 = t.v1.filter { it[0] in t.board }
+        val types = main.indices.map { i -> lit(main[i][1]).type.takeIf { it == lit(v1[i][1]).type } ?: "String" }
+        fun board(rows: List<List<String>>) = rows.indices.joinToString("") { i ->
+            val v = rows[i][1]
+            "        ${tokId(rows[i][0])} = ${if (types[i] == "String") quote(v) else lit(v).text},\n"
+        }
+        val o = StringBuilder()
+        o.append("package $pkg\n\n")
+        o.append("object TokBoard {\n")
+        o.append("    class Board(\n")
+        for (i in main.indices) o.append("        val ${tokId(main[i][0])}: ${types[i]},\n")
+        o.append("    )\n\n")
+        o.append("    val ap80 = Board(\n${board(main)}    )\n\n")
+        o.append("    val v1 = Board(\n${board(v1)}    )\n\n")
+        o.append("    fun of(board: String): Board = when (board) {\n")
+        o.append("        \"ap80\" -> ap80\n")
+        o.append("        \"v1\" -> v1\n")
+        o.append("        else -> throw IllegalArgumentException(\"board \$board\")\n")
+        o.append("    }\n")
         o.append("}\n")
         return o.toString()
     }

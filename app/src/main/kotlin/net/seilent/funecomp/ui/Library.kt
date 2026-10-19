@@ -83,7 +83,7 @@ class RowSpec(
     val bold: Boolean = false,
     val countLine: Boolean = false,
     val ring: Boolean = false,
-    val dot: Boolean = false,
+    val playing: Boolean = false,
     val tap: () -> Unit,
     val long: (() -> Unit)? = null,
 )
@@ -105,7 +105,7 @@ fun Pane(ctx: Ctx, view: Int, parent: String, top: Float? = null, x: Float = 0f,
                     val s = spec(i, r, list)
                     ListRow(
                         s.primary, Modifier.testTag("row.$i"), s.secondary, s.number, "", s.bold, s.countLine, s.ring,
-                        playingDot = s.dot, focused = focus == i, width = ui.px(ui.w) - ui.px(x),
+                        playing = s.playing, focused = focus == i, width = ui.px(ui.w) - ui.px(x),
                         onTap = {
                             focus = i
                             s.tap()
@@ -165,7 +165,7 @@ private fun musicRow(ctx: Ctx, view: Int, i: Int, r: LibRow): RowSpec {
         }
         else -> {
             val play = { playAndShow(ctx, view, "", i.toLong()) }
-            RowSpec(name, number = "${i + 1}", tap = play) { songSheet(ctx, r, play) }
+            RowSpec(name, number = "${i + 1}", playing = r.first != null && r.first == ctx.device.playback.state.track, tap = play) { songSheet(ctx, r, play) }
         }
     }
 }
@@ -193,7 +193,7 @@ private fun folderRow(ctx: Ctx, folder: String, i: Int, r: LibRow, list: LibList
     }
     val song = i - list.folderCount()
     val play = { playAndShow(ctx, Enums.View.folders, folder, list.folderStart(i)) }
-    return RowSpec(name, number = "${song + 1}", tap = play) { songSheet(ctx, r, play) }
+    return RowSpec(name, number = "${song + 1}", playing = r.first != null && r.first == ctx.device.playback.state.track, tap = play) { songSheet(ctx, r, play) }
 }
 
 @Composable
@@ -273,7 +273,7 @@ fun AlbumDetail(ctx: Ctx, page: Page.Album) {
     Box(Modifier.fillMaxSize().background(Black).testTag("album")) {
         Pane(ctx, Enums.View.albumTracks, page.key, ui.albumRowsTop, ui.albumRowsX) { i, r, _ ->
             val play = { playAndShow(ctx, Enums.View.albumTracks, page.key, i.toLong()) }
-            RowSpec(r.name ?: "", number = "${i + 1}", dot = r.first != null && r.first == ctx.device.playback.state.track, tap = play) { songSheet(ctx, r, play) }
+            RowSpec(r.name ?: "", number = "${i + 1}", playing = r.first != null && r.first == ctx.device.playback.state.track, tap = play) { songSheet(ctx, r, play) }
         }
         Box(Modifier.at(0f, 0f).size(ui.px(ui.w).dp(), ui.px(ui.albumRowsTop).dp()).background(Black).press({}))
         val textX = ui.px(ui.albumTextX)

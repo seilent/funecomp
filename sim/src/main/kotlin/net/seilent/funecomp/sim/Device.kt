@@ -34,6 +34,7 @@ import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.proto.gen.TokBoard
 import net.seilent.funecomp.state.AutoEq
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
@@ -45,6 +46,7 @@ import java.util.zip.CRC32
 import javax.imageio.IIOImage
 import javax.imageio.ImageIO
 import javax.imageio.ImageWriteParam
+import kotlin.math.roundToInt
 
 interface Out {
     fun push(type: Int, payload: ByteArray)
@@ -129,6 +131,12 @@ private fun eqNameOrder(x: String, y: String): Int {
     return java.util.Arrays.compareUnsigned(a, b)
 }
 
+private fun whole(v: Float): String {
+    val n = v.roundToInt()
+    require(n.toFloat() == v) { "token $v is not a whole number" }
+    return n.toString()
+}
+
 class Device(private val opts: Options, val lib: Library, private val clock: () -> Long) {
     private val board = opts.board
     private val faults = opts.faults
@@ -138,19 +146,23 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private val pivots = rows.mapNotNull { it.pivot }.distinct()
     private var schemaRev = 1L
 
+    private val tok = TokBoard.of(board.name)
     private val prefs = linkedMapOf(
-        "output" to "auto", "volumeStep" to "5", "accentHue" to "350", "saverSeconds" to "30",
-        "screenOffSeconds" to "300", "idleShutdownMinutes" to "0", "lockKnob" to "off", "screenOffKeys" to "all",
+        "output" to "auto", "volumeStep" to whole(Tok.volume_stepDefault),
+        "accentHue" to whole(Tok.accent_hueDefault), "saverSeconds" to whole(Tok.settings_saverDefault),
+        "screenOffSeconds" to whole(Tok.settings_screenOffDefault),
+        "idleShutdownMinutes" to whole(Tok.settings_idleDefault), "lockKnob" to "off", "screenOffKeys" to "all",
         "inlineRemote" to "on", "clock" to "24h", "batteryPercent" to "off", "playThrough" to "off",
         "usbMode" to "storage", "btCodec" to "auto", "btCodecHeadphones" to "auto", "digitalFilter" to "0",
-        "balance" to "0", "maxVolume" to "100", "powerOnVolume" to "0", "replaygain" to "off",
+        "balance" to "0", "maxVolume" to whole(Tok.settings_maxVolumeDefault), "powerOnVolume" to "0", "replaygain" to "off",
         "quickplay" to "on", "resume" to "position", "autoNowPlaying" to "off", "playKey" to "nowPlaying",
-        "dre" to "off", "crossfade" to "0", "crossfeed" to "off", "artistPhoto" to "on", "saverLyrics" to "off",
-        "brightness" to if (board.name == "v1") "35" else "55",
+        "dre" to "off", "crossfade" to whole(Tok.settings_crossfadeDefault), "crossfeed" to "off", "artistPhoto" to "on",
+        "saverLyrics" to "off", "brightness" to whole(tok.settings_brightnessDefault),
     ).apply {
         if (board.name == "v1") put("size", "standard")
         keys.retainAll(rows.mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones"))
-        opts.maxPct?.let { put("maxVolume", it.coerceIn(50, 100).toString()) }
+        val steps = tok.settings_maxVolumeSteps.split(',').map { it.toInt() }
+        opts.maxPct?.let { n -> put("maxVolume", steps.minBy { kotlin.math.abs(it - n) }.toString()) }
     }
     var settingsRev = 1L
         private set

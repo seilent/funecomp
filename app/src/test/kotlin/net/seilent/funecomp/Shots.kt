@@ -298,11 +298,30 @@ val SHOTS = listOf(
         }
         rule.onNodeWithTag("row.0").performClick()
     },
+    Shot("music-songs-play", pages = HOME + Page.Music, prep = { it.queueOp(Enums.QueueCmd.playAt, slot = 13) }) {
+        rule.onNodeWithTag("pivot.songs").performClick()
+        settle(1000)
+        scrollTo("row.13")
+    },
+    Shot("music-folders-play", pages = HOME + Page.Music, prep = ::playing) {
+        for (p in listOf("albums", "songs", "playlists", "folders")) {
+            rule.onNodeWithTag("pivot.$p").performClick()
+            settle(1000)
+        }
+        rule.onNodeWithTag("row.2").performClick()
+        settle(1000)
+        rule.onNodeWithTag("row.1").performClick()
+    },
     Shot("playlists", pages = HOME + Page.Playlists, prep = ::playing),
     Shot("artist", pages = HOME + Page.Music + Page.Artist("Utada Hikaru")),
     Shot("album-noartist", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "")),
     Shot("album", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru"), prep = ::playing),
     Shot("album-art", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru"), prep = ::playing, art = true),
+    Shot("album-play-focused", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru")) {
+        rule.onNodeWithTag("row.2").performClick()
+        settle(1000)
+        it.nav.pop()
+    },
     Shot("settings-output", pages = HOME + Page.Settings),
     Shot("settings-output-v1", board = "v1", pages = HOME + Page.Settings),
     Shot("settings-crossfeed", pages = HOME + Page.Settings) { scrollTo("set.crossfeed") },

@@ -1,7 +1,7 @@
 output	output	choice	OUTPUT	auto,headphones	AUTO,HEADPHONES	-	-
 output	volumeStep	steps	VOLUME STEP	2,5,10	2%,5%,10%	-	-
-output	maxVolume	steps	MAX VOLUME	50,55,60,65,70,75,80,85,90,95,100	50,55,60,65,70,75,80,85,90,95,100	-	-
-output	powerOnVolume	steps	POWER ON VOLUME	0,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	LAST,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-
+output	maxVolume	steps	MAX VOLUME	5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-
+output	powerOnVolume	steps	POWER ON VOLUME	0,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	LAST,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-
 output	balance	range	BALANCE	-	-	-20,20,1	-
 output	digitalFilter	choice	DIGITAL FILTER	0,1,2,3	FAST,FAST PHASE,SLOW,SLOW PHASE	-	-
 output	dre	toggle	DRE	off,on	OFF,ON	-	boardOnly

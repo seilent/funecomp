@@ -64,7 +64,6 @@ import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LyricsFetch
 
-private const val BACKDROP_FADE_MS = 2000
 private const val MIC_INK_LEFT = 8f
 private const val MIC_INK_RIGHT = 24f
 private const val MIC_INK_TOP = 3f
@@ -96,7 +95,7 @@ fun Backdrop(art: BackdropArt?) {
         }
         shown = art
         fade.snapTo(0f)
-        fade.animateTo(1f, tween(BACKDROP_FADE_MS, easing = LinearEasing))
+        fade.animateTo(1f, tween(Tok.motion_backdropFade.toInt(), easing = LinearEasing))
         old = null
     }
     if (shown == null && old == null) return
@@ -414,12 +413,12 @@ private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: St
         key(s.track, copy) {
             val dip = rememberDip(index.toString())
             val shownIndex = dip.shown.toInt()
-            val rows = LyricRows.synced(lines?.map { it.text }, shownIndex, s.title ?: "", next, { t, big -> wrap(t, if (big) 0 else 1) }, room, NP_LYRIC_PITCH, Tok.npNextPitch)
+            val rows = LyricRows.synced(lines?.map { it.text }, shownIndex, s.title ?: "", next, { t, big -> wrap(t, if (big) 0 else 1) }, room, Tok.npLyricPitch, Tok.npNextPitch)
             Box(Modifier.fillMaxSize().dip(dip)) {
                 rows.forEachIndexed { n, r ->
                     val current = r.kind == LyricRows.Kind.CURRENT
                     val role = if (current) Roles.npTitle else Roles.npNext
-                    val pitch = if (current) NP_LYRIC_PITCH else Tok.npNextPitch
+                    val pitch = if (current) Tok.npLyricPitch else Tok.npNextPitch
                     val alpha = if (r.kind == LyricRows.Kind.PREVIOUS) Tok.alpha_low else role.alpha
                     RoleText(r.text, role, Modifier.atBaseline(0f, ui.px(r.slot + (pitch + Tok.capHeight * role.size) / 2), w).testTag("np.lyric.${r.kind.name.lowercase()}.$n"), alpha = alpha)
                 }
