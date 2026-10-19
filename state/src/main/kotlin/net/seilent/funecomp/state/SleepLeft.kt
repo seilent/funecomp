@@ -6,7 +6,7 @@ object SleepLeft {
     fun leftMs(p: Playback, rttMs: Long?, now: Long): Long {
         val s = p.state.sleepLeftS ?: 0
         if (s <= 0) return 0
-        return (s * 1000 - (rttMs ?: 0) / 2 - (now - p.receivedAt)).coerceAtLeast(0)
+        return (s * 1000 - (rttMs ?: 0) / 2 - p.lateMs - (now - p.receivedAt)).coerceAtLeast(0)
     }
 
     fun minutes(leftMs: Long): Int = ((leftMs + MINUTE_MS - 1) / MINUTE_MS).toInt()

@@ -17,7 +17,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.listView
 
-data class Playback(val state: State = State(), val receivedAt: Long = 0, val gateAt: Long? = null)
+data class Playback(val state: State = State(), val receivedAt: Long = 0, val gateAt: Long? = null, val lateMs: Long = 0)
 
 data class SchemaMirror(
     val rev: Long? = null,
@@ -72,6 +72,7 @@ data class DeviceState(
     val eq: Map<Int, EqMirror> = emptyMap(),
     val queue: QueueMirror = QueueMirror(),
     val lib: LibMirror = LibMirror(),
+    val clock: DeviceClock = DeviceClock(),
 ) {
     fun has(group: String) = hello?.has(group) ?: false
 
@@ -105,7 +106,10 @@ data class DeviceState(
             lib.snap != null -> lib.lists(rev)
             else -> LibMirror(rev)
         }
-        return copy(playback = Playback(s, now, gateAt), queue = q, lib = l)
+        val sent = s.sentMs?.takeIf { s.sampleMs != null && has("stateClock") }
+        val c = sent?.let { clock.add(now, now - it) } ?: clock
+        val late = sent?.let { now - it - (c.offset ?: 0) } ?: 0
+        return copy(playback = Playback(s, now, gateAt, late), queue = q, lib = l, clock = c)
     }
 
     fun withSchema(s: Schema): DeviceState {

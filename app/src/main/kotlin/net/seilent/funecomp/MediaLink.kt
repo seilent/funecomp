@@ -190,10 +190,16 @@ class MediaLink(
 
         fun state(device: DeviceState, playing: Boolean, now: Long): PlaybackState {
             val position = device.positionMs(now)
+            val held = playing && device.playback.state.positionHeld == true
+            val state = when {
+                held -> PlaybackState.STATE_BUFFERING
+                playing -> PlaybackState.STATE_PLAYING
+                else -> PlaybackState.STATE_PAUSED
+            }
             return PlaybackState.Builder()
                 .setActions(ACTIONS)
                 .addCustomAction(PlaybackState.CustomAction.Builder(STOP, STOP, android.R.drawable.ic_menu_close_clear_cancel).build())
-                .setState(if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED, position, if (playing) 1f else 0f, now)
+                .setState(state, position, if (playing && !held) 1f else 0f, now)
                 .build()
         }
     }

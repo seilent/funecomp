@@ -80,6 +80,18 @@ class MediaLinkTest {
     }
 
     @Test
+    fun aHeldPositionIsBufferingAtSpeedZero() {
+        val held = MediaLink.state(device(st.copy(positionHeld = true), at = 10_000), playing = true, now = 12_000)
+        assertEquals(PlaybackState.STATE_BUFFERING, held.state)
+        assertEquals(61_000L, held.position)
+        assertEquals(0f, held.playbackSpeed)
+        val released = MediaLink.state(device(st.copy(positionHeld = false), at = 10_000), playing = true, now = 12_000)
+        assertEquals(PlaybackState.STATE_PLAYING, released.state)
+        assertEquals(61_000L + 40 + 10 + 2_000, released.position)
+        assertEquals(1f, released.playbackSpeed)
+    }
+
+    @Test
     fun callbacksSendTransport() {
         link.live(device(), true, false)
         val t = link.callback

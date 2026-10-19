@@ -74,7 +74,7 @@ class InboundTest {
         assertTrue(Groups.allowed(Msg.SET, Groups.mask("settings")))
         assertFalse(Groups.allowed(Msg.EQ_SET, Groups.mask("settings")))
         assertTrue(Groups.allowed(Msg.IMG_DATA, Groups.all))
-        assertEquals(16383L, Groups.all)
+        assertEquals(32767L, Groups.all)
     }
 
     @Test

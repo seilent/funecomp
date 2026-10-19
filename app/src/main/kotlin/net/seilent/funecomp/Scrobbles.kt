@@ -47,7 +47,7 @@ object Scrobbles {
         }
     }
 
-    fun session() = exec.execute { plays?.session() }
+    fun session(clocked: Boolean) = exec.execute { plays?.session(clocked) }
 
     fun state(s: State, wallMs: Long) = exec.execute {
         val p = plays ?: return@execute

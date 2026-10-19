@@ -25,6 +25,7 @@ object Groups {
         "lyricsGet" to setOf(Msg.LYR_GET),
         "artPick" to setOf(Msg.ART_PICK),
         "imgOrigin" to setOf(Msg.IMG_TAG),
+        "stateClock" to emptySet(),
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -196,6 +197,7 @@ data class State(
     val snapRev: Long? = null,
     val lyricsPlain: Boolean? = null,
     val lyricsCrc: Long? = null,
+    val positionHeld: Boolean? = null,
 ) {
     fun encode() = tlv {
         enum(Tags.State.source, source)
@@ -210,6 +212,7 @@ data class State(
         u64(Tags.State.sampleMs, sampleMs)
         u64(Tags.State.sentMs, sentMs)
         bool(Tags.State.playing, playing)
+        bool(Tags.State.positionHeld, positionHeld)
         bool(Tags.State.shuffle, shuffle)
         enum(Tags.State.repeat, repeat)
         u16(Tags.State.volume, volume)
@@ -270,6 +273,7 @@ data class State(
             n.long(Tags.State.snapRev),
             n.bool(Tags.State.lyricsPlain),
             n.long(Tags.State.lyricsCrc),
+            n.bool(Tags.State.positionHeld),
         )
     }
 }

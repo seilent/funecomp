@@ -145,6 +145,64 @@ class PlaysTest {
         assertNull(r.plays.open)
     }
 
+    private fun Run.clocked() = also { plays.session(clocked = true) }
+
+    private fun stamped(pos: Long, sample: Long, sent: Long = sample, track: Long = 7, held: Boolean? = null, at: Long = boot) =
+        st(pos, sample, track = track, dur = 600_000).copy(sampleMs = at + sample, sentMs = at + sent, positionHeld = held)
+
+    @Test
+    fun theDeviceClockTakesTheOffsetFromSentMs() {
+        val r = Run().clocked()
+        for (i in 0..6) r.at(stamped(i * 10_000L, i * 10_000L, i * 10_000L + 3), wall + i * 10_000L + 43)
+        assertEquals(wall + 40, r.plays.open!!.startMs)
+        val closed = Run()
+        for (i in 0..6) closed.at(stamped(i * 10_000L, i * 10_000L, i * 10_000L + 3), wall + i * 10_000L + 43)
+        assertEquals(wall + 43, closed.plays.open!!.startMs)
+    }
+
+    @Test
+    fun aWallClockJumpOfAnHourIsAdoptedAtTheNextState() {
+        for (jump in listOf(3_600_000L, -3_600_000L)) {
+            val r = Run().clocked()
+            for (i in 0..6) r.at(stamped(i * 10_000L, i * 10_000L), wall + i * 10_000L + 40)
+            assertEquals(wall + 40, r.plays.open!!.startMs)
+            r.at(stamped(70_000, 70_000), wall + jump + 70_040)
+            assertEquals(wall + jump + 40, r.plays.open!!.startMs)
+        }
+    }
+
+    @Test
+    fun aWallClockJumpInsideTheWindowIsHeldAtMostTheWindow() {
+        val r = Run().clocked()
+        for (i in 0..6) r.at(stamped(i * 10_000L, i * 10_000L), wall + i * 10_000L + 40)
+        var t = 70_000L
+        while (t <= 540_000) {
+            r.at(stamped(t, t), wall + 60_000 + t + 40)
+            assertEquals("at $t", if (t < DeviceClock.WINDOW_MS) wall + 40 else wall + 60_040, r.plays.open!!.startMs)
+            t += 10_000
+        }
+    }
+
+    @Test
+    fun aNewSessionDropsTheOldClock() {
+        val r = Run().clocked()
+        for (i in 0..6) r.at(stamped(i * 10_000L, i * 10_000L), wall + i * 10_000L + 40)
+        r.plays.session(clocked = true)
+        for (i in 0..2) r.at(stamped(i * 10_000L, i * 10_000L, track = 8, at = 1_000), wall + 200_000 + i * 10_000L + 40)
+        assertEquals(wall + 200_040, r.plays.open!!.startMs)
+    }
+
+    @Test
+    fun aHeldStateSetsNoStartBase() {
+        val r = Run().clocked()
+        r.at(stamped(0, 0, held = true), wall + 40)
+        assertEquals(wall + 40, r.plays.open!!.startMs)
+        r.at(stamped(50, 350, held = false), wall + 390)
+        assertEquals(wall + 340, r.plays.open!!.startMs)
+        r.at(stamped(10_050, 10_350), wall + 10_390)
+        assertEquals(wall + 340, r.plays.open!!.startMs)
+    }
+
     @Test
     fun nextTrackStartsANewPlay() {
         val r = Run()

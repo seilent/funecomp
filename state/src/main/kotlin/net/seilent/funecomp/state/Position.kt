@@ -5,10 +5,10 @@ object Position {
         val s = p.state
         val base = s.positionMs ?: return 0
         val duration = s.durationMs
-        if (s.playing != true) return clamp(base, duration)
+        if (s.playing != true || s.positionHeld == true) return clamp(base, duration)
         val sent = s.sentMs
         val sample = s.sampleMs
-        val lag = (if (sent != null && sample != null) sent - sample else 0L) + (rttMs ?: 0L) / 2
+        val lag = (if (sent != null && sample != null) sent - sample else 0L) + p.lateMs + (rttMs ?: 0L) / 2
         return clamp(base + lag + (now - p.receivedAt), duration)
     }
 

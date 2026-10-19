@@ -40,11 +40,15 @@ class Plays(open: Play? = null) {
     private var base: Long? = null
     private var refine = false
     private var announced = false
+    private var clocked = false
+    private var clock = DeviceClock()
 
-    fun session() {
+    fun session(clocked: Boolean = false) {
         prev = null
         offset = null
         base = null
+        this.clocked = clocked
+        clock = DeviceClock()
     }
 
     fun frame(s: State, arrivalMs: Long): List<Event> {
@@ -55,7 +59,13 @@ class Plays(open: Play? = null) {
         }
         val sample = s.sampleMs
         val pos = s.positionMs ?: 0
-        if (sample != null) offset = minOf(offset ?: Long.MAX_VALUE, arrivalMs - sample)
+        val sent = s.sentMs?.takeIf { clocked && sample != null }
+        if (sent != null) {
+            clock = clock.add(arrivalMs, arrivalMs - sent)
+            offset = clock.offset
+        } else if (sample != null) {
+            offset = minOf(offset ?: Long.MAX_VALUE, arrivalMs - sample)
+        }
         val p = prev
         val o = open
         val events = ArrayList<Event>()
@@ -66,11 +76,12 @@ class Plays(open: Play? = null) {
         }
         if (same && p == null) refine = false
         var play = if (same && o != null) o else {
-            base = sample?.let { it - pos }
+            base = null
             refine = true
             announced = false
             Play(track, s.libRev, startOf(s, arrivalMs))
         }
+        if (refine && base == null && s.positionHeld != true) base = sample?.let { it - pos }
         if (same && p != null && p.playing == true) {
             val moved = pos - (p.positionMs ?: 0)
             val before = p.sampleMs

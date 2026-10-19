@@ -219,12 +219,13 @@ class Conn(
         }
         if (f.type in faults.refuse) return error(f, Err.refused, "refused")
         if ((faults.busy[f.type]?.getAndDecrement() ?: 0) > 0) return error(f, Err.busy, "busy")
+        val at = clock()
         if (faults.stallMs > 0) Thread.sleep(faults.stallMs)
         val pushing = if (f.type == Msg.IMG_END) device.pushing else null
         when (val a = device.request(f.type, body, this)) {
             is Answer.Ok -> {
                 reply(f, a.payload)
-                if (a.state) push(Msg.STATE, device.state())
+                if (a.state) push(Msg.STATE, device.state(at))
                 if (pushing != null) askLater(pushing)
             }
             is Answer.Fail -> error(f, a.code, a.text, a.refused)
@@ -246,13 +247,14 @@ class Conn(
         val h = Hello.from(body)
         appFeatures = h.features ?: 0
         log("hello app major=${h.major} minor=${h.minor} version=${h.appVersion} features=$appFeatures")
+        val at = clock()
         if (faults.stallMs > 0) Thread.sleep(faults.stallMs)
         if (closed != null) return
         if (h.major != faults.major) return bye(Enums.ByeReason.version, faults.major, Proto.minor)
         if (faults.bye == Enums.ByeReason.refused) return bye(Enums.ByeReason.refused)
         reply(f, device.helloReply().encode())
         helloDone = true
-        device.greet(this)
+        device.greet(this, at)
         faults.bye?.let { return bye(it) }
         faults.askPick?.let { (name, ms) ->
             if (picks) ticker.schedule({ ask(Msg.ART_PICK, ArtPick(name, device.lib.tracks.firstNotNullOfOrNull { it.mbidOf(name) }).encode(), Proto.requestTimeoutMs.toLong()) {} }, ms, TimeUnit.MILLISECONDS)

@@ -24,6 +24,7 @@ class OldPeerTest {
     private val v16 = table("/proto-1.6.txt")
     private val v17 = table("/proto-1.7.txt")
     private val v18 = table("/proto-1.8.txt")
+    private val v19 = table("/proto-1.9.txt")
 
     private fun table(name: String): Map<String, Map<Int, Field>> = run {
         val text = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
@@ -190,7 +191,21 @@ class OldPeerTest {
         assertFalse(Groups.allowed(Msg.IMG_TAG, Groups.all and (1L shl Feature.imgOrigin).inv()))
         assertTrue(Groups.allowed(Msg.IMG_TAG, Groups.mask("imgOrigin")))
         assertEquals(13, Feature.imgOrigin)
-        assertEquals(16383L, Groups.all)
+    }
+
+    @Test
+    fun protocol110FramesDecodeWithThe19TablesToEmptyFields() {
+        assertEquals(listOf(35), Node.decode("STATE", body("state_clock"), v19).unknownTags)
+        val old = State.from(Node.decode("STATE", body("state_clock"), v19))
+        assertNull(old.positionHeld)
+        assertEquals(4000100L, old.sampleMs)
+        assertEquals(4000103L, old.sentMs)
+        val now = State.from(Node.decode("STATE", body("state_clock")))
+        assertEquals(true, now.positionHeld)
+        assertEquals(20000L, now.positionMs)
+        assertEquals(4000103L, now.sentMs)
+        assertEquals(14, Feature.stateClock)
+        assertEquals(32767L, Groups.all)
     }
 
     @Test

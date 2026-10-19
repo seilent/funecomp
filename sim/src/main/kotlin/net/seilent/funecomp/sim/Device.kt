@@ -215,6 +215,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val v14: Boolean get() = opts.minor >= 4
     private val v15: Boolean get() = opts.minor >= 5
     private val v19: Boolean get() = opts.minor >= 9
+    private val v110: Boolean get() = opts.minor >= 10
     private var source = opts.source
     private var rescanLib = opts.rescanLib
     val begins: MutableList<Pair<String, Int?>> = java.util.Collections.synchronizedList(ArrayList())
@@ -283,8 +284,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (allowed(type)) out.push(type, payload)
     }
 
-    fun greet(out: Out) = synchronized(lock) {
-        send(out, Msg.STATE, state())
+    fun greet(out: Out, receipt: Long? = null) = synchronized(lock) {
+        send(out, Msg.STATE, state(receipt))
         pushSchema(out)
         pushSettings(out)
         pushEq(out, Enums.EqOutput.wired)
@@ -306,10 +307,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun sleepLeft(): Long = if (sleepLeftS <= 0) 0 else maxOf(0L, sleepLeftS - (now() - sleepSetAt) / 1000)
 
-    fun state(): ByteArray = synchronized(lock) {
+    fun state(receipt: Long? = null): ByteArray = synchronized(lock) {
         val t = lib.byId[queue.getOrNull(slot)]
-        val sample = now()
-        lastStateAt = sample
+        lastStateAt = now()
+        val sample = if (v110) now() else receipt ?: now()
+        val sent = if (v110) now() else sample
         val key = t?.artists?.map { fold(it) }?.firstOrNull { it in images }
         if (key != null && key != shown) images[key]?.at = ++storeClock
         shown = key
@@ -317,7 +319,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         lastBattery = bat
         State(
             source, Enums.Output.wired, t?.id, t?.title, t?.artist, t?.artists.orEmpty(),
-            t?.mbids.orEmpty(), t?.durationMs, position(), sample, now(), playing, shuffle, repeat,
+            t?.mbids.orEmpty(), t?.durationMs, position(), sample, sent, playing, shuffle, repeat,
             volume, maxVolume, bat, queueRev, slot.toLong(), queue.size.toLong(), lib.rev, t?.album, sleepLeft(),
             if (v12) opts.battery.charging else null,
             if (v12) opts.cardFreeMiB else null,
@@ -330,6 +332,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             if (v13) lib.snapRev else null,
             if (v14 && t != null) hasPlain(t.id) else null,
             if (allowed(Msg.LYR_GET) && t != null) lyrs[t.id]?.crc else null,
+            if (v110) false else null,
         ).encode()
     }
 

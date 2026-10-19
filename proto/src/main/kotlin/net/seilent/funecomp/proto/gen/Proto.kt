@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "0fad790d9d8cd3adcd5c0f451a162e06ec940a5f"
-    const val PROTO_SHA256 = "7990b0d513ae392a4ea4ebf465c2bcd56ec9c92dd73ffd0afecb2ed5d5fbef80"
-    const val VECTORS_SHA256 = "0946b2d0e61618f3c7ee0692bc7de8949d572a5b3ce1d5aa28c658a8ed466c37"
+    const val COMMIT = "d094e1923d1642e557072a8fa5126a2be1ac27fc"
+    const val PROTO_SHA256 = "5681213a13b84998987a21bf4e15b94a6e917be9bc9e203b7c09e4a4baff3cc1"
+    const val VECTORS_SHA256 = "c5443a10909e8b1d9a186bffce22815281263200e26940217aaabdc88990398a"
     const val TOKENS_SHA256 = "8e5139fd329bc087d3acad8adade94bf6be643218cb1bd614c151dc524318d97"
     const val TOKENSV1_SHA256 = "4d1e0faa1738981ea062534988859dcc18ba9eaf8d09412831e301de0fb47e14"
 }
@@ -18,7 +18,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 9
+    const val minor = 10
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -159,7 +159,8 @@ object Feature {
     const val lyricsGet = 11
     const val artPick = 12
     const val imgOrigin = 13
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin")
+    const val stateClock = 14
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock")
 }
 
 object Enums {
@@ -396,6 +397,7 @@ object Tags {
         const val snapRev = 32
         const val lyricsPlain = 33
         const val lyricsCrc = 34
+        const val positionHeld = 35
     }
     object Schema {
         const val pivot = 1
@@ -756,6 +758,7 @@ object Tags {
             32 to Field(32, "snapRev", Base.U32, null, false),
             33 to Field(33, "lyricsPlain", Base.BOOL, null, false),
             34 to Field(34, "lyricsCrc", Base.U32, null, false),
+            35 to Field(35, "positionHeld", Base.BOOL, null, false),
         ),
         "SCHEMA" to mapOf(
             1 to Field(1, "pivot", Base.STR, null, false),

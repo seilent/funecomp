@@ -129,6 +129,7 @@ class Options(
         if (minor < 7) faults.features = faults.features and Groups.mask("lyricsGet").inv()
         if (minor < 8) faults.features = faults.features and Groups.mask("artPick").inv()
         if (minor < 9) faults.features = faults.features and Groups.mask("imgOrigin").inv()
+        if (minor < 10) faults.features = faults.features and Groups.mask("stateClock").inv()
     }
 
     companion object {

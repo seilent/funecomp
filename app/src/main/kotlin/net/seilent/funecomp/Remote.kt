@@ -919,7 +919,7 @@ object Remote : Control {
             bye = null
             everLive = true
             board = hello.board
-            Scrobbles.session()
+            Scrobbles.session(hello.has("stateClock"))
             Firmwares.hello(hello.board, hello.version)
             Lyrics.session()
             dapLyrics.session()
@@ -947,7 +947,7 @@ object Remote : Control {
             Scrobbles.state(s, System.currentTimeMillis())
             Firmwares.state()
             onState?.invoke()
-            Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB} pos=${s.positionMs} sent=${s.sentMs} sample=${s.sampleMs} rtt=${device.rttMs} at=$now")
+            Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB} pos=${s.positionMs} sent=${s.sentMs} sample=${s.sampleMs} rtt=${device.rttMs} at=$now lateMs=${device.playback.lateMs} held=${s.positionHeld}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
             val key = listOf(s.artists, s.output, s.queueRev, s.slot)
             if (key != artKey) {

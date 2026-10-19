@@ -28,6 +28,14 @@ class SleepLeftTest {
     }
 
     @Test
+    fun takesTheLatenessOffAndAgesAHeldState() {
+        val p = timer(1800).copy(lateMs = 300)
+        assertEquals(1_799_650L, SleepLeft.leftMs(p, 100, 1000))
+        val held = p.copy(state = p.state.copy(playing = true, positionHeld = true))
+        assertEquals(1_789_650L, SleepLeft.leftMs(held, 100, 11_000))
+    }
+
+    @Test
     fun noTimerIsZero() {
         assertEquals(0L, SleepLeft.leftMs(timer(null), null, 1000))
         assertEquals(0L, SleepLeft.leftMs(timer(0), null, 1000))
