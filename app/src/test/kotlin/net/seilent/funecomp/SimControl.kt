@@ -12,6 +12,8 @@ import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.proto.ArtGetReply
+import net.seilent.funecomp.proto.EqPresetReply
+import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
@@ -43,8 +45,9 @@ class SimControl(
     artDir: File? = null,
     minor: Int = Proto.minor,
     faults: List<String> = emptyList(),
+    cardEq: List<String> = emptyList(),
 ) : Control {
-    val sim = Device(Options(Board.of(board), Faults(faults), artDir = artDir, minor = minor), lib, now)
+    val sim = Device(Options(Board.of(board), Faults(faults), artDir = artDir, minor = minor, cardEq = cardEq), lib, now)
     var device by mutableStateOf(DeviceState())
     val sent = ArrayList<String>()
     val failed = ArrayList<Int>()
@@ -130,6 +133,16 @@ class SimControl(
 
     override fun eqSet(output: Int, key: String?, ints: Profile?) {
         req(Msg.EQ_SET, Req.eqSet(output, key, ints))
+    }
+
+    val presets = ArrayList<Node>()
+
+    override fun eqPreset(op: Int, output: Int?, key: String?, name: String?, ints: Profile?, replace: Boolean, done: (Int?, String?) -> Unit) {
+        if (!Groups.allowed(Msg.EQ_PRESET, device.hello?.features ?: 0)) return done(-1, null)
+        val payload = Req.eqPreset(op, output, key, name, ints, replace.takeIf { it })
+        presets += Node.decode("EQ_PRESET", payload)
+        val a = req(Msg.EQ_PRESET, payload)
+        if (a is Answer.Ok) done(null, EqPresetReply.from(Node.decode("EQ_PRESET.reply", a.payload)).key) else done((a as Answer.Fail).code, null)
     }
 
     override fun action(cmd: Int, track: Long?, done: (Int?, String?) -> Unit) {

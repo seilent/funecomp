@@ -134,7 +134,7 @@ fun App(
                     Page.Scrobbling -> ScrobblingPage(ctx, scrobble)
                     Page.Firmware -> FirmwarePage(ctx, firmware)
                     Page.Lyrics -> LyricsPage(ctx, link.lyrics)
-                    Page.AutoEq -> AutoEqPage(ctx, remember(ime, insets) { ime.exclude(insets) })
+                    is Page.AutoEq -> AutoEqPage(ctx, page, remember(ime, insets) { ime.exclude(insets) })
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
                     is Page.Eq -> EqPage(ctx, page)

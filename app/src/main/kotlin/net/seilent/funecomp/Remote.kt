@@ -35,6 +35,7 @@ import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
 import net.seilent.funecomp.link.Transport
 import net.seilent.funecomp.proto.Bye
+import net.seilent.funecomp.proto.EqPresetReply
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
@@ -556,6 +557,16 @@ object Remote : Control {
 
     override fun eqSet(output: Int, key: String?, ints: Profile?) =
         send(Msg.EQ_SET, Req.eqSet(output, key, ints), "eq set output=$output key=$key")
+
+    override fun eqPreset(op: Int, output: Int?, key: String?, name: String?, ints: Profile?, replace: Boolean, done: (Int?, String?) -> Unit) {
+        var saved: String? = null
+        send(
+            Msg.EQ_PRESET, Req.eqPreset(op, output, key, name, ints, replace.takeIf { it }),
+            "eq preset ${Enums.EqPresetOp.names[op]} output=$output key=$key replace=$replace",
+            ok = { saved = EqPresetReply.from(it).key },
+            done = { code, _ -> main.post { done(code, saved) } },
+        )
+    }
 
     override fun action(cmd: Int, track: Long?, done: (Int?, String?) -> Unit) =
         send(Msg.ACTION, Req.action(cmd, track), "action ${Enums.ActionCmd.names[cmd]}", done = done)

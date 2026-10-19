@@ -44,6 +44,7 @@ class Faults(specs: List<String>) {
     var favsBusy = 0
     var favsBusyText = "busy"
     var staleState = false
+    val eqHidden = HashSet<String>()
 
     init {
         for (spec in specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }) {
@@ -72,6 +73,7 @@ class Faults(specs: List<String>) {
                     favsBusyText = v.substringAfter(':', "busy")
                 }
                 "stale-state" -> staleState = true
+                "eq-hidden" -> eqHidden += v
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')
@@ -105,9 +107,11 @@ class Options(
     val cardTotalMiB: Long = 233_440,
     val curve: Boolean = board.name == "v1",
     val maxPct: Int? = null,
+    val cardEq: List<String> = emptyList(),
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
+        if (minor < 5) faults.features = faults.features and Groups.mask("eqPresets").inv()
     }
 
     companion object {

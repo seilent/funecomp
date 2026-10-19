@@ -34,6 +34,15 @@ object Req {
         ints?.let { p -> rec(Tags.EqSet.ints) { p.write(this) } }
     }
 
+    fun eqPreset(op: Int, output: Int? = null, key: String? = null, name: String? = null, ints: Profile? = null, replace: Boolean? = null) = tlv {
+        enum(Tags.EqPreset.op, op)
+        enum(Tags.EqPreset.output, output)
+        str(Tags.EqPreset.key, key)
+        str(Tags.EqPreset.name, name)
+        ints?.let { p -> rec(Tags.EqPreset.ints) { p.write(this) } }
+        bool(Tags.EqPreset.replace, replace)
+    }
+
     fun play(view: Int? = null, parent: String? = null, libRev: Long? = null, start: Long? = null, shuffle: Boolean? = null, tracks: List<Long> = emptyList(), snapRev: Long? = null) = tlv {
         enum(Tags.Play.view, view)
         str(Tags.Play.parent, parent)

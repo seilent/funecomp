@@ -33,6 +33,8 @@ import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.state.AutoEq
+import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
@@ -79,6 +81,7 @@ class Shot(
     val sources: Sources = Sources(),
     val minor: Int = Proto.minor,
     val faults: List<String> = emptyList(),
+    val cardEq: List<String> = emptyList(),
     val ime: Float = 0f,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
@@ -143,6 +146,27 @@ private fun emptyQueue(c: SimControl) {
     c.device = c.device.copy(playback = p.copy(state = p.state.copy(track = null, title = null, artist = null, slots = 0)))
 }
 
+private fun preset(name: String, output: Int = Enums.EqOutput.wired): (SimControl) -> Unit = { c ->
+    c.eqPreset(Enums.EqPresetOp.save, output, null, name, AutoEq.profile((AutoEq.parse(SimControl.HD650, name) as AutoEqResult.Ok).eq), false) { _, _ -> }
+}
+
+private const val LONG_NAME = "Sennheiser HD 650 (2020, worn earpads, oratory1990 target)"
+
+private const val NAME_64 = "Beyerdynamic DT 1990 PRO (B pads, analytical, 2024 measure)abcde"
+
+private fun Shots.import() {
+    rule.onNodeWithTag("eq.import").performClick()
+    settle(600)
+    rule.onNodeWithTag("sheet.item.0").performClick()
+    settle(600)
+}
+
+private fun Shots.apply() {
+    import()
+    rule.onNodeWithTag("sheet.item.0").performClick()
+    settle(600)
+}
+
 private fun custom(c: SimControl) {
     c.eqSet(Enums.EqOutput.wired, ints = Profile(-64, (0 until 10).map { i ->
         val b = flatBand(i)
@@ -173,7 +197,7 @@ private val FOUND = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true
 
 private val EQ = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)
 
-private val AEQ = EQ + Page.AutoEq
+private val AEQ = EQ + Page.AutoEq(Enums.EqOutput.wired)
 
 private const val AEQ_IME = 0.4f
 
@@ -341,6 +365,26 @@ val SHOTS = listOf(
         settle(600)
         rule.onNodeWithTag("sheet.item.0").performClick()
     },
+    Shot("eqp-custom", pages = EQ, prep = ::custom),
+    Shot("eqp-custom-bt", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.bt), prep = { c -> c.eqSet(Enums.EqOutput.bt, key = "custom") }),
+    Shot("eqp-preset", pages = EQ, prep = preset("Sennheiser HD 650")),
+    Shot("eqp-preset-bt", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.bt), prep = preset("Sennheiser HD 650", Enums.EqOutput.bt)),
+    Shot("eqp-preset-long", pages = EQ, prep = preset(LONG_NAME)),
+    Shot("eqp-preset-64", pages = EQ, prep = preset(NAME_64)),
+    Shot("eqp-delete", pages = EQ, prep = preset("Sennheiser HD 650")) { rule.onNodeWithTag("eq.delete").performClick() },
+    Shot("eqp-rename", pages = EQ, prep = preset("Sennheiser HD 650")) { rule.onNodeWithTag("eq.rename").performClick() },
+    Shot("eqp-apply", pages = EQ) { import() },
+    Shot("eqp-apply-long", pages = EQ, prep = { it.eqFileName = "$LONG_NAME ParametricEQ.txt" }) { import() },
+    Shot("eqp-replace", pages = EQ, prep = preset("Sennheiser HD 650")) { apply() },
+    Shot("eqp-replace-64", pages = EQ, prep = { c -> c.eqFileName = "$NAME_64.txt"; preset(NAME_64)(c) }) { apply() },
+    Shot("eqp-clash", pages = EQ, cardEq = listOf("Sennheiser HD 650")) { apply() },
+    Shot("eqp-saveas", pages = EQ, cardEq = listOf("Sennheiser HD 650")) {
+        apply()
+        rule.onNodeWithTag("sheet.item.1").performClick()
+    },
+    Shot("eqp-old", pages = EQ, minor = 4) { import() },
+    Shot("eqp-toast-taken", pages = EQ, faults = listOf("eq-hidden=Sennheiser HD 650"), after = 300) { apply() },
+    Shot("eqp-toast-full", pages = EQ, prep = { c -> (1..200).forEach { preset("P$it")(c) } }, after = 300) { apply() },
     Shot("firmware", board = "v1", pages = FW),
     Shot("firmware-private", board = "v1", pages = FW, firmware = FirmwareView(info = "no public releases")),
     Shot("firmware-found", board = "v1", pages = FW, firmware = FOUND),
@@ -488,7 +532,7 @@ class Shots {
             for (shot in SHOTS) {
                 if (only.isNotEmpty() && only.split(',').none { "${shot.name}-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue
-                val c = SimControl(shot.board, artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults)
+                val c = SimControl(shot.board, artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
                 shot.prep(c)
                 control = c
                 shell = Shell(Nav(shot.pages))

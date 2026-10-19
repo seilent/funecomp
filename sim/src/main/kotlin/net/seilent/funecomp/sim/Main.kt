@@ -7,7 +7,7 @@ import kotlin.system.exitProcess
 private const val USAGE = "usage: sim --board ap80|v1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
-    "[--curve v1|linear] [--max-pct <n>] [--quiet]"
+    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -28,6 +28,7 @@ fun main(args: Array<String>) {
     var card: String? = null
     var curve: String? = null
     var maxPct: String? = null
+    val cardEq = ArrayList<String>()
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -52,6 +53,7 @@ fun main(args: Array<String>) {
             "--card" -> card = value()
             "--curve" -> curve = value()
             "--max-pct" -> maxPct = value()
+            "--card-eq" -> cardEq += value().split(',').filter { it.isNotEmpty() }
             "--quiet" -> quiet = true
             else -> {
                 System.err.println(USAGE)
@@ -84,6 +86,7 @@ fun main(args: Array<String>) {
         card?.substringAfter(':')?.toLong() ?: base.cardTotalMiB,
         curve?.let { it == "v1" } ?: (b.name == "v1"),
         maxPct?.toInt(),
+        cardEq,
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {

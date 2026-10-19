@@ -4,6 +4,7 @@ import net.seilent.funecomp.proto.ArtGetReply
 import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Eq
 import net.seilent.funecomp.proto.EqName
+import net.seilent.funecomp.proto.EqPresetReply
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.ImgAbort
 import net.seilent.funecomp.proto.ImgBeginReply
@@ -28,6 +29,8 @@ import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
+import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.state.AutoEq
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
@@ -56,6 +59,39 @@ private const val MIB = 1L shl 20
 private const val UPDATE_RESERVE = 64L shl 20
 private val SYNCED = Regex("^\\[[0-9]+:[0-9]{2}(\\.[0-9]+)?]", RegexOption.MULTILINE)
 private val MD5 = Regex("^[0-9a-f]{32}$")
+private const val EQ_DIR = "/data/flatdap/eq/"
+private val CARD_PROFILE = Profile(-30, listOf(Band(Enums.BandType.peak, -1, 1_000_000, -20, 141)))
+
+private fun eqNameOrder(x: String, y: String): Int {
+    val a = x.toByteArray(Charsets.UTF_8)
+    val b = y.toByteArray(Charsets.UTF_8)
+    fun u(v: Byte) = v.toInt() and 0xff
+    fun digit(v: Byte) = u(v) in '0'.code..'9'.code
+    fun fold(v: Int) = if (v in 'A'.code..'Z'.code) v + ('a' - 'A') else v
+    var i = 0
+    var j = 0
+    while (i < a.size && j < b.size) {
+        if (digit(a[i]) && digit(b[j])) {
+            var ie = i
+            var je = j
+            while (ie < a.size && digit(a[ie])) ie++
+            while (je < b.size && digit(b[je])) je++
+            while (i + 1 < ie && u(a[i]) == '0'.code) i++
+            while (j + 1 < je && u(b[j]) == '0'.code) j++
+            if (ie - i != je - j) return (ie - i) - (je - j)
+            for (k in 0 until ie - i) if (a[i + k] != b[j + k]) return u(a[i + k]) - u(b[j + k])
+            i = ie
+            j = je
+            continue
+        }
+        val c = fold(u(a[i])) - fold(u(b[j]))
+        if (c != 0) return c
+        i++
+        j++
+    }
+    if (a.size - i != b.size - j) return (a.size - i) - (b.size - j)
+    return java.util.Arrays.compareUnsigned(a, b)
+}
 
 class Device(private val opts: Options, val lib: Library, private val clock: () -> Long) {
     private val board = opts.board
@@ -85,8 +121,12 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private var sleepLeftS = 0L
     private var sleepSetAt = 0L
 
-    private val eqNames: List<EqName> = listOf(EqName("off", "OFF"), EqName("custom", "CUSTOM")) +
-        (1..198).map { EqName("autoeq/oratory1990/Headphone Model %03d.txt".format(it), "Headphone Model %03d".format(it)) }
+    private class Preset(val name: String, val profile: Profile)
+
+    private val presets = HashMap<String, Preset>()
+    private val cards: List<EqName> = ((1..198).map { EqName("autoeq/oratory1990/Headphone Model %03d.txt".format(it), "Headphone Model %03d".format(it)) } +
+        opts.cardEq.map { EqName("autoeq/$it.txt", it) }).sortedWith { a, b -> eqNameOrder(a.key.substringAfterLast('/'), b.key.substringAfterLast('/')) }
+    private var eqNames: List<EqName> = listEq()
     private val eqKey = arrayOf("off", "off")
     private val eqCustom = arrayOf(flat(), flat())
 
@@ -118,6 +158,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private val v12: Boolean get() = opts.minor >= 2
     private val v13: Boolean get() = opts.minor >= 3
     private val v14: Boolean get() = opts.minor >= 4
+    private val v15: Boolean get() = opts.minor >= 5
     private val started = clock()
     private var lastBattery = -1
     private val have = HashMap<Long, Have>()
@@ -294,7 +335,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         do {
             val n = PageInfo.fill(eqNames.map { it.size }, at, fixed)
             val more = at + n < eqNames.size
-            val ints = if (eqKey[output] == "custom") eqCustom[output] else flat()
+            val ints = if (eqKey[output] == "custom") eqCustom[output] else presets[eqKey[output]]?.profile ?: if (cards.any { it.key == eqKey[output] }) CARD_PROFILE else flat()
             send(out, Msg.EQ, Eq(output, eqKey[output], eqNames.subList(at, at + n), ints, PageInfo(at.toLong(), eqNames.size.toLong(), more)).encode())
             at += n
         } while (at < eqNames.size)
@@ -307,6 +348,9 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             Msg.SET -> set(body, out)
             Msg.DRAFT -> draft(body, out)
             Msg.EQ_SET -> eqSet(body, out)
+            Msg.EQ_PRESET -> eqPreset(body, out).also { a ->
+                opts.log("eq preset ${body.int(Tags.EqPreset.op)} key=${body.str(Tags.EqPreset.key)} -> ${if (a is Answer.Fail) a.code else "ok " + EqPresetReply.from(Node.decode("EQ_PRESET.reply", (a as Answer.Ok).payload)).key}")
+            }
             Msg.PLAY -> play(body)
             Msg.QUEUE_OP -> queueOp(body, out)
             Msg.LIB_GET -> libGet(body, out)
@@ -497,6 +541,71 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         if (key == null && ints == null) return Answer.Fail(Err.badValue, "no key or ints")
         pushEq(out, o)
         return Answer.Ok()
+    }
+
+    private fun listEq(): List<EqName> {
+        val device = presets.entries.sortedWith { a, b -> eqNameOrder(a.key.removePrefix(EQ_DIR), b.key.removePrefix(EQ_DIR)) }
+            .map { EqName(it.key, it.value.name, if (v15) true else null) }
+        return listOf(EqName("off", "OFF"), EqName("custom", "CUSTOM")) + (device + cards).take(Tok.eq_profilesMax.toInt())
+    }
+
+    private fun eqTaken(name: String, except: String?): String? {
+        val l = AutoEq.foldKey(name)
+        eqNames.drop(2).firstOrNull { it.key != except && AutoEq.foldKey(it.name ?: "") == l }?.let { return it.key }
+        val to = EQ_DIR + name + ".txt"
+        return to.takeIf { it != except && (it in presets || name in faults.eqHidden) }
+    }
+
+    private fun eqNext(): String = generateSequence(1) { it + 1 }.map { "Preset $it" }.first { n ->
+        eqNames.none { AutoEq.foldKey(it.name ?: "") == AutoEq.foldKey(n) } && EQ_DIR + n + ".txt" !in presets && n !in faults.eqHidden
+    }
+
+    private fun eqStored(out: Out, key: String?): Answer {
+        eqNames = listEq()
+        pushEq(out, Enums.EqOutput.wired)
+        pushEq(out, Enums.EqOutput.bt)
+        return Answer.Ok(EqPresetReply(key).encode())
+    }
+
+    private fun eqPreset(b: Node, out: Out): Answer {
+        val op = b.int(Tags.EqPreset.op) ?: return Answer.Fail(Err.badValue, "no op")
+        val name = b.str(Tags.EqPreset.name)
+        val path = b.str(Tags.EqPreset.key)
+        val replace = b.bool(Tags.EqPreset.replace) == true
+        if (op == Enums.EqPresetOp.save) {
+            val o = b.int(Tags.EqPreset.output)?.takeIf { it in Enums.EqOutput.names } ?: return Answer.Fail(Err.badValue, "no output")
+            val sent = b.node(Tags.EqPreset.ints)?.let { Profile.from(it) }
+            if (sent != null && (sent.bands.isEmpty() || !valid(sent))) return Answer.Fail(Err.badValue, "profile out of range")
+            val n = name ?: eqNext()
+            if (!AutoEq.validName(n)) return Answer.Fail(Err.badValue, "invalid name")
+            val clash = eqTaken(n, null)
+            if (clash != null && (!replace || clash !in presets)) return Answer.Fail(Err.exists, "exists")
+            if (clash == null && presets.size >= Tok.eq_profilesMax.toInt()) return Answer.Fail(Err.noSpace, "no space")
+            val to = clash ?: (EQ_DIR + n + ".txt")
+            presets[to] = Preset(presets[to]?.name ?: n, sent ?: eqCustom[o])
+            eqKey[o] = to
+            return eqStored(out, to)
+        }
+        if (op != Enums.EqPresetOp.remove && op != Enums.EqPresetOp.rename) return Answer.Fail(Err.badValue, "bad op")
+        if (path == null || (op == Enums.EqPresetOp.rename && name == null)) return Answer.Fail(Err.badValue, "missing tag")
+        if (path == "off" || path == "custom") return Answer.Fail(Err.readOnly, "read only")
+        if (eqNames.none { it.key == path }) return Answer.Fail(Err.notFound, "not found")
+        val was = presets[path] ?: return Answer.Fail(Err.readOnly, "read only")
+        if (op == Enums.EqPresetOp.remove) {
+            presets.remove(path)
+            for (o in eqKey.indices) if (eqKey[o] == path) eqKey[o] = "off"
+            return eqStored(out, null)
+        }
+        val n = name ?: return Answer.Fail(Err.badValue, "missing tag")
+        if (n == was.name) return eqStored(out, path)
+        if (!AutoEq.validName(n)) return Answer.Fail(Err.badValue, "invalid name")
+        val clash = eqTaken(n, path)
+        if (clash != null && (!replace || clash !in presets)) return Answer.Fail(Err.exists, "exists")
+        val to = clash ?: (EQ_DIR + n + ".txt")
+        presets.remove(path)
+        presets[to] = Preset(clash?.let { presets[it]?.name } ?: n, was.profile)
+        for (o in eqKey.indices) if (eqKey[o] == path) eqKey[o] = to
+        return eqStored(out, to)
     }
 
     private fun valid(p: Profile): Boolean {

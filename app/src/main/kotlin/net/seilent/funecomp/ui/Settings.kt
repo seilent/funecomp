@@ -43,8 +43,10 @@ import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Tok
 import kotlinx.coroutines.delay
+import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Rows as RowRules
 import net.seilent.funecomp.state.SleepLeft
@@ -298,6 +300,11 @@ private const val FIELD_FREQ = 1
 private const val FIELD_GAIN = 2
 private const val FIELD_Q = 3
 private val FIELDS = listOf("type", "frequency", "gain", "q")
+private const val DELETE_PRESET = "delete preset"
+private const val RENAME_PRESET = "rename preset"
+private const val KEEP_PRESET = "keep preset"
+private const val NOT_DELETED = "preset not deleted"
+private const val NOT_RENAMED = "preset not renamed"
 
 private class EqLine(val id: String, val title: String, val value: String, val sub: Boolean, val tap: () -> Unit)
 
@@ -335,8 +342,55 @@ private fun EqRows(ctx: Ctx, output: Int) {
         val keys = names.map { it.key }
         ctx.sheet.open("profile", names.map { it.name ?: it.key }, keys.indexOf(key).coerceAtLeast(0)) { ctx.control.eqSet(output, key = keys[it]) }
     }
-    lines += EqLine("import", "import autoeq", "", false) { autoEqImport(ctx) }
-    if (key == "custom") {
+    val entry = eq?.names?.firstOrNull { it.key == key }
+    val presets = ctx.device.has("eqPresets")
+    if (presets && key == "custom") {
+        lines += EqLine("save", SAVE_PRESET, "", false) {
+            ctx.control.eqPreset(Enums.EqPresetOp.save, output, null, null, null, false) { code, _ ->
+                when (code) {
+                    null -> focus = "delete"
+                    Err.noSpace -> ctx.toast.show(TOO_MANY, "")
+                    else -> ctx.toast.show(NOT_SAVED, "")
+                }
+            }
+        }
+    }
+    if (presets && entry?.preset == true) {
+        val name = entry.name ?: key
+        lines += EqLine("delete", DELETE_PRESET, "", false) {
+            ctx.sheet.open("$DELETE_PRESET?", listOf(DELETE_PRESET, KEEP_PRESET), 1) {
+                if (it == 0) ctx.control.eqPreset(Enums.EqPresetOp.remove, null, key, null, null, false) { code, _ ->
+                    if (code == null) focus = "profile" else ctx.toast.show(NOT_DELETED, name)
+                }
+            }
+        }
+        fun rename(start: String) {
+            ctx.sheet.openEntry(RENAME_PRESET) {
+                TextEntry(start) { text ->
+                    when {
+                        text == name -> ctx.sheet.close()
+                        !AutoEq.validName(text) -> ctx.toast.show(RENAME_PRESET, NAME_NOT_ALLOWED)
+                        else -> {
+                            ctx.sheet.close()
+                            ctx.control.eqPreset(Enums.EqPresetOp.rename, null, key, text, null, false) { code, _ ->
+                                when (code) {
+                                    null -> {}
+                                    Err.exists, Err.badValue -> {
+                                        ctx.toast.show(RENAME_PRESET, if (code == Err.exists) NAME_TAKEN else NAME_NOT_ALLOWED)
+                                        rename(text)
+                                    }
+                                    else -> ctx.toast.show(NOT_RENAMED, name)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        lines += EqLine("rename", RENAME_PRESET, "", false) { rename(name) }
+    }
+    lines += EqLine("import", "import autoeq", "", false) { autoEqImport(ctx, output) }
+    if (key == "custom" || entry != null && key != "off") {
         lines += EqLine("preamp", "preamp", signed(ints.preamp10 / 10f, false) + " db", false) {
             typedAt("preamp", "preamp", signed(ints.preamp10 / 10f, false), Tok.eq_preampMin, Tok.eq_preampMax, "db") { v ->
                 send(Profile((v * 10).roundToInt(), bands().mapIndexed { j, b -> b ?: flatBand(j) }))
@@ -378,7 +432,7 @@ private fun EqRows(ctx: Ctx, output: Int) {
     Rows(ui.contentTop, state, focus = lines.indexOfFirst { it.id == focus }) {
         itemsIndexed(lines, key = { _, l -> l.id }) { i, l ->
             val tag = when {
-                l.id == "profile" || l.id == "preamp" || l.id == "import" -> "eq.${l.id}"
+                l.id in setOf("profile", "save", "delete", "rename", "import", "preamp") -> "eq.${l.id}"
                 l.sub -> "eq.band.${l.id.removePrefix("band").substringBefore('.')}.${fieldTags[l.id.substringAfter('.').toInt()]}"
                 else -> "eq.band.${l.id.removePrefix("band")}"
             }

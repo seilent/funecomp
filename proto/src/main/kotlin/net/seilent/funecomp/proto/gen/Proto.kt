@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "e5435533925123749fadff9f955731d8f094b5e7"
-    const val PROTO_SHA256 = "e9b2a728eef00485f940ee3d132e1e2f77d2ef87c0c1a6c2785a4f78e9a2f44a"
-    const val VECTORS_SHA256 = "55ec88554c54fd10ede6571d5bed7a42e98f20fc123bc2ca14e82d624a1ceaae"
+    const val COMMIT = "2d0b01d18f5a62b95bc53690b6b35b3892231a51"
+    const val PROTO_SHA256 = "52147ba9ee4f321cde4f0748fe75fae72c5b490fd3c186a6aff43571c3cca29e"
+    const val VECTORS_SHA256 = "8d7c9a38ef96d9f6de9f4473ce084430ccafb6815b6620323209018b528f75d2"
     const val TOKENS_SHA256 = "6ec9e3b80e9c857e924e2a26602d9fd282176337545ef938b4f7113a332f4bd5"
     const val TOKENSV1_SHA256 = "7463c4af8a045b4e5f2561bd4ff488de8edc667358e266ce781950ddac2e35a0"
 }
@@ -18,7 +18,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 4
+    const val minor = 5
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -81,6 +81,7 @@ object Msg {
     const val IMG_LIST = 0x34
     const val IMG_DEL = 0x35
     const val IMG_ABORT = 0x36
+    const val EQ_PRESET = 0x37
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -113,6 +114,7 @@ object Msg {
         IMG_LIST to MsgInfo(IMG_LIST, "IMG_LIST", "app", false),
         IMG_DEL to MsgInfo(IMG_DEL, "IMG_DEL", "app", false),
         IMG_ABORT to MsgInfo(IMG_ABORT, "IMG_ABORT", "dev", true),
+        EQ_PRESET to MsgInfo(EQ_PRESET, "EQ_PRESET", "app", false),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -129,7 +131,8 @@ object Err {
     const val noSpace = 9
     const val notFound = 10
     const val readOnly = 11
-    val names: Map<Int, String> = mapOf(1 to "unknown", 2 to "badValue", 3 to "busy", 4 to "refused", 5 to "tooBig", 6 to "crc", 7 to "staleRev", 8 to "noLibrary", 9 to "noSpace", 10 to "notFound", 11 to "readOnly")
+    const val exists = 12
+    val names: Map<Int, String> = mapOf(1 to "unknown", 2 to "badValue", 3 to "busy", 4 to "refused", 5 to "tooBig", 6 to "crc", 7 to "staleRev", 8 to "noLibrary", 9 to "noSpace", 10 to "notFound", 11 to "readOnly", 12 to "exists")
 }
 
 object Feature {
@@ -142,7 +145,8 @@ object Feature {
     const val lyrics = 6
     const val update = 7
     const val clockAuto = 8
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto")
+    const val eqPresets = 9
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets")
 }
 
 object Enums {
@@ -267,6 +271,12 @@ object Enums {
         const val writeError = 6
         val names: Map<Int, String> = mapOf(0 to "crc", 1 to "badValue", 2 to "noSpace", 3 to "busy", 4 to "offsetMismatch", 5 to "superseded", 6 to "writeError")
     }
+    object EqPresetOp {
+        const val save = 0
+        const val remove = 1
+        const val rename = 2
+        val names: Map<Int, String> = mapOf(0 to "save", 1 to "remove", 2 to "rename")
+    }
     val byName: Map<String, Map<Int, String>> = mapOf(
         "SOURCE" to Source.names,
         "OUTPUT" to Output.names,
@@ -285,6 +295,7 @@ object Enums {
         "ACTION_CMD" to ActionCmd.names,
         "IMG_KIND" to ImgKind.names,
         "ABORT_CODE" to AbortCode.names,
+        "EQ_PRESET_OP" to EqPresetOp.names,
     )
 }
 
@@ -542,6 +553,17 @@ object Tags {
         const val offset = 2
         const val code = 3
     }
+    object EqPreset {
+        const val op = 1
+        const val output = 2
+        const val key = 3
+        const val name = 4
+        const val ints = 5
+        const val replace = 6
+    }
+    object EqPresetReply {
+        const val key = 1
+    }
     object Error {
         const val code = 1
         const val text = 2
@@ -562,6 +584,7 @@ object Tags {
     object EqName {
         const val key = 1
         const val name = 2
+        const val preset = 3
     }
     object Profile {
         const val preamp10 = 1
@@ -849,6 +872,17 @@ object Tags {
             2 to Field(2, "offset", Base.U32, null, false),
             3 to Field(3, "code", Base.ENUM, "ABORT_CODE", false),
         ),
+        "EQ_PRESET" to mapOf(
+            1 to Field(1, "op", Base.ENUM, "EQ_PRESET_OP", false),
+            2 to Field(2, "output", Base.ENUM, "EQ_OUTPUT", false),
+            3 to Field(3, "key", Base.STR, null, false),
+            4 to Field(4, "name", Base.STR, null, false),
+            5 to Field(5, "ints", Base.RECORD, "Profile", false),
+            6 to Field(6, "replace", Base.BOOL, null, false),
+        ),
+        "EQ_PRESET.reply" to mapOf(
+            1 to Field(1, "key", Base.STR, null, false),
+        ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),
             2 to Field(2, "text", Base.STR, null, false),
@@ -869,6 +903,7 @@ object Tags {
         "EqName" to mapOf(
             1 to Field(1, "key", Base.STR, null, false),
             2 to Field(2, "name", Base.STR, null, false),
+            3 to Field(3, "preset", Base.BOOL, null, false),
         ),
         "Profile" to mapOf(
             1 to Field(1, "preamp10", Base.I32, null, false),

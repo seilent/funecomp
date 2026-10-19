@@ -36,6 +36,7 @@ import androidx.test.espresso.Espresso
 import kotlinx.coroutines.CompletableDeferred
 import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.Section
@@ -68,8 +69,8 @@ class BehaviorTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private fun start(pages: List<Page>, link: LinkView = LinkView(Phase.LIVE), firmware: FirmwareView = FirmwareView(), board: String = "ap80"): Pair<SimControl, Shell> {
-        val c = SimControl(board)
+    private fun start(pages: List<Page>, link: LinkView = LinkView(Phase.LIVE), firmware: FirmwareView = FirmwareView(), board: String = "ap80", minor: Int = Proto.minor): Pair<SimControl, Shell> {
+        val c = SimControl(board, minor = minor)
         val shell = Shell(Nav(pages))
         rule.mainClock.autoAdvance = false
         rule.setContent {
@@ -433,7 +434,7 @@ class BehaviorTest {
 
     @Test
     fun autoEqFileShowsTheConfirmWithoutSending() {
-        val (c, shell) = start(eqPage)
+        val (c, shell) = start(eqPage, minor = 4)
         val sent = c.sent.size
         rule.onNodeWithTag("eq.import").performClick()
         settle(500)
@@ -448,7 +449,7 @@ class BehaviorTest {
 
     @Test
     fun autoEqClampsAndRefusals() {
-        val (c, shell) = start(eqPage)
+        val (c, shell) = start(eqPage, minor = 4)
         c.eqText = "Preamp: 1.5 dB\nFilter 1: ON PK Fc 15 Hz Gain 14 dB Q 12"
         c.eqFileName = "custom.txt"
         rule.onNodeWithTag("eq.import").performClick()
@@ -521,7 +522,7 @@ class BehaviorTest {
     @Test
     fun autoEqSearchOpensTheListAndFetchesTheIndexOnce() {
         val (c, shell) = openAutoEq()
-        assertEquals(Page.AutoEq, shell.nav.top)
+        assertEquals(Page.AutoEq(Enums.EqOutput.wired), shell.nav.top)
         assertEquals(1, c.lists)
         rule.onNodeWithTag("aeq.field").assertIsNotFocused()
         rule.onNode(hasText("type to search"), useUnmergedTree = true).assertExists()
@@ -582,7 +583,7 @@ class BehaviorTest {
     fun autoEqTypingWhileLoadingAppliesOnArrival() {
         val (c, shell) = start(eqPage)
         c.holdList = true
-        shell.nav.push(Page.AutoEq)
+        shell.nav.push(Page.AutoEq(Enums.EqOutput.wired))
         settle(1500)
         stateLine("loading")
         type("rode")
@@ -597,7 +598,7 @@ class BehaviorTest {
     fun autoEqSearchFailedRetriesOncePerTap() {
         val (c, shell) = start(eqPage)
         c.autoEq = null
-        shell.nav.push(Page.AutoEq)
+        shell.nav.push(Page.AutoEq(Enums.EqOutput.wired))
         settle(1500)
         stateLine("search failed")
         assertEquals(1, c.lists)
@@ -662,7 +663,7 @@ class BehaviorTest {
         Espresso.pressBack()
         settle(300)
         assertFalse(gridOpen())
-        assertEquals(Page.AutoEq, shell.nav.top)
+        assertEquals(Page.AutoEq(Enums.EqOutput.wired), shell.nav.top)
         Espresso.pressBack()
         settle(1500)
         assertEquals(Page.Eq(Enums.EqOutput.wired), shell.nav.top)
@@ -686,7 +687,7 @@ class BehaviorTest {
     @Test
     fun autoEqRestoredOpenGridKeepsItsLetters() {
         val c = SimControl("ap80")
-        val shell = Shell(Nav(eqPage + Page.AutoEq))
+        val shell = Shell(Nav(eqPage + Page.AutoEq(Enums.EqOutput.wired)))
         val restore = StateRestorationTester(rule)
         rule.mainClock.autoAdvance = false
         restore.setContent {
@@ -728,13 +729,14 @@ class BehaviorTest {
         settle(500)
         assertEquals(listOf("Sennheiser HD 650"), c.profiles)
         assertEquals("Sennheiser HD 650", shell.sheet.title)
-        assertEquals(listOf("preamp -6.1 db", "10 bands", "device has no eq presets"), shell.sheet.info)
+        assertEquals(listOf("preamp -6.1 db", "10 bands"), shell.sheet.info)
+        assertEquals(listOf("apply", "cancel"), shell.sheet.items)
     }
 
     @Test
     fun autoEqLastRowScrollsAboveTheKeyboard() {
         val c = SimControl("ap80")
-        val shell = Shell(Nav(eqPage + Page.AutoEq))
+        val shell = Shell(Nav(eqPage + Page.AutoEq(Enums.EqOutput.wired)))
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell, insets = WindowInsets(0.dp), ime = WindowInsets(bottom = 300.dp)) }
@@ -755,7 +757,7 @@ class BehaviorTest {
     @Test
     fun autoEqResizeKeepsTheQueryAndTheScroll() {
         val c = SimControl("ap80")
-        val shell = Shell(Nav(eqPage + Page.AutoEq))
+        val shell = Shell(Nav(eqPage + Page.AutoEq(Enums.EqOutput.wired)))
         var size by mutableStateOf(411.dp to 960.dp)
         rule.mainClock.autoAdvance = false
         rule.setContent {

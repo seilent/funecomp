@@ -169,6 +169,7 @@ class VectorsTest {
             Msg.IMG_LIST -> ImgListReply.from(n).encode()
             Msg.ART_GET -> ArtGetReply.from(n).encode()
             Msg.UPD_BEGIN -> UpdBeginReply.from(n).encode()
+            Msg.EQ_PRESET -> EqPresetReply.from(n).encode()
             else -> null
         }
         return when (f.type) {

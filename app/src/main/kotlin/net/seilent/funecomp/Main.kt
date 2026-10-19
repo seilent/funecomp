@@ -306,7 +306,7 @@ class Main : ComponentActivity() {
             "playlists" -> base + Page.Playlists
             "settings" -> base + Page.Settings
             "eq" -> base + Page.Settings + Page.Eq(0)
-            "autoeq" -> base + Page.Settings + Page.Eq(0) + Page.AutoEq
+            "autoeq" -> base + Page.Settings + Page.Eq(0) + Page.AutoEq(0)
             "connection" -> base + Page.Connection
             "art" -> base + Page.ArtistArt
             "scrobbling" -> base + Page.Connection + Page.Scrobbling

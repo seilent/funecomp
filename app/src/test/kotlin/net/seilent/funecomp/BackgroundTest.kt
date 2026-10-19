@@ -122,6 +122,32 @@ class BackgroundTest {
     }
 
     @Test
+    fun eqPresetSaveRepliesWithTheKeyOnce() {
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE }
+        val got = java.util.concurrent.CopyOnWriteArrayList<Pair<Int?, String?>>()
+        Remote.eqPreset(Enums.EqPresetOp.save, Enums.EqOutput.wired, null, "HD 650", null, false) { code, key -> got += code to key }
+        waitFor { got.isNotEmpty() }
+        Thread.sleep(200)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf<Pair<Int?, String?>>(null to "/data/flatdap/eq/HD 650.txt"), got.toList())
+        assertTrue(logs.any { it == "eq preset 0 key=null -> ok /data/flatdap/eq/HD 650.txt" })
+        c.destroy()
+    }
+
+    @Test
+    fun eqPresetWithoutTheBitFailsWithoutAFrame() {
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(minor = 4))).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE }
+        val got = java.util.concurrent.CopyOnWriteArrayList<Pair<Int?, String?>>()
+        Remote.eqPreset(Enums.EqPresetOp.save, Enums.EqOutput.wired, null, "HD 650", null, false) { code, key -> got += code to key }
+        waitFor { got.isNotEmpty() }
+        assertEquals(listOf<Pair<Int?, String?>>(-1 to null), got.toList())
+        assertTrue(logs.none { "EQ_PRESET" in it })
+        c.destroy()
+    }
+
+    @Test
     fun bluetoothOffPausesAndOnResumes() {
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE }

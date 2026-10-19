@@ -1,13 +1,15 @@
 package net.seilent.funecomp.state
 
+import net.seilent.funecomp.proto.Band
+import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 
-data class EqFilter(val type: Int, val hz: Float, val db: Float, val q: Float)
+data class EqFilter(val type: Int, val hz: Double, val db: Double, val q: Double)
 
-data class Clamp(val filter: Int, val field: String, val from: Float, val to: Float)
+data class Clamp(val filter: Int, val field: String, val from: Double, val to: Double)
 
-data class EqImport(val name: String, val preamp: Float, val filters: List<EqFilter>, val clamps: List<Clamp>)
+data class EqImport(val name: String, val preamp: Double, val filters: List<EqFilter>, val clamps: List<Clamp>)
 
 sealed interface AutoEqResult {
     data class Ok(val eq: EqImport) : AutoEqResult
@@ -43,14 +45,21 @@ object AutoEq {
         val bytes = n.toByteArray(Charsets.UTF_8)
         if (bytes.isEmpty() || bytes.size > NAME_MAX_BYTES) return false
         if (bytes.any { (it.toInt() and 0xff) < 0x20 || it.toInt() == 0x7f }) return false
-        if ('/' in n || n.startsWith('.') || n != n.trim()) return false
+        if ('/' in n || n.startsWith('.') || n.startsWith(' ') || n.endsWith(' ')) return false
         if (SUFFIXES.any { n.endsWith(it) }) return false
-        return n.lowercase() !in RESERVED
+        return foldKey(n) !in RESERVED
+    }
+
+    fun foldKey(n: String) = buildString { n.forEach { append(if (it in 'A'..'Z') it + ('a' - 'A') else it) } }
+
+    fun profile(eq: EqImport): Profile {
+        fun r(v: Double, k: Int) = (v * k + if (v < 0) -0.5 else 0.5).toInt()
+        return Profile(r(eq.preamp, 10), eq.filters.map { Band(it.type, -1, r(it.hz, 1000), r(it.db, 10), r(it.q, 100)) })
     }
 
     fun parse(text: String, name: String): AutoEqResult {
         if (text.toByteArray(Charsets.UTF_8).size > Tok.eq_fileMaxKib.toInt() * KIB) return AutoEqResult.Refused("file over ${Tok.eq_fileMaxKib.toInt()} kib")
-        var preamp = 0f
+        var preamp = 0.0
         val filters = ArrayList<EqFilter>()
         for (raw in text.lineSequence()) {
             val line = raw.removePrefix("\uFEFF").trim()
@@ -69,8 +78,8 @@ object AutoEq {
         val max = Tok.eq_bands.toInt()
         if (filters.size > max) return AutoEqResult.Refused("${filters.size} filters, max $max")
         val clamps = ArrayList<Clamp>()
-        fun clamp(i: Int, field: String, v: Float, lo: Float, hi: Float): Float {
-            val c = v.coerceIn(lo, hi)
+        fun clamp(i: Int, field: String, v: Double, lo: Float, hi: Float): Double {
+            val c = v.coerceIn(lo.toString().toDouble(), hi.toString().toDouble())
             if (c != v) clamps += Clamp(i, field, v, c)
             return c
         }
@@ -86,5 +95,5 @@ object AutoEq {
         return AutoEqResult.Ok(EqImport(name, p, out, clamps))
     }
 
-    private fun num(s: String) = s.replace(',', '.').toFloat()
+    private fun num(s: String) = s.replace(',', '.').toDouble()
 }

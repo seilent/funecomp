@@ -10,8 +10,8 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply 74000101010001040046444350020200010003020004000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
-hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff010000000000000e0400070000000f04000300000010040004000000
+hex hello_reply 74000101010001040046444350020200010003020005000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff030000000000000e0400070000000f04000300000010040004000000
 re hello_reply hello
 dec hello_reply 0.len 116
 dec hello_reply 0.type HELLO
@@ -19,7 +19,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 4
+dec hello_reply 0.body.minor 5
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -29,7 +29,7 @@ dec hello_reply 0.body.backdropH 480
 dec hello_reply 0.body.maxPayload 16384
 dec hello_reply 0.body.idleMs 30000
 dec hello_reply 0.body.busyMs 5000
-dec hello_reply 0.body.features 511
+dec hello_reply 0.body.features 1023
 dec hello_reply 0.body.libRev 7
 dec hello_reply 0.body.settingsRev 3
 dec hello_reply 0.body.snapRev 4
@@ -2005,3 +2005,161 @@ dec lrc_put_plain_error 0.seq 59
 dec lrc_put_plain_error 0.body.code 4
 dec lrc_put_plain_error 0.body.text refused
 act lrc_put_plain_error accept
+vec eq_preset_save app
+hex eq_preset_save 420037043c000101000002010000040600484420363530052a00010400d8ffffff022000010100010204002200000003040040420f00040400e2ffffff050400
+hex eq_preset_save 8d00000006010001
+dec eq_preset_save 0.len 66
+dec eq_preset_save 0.type EQ_PRESET
+dec eq_preset_save 0.flags 0x04
+dec eq_preset_save 0.seq 60
+dec eq_preset_save 0.body.op save
+dec eq_preset_save 0.body.output wired
+dec eq_preset_save 0.body.name HD 650
+dec eq_preset_save 0.body.ints.preamp10 -40
+dec eq_preset_save 0.body.ints.band[0].type peak
+dec eq_preset_save 0.body.ints.band[0].grid 34
+dec eq_preset_save 0.body.ints.band[0].milliHz 1000000
+dec eq_preset_save 0.body.ints.band[0].gain10 -30
+dec eq_preset_save 0.body.ints.band[0].q100 141
+dec eq_preset_save 0.body.replace true
+act eq_preset_save accept
+vec eq_preset_save_reply dev
+hex eq_preset_save_reply 1e0037013c00011b002f646174612f666c61746461702f65712f4844203635302e747874
+re eq_preset_save_reply eq_preset_save
+dec eq_preset_save_reply 0.len 30
+dec eq_preset_save_reply 0.type EQ_PRESET
+dec eq_preset_save_reply 0.flags 0x01
+dec eq_preset_save_reply 0.seq 60
+dec eq_preset_save_reply 0.body.key /data/flatdap/eq/HD 650.txt
+act eq_preset_save_reply accept
+vec eq_preset_save_error2 dev
+hex eq_preset_save_error2 100037033c00010100020209006261642076616c7565
+re eq_preset_save_error2 eq_preset_save
+dec eq_preset_save_error2 0.len 16
+dec eq_preset_save_error2 0.type EQ_PRESET
+dec eq_preset_save_error2 0.flags 0x03
+dec eq_preset_save_error2 0.seq 60
+dec eq_preset_save_error2 0.body.code 2
+dec eq_preset_save_error2 0.body.text bad value
+act eq_preset_save_error2 accept
+vec eq_preset_save_error3 dev
+hex eq_preset_save_error3 0b0037033c000101000302040062757379
+re eq_preset_save_error3 eq_preset_save
+dec eq_preset_save_error3 0.len 11
+dec eq_preset_save_error3 0.type EQ_PRESET
+dec eq_preset_save_error3 0.flags 0x03
+dec eq_preset_save_error3 0.seq 60
+dec eq_preset_save_error3 0.body.code 3
+dec eq_preset_save_error3 0.body.text busy
+act eq_preset_save_error3 accept
+vec eq_preset_save_error9 dev
+hex eq_preset_save_error9 0f0037033c00010100090208006e6f207370616365
+re eq_preset_save_error9 eq_preset_save
+dec eq_preset_save_error9 0.len 15
+dec eq_preset_save_error9 0.type EQ_PRESET
+dec eq_preset_save_error9 0.flags 0x03
+dec eq_preset_save_error9 0.seq 60
+dec eq_preset_save_error9 0.body.code 9
+dec eq_preset_save_error9 0.body.text no space
+act eq_preset_save_error9 accept
+vec eq_preset_save_error12 dev
+hex eq_preset_save_error12 0d0037033c000101000c020600657869737473
+re eq_preset_save_error12 eq_preset_save
+dec eq_preset_save_error12 0.len 13
+dec eq_preset_save_error12 0.type EQ_PRESET
+dec eq_preset_save_error12 0.flags 0x03
+dec eq_preset_save_error12 0.seq 60
+dec eq_preset_save_error12 0.body.code 12
+dec eq_preset_save_error12 0.body.text exists
+act eq_preset_save_error12 accept
+vec eq_preset_remove app
+hex eq_preset_remove 240037043d0001010001031d002f646174612f666c61746461702f65712f50726573657420312e747874
+dec eq_preset_remove 0.len 36
+dec eq_preset_remove 0.type EQ_PRESET
+dec eq_preset_remove 0.flags 0x04
+dec eq_preset_remove 0.seq 61
+dec eq_preset_remove 0.body.op remove
+dec eq_preset_remove 0.body.key /data/flatdap/eq/Preset 1.txt
+act eq_preset_remove accept
+vec eq_preset_remove_reply dev
+hex eq_preset_remove_reply 000037013d00
+re eq_preset_remove_reply eq_preset_remove
+dec eq_preset_remove_reply 0.len 0
+dec eq_preset_remove_reply 0.type EQ_PRESET
+dec eq_preset_remove_reply 0.flags 0x01
+dec eq_preset_remove_reply 0.seq 61
+act eq_preset_remove_reply accept
+vec eq_preset_remove_error10 dev
+hex eq_preset_remove_error10 100037033d000101000a0209006e6f7420666f756e64
+re eq_preset_remove_error10 eq_preset_remove
+dec eq_preset_remove_error10 0.len 16
+dec eq_preset_remove_error10 0.type EQ_PRESET
+dec eq_preset_remove_error10 0.flags 0x03
+dec eq_preset_remove_error10 0.seq 61
+dec eq_preset_remove_error10 0.body.code 10
+dec eq_preset_remove_error10 0.body.text not found
+act eq_preset_remove_error10 accept
+vec eq_preset_remove_error11 dev
+hex eq_preset_remove_error11 100037033d000101000b02090072656164206f6e6c79
+re eq_preset_remove_error11 eq_preset_remove
+dec eq_preset_remove_error11 0.len 16
+dec eq_preset_remove_error11 0.type EQ_PRESET
+dec eq_preset_remove_error11 0.flags 0x03
+dec eq_preset_remove_error11 0.seq 61
+dec eq_preset_remove_error11 0.body.code 11
+dec eq_preset_remove_error11 0.body.text read only
+act eq_preset_remove_error11 accept
+vec eq_preset_rename app
+hex eq_preset_rename 310037043e0001010002031d002f646174612f666c61746461702f65712f50726573657420312e747874040a0053656e6e686569736572
+dec eq_preset_rename 0.len 49
+dec eq_preset_rename 0.type EQ_PRESET
+dec eq_preset_rename 0.flags 0x04
+dec eq_preset_rename 0.seq 62
+dec eq_preset_rename 0.body.op rename
+dec eq_preset_rename 0.body.key /data/flatdap/eq/Preset 1.txt
+dec eq_preset_rename 0.body.name Sennheiser
+act eq_preset_rename accept
+vec eq_preset_rename_reply dev
+hex eq_preset_rename_reply 220037013e00011f002f646174612f666c61746461702f65712f53656e6e6865697365722e747874
+re eq_preset_rename_reply eq_preset_rename
+dec eq_preset_rename_reply 0.len 34
+dec eq_preset_rename_reply 0.type EQ_PRESET
+dec eq_preset_rename_reply 0.flags 0x01
+dec eq_preset_rename_reply 0.seq 62
+dec eq_preset_rename_reply 0.body.key /data/flatdap/eq/Sennheiser.txt
+act eq_preset_rename_reply accept
+vec eq_preset_rename_error12 dev
+hex eq_preset_rename_error12 0d0037033e000101000c020600657869737473
+re eq_preset_rename_error12 eq_preset_rename
+dec eq_preset_rename_error12 0.len 13
+dec eq_preset_rename_error12 0.type EQ_PRESET
+dec eq_preset_rename_error12 0.flags 0x03
+dec eq_preset_rename_error12 0.seq 62
+dec eq_preset_rename_error12 0.body.code 12
+dec eq_preset_rename_error12 0.body.text exists
+act eq_preset_rename_error12 accept
+vec eq_presets dev
+hex eq_presets 9e0013003f0001010001021b002f646174612f666c61746461702f65712f4844203635302e747874030c000103006f66660203004f4646032b00011b002f6461
+hex eq_presets 74612f666c61746461702f65712f4844203635302e74787402060048442036353003010001042a00010400d8ffffff0220000101000102040022000000030400
+hex eq_presets 40420f00040400e2ffffff0504008d000000050400000000000604000200000007010000
+dec eq_presets 0.len 158
+dec eq_presets 0.type EQ
+dec eq_presets 0.flags 0x00
+dec eq_presets 0.seq 63
+dec eq_presets 0.body.output bt
+dec eq_presets 0.body.key /data/flatdap/eq/HD 650.txt
+dec eq_presets 0.body.profile[0].key off
+dec eq_presets 0.body.profile[0].name OFF
+dec eq_presets 0.body.profile[1].key /data/flatdap/eq/HD 650.txt
+dec eq_presets 0.body.profile[1].name HD 650
+dec eq_presets 0.body.profile[1].preset true
+dec eq_presets 0.body.ints.preamp10 -40
+dec eq_presets 0.body.ints.band[0].type peak
+dec eq_presets 0.body.ints.band[0].grid 34
+dec eq_presets 0.body.ints.band[0].milliHz 1000000
+dec eq_presets 0.body.ints.band[0].gain10 -30
+dec eq_presets 0.body.ints.band[0].q100 141
+dec eq_presets 0.body.offset 0
+dec eq_presets 0.body.total 2
+dec eq_presets 0.body.more false
+act eq_presets accept

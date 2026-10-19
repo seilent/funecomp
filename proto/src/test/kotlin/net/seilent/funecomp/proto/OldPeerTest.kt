@@ -18,6 +18,7 @@ class OldPeerTest {
     private val v11 = table("/proto-1.1.txt")
     private val v12 = table("/proto-1.2.txt")
     private val v13 = table("/proto-1.3.txt")
+    private val v14 = table("/proto-1.4.txt")
 
     private fun table(name: String): Map<String, Map<Int, Field>> = run {
         val text = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
@@ -122,6 +123,36 @@ class OldPeerTest {
         assertTrue(q.items.all { it.lyricsPlain == null })
         val q14 = Queue.from(Node.decode("QUEUE", body("queue_lyrics_plain")))
         assertEquals(listOf(false to true, true to false), q14.items.map { it.lyrics to it.lyricsPlain })
+    }
+
+    @Test
+    fun protocol15FramesDecodeWithThe14TablesToEmptyFields() {
+        val old = Eq.from(Node.decode("EQ", body("eq_presets"), v14))
+        assertEquals(listOf(EqName("off", "OFF"), EqName("/data/flatdap/eq/HD 650.txt", "HD 650")), old.names)
+        val now = Eq.from(Node.decode("EQ", body("eq_presets")))
+        assertEquals(listOf(EqName("off", "OFF", null), EqName("/data/flatdap/eq/HD 650.txt", "HD 650", true)), now.names)
+        assertNull(v14["EQ_PRESET"])
+
+        assertEquals("/data/flatdap/eq/HD 650.txt", EqPresetReply.from(Node.decode("EQ_PRESET.reply", body("eq_preset_save_reply"))).key)
+        assertNull(EqPresetReply.from(Node.decode("EQ_PRESET.reply", body("eq_preset_remove_reply"))).key)
+    }
+
+    @Test
+    fun eqPresetBuildersMatchTheVectors() {
+        val ints = Profile(-40, listOf(Band(Enums.BandType.peak, 34, 1000000, -30, 141)))
+        assertArrayEquals(body("eq_preset_save"), Req.eqPreset(Enums.EqPresetOp.save, Enums.EqOutput.wired, name = "HD 650", ints = ints, replace = true))
+        assertArrayEquals(body("eq_preset_remove"), Req.eqPreset(Enums.EqPresetOp.remove, key = "/data/flatdap/eq/Preset 1.txt"))
+        assertArrayEquals(body("eq_preset_rename"), Req.eqPreset(Enums.EqPresetOp.rename, key = "/data/flatdap/eq/Preset 1.txt", name = "Sennheiser"))
+        val noReplace = Req.eqPreset(Enums.EqPresetOp.save, Enums.EqOutput.wired, name = "HD 650", ints = ints, replace = false)
+        assertArrayEquals(body("eq_preset_save").copyOf(body("eq_preset_save").size - 1) + byteArrayOf(0), noReplace)
+    }
+
+    @Test
+    fun eqPresetIsGatedByItsOwnBit() {
+        assertFalse(Groups.allowed(Msg.EQ_PRESET, Groups.mask("eq")))
+        assertTrue(Groups.allowed(Msg.EQ_PRESET, Groups.mask("eq", "eqPresets")))
+        assertEquals(9, Feature.eqPresets)
+        assertTrue(Groups.allowed(Msg.EQ_SET, Groups.mask("eq")))
     }
 
     @Test

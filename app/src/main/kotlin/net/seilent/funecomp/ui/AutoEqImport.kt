@@ -34,6 +34,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.artist.AutoEqList
+import net.seilent.funecomp.proto.Profile
+import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
@@ -45,6 +48,17 @@ private const val TITLE = "import autoeq"
 private const val FILE = "file"
 private const val SEARCH = "search"
 private const val CANCEL = "cancel"
+private const val APPLY = "apply"
+private const val REPLACE_TITLE = "replace preset?"
+private const val REPLACE = "replace preset"
+private const val KEEP = "keep preset"
+private const val USE = "select that profile"
+private const val SAVE_AS = "save as"
+const val SAVE_PRESET = "save preset"
+const val NAME_TAKEN = "name taken"
+const val NAME_NOT_ALLOWED = "name not allowed"
+const val NOT_SAVED = "preset not saved"
+const val TOO_MANY = "too many presets"
 private const val NO_PRESETS = "device has no eq presets"
 private const val HEADER = "autoeq"
 private const val LOADING = "loading"
@@ -56,31 +70,31 @@ private const val IME_KEY = "ime"
 fun clampText(c: Clamp): String {
     val band = if (c.filter == AutoEq.PREAMP) "" else "band ${c.filter} "
     return band + when (c.field) {
-        AutoEq.FIELD_FC -> "fc ${freqText(c.from)} to ${freqText(c.to)}"
+        AutoEq.FIELD_FC -> "fc ${freqText(c.from.toFloat())} to ${freqText(c.to.toFloat())}"
         AutoEq.FIELD_Q -> "q ${qText((c.from * 100).roundToInt())} to ${qText((c.to * 100).roundToInt())}"
-        AutoEq.FIELD_GAIN -> "gain ${signed(c.from, true)} to ${signed(c.to, true)}"
-        else -> "preamp ${signed(c.from, true)} to ${signed(c.to, true)}"
+        AutoEq.FIELD_GAIN -> "gain ${signed(c.from.toFloat(), true)} to ${signed(c.to.toFloat(), true)}"
+        else -> "preamp ${signed(c.from.toFloat(), true)} to ${signed(c.to.toFloat(), true)}"
     }
 }
 
-fun autoEqLines(r: AutoEqResult): List<String> = when (r) {
+fun autoEqLines(r: AutoEqResult, presets: Boolean): List<String> = when (r) {
     is AutoEqResult.Refused -> listOf(r.reason)
     is AutoEqResult.Ok -> buildList {
         val eq = r.eq
-        add("preamp ${signed(eq.preamp, false)} db")
+        add("preamp ${signed(eq.preamp.toFloat(), false)} db")
         add(if (eq.filters.size == 1) "1 band" else "${eq.filters.size} bands")
         eq.clamps.forEach { add(clampText(it)) }
         if (!AutoEq.validName(eq.name)) add("invalid name")
-        add(NO_PRESETS)
+        if (!presets) add(NO_PRESETS)
     }
 }
 
-fun autoEqImport(ctx: Ctx) = ctx.sheet.open(TITLE, listOf(FILE, SEARCH)) { i ->
-    if (i == 0) ctx.control.eqFile { name, text -> autoEqConfirm(ctx, AutoEq.name(name), text) } else ctx.nav.push(Page.AutoEq)
+fun autoEqImport(ctx: Ctx, output: Int) = ctx.sheet.open(TITLE, listOf(FILE, SEARCH)) { i ->
+    if (i == 0) ctx.control.eqFile { name, text -> autoEqConfirm(ctx, output, AutoEq.name(name), text) } else ctx.nav.push(Page.AutoEq(output))
 }
 
 @Composable
-fun AutoEqPage(ctx: Ctx, ime: WindowInsets) {
+fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
     val ui = LocalUi.current
     val query = rememberSaveable { mutableStateOf("") }
     var focus by rememberSaveable { mutableStateOf("") }
@@ -134,7 +148,7 @@ fun AutoEqPage(ctx: Ctx, ime: WindowInsets) {
                                 val e = item.row.entry
                                 ListRow(e.name, Modifier.testTag("aeq.row.${e.name}"), e.source, focused = focus == item.key, onTap = {
                                     focus = item.key
-                                    ctx.control.autoEqProfile(e) { text -> autoEqConfirm(ctx, AutoEq.name(e.name), text) }
+                                    ctx.control.autoEqProfile(e) { text -> autoEqConfirm(ctx, page.output, AutoEq.name(e.name), text) }
                                 })
                             }
                         }
@@ -199,7 +213,55 @@ private fun SearchField(query: MutableState<String>) {
     )
 }
 
-fun autoEqConfirm(ctx: Ctx, name: String, text: String?) {
+fun autoEqConfirm(ctx: Ctx, output: Int, name: String, text: String?) {
     val r = if (text == null) AutoEqResult.Refused("not readable") else AutoEq.parse(text, name)
-    ctx.sheet.open(name.ifEmpty { TITLE }, listOf(CANCEL), info = autoEqLines(r)) {}
+    val presets = ctx.device.has("eqPresets")
+    val eq = (r as? AutoEqResult.Ok)?.eq?.takeIf { presets && AutoEq.validName(it.name) }
+    if (eq == null) {
+        ctx.sheet.open(name.ifEmpty { TITLE }, listOf(CANCEL), info = autoEqLines(r, presets)) {}
+        return
+    }
+    val ints = AutoEq.profile(eq)
+    ctx.sheet.open(name, listOf(APPLY, CANCEL), info = autoEqLines(r, true)) { if (it == 0) savePreset(ctx, output, name, ints, false) }
+}
+
+private fun savePreset(ctx: Ctx, output: Int, name: String, ints: Profile, replace: Boolean) {
+    ctx.control.eqPreset(Enums.EqPresetOp.save, output, null, name, ints, replace) { code, _ ->
+        when (code) {
+            null -> imported(ctx)
+            Err.exists -> clash(ctx, output, name, ints)
+            Err.noSpace -> ctx.toast.show(TOO_MANY, name)
+            else -> ctx.toast.show(NOT_SAVED, name)
+        }
+    }
+}
+
+private fun imported(ctx: Ctx) {
+    if (ctx.nav.top is Page.AutoEq) ctx.nav.pop()
+}
+
+private fun clash(ctx: Ctx, output: Int, name: String, ints: Profile) {
+    val fold = AutoEq.foldKey(name)
+    val hit = ctx.device.eq[output]?.names.orEmpty().firstOrNull { AutoEq.foldKey(it.name ?: "") == fold }
+    when {
+        hit == null -> ctx.toast.show(NOT_SAVED, NAME_TAKEN)
+        hit.preset == true -> ctx.sheet.open(REPLACE_TITLE, listOf(REPLACE, KEEP), 1, listOf(name)) { if (it == 0) savePreset(ctx, output, name, ints, true) }
+        else -> ctx.sheet.open(name, listOf(USE, SAVE_AS), info = listOf(NAME_TAKEN)) { i ->
+            if (i == 0) {
+                ctx.control.eqSet(output, key = hit.key)
+                imported(ctx)
+            } else {
+                ctx.sheet.openEntry(SAVE_PRESET) {
+                    TextEntry(name) { text ->
+                        if (!AutoEq.validName(text)) {
+                            ctx.toast.show(SAVE_PRESET, NAME_NOT_ALLOWED)
+                        } else {
+                            ctx.sheet.close()
+                            savePreset(ctx, output, text, ints, false)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

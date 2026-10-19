@@ -19,6 +19,7 @@ object Groups {
         "lyrics" to setOf(Msg.LRC_PUT, Msg.LRC_DEL),
         "update" to setOf(Msg.UPD_BEGIN, Msg.UPD_DATA, Msg.UPD_END, Msg.UPD_ABORT),
         "clockAuto" to emptySet(),
+        "eqPresets" to setOf(Msg.EQ_PRESET),
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -382,20 +383,21 @@ data class Profile(val preamp10: Int, val bands: List<Band>) {
     }
 }
 
-data class EqName(val key: String, val name: String?) {
-    val size: Int get() = TlvWriter().rec(Tags.Eq.profile) { str(Tags.EqName.key, key); str(Tags.EqName.name, name) }.size
+data class EqName(val key: String, val name: String?, val preset: Boolean? = null) {
+    fun write(o: TlvWriter) = o.apply {
+        str(Tags.EqName.key, key)
+        str(Tags.EqName.name, name)
+        bool(Tags.EqName.preset, preset)
+    }
+
+    val size: Int get() = TlvWriter().rec(Tags.Eq.profile) { write(this) }.size
 }
 
 data class Eq(val output: Int, val key: String?, val names: List<EqName>, val ints: Profile?, val page: PageInfo) {
     fun encode() = tlv {
         enum(Tags.Eq.output, output)
         str(Tags.Eq.key, key)
-        names.forEach { e ->
-            rec(Tags.Eq.profile) {
-                str(Tags.EqName.key, e.key)
-                str(Tags.EqName.name, e.name)
-            }
-        }
+        names.forEach { e -> rec(Tags.Eq.profile) { e.write(this) } }
         ints?.let { p -> rec(Tags.Eq.ints) { p.write(this) } }
         u32(Tags.Eq.offset, page.offset)
         u32(Tags.Eq.total, page.total)
@@ -406,7 +408,7 @@ data class Eq(val output: Int, val key: String?, val names: List<EqName>, val in
         fun from(n: Node) = Eq(
             n.int(Tags.Eq.output) ?: -1,
             n.str(Tags.Eq.key),
-            n.nodes(Tags.Eq.profile).map { EqName(it.str(Tags.EqName.key) ?: "", it.str(Tags.EqName.name)) },
+            n.nodes(Tags.Eq.profile).map { EqName(it.str(Tags.EqName.key) ?: "", it.str(Tags.EqName.name), it.bool(Tags.EqName.preset)) },
             n.node(Tags.Eq.ints)?.let { Profile.from(it) },
             PageInfo.read(n, Tags.Eq.offset, Tags.Eq.total, Tags.Eq.more),
         )
@@ -587,6 +589,14 @@ data class ArtGetReply(val crc: Long?, val total: Long?, val w: Int?, val h: Int
             n.long(Tags.ArtGetReply.offset) ?: 0,
             n.bytes(Tags.ArtGetReply.data),
         )
+    }
+}
+
+data class EqPresetReply(val key: String?) {
+    fun encode() = tlv { str(Tags.EqPresetReply.key, key) }
+
+    companion object {
+        fun from(n: Node) = EqPresetReply(n.str(Tags.EqPresetReply.key))
     }
 }
 

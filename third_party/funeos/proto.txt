@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 4
+const minor 5
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -41,6 +41,7 @@ err noLibrary 8
 err noSpace 9
 err notFound 10
 err readOnly 11
+err exists 12
 feature settings 0
 feature eq 1
 feature library 2
@@ -50,6 +51,7 @@ feature art 5
 feature lyrics 6
 feature update 7
 feature clockAuto 8
+feature eqPresets 9
 enum SOURCE 0 local
 enum SOURCE 1 phone
 enum OUTPUT 0 wired
@@ -120,6 +122,9 @@ enum ABORT_CODE 3 busy
 enum ABORT_CODE 4 offsetMismatch
 enum ABORT_CODE 5 superseded
 enum ABORT_CODE 6 writeError
+enum EQ_PRESET_OP 0 save
+enum EQ_PRESET_OP 1 remove
+enum EQ_PRESET_OP 2 rename
 msg HELLO 0x01 app req
 tag HELLO 1 magic u32 one
 tag HELLO 2 major u16 one
@@ -330,6 +335,14 @@ msg IMG_ABORT 0x36 dev push
 tag IMG_ABORT 1 name str one
 tag IMG_ABORT 2 offset u32 one
 tag IMG_ABORT 3 code ABORT_CODE one
+msg EQ_PRESET 0x37 app req
+tag EQ_PRESET 1 op EQ_PRESET_OP one
+tag EQ_PRESET 2 output EQ_OUTPUT one
+tag EQ_PRESET 3 key str one
+tag EQ_PRESET 4 name str one
+tag EQ_PRESET 5 ints Profile one
+tag EQ_PRESET 6 replace bool one
+tag EQ_PRESET.reply 1 key str one
 tag error 1 code u8 one
 tag error 2 text str one
 tag error 3 refused str list
@@ -345,6 +358,7 @@ tag Row 9 word str list
 tag Row 10 flag ROW_FLAG list
 tag EqName 1 key str one
 tag EqName 2 name str one
+tag EqName 3 preset bool one
 tag Profile 1 preamp10 i32 one
 tag Profile 2 band Band list
 tag Band 1 type BAND_TYPE one

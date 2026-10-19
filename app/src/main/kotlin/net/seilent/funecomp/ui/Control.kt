@@ -46,6 +46,7 @@ interface Control {
     fun set(key: String, value: String)
     fun draft(kind: Int, value: String? = null, minutes: Long? = null, unixS: Long? = null, zoneS: Int? = null)
     fun eqSet(output: Int, key: String? = null, ints: Profile? = null)
+    fun eqPreset(op: Int, output: Int?, key: String?, name: String?, ints: Profile?, replace: Boolean, done: (Int?, String?) -> Unit) {}
     fun action(cmd: Int, track: Long? = null, done: (Int?, String?) -> Unit = { _, _ -> })
     fun favorite(s: State, toast: (String, String) -> Unit) {}
     fun bonded(): List<Bonded> = emptyList()
