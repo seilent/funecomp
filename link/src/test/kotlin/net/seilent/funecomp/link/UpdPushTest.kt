@@ -72,8 +72,9 @@ class UpdPushTest {
         val port = sim("drop-after-bytes=100000")
         assertTrue(push(session(port)) is UpdPush.Outcome.Paused)
         assertFalse(File(tmp.root, "v1.upt").exists())
-        val r = push(session(port)) as UpdPush.Outcome.Done
+        val r = push(session(sim())) as UpdPush.Outcome.Done
         assertTrue(r.from > 0)
+        assertTrue(r.from % Proto.updChunk == 0L && r.from < image.size)
         assertArrayEquals(image, File(tmp.root, "v1.upt").readBytes())
     }
 
@@ -100,10 +101,10 @@ class UpdPushTest {
 
     @Test
     fun gateClosedPausesAndKeepsThePart() {
-        val port = sim()
+        val s = session(sim())
         var n = 0
-        assertTrue(push(session(port), gate = { n++ < 3 }) is UpdPush.Outcome.Paused)
-        val r = push(session(port)) as UpdPush.Outcome.Done
+        assertTrue(push(s, gate = { n++ < 3 }) is UpdPush.Outcome.Paused)
+        val r = push(s) as UpdPush.Outcome.Done
         assertEquals(3L * Proto.updChunk, r.from)
     }
 

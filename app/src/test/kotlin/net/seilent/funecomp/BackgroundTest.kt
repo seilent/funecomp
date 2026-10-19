@@ -199,7 +199,7 @@ class BackgroundTest {
         })
         Lyrics.set(true)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(lrcDir = dir))).create().startCommand(0, 1)
-        waitFor { Remote.phase == Phase.LIVE }
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
         Remote.queuePage(0)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
         waitFor { logs.count { it.startsWith("stored lrc") } >= 3 }
@@ -214,7 +214,7 @@ class BackgroundTest {
         c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
         c.destroy()
         val again = Robolectric.buildService(LinkService::class.java, startIntent(sim(lrcDir = dir))).create().startCommand(0, 3)
-        waitFor { Remote.phase == Phase.LIVE }
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
         Remote.queuePage(0)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
         Thread.sleep(1500)
@@ -233,7 +233,7 @@ class BackgroundTest {
         })
         Lyrics.set(true)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("refuse=LRC_PUT")))).create().startCommand(0, 1)
-        waitFor { Remote.phase == Phase.LIVE }
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
         Remote.queuePage(0)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
         val end = System.currentTimeMillis() + 30_000
@@ -272,7 +272,7 @@ class BackgroundTest {
 
     private fun live(spec: String): org.robolectric.android.controller.ServiceController<LinkService> {
         val c = Robolectric.buildService(LinkService::class.java, startIntent(spec)).create().startCommand(0, 1)
-        waitFor { Remote.phase == Phase.LIVE }
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
         Remote.queuePage(0)
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
         return c
