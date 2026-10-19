@@ -126,7 +126,7 @@ fun App(
             Stack(nav) { page ->
                 when (page) {
                     Page.NowPlaying -> NowPlaying(device, control, shell.toast, { nav.pop() }, { nav.push(Page.Queue) }, art, lyrics) { held -> artSheet(ctx, held) }
-                    Page.Home -> Home(homeItems(device, link, sources)) { nav.push(it) }
+                    Page.Home -> Home(homeItems(device, link, sources), { control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)
                     Page.Playlists -> Playlists(ctx)

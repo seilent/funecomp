@@ -292,6 +292,24 @@ class DeviceTest {
         assertEquals(rev + 1, q.rev)
     }
 
+    @Test
+    fun shuffleLibraryNeedsTracks() {
+        val empty = Device(Options(Board.of("ap80")), Library(emptyList())) { t }
+        val first = Sink()
+        empty.greet(first)
+        val rev = State.from(first.of(Msg.STATE).single()).queueRev
+        val none = Sink()
+        assertEquals(Err.noLibrary, fail(req(empty, Msg.ACTION, Req.action(Enums.ActionCmd.shuffleLibrary), none)).code)
+        assertTrue(none.of(Msg.STATE).isEmpty())
+        assertEquals(rev, State.from(Node.decode("STATE", empty.state())).queueRev)
+        val d = device()
+        val out = Sink()
+        ok(req(d, Msg.ACTION, Req.action(Enums.ActionCmd.shuffleLibrary), out))
+        val s = State.from(out.of(Msg.STATE).single())
+        assertEquals(d.lib.tracks.size.toLong(), s.slots)
+        assertEquals(true, s.shuffle)
+    }
+
     private fun jpeg(size: Int): ByteArray {
         val head = byteArrayOf(-1, -40, -1, -64, 0, 17, 8, 1, -32, 1, 104, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1)
         return ByteArray(size).also { head.copyInto(it); it[size - 2] = -1; it[size - 1] = -39 }

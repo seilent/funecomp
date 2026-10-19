@@ -795,6 +795,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
                 lib.snapRev++
             }
             Enums.ActionCmd.shuffleLibrary -> {
+                if (lib.tracks.isEmpty()) return Answer.Fail(Err.noLibrary, "no library")
                 queue = lib.tracks.map { it.id }.shuffled().toMutableList()
                 slot = 0
                 shuffle = true

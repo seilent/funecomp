@@ -3,6 +3,7 @@ package net.seilent.funecomp.ui
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -18,6 +19,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -137,14 +139,18 @@ fun HubPage(
 }
 
 @Composable
-fun Home(items: List<HomeItem>, onOpen: (Page) -> Unit) {
+fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     val ui = LocalUi.current
     var focus by rememberSaveable { mutableIntStateOf(0) }
     val enter = remember { Animatable(0f) }
+    val ringEnter = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
+        launch { ringEnter.animateTo(Tok.motion_homeEnterPeek, tween(Tok.motion_homeEnterPeek.toInt(), easing = LinearEasing)) }
         val total = Tok.motion_homeEnter + Tok.motion_homeEnterStagger * items.size
         enter.animateTo(total, tween(total.toInt(), easing = LinearEasing))
     }
+    val music = items.indexOfFirst { it.page == Page.Music }
+    val barFocus by animateFloatAsState(focus.toFloat(), tween(Tok.motion_focusCursor.toInt(), easing = Sine), label = "homeFocus")
     val measurer = rememberTextMeasurer()
     val pitch = ui.homePitch
     val x = ui.px(ui.homeTextX)
@@ -155,7 +161,21 @@ fun Home(items: List<HomeItem>, onOpen: (Page) -> Unit) {
             Box(Modifier.size(ui.px(ui.w).dp(), ui.px(height).dp())) {
                 val barX = ui.homeTextX - Tok.focus_barOffset
                 val first = ui.px(Tok.homeFirstBaseline)
-                FocusBar(ui.px(Tok.homeBarH), ui.px(barX), first + ui.px(focus * pitch) - ui.px(Tok.homeBarTop))
+                FocusBar(ui.px(Tok.homeBarH), ui.px(barX), first + ui.px(focus * pitch) - ui.px(Tok.homeBarTop)) { if (music < 0) 1f else homeBarAlpha(barFocus, music) }
+                if (music >= 0) {
+                    var down by remember { mutableStateOf(false) }
+                    val left = ui.px(ui.homeMenuX)
+                    val top = ui.px(ui.homeSlotTop(music))
+                    Box(
+                        Modifier.at(left, top)
+                            .size((ui.px(ui.homeRingHitRight) - left).dp(), (ui.px(ui.homeRingHitBottom(music)) - top).dp())
+                            .graphicsLayer { alpha = homeRingEnter(ringEnter.value) }
+                            .press({ onShuffle() }) { down = it }
+                            .testTag("home.ring"),
+                    ) {
+                        Box(Modifier.at(ui.px(ui.homeRingX) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(Tok.homeRingSize, GlyphName.PLAY, false, pressed = down) }
+                    }
+                }
                 items.forEachIndexed { i, item ->
                     val baseline = ui.px(Tok.homeFirstBaseline + i * pitch)
                     val on = focus == i

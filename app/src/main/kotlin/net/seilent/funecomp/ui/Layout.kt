@@ -1,6 +1,7 @@
 package net.seilent.funecomp.ui
 
 import net.seilent.funecomp.proto.gen.Tok
+import kotlin.math.abs
 import kotlin.math.min
 
 private const val PIVOT_TOP = 74f
@@ -89,3 +90,13 @@ val Ui.overlayMinusY get() = OVERLAY_MINUS_Y * overlayAnchorScale
 val Ui.homePitch get() = if (landscape) HOME_PITCH_LANDSCAPE else Tok.homePitch
 val Ui.homeMenuX get() = if (landscape) HOME_MENU_X_LANDSCAPE else 0f
 val Ui.homeTextX get() = homeMenuX + Tok.homeTextX
+
+fun Ui.homeSlotTop(index: Int) = Tok.homeFirstBaseline + index * homePitch - Tok.homeBarTop
+val Ui.homeRingX get() = homeMenuX + Tok.homeRingX
+fun Ui.homeRingY(music: Int) = Tok.homeRingY + music * homePitch
+val Ui.homeRingHitRight get() = homeMenuX + min(Tok.homeBarX, Tok.homeRingX + Tok.homeRingSize / 2)
+fun Ui.homeRingHitBottom(music: Int) = music * homePitch + Tok.homeRingHitBottom
+
+fun homeRingEnter(ms: Float) = Decel.transform((ms / Tok.motion_homeEnterPeek).coerceIn(0f, 1f))
+
+fun homeBarAlpha(focus: Float, music: Int) = abs(focus - music).coerceIn(0f, 1f)

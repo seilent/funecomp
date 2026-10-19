@@ -88,6 +88,7 @@ class Shot(
     val cardEq: List<String> = emptyList(),
     val ime: Float = 0f,
     val lyrics: ((DeviceState) -> LyricsFetch.Show)? = null,
+    val held: Boolean = false,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -263,6 +264,7 @@ val SHOTS = listOf(
         rule.onNodeWithTag("home.column").performTouchInput { swipeUp() }
         rule.mainClock.autoAdvance = false
     },
+    Shot("home-ring-down", pages = HOME, prep = ::playing, held = true) { rule.onNodeWithTag("home.ring").performTouchInput { down(center) } },
     Shot("nowplaying", pages = NP, prep = ::playing),
     Shot("nowplaying-v1", board = "v1", pages = NP, prep = ::playing),
     Shot("nowplaying-last", pages = NP, prep = { it.queueOp(Enums.QueueCmd.playAt, slot = it.device.playback.state.slots!! - 1) }),
@@ -673,6 +675,7 @@ class Shots {
                 settle(shot.after)
                 val file = File(dir, "${shot.name}-${size.name}.png")
                 rule.onNodeWithTag("frame").captureRoboImage(file.path)
+                if (shot.held) rule.onNodeWithTag("frame").performTouchInput { cancel() }
             }
         }
     }

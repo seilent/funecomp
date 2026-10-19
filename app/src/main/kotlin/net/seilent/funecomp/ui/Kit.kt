@@ -230,13 +230,13 @@ fun ListBar(state: LazyListState, focus: Int, x: Float) {
 }
 
 @Composable
-fun FocusBar(height: Float, x: Float, y: Float) {
+fun FocusBar(height: Float, x: Float, y: Float, alpha: () -> Float = { 1f }) {
     val ui = LocalUi.current
     val spec = tween<Float>(Tok.motion_focusCursor.toInt(), easing = Sine)
     val ay by animateFloatAsState(y, spec, label = "barY")
     val ax by animateFloatAsState(x, spec, label = "barX")
     val ah by animateFloatAsState(height, spec, label = "barH")
-    Box(Modifier.offset { IntOffset(ax.roundToInt(), ay.roundToInt()) }.size(ui.px(Tok.focus_barWidth).dp(), ah.dp()).background(white(Tok.alpha_full)))
+    Box(Modifier.offset { IntOffset(ax.roundToInt(), ay.roundToInt()) }.size(ui.px(Tok.focus_barWidth).dp(), ah.dp()).graphicsLayer { this.alpha = alpha() }.background(white(Tok.alpha_full)))
 }
 
 @Stable

@@ -12,6 +12,14 @@ import net.seilent.funecomp.ui.bandText
 import net.seilent.funecomp.ui.display
 import net.seilent.funecomp.ui.freqText
 import net.seilent.funecomp.ui.gridHz
+import net.seilent.funecomp.ui.homeBarAlpha
+import net.seilent.funecomp.ui.homeMenuX
+import net.seilent.funecomp.ui.homeRingEnter
+import net.seilent.funecomp.ui.homeRingHitBottom
+import net.seilent.funecomp.ui.homeRingHitRight
+import net.seilent.funecomp.ui.homeRingX
+import net.seilent.funecomp.ui.homeRingY
+import net.seilent.funecomp.ui.homeSlotTop
 import net.seilent.funecomp.ui.npAlbumBaseline
 import net.seilent.funecomp.ui.npArt
 import net.seilent.funecomp.ui.npArtTop
@@ -75,6 +83,44 @@ class LayoutTest {
         val land = Ui.of(2520f, 1080f)
         assertTrue(land.landscape)
         assertEquals(minOf(168f, land.h - 106f), land.npArt, 1e-3f)
+    }
+
+    @Test
+    fun homeRingSitsLeftOfMusic() {
+        val portrait = Ui.of(411f, 960f)
+        assertEquals(50f, portrait.homeRingX, 1e-3f)
+        assertEquals(97.9f, portrait.homeRingY(1), 1e-3f)
+        assertEquals(0f, portrait.homeMenuX, 1e-3f)
+        assertEquals(62f, portrait.homeRingHitRight, 1e-3f)
+        assertEquals(79.2f, portrait.homeSlotTop(1), 1e-3f)
+        assertEquals(119f, portrait.homeRingHitBottom(1), 1e-3f)
+        val land = Ui.of(960f, 600f)
+        assertTrue(land.landscape)
+        assertEquals(290f, land.homeRingX, 1e-3f)
+        assertEquals(90.9f, land.homeRingY(1), 1e-3f)
+        assertEquals(240f, land.homeMenuX, 1e-3f)
+        assertEquals(302f, land.homeRingHitRight, 1e-3f)
+        assertEquals(72.2f, land.homeSlotTop(1), 1e-3f)
+        assertEquals(112f, land.homeRingHitBottom(1), 1e-3f)
+    }
+
+    @Test
+    fun homeBarFadesNearMusic() {
+        assertEquals(0f, homeBarAlpha(1f, 1), 1e-6f)
+        assertEquals(1f, homeBarAlpha(0f, 1), 1e-6f)
+        assertEquals(1f, homeBarAlpha(2f, 1), 1e-6f)
+        assertEquals(1f, homeBarAlpha(5f, 1), 1e-6f)
+        assertEquals(0.5f, homeBarAlpha(0.5f, 1), 1e-6f)
+        assertEquals(0.5f, homeBarAlpha(1.5f, 1), 1e-6f)
+    }
+
+    @Test
+    fun homeRingEntersOverThePeek() {
+        assertEquals(0f, homeRingEnter(0f), 1e-6f)
+        val half = homeRingEnter(210f)
+        assertTrue(half > 0.5f && half < 1f)
+        assertEquals(1f, homeRingEnter(420f), 1e-6f)
+        assertEquals(1f, homeRingEnter(1000f), 1e-6f)
     }
 
     @Test
