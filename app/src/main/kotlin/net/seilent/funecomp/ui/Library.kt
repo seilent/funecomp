@@ -150,15 +150,18 @@ private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
     }
 }
 
-private fun groupSheet(ctx: Ctx, title: String, view: Int, parent: String, count: Long?) {
-    ctx.sheet.open(title, listOf("play", "shuffle")) { playSource(ctx, view, parent, count, shuffle = it == 1) }
+private fun groupSheet(ctx: Ctx, title: String, view: Int, parent: String, count: Long?, artist: LibRow? = null) {
+    val items = listOf("play", "shuffle") + if (artist != null) listOf(PICK_IMAGE) else emptyList()
+    ctx.sheet.open(title, items) {
+        if (it == 2) pickSheet(ctx, PickFor(title, artist?.mbid, library = true)) else playSource(ctx, view, parent, count, shuffle = it == 1)
+    }
 }
 
 private fun musicRow(ctx: Ctx, view: Int, i: Int, r: LibRow): RowSpec {
     val name = r.name ?: ""
     return when (view) {
         Enums.View.artists -> RowSpec(name, songs(r.count ?: 0), countLine = true, tap = { ctx.nav.push(Page.Artist(r.key ?: name, r.count)) }) {
-            groupSheet(ctx, name, Enums.View.artistAlbums, r.key ?: name, r.count)
+            groupSheet(ctx, name, Enums.View.artistAlbums, r.key ?: name, r.count, r)
         }
         Enums.View.albums -> RowSpec(name, songs(r.count ?: 0), countLine = true, tap = { ctx.nav.push(Page.Album(r.key ?: "", name, "")) }) {
             groupSheet(ctx, name, Enums.View.albumTracks, r.key ?: "", r.count)

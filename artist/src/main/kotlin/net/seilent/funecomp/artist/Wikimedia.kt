@@ -41,7 +41,7 @@ class Wikimedia(
     private val commons: String = "https://commons.wikimedia.org",
     private val wikipedia: (String) -> String = { "https://$it.wikipedia.org" },
 ) {
-    fun candidates(a: MbArtist, minW: Int, minH: Int): List<Candidate> {
+    fun candidates(a: MbArtist, minW: Int, minH: Int, thumbW: Int = THUMB_W): List<Candidate> {
         val files = LinkedHashSet<String>()
         val qid = a.rels("wikidata").firstNotNullOfOrNull { Regex("/(Q\\d+)$").find(it.url)?.groupValues?.get(1) }
         if (qid != null) {
@@ -52,8 +52,10 @@ class Wikimedia(
         }
         a.rels("image").mapNotNullTo(files) { commonsFile(it.url) }
         if (files.isEmpty()) return emptyList()
-        return info(files.toList()).filter { usable(it, minW, minH) }.map { Candidate(it.url, SOURCE, it.credit, it.title) }
+        return info(files.toList(), thumbW).filter { usable(it, minW, minH) }.map { Candidate(it.url, SOURCE, it.credit, it.title) }
     }
+
+    fun file(name: String): Candidate? = info(listOf(name), THUMB_W).firstOrNull()?.let { Candidate(it.url, SOURCE, it.credit, it.title) }
 
     private fun p18(qid: String): List<String> =
         api.json("$wikidata/w/api.php?action=wbgetclaims&entity=$qid&property=P18&format=json")
@@ -70,21 +72,18 @@ class Wikimedia(
 
     private fun lead(lang: String, title: String): String? {
         val r = api.json("${wikipedia(lang)}/api/rest_v1/page/summary/${Api.enc(title.replace(' ', '_'))}") ?: return null
-        val path = r["originalimage"]["source"].str?.substringBefore('?') ?: return null
-        if (!path.contains("/wikipedia/commons/")) return null
-        val parts = path.split('/')
-        return decode(if (path.contains("/wikipedia/commons/thumb/")) parts[parts.size - 2] else parts.last())
+        return uploadFile(r["originalimage"]["source"].str ?: return null)
     }
 
     private class Info(val url: String, val w: Int, val h: Int, val mime: String, val title: String, val credit: Credit)
 
-    private fun info(files: List<String>): List<Info> {
+    private fun info(files: List<String>, thumbW: Int): List<Info> {
         val titles = files.map { "File:" + it.replace('_', ' ') }
         val out = HashMap<String, Info>()
         for (batch in titles.chunked(50)) {
             val r = api.json(
                 "$commons/w/api.php?action=query&format=json&prop=imageinfo" +
-                    "&iiprop=${Api.enc("url|size|mime|extmetadata")}&iiurlwidth=$THUMB_W" +
+                    "&iiprop=${Api.enc("url|size|mime|extmetadata")}&iiurlwidth=$thumbW" +
                     "&iiextmetadatafilter=${Api.enc("LicenseShortName|LicenseUrl|Artist|Attribution|AttributionRequired")}" +
                     "&titles=${Api.enc(batch.joinToString("|"))}",
             ) ?: continue
@@ -143,6 +142,13 @@ class Wikimedia(
             val i = url.indexOf("commons.wikimedia.org/wiki/File:")
             if (i < 0) return null
             return decode(url.substring(i + "commons.wikimedia.org/wiki/File:".length))
+        }
+
+        fun uploadFile(url: String): String? {
+            val path = url.substringBefore('?')
+            if (!path.contains("/wikipedia/commons/")) return null
+            val parts = path.split('/')
+            return decode(if (path.contains("/wikipedia/commons/thumb/")) parts[parts.size - 2] else parts.last())
         }
 
         private fun decode(s: String): String = URLDecoder.decode(s.replace("+", "%2B"), "UTF-8").replace('_', ' ')

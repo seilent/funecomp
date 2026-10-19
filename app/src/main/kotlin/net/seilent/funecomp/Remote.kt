@@ -23,12 +23,18 @@ import net.seilent.funecomp.art.Memo
 import net.seilent.funecomp.art.ThumbWorker
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
+import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
 import net.seilent.funecomp.artist.Http
+import net.seilent.funecomp.artist.HttpRun
 import net.seilent.funecomp.artist.ImageIds
 import net.seilent.funecomp.artist.Names
+import net.seilent.funecomp.artist.Offer
+import net.seilent.funecomp.artist.Offered
+import net.seilent.funecomp.artist.PickLink
 import net.seilent.funecomp.artist.Sweep
+import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.link.Link
 import net.seilent.funecomp.link.Responder
@@ -55,9 +61,11 @@ import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
 import net.seilent.funecomp.state.Wake
 import net.seilent.funecomp.ui.BackdropArt
+import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LIB_PAGE
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.PickFor
 import java.io.File
 import java.io.IOException
 import java.time.ZoneId
@@ -126,6 +134,9 @@ object Remote : Control {
     var blocked by mutableStateOf<List<ArtBlocks.Record>>(emptyList())
         private set
 
+    var picks by mutableStateOf<List<ArtPicks.Pick>>(emptyList())
+        private set
+
     private val backdropLock = Any()
     private val blockedLock = Any()
     private val blockExec = Executors.newSingleThreadExecutor { Thread(it, "artblock").apply { isDaemon = true } }
@@ -143,6 +154,7 @@ object Remote : Control {
     @Volatile private var art: ArtWorker? = null
     @Volatile private var artKey: List<Any?>? = null
     @Volatile private var backdropFor: List<String>? = null
+    @Volatile private var backdropRev = 0
     @Volatile private var shown = false
     private val trigger = AtomicInteger()
     @Volatile private var online = true
@@ -306,9 +318,11 @@ object Remote : Control {
             val version = c.packageManager.getPackageInfo(c.packageName, 0).versionName ?: "0"
             network(c)
             val blocks = ArtBlocks(File(c.filesDir, "artblock.tsv")) { Log.w(TAG, it) }
-            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks).also {
+            val picks = ArtPicks(File(c.filesDir, "artpick.tsv")) { Log.w(TAG, it) }
+            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks).also {
                 artist = it
                 showBlocked { blocks.records() }
+                showPicks { picks.list() }
                 Thread({ credits = it.credits() }, "art-credits").apply { isDaemon = true }.start()
             }
         }
@@ -317,6 +331,7 @@ object Remote : Control {
     internal fun resetArtist() = synchronized(lock) {
         artist = null
         showBlocked { emptyList() }
+        showPicks { emptyList() }
     }
 
     fun sourcesChanged() = art?.want()
@@ -377,6 +392,10 @@ object Remote : Control {
         }
         if (hits.isNotEmpty()) {
             for (e in hits) {
+                if (!wrong && a.picked(e)) {
+                    blockPick(e, crc)
+                    continue
+                }
                 val done = if (wrong) e.mbid in a.blocks.rejected(a.resolvedBy(e)) else a.blocked(a.withSha(e))
                 if (done) Log.i(TAG, "art ask ${e.name} already recorded")
                 else if (wrong) wrongArtist(e, crc)
@@ -390,12 +409,132 @@ object Remote : Control {
         return if (found.any { it.second != null }) Err.staleRev else Err.notFound
     }
 
+    private fun blockPick(e: ArtCache.Entry, crc: Long?) {
+        val a = artist ?: return
+        val p = a.picks.byCache(e.key) ?: return
+        val s = a.withSha(e)
+        val at = System.currentTimeMillis()
+        p.keys.forEach { k -> a.blocks.add(ArtBlocks.Block(k, p.mbid, s.source, ImageIds.of(s), s.sha, p.name, at, crc = crc)) }
+        a.picks.add(p.copy(kind = ArtPicks.NONE, was = p.kind, failedAt = null))
+        a.blocks.addPush(p.name, p.mbid)
+        Log.i(TAG, "art block pick ${p.name} ${s.source} ${ImageIds.of(s)}")
+        showPicks { a.picks.list() }
+        blockedArt(a) {
+            a.forget(e.key)
+            a.picks.save()
+        }
+    }
+
+    override fun pickLink(text: String, done: (Offered) -> Unit) = offered(done) { it.offer(text) }
+
+    override fun takeTile(t: Tile, done: (Offered) -> Unit) = offered(done) { it.take(t) }
+
+    private fun offered(done: (Offered) -> Unit, get: (ArtistArt) -> Offered) {
+        val a = artist ?: return done(Offered.Refused(PickLink.UNREACHABLE))
+        Thread({
+            val o = try {
+                get(a)
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "art pick: $e")
+                Offered.Refused(PickLink.UNREACHABLE)
+            }
+            Log.i(TAG, "art pick offer -> ${if (o is Offered.Refused) o.reason else "ok"}")
+            main.post { done(o) }
+        }, "art-pick").apply { isDaemon = true }.start()
+    }
+
+    override fun browse(name: String, mbid: String?, px: Int, tile: (BrowseTile) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+        val a = artist ?: run {
+            done(false)
+            return {}
+        }
+        val run = HttpRun { Log.i(TAG, "art browse http ${it.replace(SECRET, "$1=x")}") }
+        Thread({
+            val ok = try {
+                run.on {
+                    a.browse(name, mbid, px) { t ->
+                        val bmp = codec.faced(t.preview, px) { null }?.first ?: return@browse
+                        val b = BrowseTile(t, bmp.asImageBitmap())
+                        main.post { if (!run.cancelled) tile(b) }
+                    }
+                }
+            } catch (e: IOException) {
+                null
+            } catch (e: RuntimeException) {
+                Log.w(TAG, "art browse: $e")
+                false
+            }
+            Log.i(TAG, "art browse $name -> ${ok ?: "cancelled"}")
+            if (ok != null) main.post { if (!run.cancelled) done(ok) }
+        }, "art-browse").apply { isDaemon = true }.start()
+        return { run.cancel() }
+    }
+
+    override fun pick(target: PickFor, offer: Offer) {
+        val a = artist ?: return
+        val (k, k2) = ArtPicks.keys(target.name, target.mbid, target.library)
+        val mbid = if (offer.kind == ArtPicks.ARTIST) offer.mbid else Names.mbid(target.mbid)
+        val p = ArtPicks.Pick(k, k2, target.name.trim(), offer.kind, offer.source, offer.url, offer.id, offer.src?.let { ArtCache.sha256(it) } ?: "", offer.credit, mbid, System.currentTimeMillis())
+        Log.i(TAG, "art pick ${p.name} ${p.kind} ${p.source} ${p.keys}")
+        picked(a) {
+            a.picks.list().filter { o -> o.keys.any { it in p.keys } }.forEach { a.forget(it.cacheKey) }
+            a.picks.add(p)
+            offer.src?.let { a.store(p, it) }
+            a.blocks.addPush(p.name, mbid)
+        }
+    }
+
+    override fun undoPick(p: ArtPicks.Pick) {
+        val a = artist ?: return
+        Log.i(TAG, "art undo pick ${p.name}")
+        picked(a) {
+            a.picks.remove(p)
+            a.forget(p.cacheKey)
+            a.blocks.addPush(p.name, Names.mbid(p.key))
+        }
+    }
+
+    override fun tryAgain(p: ArtPicks.Pick) {
+        val a = artist ?: return
+        Log.i(TAG, "art pick try again ${p.name}")
+        picked(a) { a.picks.retry(p) }
+    }
+
+    private fun picked(a: ArtistArt, change: () -> Unit) {
+        blockExec.execute {
+            forgetting()
+            change()
+            a.picks.save()
+            a.blocks.save()
+            synchronized(backdropLock) {
+                backdropRev++
+                backdrop = null
+                backdropFor = null
+            }
+            decoded.clear()
+            showPicks { a.picks.list() }
+            trigger.incrementAndGet()
+            art?.want()
+            credits = a.credits()
+        }
+    }
+
+    private fun showPicks(list: () -> List<ArtPicks.Pick>) = synchronized(blockedLock) { picks = list() }
+
     override fun unblock(r: ArtBlocks.Record) {
         val a = artist ?: return
         Log.i(TAG, "art unblock ${r.name}")
         showBlocked { blocked - r }
         blockExec.execute {
             forgetting()
+            if (r is ArtBlocks.Block) {
+                a.picks.none(r.key)?.takeIf { it.source == r.source && it.id == r.id }?.let { p ->
+                    a.blocks.records().filter { it is ArtBlocks.Block && it != r && it.key in p.keys && it.at == r.at && it.source == r.source && it.id == r.id }.forEach { a.blocks.remove(it) }
+                    a.picks.add(p.copy(kind = p.was, was = ""))
+                    a.picks.save()
+                    showPicks { a.picks.list() }
+                }
+            }
             if (r is ArtBlocks.Reject) {
                 a.forgetName(r.resolvedBy)
                 a.forget("name:${Names.fold(r.name)}")
@@ -414,6 +553,7 @@ object Remote : Control {
 
     private fun blockedArt(a: ArtistArt, forget: () -> Unit) {
         synchronized(backdropLock) {
+            backdropRev++
             backdrop = null
             backdropFor = null
         }
@@ -513,6 +653,7 @@ object Remote : Control {
     private fun showBackdrop(a: ArtistArt, final: Boolean): Boolean {
         val s = device.playback.state
         if (s.artists == backdropFor && backdrop != null) return true
+        val rev = backdropRev
         val found = s.artists.withIndex().firstNotNullOfOrNull { (i, n) -> a.cachedEntry(n, s.mbids.getOrNull(i))?.let { i to it } }
         val e = found?.second
         if (e == null) {
@@ -534,7 +675,7 @@ object Remote : Control {
             }
         } ?: return false
         synchronized(backdropLock) {
-            if (a.blocked(full)) return false
+            if (rev != backdropRev || a.blocked(full)) return false
             backdropFor = s.artists
             backdrop = BackdropArt(art.image, art.face, full, wrong)
         }

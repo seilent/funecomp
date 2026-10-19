@@ -61,11 +61,12 @@ const val NOT_SAVED = "preset not saved"
 const val TOO_MANY = "too many presets"
 private const val NO_PRESETS = "device has no eq presets"
 private const val HEADER = "autoeq"
-private const val LOADING = "loading"
+const val LOADING = "loading"
 private const val FAILED = "search failed"
 private const val NO_RESULTS = "no results"
 private const val PLACEHOLDER = "type to search"
 private const val IME_KEY = "ime"
+private const val STATE_TAG = "aeq.state"
 
 fun clampText(c: Clamp): String {
     val band = if (c.filter == AutoEq.PREAMP) "" else "band ${c.filter} "
@@ -131,12 +132,12 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
         HubPage(HEADER, { ctx.nav.pop() }) {
             val shown = view
             when {
-                failed -> StateLine(FAILED) {
+                failed -> StateLine(FAILED, STATE_TAG) {
                     failed = false
                     tries++
                 }
-                shown == null -> StateLine(LOADING)
-                shown.items.isEmpty() -> StateLine(NO_RESULTS)
+                shown == null -> StateLine(LOADING, STATE_TAG)
+                shown.items.isEmpty() -> StateLine(NO_RESULTS, STATE_TAG)
                 else -> Rows(ui.contentTop, state, focus = shown.index[focus] ?: -1) {
                     items(shown.items, contentType = { it is AutoEqList.Divider }) { item ->
                         when (item) {
@@ -164,16 +165,6 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
                 grid = null
             }) { grid = null }
         }
-    }
-}
-
-@Composable
-private fun StateLine(text: String, onTap: (() -> Unit)? = null) {
-    val ui = LocalUi.current
-    val h = ui.px(Tok.rowHeight)
-    val tap = if (onTap == null) Modifier else Modifier.press({ onTap() })
-    Box(Modifier.at(0f, ui.px(ui.contentTop)).size(ui.px(ui.w).dp(), h.dp()).then(tap).testTag("aeq.state")) {
-        RoleText(text, Roles.listPrimary, Modifier.at(ui.px(Tok.hubEdge), h / 2, ay = 0.5f), alpha = Tok.alpha_low)
     }
 }
 

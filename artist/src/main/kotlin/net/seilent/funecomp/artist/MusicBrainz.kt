@@ -73,7 +73,7 @@ object Names {
 
 class Rel(val type: String, val url: String, val ended: Boolean)
 
-class MbArtist(val id: String, val name: String, val country: String?, val rels: List<Rel>) {
+class MbArtist(val id: String, val name: String, val country: String?, val rels: List<Rel>, val disambiguation: String = "") {
     fun rels(type: String) = rels.filter { it.type == type && !it.ended }
 }
 
@@ -81,11 +81,9 @@ class MusicBrainz(private val api: Api, private val base: String = "https://musi
     fun search(name: String, skip: Set<String> = emptySet()): String? {
         val want = Names.fold(name)
         if (want.isEmpty()) return null
-        val r = api.json("$base/artist/?query=${Api.enc(escape(name.trim()))}&fmt=json&limit=10") ?: return null
+        val r = api.json(query(name)) ?: return null
         val all = r["artists"].list.filter { Names.mbid(it["id"].str) !in skip }
         val top = all.firstOrNull()?.takeIf { it["score"].long == 100L && Names.fold(it["sort-name"].str?.replace(", ", " ")) == want }
-        fun matches(a: J, f: (String?) -> String, w: String) =
-            f(a["name"].str) == w || f(a["sort-name"].str) == w || a["aliases"].list.any { f(it["name"].str) == w }
         val kana = Names.kana(name)
         val folded = all.filter { matches(it, Names::fold, want) }
         val same = folded.firstOrNull { matches(it, { s -> s?.trim() ?: "" }, name.trim()) }
@@ -93,13 +91,25 @@ class MusicBrainz(private val api: Api, private val base: String = "https://musi
             ?.get("id")?.str?.let { Names.mbid(it) }
     }
 
+    fun searchAll(name: String): List<String> {
+        val want = Names.fold(name)
+        if (want.isEmpty()) return emptyList()
+        val r = api.json(query(name)) ?: return emptyList()
+        return r["artists"].list.filter { matches(it, Names::fold, want) }.mapNotNull { Names.mbid(it["id"].str) }
+    }
+
+    private fun query(name: String) = "$base/artist/?query=${Api.enc(escape(name.trim()))}&fmt=json&limit=10"
+
+    private fun matches(a: J, f: (String?) -> String, w: String) =
+        f(a["name"].str) == w || f(a["sort-name"].str) == w || a["aliases"].list.any { f(it["name"].str) == w }
+
     fun artist(id: String): MbArtist? {
         val r = api.json("$base/artist/$id?inc=url-rels&fmt=json") ?: return null
         val rels = r["relations"].list.mapNotNull { x ->
             val url = x["url"]["resource"].str ?: return@mapNotNull null
             Rel(x["type"].str ?: "", url, x["ended"].bool == true)
         }
-        return MbArtist(id, r["name"].str ?: "", r["country"].str, rels)
+        return MbArtist(id, r["name"].str ?: "", r["country"].str, rels, r["disambiguation"].str ?: "")
     }
 
     private fun escape(s: String) = buildString {

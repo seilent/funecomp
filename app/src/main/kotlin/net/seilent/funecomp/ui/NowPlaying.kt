@@ -149,7 +149,7 @@ fun BackRing(onBack: () -> Unit) {
 }
 
 @Composable
-fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack: () -> Unit, onQueue: () -> Unit, art: BackdropArt? = null, lyrics: LyricsFetch.Show = LyricsFetch.Show.Off, onBackdrop: ((BackdropArt) -> Unit)? = null) {
+fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack: () -> Unit, onQueue: () -> Unit, art: BackdropArt? = null, lyrics: LyricsFetch.Show = LyricsFetch.Show.Off, onBackdrop: ((BackdropArt?) -> Unit)? = null) {
     val ui = LocalUi.current
     val s = device.playback.state
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -247,7 +247,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack:
         if (art != null && shade.value > 0f) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha * shade.value)).testTag("np.shade"))
         val held = art?.takeIf { it.entry != null }
         val forward: () -> Unit = { if (held != null) onBackdrop?.invoke(held) }
-        if (held != null && onBackdrop != null) Box(Modifier.fillMaxSize().press({}, { onBackdrop(held) }).testTag("np.backdrop"))
+        if (onBackdrop != null && (held != null || s.artists.isNotEmpty())) Box(Modifier.fillMaxSize().press({}, { onBackdrop(held) }).testTag("np.backdrop"))
         BackRing(onBack)
         Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
         if (lyricMode) {

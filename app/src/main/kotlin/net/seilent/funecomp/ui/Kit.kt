@@ -239,6 +239,22 @@ fun FocusBar(height: Float, x: Float, y: Float, alpha: () -> Float = { 1f }) {
     Box(Modifier.offset { IntOffset(ax.roundToInt(), ay.roundToInt()) }.size(ui.px(Tok.focus_barWidth).dp(), ah.dp()).graphicsLayer { this.alpha = alpha() }.background(white(Tok.alpha_full)))
 }
 
+@Composable
+fun StateLine(text: String, tag: String, onTap: (() -> Unit)? = null) {
+    val ui = LocalUi.current
+    Box(Modifier.at(0f, ui.px(ui.contentTop))) { StateRow(text, tag, onTap) }
+}
+
+@Composable
+fun StateRow(text: String, tag: String, onTap: (() -> Unit)? = null) {
+    val ui = LocalUi.current
+    val h = ui.px(Tok.rowHeight)
+    val tap = if (onTap == null) Modifier else Modifier.press({ onTap() })
+    Box(Modifier.size(ui.px(ui.w).dp(), h.dp()).then(tap).testTag(tag)) {
+        RoleText(text, Roles.listPrimary, Modifier.at(ui.px(Tok.hubEdge), h / 2, ay = 0.5f), alpha = Tok.alpha_low)
+    }
+}
+
 @Stable
 class Dip(initial: String) {
     var shown by mutableStateOf(initial)

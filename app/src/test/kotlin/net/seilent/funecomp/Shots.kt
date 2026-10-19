@@ -10,6 +10,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
@@ -30,12 +31,17 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
+import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.Credit
+import net.seilent.funecomp.artist.Offer
+import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.DeviceState
@@ -44,14 +50,17 @@ import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Bonded
+import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.FirmwareView
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.ScrobbleView
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.TextEntry
+import net.seilent.funecomp.ui.browseCols
 import net.seilent.funecomp.ui.flatBand
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -89,6 +98,8 @@ class Shot(
     val ime: Float = 0f,
     val lyrics: ((DeviceState) -> LyricsFetch.Show)? = null,
     val held: Boolean = false,
+    val picks: List<ArtPicks.Pick> = emptyList(),
+    val cols: ((Float) -> Int)? = null,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -140,6 +151,58 @@ private fun held(c: SimControl) {
     playing(c)
     val p = c.device.playback
     c.device = c.device.copy(playback = p.copy(state = p.state.copy(title = "Reckoner", artist = HELD.name, artists = listOf(HELD.name), mbids = emptyList(), album = "In Rainbows")))
+}
+
+private fun tsuki(vararg artists: String): (SimControl) -> Unit = { c ->
+    playing(c)
+    val p = c.device.playback
+    c.device = c.device.copy(playback = p.copy(state = p.state.copy(title = "君の知らない物語", artist = artists.joinToString(", "), artists = artists.toList(), mbids = emptyList(), album = "歌ってみた")))
+}
+
+private fun tileImage(i: Int): ImageBitmap {
+    val img = java.awt.image.BufferedImage(160, 160, java.awt.image.BufferedImage.TYPE_INT_RGB)
+    val g = img.createGraphics()
+    g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color.getHSBColor(i * 0.11f, 0.5f, 0.8f), 160f, 160f, java.awt.Color.getHSBColor(i * 0.11f + 0.4f, 0.6f, 0.3f))
+    g.fillRect(0, 0, 160, 160)
+    g.color = java.awt.Color(255, 255, 255, 80)
+    g.fillOval(40, 30, 80, 80)
+    g.dispose()
+    val out = java.io.ByteArrayOutputStream()
+    javax.imageio.ImageIO.write(img, "jpg", out)
+    return BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size()).asImageBitmap()
+}
+
+private val TILE_CAPTIONS = listOf(Sources.DISCOGS to "dnb, Jump up") +
+    listOf("TSUKI(Billlie)", "TSUKI", "Suki Waterhouse", "Tsuki Nakamura", "Tsukiko Amano", "Billlie", "Tsukisheis", "Tsukimi Runa(CV: Sae Hiratsuka)", "Tsukino Amasato", "La Tsuki").map { Sources.DEEZER to it } +
+    listOf("tuki.(17)", "tsuki ASMR", "月-Tsuki-", "TsukiUraya", "TSUKI TV", "月 / tsuki", "つき⭐︎", "Tsuki", "Tsuki", "tuki. - トピック").map { Sources.YOUTUBE to it }
+
+private fun browsed(n: Int, end: Boolean?): (SimControl) -> Unit = { c ->
+    c.tiles = TILE_CAPTIONS.take(n).mapIndexed { i, (src, cap) -> BrowseTile(Tile(src, cap, ByteArray(0), "https://example.org/$i.jpg", "$i", null), tileImage(i)) }
+    c.browsed = end
+}
+
+private val PICK_OFFER = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ=s900-c-k-c0x00ffffff-no-rj", "https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ", null, null, "月-Tsuki-", null)
+
+private val PICKS = listOf(
+    ArtPicks.Pick("name:tsuki", null, "TSUKI", ArtPicks.IMAGE, Sources.YOUTUBE, PICK_OFFER.url, PICK_OFFER.id, "s", null, null, 3),
+    ArtPicks.Pick("name:むと", null, "むと", ArtPicks.IMAGE, Sources.LINK, "https://example.org/muto.jpg", "https://example.org/muto.jpg", "s", null, null, 2, 5),
+    ArtPicks.Pick("name:空星きらめ", null, "空星きらめ/Sorahoshi Kirame【にじさんじ】", ArtPicks.NONE, Sources.YOUTUBE, "https://yt3.ggpht.com/k=s900", "https://yt3.ggpht.com/k", "s", null, null, 1, null, ArtPicks.IMAGE),
+)
+
+private val PICK_ENTRY = ArtCache.Entry("pick:name:tsuki", "TSUKI", null, Sources.YOUTUBE, null, PICK_OFFER.url, 0, PICK_OFFER.id, "s")
+
+private val WIDE: (Float) -> Int = { w -> ((w - 2 * Tok.hubEdge + Tok.gutter) / (Tok.tileS + Tok.gutter)).toInt() }
+
+private fun Shots.holdBackdrop() {
+    rule.onNodeWithTag("np.backdrop").performTouchInput { longClick(Offset(width * 0.85f, height * 0.2f)) }
+}
+
+private fun Shots.pasteLink(shell: Shell, url: String) {
+    holdBackdrop()
+    settle(600)
+    shell.sheet.accept(0)
+    settle(600)
+    if (rule.onAllNodesWithTag("entry").fetchSemanticsNodes().isNotEmpty()) rule.onNodeWithTag("entry").performTextInput(url)
 }
 
 private fun longTitle(c: SimControl) {
@@ -575,6 +638,30 @@ val SHOTS = listOf(
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.credit.2"))
         rule.mainClock.autoAdvance = false
     },
+    Shot("pick-np-second", pages = NP, prep = ::held, artEntry = HELD) { shell ->
+        holdBackdrop()
+        settle(600)
+        shell.sheet.accept(1)
+    },
+    Shot("pick-np-black", pages = NP, prep = tsuki("TSUKI")) { holdBackdrop() },
+    Shot("pick-np-chooser", pages = NP, prep = tsuki("TSUKI", "Kagura Nana")) { holdBackdrop() },
+    Shot("pick-np-picked", pages = NP, prep = tsuki("TSUKI"), artEntry = PICK_ENTRY, picks = PICKS) { holdBackdrop() },
+    Shot("pick-entry", pages = NP, prep = tsuki("TSUKI"), ime = AEQ_IME) { shell -> pasteLink(shell, "https://www.youtube.com/@tsukiniterasarete") },
+    Shot("pick-confirm", pages = NP, prep = { c -> tsuki("TSUKI")(c); c.offered = Offered.Ok(PICK_OFFER) }) { shell ->
+        pasteLink(shell, "https://www.youtube.com/@tsukiniterasarete")
+        rule.onNodeWithTag("entry").performImeAction()
+    },
+    Shot("pick-settings", pages = HOME + Page.ArtistArt, picks = PICKS, blocked = BLOCKED.take(1)) { scrollTo("art.picked.2") },
+    Shot("pick-library", pages = HOME + Page.ArtistArt + Page.PickArtist),
+    Shot("pick-artists-sheet", pages = HOME + Page.Music) { rule.onNodeWithTag("row.0").performTouchInput { longClick() } },
+    Shot("pick-browse-loading", pages = NP + Page.Browse(PickFor("TSUKI"))),
+    Shot("pick-browse-more", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(5, null)),
+    Shot("pick-browse", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)),
+    Shot("pick-browse-wide", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true), cols = WIDE),
+    Shot("pick-browse-focus", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)) { rule.onNodeWithTag("pick.tile.4").performClick() },
+    Shot("pick-browse-empty", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, true)),
+    Shot("pick-browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, false)),
+    Shot("pick-browse-unavailable-tiles", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(11, false)),
 )
 
 @RunWith(RobolectricTestRunner::class)
@@ -656,7 +743,7 @@ class Shots {
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
                     val held = f.first.artEntry?.let { BackdropArt(backdrop ?: plain, null, it, f.first.wrong) }
-                    App(c.device, f.first.link, c, shell, f.first.sources, {}, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * f.first.ime).dp))
+                    App(c.device, f.first.link, c, shell, f.first.sources, {}, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * f.first.ime).dp))
                 }
             }
         }
@@ -667,6 +754,7 @@ class Shots {
                 if (shot.backdrop && backdrop == null) continue
                 val c = SimControl(shot.board, artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
                 shot.prep(c)
+                browseCols = shot.cols ?: { Tok.gridCols.toInt() }
                 control = c
                 shell = Shell(Nav(shot.pages))
                 frame = shot to size

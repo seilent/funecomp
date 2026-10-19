@@ -41,6 +41,8 @@ sealed interface Page {
     data class Artist(val name: String, val songs: Long? = null) : Page
     data class Album(val key: String, val title: String, val artist: String) : Page
     data class Eq(val output: Int) : Page
+    data object PickArtist : Page
+    data class Browse(val target: PickFor) : Page
 }
 
 @Stable

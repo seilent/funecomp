@@ -117,7 +117,8 @@ class Forward(
     }
 
     private fun matches(r: ArtBlocks.Record, e: ImgEntry, b: Blocks): Boolean {
-        val on = (r.mbid != null && e.mbid?.trim()?.lowercase() == r.mbid) || b.keyOf(e.name, e.mbid) == r.key
+        val on = (r.mbid != null && e.mbid?.trim()?.lowercase() == r.mbid) || b.keyOf(e.name, e.mbid) == r.key ||
+            (Names.mbid(e.mbid) == null && "name:" + Names.fold(e.name) == r.key)
         return on && (r !is ArtBlocks.Reject || Names.fold(e.name) == Names.fold(r.name))
     }
 

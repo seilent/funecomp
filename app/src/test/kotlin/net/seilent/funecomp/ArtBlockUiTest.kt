@@ -106,19 +106,19 @@ class ArtBlockUiTest {
 
     @Test
     fun theSecondNameOnASearchedMbidGetsOnlyBlockImage() {
-        assertEquals(listOf("block image"), sheetFor("Utada Hikaru", utada, "宇多田ヒカル", "宇多田ヒカル", "宇多田ヒカル" to utada, "Utada Hikaru" to utada))
+        assertEquals(listOf("block image", "pick image"), sheetFor("Utada Hikaru", utada, "宇多田ヒカル", "宇多田ヒカル", "宇多田ヒカル" to utada, "Utada Hikaru" to utada))
     }
 
     @Test
     fun theResolverNameGetsWrongArtist() {
-        assertEquals(listOf("block image", "wrong artist"), sheetFor("宇多田ヒカル", utada, "宇多田ヒカル", "宇多田ヒカル", "宇多田ヒカル" to utada, "Utada Hikaru" to utada))
+        assertEquals(listOf("block image", "wrong artist", "pick image"), sheetFor("宇多田ヒカル", utada, "宇多田ヒカル", "宇多田ヒカル", "宇多田ヒカル" to utada, "Utada Hikaru" to utada))
     }
 
     @Test
     fun aVariantWinGetsWrongArtist() {
         val vtuber = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
         val items = sheetFor(vtuber, "name:${Names.fold(vtuber)}", vtuber, "空星きらめ", "空星きらめ" to "0e7b3c4f-1f2a-4b5c-8d6e-7f8091a2b3c4", vtuber to null)
-        assertEquals(listOf("block image", "wrong artist"), items)
+        assertEquals(listOf("block image", "wrong artist", "pick image"), items)
     }
 
     @Test
@@ -127,7 +127,7 @@ class ArtBlockUiTest {
         rule.onNodeWithTag("np.backdrop").performTouchInput { longClick() }
         settle(500)
         assertEquals("むと", shell.sheet.title)
-        assertEquals(listOf("block image"), shell.sheet.items)
+        assertEquals(listOf("block image", "pick image"), shell.sheet.items)
         assertEquals(listOf("deezer"), shell.sheet.info)
         rule.onNodeWithTag("sheet.item.0").performClick()
         settle(500)
@@ -140,7 +140,7 @@ class ArtBlockUiTest {
         val shell = start(listOf(Page.Home, Page.NowPlaying), backdrop(e, wrong = true))
         rule.onNodeWithTag("np.backdrop").performTouchInput { longClick() }
         settle(500)
-        assertEquals(listOf("block image", "wrong artist"), shell.sheet.items)
+        assertEquals(listOf("block image", "wrong artist", "pick image"), shell.sheet.items)
         assertEquals(listOf("commons, Goldnrush Podcast"), shell.sheet.info)
         rule.onNodeWithTag("sheet.item.1").performClick()
         settle(500)

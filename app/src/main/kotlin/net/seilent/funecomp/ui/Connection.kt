@@ -20,6 +20,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
+import net.seilent.funecomp.artist.ArtPicks
+import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.gen.Tok
@@ -121,12 +123,20 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleVi
 
 private class Toggle(val title: String, val on: Boolean, val tag: String, val flip: (Sources) -> Sources)
 
-fun artSheet(ctx: Ctx, held: BackdropArt) {
-    val e = held.entry ?: return
-    val items = listOf("block image") + if (held.wrongArtist) listOf("wrong artist") else emptyList()
+fun artSheet(ctx: Ctx, held: BackdropArt?, picks: List<ArtPicks.Pick> = emptyList()) {
+    val e = held?.entry ?: return artistChooser(ctx)
+    val s = ctx.device.playback.state
+    val target = PickFor(e.name, s.mbids.getOrNull(s.artists.indexOfFirst { Names.fold(it) == Names.fold(e.name) }))
+    val pick = picks.firstOrNull { it.cacheKey == e.key }
+    val items = if (pick != null) listOf(PICK_IMAGE, UNDO_PICK) else listOf(BLOCK_IMAGE) + (if (held.wrongArtist) listOf(WRONG_ARTIST) else emptyList()) + PICK_IMAGE
     val info = listOf(listOfNotNull(Sources.label(e.source), e.credit?.author?.takeIf { it.isNotBlank() }).joinToString(", "))
     ctx.sheet.open(e.name, items, info = info) {
-        if (it == 0) ctx.control.blockArt(e) else ctx.control.wrongArtist(e)
+        when (items[it]) {
+            BLOCK_IMAGE -> ctx.control.blockArt(e)
+            WRONG_ARTIST -> ctx.control.wrongArtist(e)
+            PICK_IMAGE -> pickSheet(ctx, target)
+            UNDO_PICK -> pick?.let { p -> ctx.control.undoPick(p) }
+        }
     }
 }
 
@@ -138,6 +148,7 @@ fun ArtistArtPage(
     credits: List<ArtCache.Entry> = emptyList(),
     onCredit: (ArtCache.Entry) -> Unit = {},
     blocked: List<ArtBlocks.Record> = emptyList(),
+    picks: List<ArtPicks.Pick> = emptyList(),
 ) {
     val ui = LocalUi.current
     var focus by remember { mutableIntStateOf(0) }
@@ -150,7 +161,9 @@ fun ArtistArtPage(
     )
     val above = Tok.detailLabelBaseline - Tok.detailRingTop - Tok.detailRing
     val orderAt = toggles.size + 1
-    val blockedAt = orderAt + 2 + sources.order.size
+    val pickAt = orderAt + 2 + sources.order.size
+    val pickedAt = pickAt + 1
+    val blockedAt = pickedAt + if (picks.isEmpty()) 0 else 1 + picks.size
     val creditsAt = blockedAt + if (blocked.isEmpty()) 0 else 1 + blocked.size
     @Composable
     fun Label(text: String, i: Int) {
@@ -195,6 +208,30 @@ fun ArtistArtPage(
                         if (j < sources.order.size - 1) add("move down" to 1)
                     }
                     ctx.sheet.open(Sources.label(id), moves.map { it.first }) { k -> onSources(sources.moved(id, moves[k].second)) }
+                }
+            }
+            item(key = "pick") {
+                val library = ctx.device.has("library")
+                SettingsRow(PICK_IMAGE, if (library) "" else NO_LIBRARY, Modifier.enter { pickAt }.testTag("art.pick"), focused = focus == pickAt) {
+                    focus = pickAt
+                    if (library) ctx.nav.push(Page.PickArtist)
+                }
+            }
+            if (picks.isNotEmpty()) {
+                item(key = "picked") { Label(PICKED, pickedAt) }
+                itemsIndexed(picks, key = { _, p -> "picked ${p.key} ${p.at}" }) { j, p ->
+                    val i = pickedAt + 1 + j
+                    val broken = p.kind != ArtPicks.NONE && p.failedAt != null
+                    val line = when {
+                        p.kind == ArtPicks.NONE -> NO_IMAGE
+                        broken -> LINK_BROKEN
+                        else -> Sources.label(p.source)
+                    }
+                    CreditRow(p.name, listOf(line), Modifier.enter { i }.testTag("art.picked.$j"), focused = focus == i) {
+                        focus = i
+                        val items = listOf(UNDO_PICK) + if (broken) listOf(TRY_AGAIN) else emptyList()
+                        ctx.sheet.open(p.name, items) { k -> if (k == 0) ctx.control.undoPick(p) else ctx.control.tryAgain(p) }
+                    }
                 }
             }
             if (blocked.isNotEmpty()) {

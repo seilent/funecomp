@@ -62,6 +62,12 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
     }
 
     @Synchronized
+    fun addPush(name: String, mbid: String?) {
+        pushes.removeAll { Names.fold(it.name) == Names.fold(name) }
+        pushes += Push(name, Names.mbid(mbid))
+    }
+
+    @Synchronized
     fun blocked(key: String, source: String, id: String, sha: String = "", name: String = ""): Boolean {
         val byName = Names.fold(name).takeIf { it.isNotEmpty() }?.let { "name:$it" }
         return blocks.any { (it.key == key || it.key == byName) && ((it.source == source && it.id == id && id.isNotEmpty()) || (sha.isNotEmpty() && it.sha == sha)) }
@@ -158,24 +164,26 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
 
     private fun set(s: String) = s.split(',').filter { it.isNotEmpty() }.toSet()
 
-    private fun escape(s: String) = s.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n")
+    internal companion object {
+        fun escape(s: String) = s.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n")
 
-    private fun unescape(s: String) = buildString {
-        var i = 0
-        while (i < s.length) {
-            val c = s[i]
-            if (c == '\\' && i + 1 < s.length) {
-                append(
-                    when (s[i + 1]) {
-                        't' -> '\t'
-                        'n' -> '\n'
-                        else -> s[i + 1]
-                    },
-                )
-                i += 2
-            } else {
-                append(c)
-                i++
+        fun unescape(s: String) = buildString {
+            var i = 0
+            while (i < s.length) {
+                val c = s[i]
+                if (c == '\\' && i + 1 < s.length) {
+                    append(
+                        when (s[i + 1]) {
+                            't' -> '\t'
+                            'n' -> '\n'
+                            else -> s[i + 1]
+                        },
+                    )
+                    i += 2
+                } else {
+                    append(c)
+                    i++
+                }
             }
         }
     }

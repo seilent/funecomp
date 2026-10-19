@@ -5,6 +5,7 @@ import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.artist.Art
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtPusher
+import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
@@ -470,5 +471,57 @@ class ForwardTest {
         forward(Lookups(), missing = { true }, blocks = blocks(records, "tcp:A")).run(s) { true }
         assertEquals(listOf("むと"), deleted())
         assertEquals(setOf("muto"), s0.device.stored.keys)
+    }
+
+    @Test
+    fun aNameRecordDeletesOnlyTheUntaggedEntryOfThatName() {
+        val dj = "91352441-9f79-48c2-81ad-ccdd1e46915a"
+        val s0 = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = tmp.newFolder()), Library(listOf(
+            Library.track("TSUKI", "A", "One", 1, 200_000),
+            Library.track("ＴＳＵＫＩ", "B", "Two", 1, 200_000, mbids = listOf(dj)),
+        )))
+        sims += s0
+        val s = session(s0.listen(0))
+        forward(Lookups()).run(s) { true }
+        assertEquals(setOf("tsuki", "ｔｓｕｋｉ"), s0.device.stored.keys)
+        val records = ArtBlocks()
+        val keyOf = { n: String, m: String? -> Names.mbid(m) ?: if (Names.fold(n) == "tsuki") dj else "name:${Names.fold(n)}" }
+        records.add(ArtBlocks.Block("name:tsuki", null, "youtube", "x", "", "TSUKI", 1))
+        records.addPush("TSUKI", null)
+        val b = Forward.Blocks(records, { "tcp:A" }, keyOf)
+        forward(Lookups(), missing = { it == "TSUKI" }, blocks = b).run(s) { true }
+        assertEquals(listOf("TSUKI"), deleted())
+        assertEquals(setOf("ｔｓｕｋｉ"), s0.device.stored.keys)
+        assertTrue(records.pending("tcp:A").isEmpty())
+        assertTrue(records.pushes("tcp:A").isEmpty())
+        val before = stores().count { it == "TSUKI" }
+        records.addPush("TSUKI", null)
+        forward(Lookups(), blocks = b).run(s) { true }
+        assertEquals(before + 1, stores().count { it == "TSUKI" })
+        assertEquals(1, deleted().size)
+    }
+
+    @Test
+    fun aLibraryPickBlockedUnderBothKeysDeletesTheTaggedAndTheUntaggedEntry() {
+        val dj = "91352441-9f79-48c2-81ad-ccdd1e46915a"
+        val s0 = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = tmp.newFolder()), Library(listOf(
+            Library.track("TSUKI", "A", "One", 1, 200_000, mbids = listOf(dj)),
+            Library.track("ＴＳＵＫＩ", "B", "Two", 1, 200_000),
+        )))
+        sims += s0
+        val s = session(s0.listen(0))
+        forward(Lookups()).run(s) { true }
+        assertEquals(setOf("tsuki", "ｔｓｕｋｉ"), s0.device.stored.keys)
+        val keyOf = { n: String, m: String? -> Names.mbid(m) ?: "name:${Names.fold(n)}" }
+        val only = ArtBlocks()
+        only.add(ArtBlocks.Block(dj, dj, "youtube", "x", "", "TSUKI", 1))
+        forward(Lookups(), missing = { true }, blocks = Forward.Blocks(only, { "tcp:A" }, keyOf)).run(s) { true }
+        assertEquals(listOf("TSUKI"), deleted())
+        forward(Lookups()).run(s) { true }
+        val both = ArtBlocks()
+        listOf(dj, "name:tsuki").forEach { both.add(ArtBlocks.Block(it, dj, "youtube", "x", "", "TSUKI", 2)) }
+        forward(Lookups(), missing = { true }, blocks = Forward.Blocks(both, { "tcp:B" }, keyOf)).run(s) { true }
+        assertEquals(setOf("TSUKI", "ＴＳＵＫＩ"), deleted().drop(1).toSet())
+        assertTrue(both.pending("tcp:B").isEmpty())
     }
 }

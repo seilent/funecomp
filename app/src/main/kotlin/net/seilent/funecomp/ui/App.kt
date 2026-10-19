@@ -26,6 +26,7 @@ import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
+import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
@@ -82,6 +83,7 @@ fun App(
     firmware: FirmwareView = FirmwareView(),
     blocked: List<ArtBlocks.Record> = emptyList(),
     lyrics: LyricsFetch.Show = LyricsFetch.Show.Off,
+    picks: List<ArtPicks.Pick> = emptyList(),
     insets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     ime: WindowInsets = WindowInsets.ime,
 ) {
@@ -125,14 +127,14 @@ fun App(
             }
             Stack(nav) { page ->
                 when (page) {
-                    Page.NowPlaying -> NowPlaying(device, control, shell.toast, { nav.pop() }, { nav.push(Page.Queue) }, art, lyrics) { held -> artSheet(ctx, held) }
+                    Page.NowPlaying -> NowPlaying(device, control, shell.toast, { nav.pop() }, { nav.push(Page.Queue) }, art, lyrics) { held -> artSheet(ctx, held, picks) }
                     Page.Home -> Home(homeItems(device, link, sources), { control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)
                     Page.Playlists -> Playlists(ctx)
                     Page.Settings -> SettingsPage(ctx)
                     Page.Connection -> ConnectionPage(ctx, link, scrobble, firmware)
-                    Page.ArtistArt -> ArtistArtPage(ctx, sources, onSources, credits, onCredit, blocked)
+                    Page.ArtistArt -> ArtistArtPage(ctx, sources, onSources, credits, onCredit, blocked, picks)
                     Page.Scrobbling -> ScrobblingPage(ctx, scrobble)
                     Page.Firmware -> FirmwarePage(ctx, firmware)
                     Page.Lyrics -> LyricsPage(ctx, link.lyrics)
@@ -140,6 +142,8 @@ fun App(
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
                     is Page.Eq -> EqPage(ctx, page)
+                    Page.PickArtist -> PickArtistPage(ctx)
+                    is Page.Browse -> BrowsePage(ctx, page)
                 }
             }
             VolumeOverlay(shell.overlay, device, control)

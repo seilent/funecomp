@@ -16,6 +16,7 @@ class ArtistArt(
     mono: () -> Long = { System.nanoTime() / 1_000_000 },
     private val online: () -> Boolean = { true },
     val blocks: ArtBlocks = ArtBlocks(),
+    val picks: ArtPicks = ArtPicks(),
 ) {
     private val ua = "funecomp/$version (github@seilent.net)"
     private fun api(limiter: RateLimiter) = Api(http, ua, limiter, sleep)
@@ -48,9 +49,14 @@ class ArtistArt(
 
     @Throws(IOException::class)
     fun get(name: String, mbid: String?, w: Int, h: Int): Art? {
+        val p = picks.of(mbid, name)
+        when (p?.kind) {
+            ArtPicks.IMAGE -> return picked(p, name, mbid, w, h)
+            ArtPicks.NONE -> return null
+        }
         val on = sources().enabled
         val now = clock()
-        val tag = Names.mbid(mbid)
+        val tag = tag(p, mbid)
         val id = tag ?: resolve(name, now)
         val key = id ?: "name:${Names.fold(name)}"
         val hit = cache.hit(key)?.takeIf { it.source in on }
@@ -84,9 +90,11 @@ class ArtistArt(
 
     @Throws(IOException::class)
     fun refresh(name: String, mbid: String?, w: Int, h: Int): Art? {
+        val p = picks.of(mbid, name)
+        if (p != null && p.kind != ArtPicks.ARTIST) return get(name, mbid, w, h)
         val on = sources().enabled
         val now = clock()
-        val tag = Names.mbid(mbid)
+        val tag = tag(p, mbid)
         val id = tag ?: resolve(name, now)
         val key = id ?: "name:${Names.fold(name)}"
         val found = try {
@@ -95,6 +103,132 @@ class ArtistArt(
             null
         }
         return if (found == null) get(name, mbid, w, h) else keep(name, tag, key, found, w, h, now)
+    }
+
+    private fun tag(p: ArtPicks.Pick?, mbid: String?): String? = p?.takeIf { it.kind == ArtPicks.ARTIST }?.mbid ?: Names.mbid(mbid)
+
+    private fun picked(p: ArtPicks.Pick, name: String, mbid: String?, w: Int, h: Int): Art? {
+        val key = p.cacheKey
+        val tag = Names.mbid(mbid)
+        val e = cache.hit(key)
+        if (e != null) {
+            cache.rendered(key, w, h)?.let { return Art(it, w, h, name.trim(), tag, e.source, e.credit) }
+            val jpeg = cache.source(key)?.let { Backdrop.render(codec, it, w, h) }
+            if (jpeg != null) {
+                cache.putRendered(key, w, h, jpeg)
+                return Art(jpeg, w, h, name.trim(), tag, e.source, e.credit)
+            }
+        }
+        val now = clock()
+        p.failedAt?.let { at ->
+            if (now - at < TTL_MS) {
+                due(at)
+                return null
+            }
+        }
+        if (!online()) throw IOException("offline")
+        val src = (images[p.source] ?: otherImages).get(p.url)?.body
+        val jpeg = src?.takeIf { check(it) == null }?.let { Backdrop.render(codec, it, w, h) }
+        if (src == null || jpeg == null) {
+            picks.failed(p, now)
+            picks.save()
+            due(now)
+            return null
+        }
+        picks.ifCurrent(p) {
+            store(p, src)
+            cache.putRendered(key, w, h, jpeg)
+        } ?: return null
+        if (p.failedAt != null) {
+            picks.retry(p)
+            picks.save()
+        }
+        return Art(jpeg, w, h, name.trim(), tag, p.source, p.credit)
+    }
+
+    fun store(p: ArtPicks.Pick, src: ByteArray) = picks.ifCurrent(p) {
+        cache.putHit(ArtCache.Entry(p.cacheKey, p.name, p.mbid, p.source, p.credit, p.url, clock(), p.id, ArtCache.sha256(src)), src)
+    }
+
+    fun check(src: ByteArray): String? {
+        val p = codec.decode(src, maxOf(PICK_W, PICK_H) * 4) ?: return PickLink.NOT_IMAGE
+        try {
+            val r = Crop.rect(p.w, p.h, PICK_W, PICK_H)
+            return if (r.w < PICK_W || r.h < PICK_H) PickLink.TOO_SMALL else null
+        } finally {
+            p.release()
+        }
+    }
+
+    fun offer(text: String): Offered = try {
+        when (val l = PickLink.parse(text)) {
+            PickLink.Unsupported -> Offered.Refused(PickLink.UNSUPPORTED)
+            is PickLink.MusicBrainz -> mb.artist(l.mbid)?.let { a -> Offered.Ok(Offer(ArtPicks.ARTIST, Sources.MUSICBRAINZ, "https://musicbrainz.org/artist/${a.id}", a.id, null, a.id, a.name, null)) }
+                ?: Offered.Refused(PickLink.NOT_FOUND)
+            is PickLink.YouTube -> otherImages.get(l.url)?.text?.let { html ->
+                val img = YouTube.ogImage(html) ?: return Offered.Refused(PickLink.NOT_IMAGE)
+                image(Sources.YOUTUBE, img, ImageIds.of(Sources.YOUTUBE, img), null, YouTube.ogTitle(html) ?: "")
+            } ?: Offered.Refused(PickLink.UNREACHABLE)
+            is PickLink.Commons -> commons(l.file)
+            is PickLink.Direct -> image(Sources.LINK, l.url, l.url, null, l.url.substringAfterLast('/').substringBefore('?'))
+        }
+    } catch (e: IOException) {
+        Offered.Refused(PickLink.UNREACHABLE)
+    }
+
+    fun take(t: Tile): Offered = try {
+        if (t.source == Wikimedia.SOURCE) commons(t.id.removePrefix("File:")) else image(t.source, t.full, t.id, t.credit, t.caption)
+    } catch (e: IOException) {
+        Offered.Refused(PickLink.UNREACHABLE)
+    }
+
+    private fun commons(file: String): Offered {
+        val c = wikimedia.file(file) ?: return Offered.Refused(PickLink.UNREACHABLE)
+        return image(Wikimedia.SOURCE, c.url, c.id, c.credit, c.id.removePrefix("File:"))
+    }
+
+    private fun image(source: String, url: String, id: String, credit: Credit?, title: String): Offered {
+        val src = (images[source] ?: otherImages).get(url)?.body ?: return Offered.Refused(PickLink.UNREACHABLE)
+        check(src)?.let { return Offered.Refused(it) }
+        return Offered.Ok(Offer(ArtPicks.IMAGE, source, url, id, credit, null, title, src))
+    }
+
+    fun browse(name: String, mbid: String?, px: Int, sink: (Tile) -> Unit): Boolean {
+        val on = sources().enabled
+        val run = HttpRun.current.get()
+        fun <T> attempt(block: () -> T): T? = try {
+            block()
+        } catch (e: IOException) {
+            if (run?.cancelled == true) throw e
+            null
+        } catch (e: RuntimeException) {
+            null
+        }
+        fun tile(source: String, caption: String, preview: String, full: String, id: String = ImageIds.of(source, full), credit: Credit? = null) {
+            val b = attempt { (images[source] ?: otherImages).get(preview) }?.body ?: return
+            sink(Tile(source, caption, b, full, id, credit))
+        }
+        val ids = ((attempt { mb.searchAll(name) } ?: emptyList()).take(BROWSE_MBIDS) + listOfNotNull(Names.mbid(mbid))).distinct()
+        val artists = ids.mapNotNull { attempt { mb.artist(it) } }
+        fun caption(a: MbArtist) = a.disambiguation.ifEmpty { a.name }
+        for (source in sources().order.filter { it in on }) {
+            when (source) {
+                Wikimedia.SOURCE -> for (a in artists) attempt { wikimedia.candidates(a, PICK_W, PICK_H, px) }?.take(MAX_TRIES)?.forEach { tile(source, caption(a), it.url, it.id, it.id, it.credit) }
+                Sources.THE_AUDIO_DB -> for (a in artists) attempt { audioDb.candidates(a.id) }?.take(MAX_TRIES)?.forEach { tile(source, caption(a), it.url, it.url) }
+                Sources.FANART_TV -> for (a in artists) attempt { fanartTv.candidates(a.id) }?.take(MAX_TRIES)?.forEach { tile(source, caption(a), it.url, it.url) }
+                Sources.DISCOGS -> for (a in artists) attempt { discogs.previews(a) }?.take(MAX_TRIES)?.forEach { (small, full) -> tile(source, caption(a), small, full) }
+                Sources.YOUTUBE -> for (a in artists) attempt { youtube.candidates(a).take(MAX_TRIES).toList() }?.forEach { tile(source, caption(a), YouTube.sized(it.url, YT_PREVIEW), it.url) }
+                Sources.DEEZER -> attempt { deezer.search(name) }?.take(BROWSE_RESULTS)?.forEach { d ->
+                    val small = Deezer.picture(d, "picture_medium") ?: return@forEach
+                    val full = Deezer.picture(d, "picture_xl") ?: return@forEach
+                    tile(source, d["name"].str ?: "", small, full)
+                }
+            }
+        }
+        if (Sources.YOUTUBE !in on) return true
+        val found = attempt { youtube.search(name) }?.takeIf { it.isNotEmpty() } ?: return false
+        found.take(BROWSE_RESULTS).forEach { c -> tile(Sources.YOUTUBE, c.title, YouTube.sized(c.thumb, YT_PREVIEW), YouTube.sized(c.thumb, YT_FULL)) }
+        return true
     }
 
     private fun find(name: String, tag: String?, id: String?, key: String, w: Int, h: Int, on: Set<String>, now: Long): Found? {
@@ -115,7 +249,7 @@ class ArtistArt(
         return Art(f.jpeg, w, h, name.trim(), f.mbid, f.c.source, f.c.credit, tag == null && wrongArtistOffered(e, name))
     }
 
-    fun blocked(e: ArtCache.Entry): Boolean = blocks.blocked(e.key, e.source, ImageIds.of(e), cache.sha(e), e.name)
+    fun blocked(e: ArtCache.Entry): Boolean = !picked(e) && blocks.blocked(e.key, e.source, ImageIds.of(e), cache.sha(e), e.name)
 
     fun forget(key: String) = cache.drop(key)
 
@@ -124,7 +258,10 @@ class ArtistArt(
     fun resolvedBy(e: ArtCache.Entry): String =
         e.resolvedBy.ifEmpty { e.name.takeIf { e.mbid != null && cache.mbid(it)?.mbid == e.mbid } ?: "" }
 
+    fun picked(e: ArtCache.Entry): Boolean = e.key.startsWith(ArtPicks.PREFIX)
+
     fun wrongArtistOffered(e: ArtCache.Entry): Boolean {
+        if (picked(e)) return false
         val by = resolvedBy(e)
         return by.isNotEmpty() && e.mbid != null && cache.mbid(by)?.mbid == e.mbid
     }
@@ -139,7 +276,8 @@ class ArtistArt(
     fun candidates(name: String, mbid: String?): List<ArtCache.Entry> {
         val f = Names.fold(name)
         val m = Names.mbid(mbid)
-        val all = cache.entries().filter { Names.fold(it.name) == f || (m != null && it.mbid == m) } + listOfNotNull(cache.hit(keyOf(name, mbid)))
+        val all = cache.entries().filter { Names.fold(it.name) == f || (m != null && it.mbid == m) } +
+            listOfNotNull(cache.hit(keyOf(name, mbid)), picks.of(mbid, name)?.let { cache.hit(it.cacheKey) })
         return all.distinctBy { it.key }
     }
 
@@ -150,7 +288,7 @@ class ArtistArt(
     fun withSha(e: ArtCache.Entry): ArtCache.Entry =
         if (e.sha.isNotEmpty()) e else ArtCache.Entry(e.key, e.name, e.mbid, e.source, e.credit, e.url, e.at, e.id, cache.sha(e), e.resolvedBy)
 
-    fun keyOf(name: String, mbid: String?): String = (Names.mbid(mbid) ?: cache.mbid(name)?.mbid) ?: "name:${Names.fold(name)}"
+    fun keyOf(name: String, mbid: String?): String = (tag(picks.of(mbid, name), mbid) ?: cache.mbid(name)?.mbid) ?: "name:${Names.fold(name)}"
 
     fun beginMark() {
         missDue = Long.MAX_VALUE
@@ -174,7 +312,12 @@ class ArtistArt(
     fun cached(name: String, mbid: String?): ByteArray? = cachedEntry(name, mbid)?.let { source(it) }
 
     fun cachedEntry(name: String, mbid: String?): ArtCache.Entry? {
-        val key = (Names.mbid(mbid) ?: cache.mbid(name)?.mbid?.takeIf { it !in blocks.rejected(name) }) ?: "name:${Names.fold(name)}"
+        val p = picks.of(mbid, name)
+        when (p?.kind) {
+            ArtPicks.IMAGE -> return cache.hit(p.cacheKey)
+            ArtPicks.NONE -> return null
+        }
+        val key = (tag(p, mbid) ?: cache.mbid(name)?.mbid?.takeIf { it !in blocks.rejected(name) }) ?: "name:${Names.fold(name)}"
         return cache.hit(key)?.takeIf { it.source in sources().enabled && cache.hasSource(key) && !blocked(it) }
     }
 
@@ -231,5 +374,11 @@ class ArtistArt(
     companion object {
         const val TTL_MS = 7L * 24 * 3600 * 1000
         const val MAX_TRIES = 4
+        const val PICK_W = 360
+        const val PICK_H = 480
+        const val BROWSE_MBIDS = 5
+        const val BROWSE_RESULTS = 10
+        const val YT_PREVIEW = 176
+        const val YT_FULL = 900
     }
 }

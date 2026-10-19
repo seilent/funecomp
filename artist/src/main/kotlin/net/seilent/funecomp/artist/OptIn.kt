@@ -42,6 +42,8 @@ data class Sources(
         const val DISCOGS = "discogs"
         const val YOUTUBE = "youtube"
         const val DEEZER = "deezer"
+        const val LINK = "link"
+        const val MUSICBRAINZ = "musicbrainz"
 
         private val LABELS = mapOf(
             Wikimedia.SOURCE to "commons",
@@ -50,6 +52,8 @@ data class Sources(
             FANART_TV to "fanart.tv",
             YOUTUBE to "youtube",
             DEEZER to "deezer",
+            LINK to "link",
+            MUSICBRAINZ to "musicbrainz",
         )
 
         fun label(id: String) = LABELS[id] ?: id
@@ -76,38 +80,87 @@ class FanartTv(private val api: Api, private val key: () -> String, private val 
 }
 
 class Discogs(private val api: Api, private val base: String = "https://api.discogs.com") {
-    fun candidates(a: MbArtist): List<Candidate> {
+    fun candidates(a: MbArtist): List<Candidate> = images(a).mapNotNull { it["uri"].str?.takeIf { u -> u.startsWith("http") } }.map { Candidate(it, Sources.DISCOGS) }
+
+    fun previews(a: MbArtist): List<Pair<String, String>> = images(a).mapNotNull { i ->
+        val full = i["uri"].str?.takeIf { it.startsWith("http") } ?: return@mapNotNull null
+        (i["uri150"].str?.takeIf { it.startsWith("http") } ?: full) to full
+    }
+
+    private fun images(a: MbArtist): List<J> {
         val id = a.rels("discogs").firstNotNullOfOrNull { Regex("/artist/(\\d+)").find(it.url)?.groupValues?.get(1) }
             ?: return emptyList()
         val r = api.json("$base/artists/$id") ?: return emptyList()
         return r["images"].list.sortedBy { if (it["type"].str == "primary") 0 else 1 }
-            .mapNotNull { it["uri"].str?.takeIf { u -> u.startsWith("http") } }
-            .map { Candidate(it, Sources.DISCOGS) }
     }
 }
 
 class YouTube(private val api: Api) {
+    class Channel(val id: String, val title: String, val thumb: String)
+
     fun candidates(a: MbArtist): Sequence<Candidate> =
         a.rels("youtube").map { it.url }.filter { CHANNEL.containsMatchIn(it) }.sortedBy { if (it.contains("/channel/")) 0 else 1 }
             .asSequence()
             .mapNotNull { url -> api.get(url)?.text?.let { ogImage(it) } }
             .map { Candidate(it, Sources.YOUTUBE) }
 
+    fun search(name: String): List<Channel>? =
+        api.get("https://www.youtube.com/results?search_query=${Api.enc(name.trim())}&sp=$CHANNELS")?.text?.let { channels(it) }
+
     companion object {
+        private const val CHANNELS = "EgIQAg%253D%253D"
+        private const val DATA = "var ytInitialData = "
         private val CHANNEL = Regex("^https?://(www\\.|m\\.)?youtube\\.com/(channel/|user/|c/|@)")
         private val OG = Regex("<meta\\s+property=\"og:image\"\\s+content=\"([^\"]+)\"")
+        private val TITLE = Regex("<meta\\s+property=\"og:title\"\\s+content=\"([^\"]*)\"")
+        private val SIDE = Regex("=s\\d+")
 
         fun ogImage(html: String): String? = OG.find(html)?.groupValues?.get(1)?.replace("&amp;", "&")
+
+        fun ogTitle(html: String): String? = TITLE.find(html)?.groupValues?.get(1)?.let { Wikimedia.text(it) }
+
+        fun channels(html: String): List<Channel>? {
+            val i = html.indexOf(DATA).takeIf { it >= 0 }?.plus(DATA.length) ?: return null
+            val j = html.indexOf(";</script>", i).takeIf { it >= 0 } ?: return null
+            val root = try {
+                J.parse(html.substring(i, j))
+            } catch (e: IllegalArgumentException) {
+                return null
+            }
+            val out = ArrayList<Channel>()
+            fun walk(n: J) {
+                n.entries.forEach { (k, v) ->
+                    if (k == "channelRenderer") {
+                        val id = v["channelId"].str
+                        val title = v["title"]["simpleText"].str
+                        val thumb = v["thumbnail"]["thumbnails"].list.lastOrNull()?.get("url")?.str
+                        if (id != null && title != null && thumb != null) out += Channel(id, title, if (thumb.startsWith("//")) "https:$thumb" else thumb)
+                    } else {
+                        walk(v)
+                    }
+                }
+                n.list.forEach { walk(it) }
+            }
+            walk(root)
+            return out
+        }
+
+        fun sized(url: String, side: Int): String = url.replace(SIDE, "=s$side")
     }
 }
 
 class Deezer(private val api: Api, private val base: String = "https://api.deezer.com") {
+    fun search(name: String): List<J> = api.json("$base/search/artist?q=${Api.enc(name.trim())}")?.get("data")?.list ?: emptyList()
+
     fun candidates(name: String): List<Candidate> {
         val want = Names.fold(name)
-        val r = api.json("$base/search/artist?q=${Api.enc(name.trim())}") ?: return emptyList()
-        return r["data"].list.filter { Names.fold(it["name"].str) == want }
+        return search(name).filter { Names.fold(it["name"].str) == want }
             .sortedWith(compareBy<J> { it["name"].str?.trim() != name.trim() }.thenByDescending { it["nb_fan"].long ?: 0 })
-            .mapNotNull { it["picture_xl"].str?.takeIf { u -> u.startsWith("http") && !u.contains("/artist//") } }
+            .mapNotNull { picture(it, "picture_xl") }
             .map { Candidate(it, Sources.DEEZER) }
+    }
+
+    companion object {
+        fun picture(a: J, size: String): String? = a[size].str?.takeIf { u -> u.startsWith("http") && !u.contains("/artist//") }
     }
 }

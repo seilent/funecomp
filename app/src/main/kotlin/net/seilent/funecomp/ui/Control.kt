@@ -5,8 +5,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
+import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
+import net.seilent.funecomp.artist.Offer
+import net.seilent.funecomp.artist.Offered
+import net.seilent.funecomp.artist.Tile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.seilent.funecomp.proto.Profile
@@ -31,6 +35,11 @@ data class LinkView(
     val reconnect: Boolean = false,
     val askReconnect: Boolean = false,
 )
+
+@Immutable
+data class PickFor(val name: String, val mbid: String? = null, val library: Boolean = false)
+
+class BrowseTile(val tile: Tile, val image: ImageBitmap)
 
 @Immutable
 data class Bonded(val name: String, val address: String, val companion: Boolean = false)
@@ -81,6 +90,12 @@ interface Control {
     fun blockArt(e: ArtCache.Entry) {}
     fun wrongArtist(e: ArtCache.Entry) {}
     fun unblock(r: ArtBlocks.Record) {}
+    fun pickLink(text: String, done: (Offered) -> Unit) {}
+    fun browse(name: String, mbid: String?, px: Int, tile: (BrowseTile) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}
+    fun takeTile(t: Tile, done: (Offered) -> Unit) {}
+    fun pick(target: PickFor, offer: Offer) {}
+    fun undoPick(p: ArtPicks.Pick) {}
+    fun tryAgain(p: ArtPicks.Pick) {}
 }
 
 const val LIB_PAGE = 100L
