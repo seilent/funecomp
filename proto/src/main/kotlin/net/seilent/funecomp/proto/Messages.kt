@@ -23,6 +23,7 @@ object Groups {
         "eqPresets" to setOf(Msg.EQ_PRESET),
         "artBlock" to setOf(Msg.ART_BLOCK),
         "lyricsGet" to setOf(Msg.LYR_GET),
+        "artPick" to setOf(Msg.ART_PICK),
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -619,6 +620,25 @@ data class LyrLine(val ms: Long?, val text: String) {
     }
 
     val size: Int get() = TlvWriter().rec(Tags.LyrGetReply.line) { write(this) }.size
+}
+
+data class ArtPick(val name: String?, val mbid: String?) {
+    fun encode() = tlv {
+        str(Tags.ArtPick.name, name)
+        str(Tags.ArtPick.mbid, mbid)
+    }
+
+    companion object {
+        fun from(n: Node) = ArtPick(n.str(Tags.ArtPick.name), n.str(Tags.ArtPick.mbid))
+    }
+}
+
+data class ArtPickReply(val shown: Boolean?) {
+    fun encode() = tlv { bool(Tags.ArtPickReply.shown, shown) }
+
+    companion object {
+        fun from(n: Node) = ArtPickReply(n.bool(Tags.ArtPickReply.shown))
+    }
 }
 
 data class LyrGetReply(val crc: Long?, val kind: Int?, val total: Long?, val offset: Long?, val more: Boolean?, val lines: List<LyrLine>) {

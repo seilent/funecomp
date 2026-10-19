@@ -7,18 +7,18 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "da588bcd1722c95345739d75f3733be3f0c0f7d1"
-    const val PROTO_SHA256 = "a7c115e7de01794a592d1b68c28ce630ad70e2c323757b84487648d08dc5ec21"
-    const val VECTORS_SHA256 = "fed5d5852ea3d02fada9e1f897176adb7dbf29408af4caa560ec0abc6a62b8f7"
-    const val TOKENS_SHA256 = "c436748675b88328bc6846a4ec2f2104cc74e4f305918d3a837984a4fb4fa866"
-    const val TOKENSV1_SHA256 = "a3bfc28ff125e1c74fb7304e1466b1b9fadf25f555bb2382393c3393e7a6a239"
+    const val COMMIT = "aa889207b75d3c38da36b0d563a7abcd55364529"
+    const val PROTO_SHA256 = "1d7abaedfab289cefdc1881e7d0d14c49fced83b7789e2ebd917053ef2792b9e"
+    const val VECTORS_SHA256 = "da97c236afb7ac07e56a223eb742290ffc2d3651fe5acd04860429079641d5ce"
+    const val TOKENS_SHA256 = "8e5139fd329bc087d3acad8adade94bf6be643218cb1bd614c151dc524318d97"
+    const val TOKENSV1_SHA256 = "4d1e0faa1738981ea062534988859dcc18ba9eaf8d09412831e301de0fb47e14"
 }
 
 object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 7
+    const val minor = 8
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -85,6 +85,7 @@ object Msg {
     const val EQ_PRESET = 0x37
     const val ART_BLOCK = 0x38
     const val LYR_GET = 0x39
+    const val ART_PICK = 0x3a
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -120,6 +121,7 @@ object Msg {
         EQ_PRESET to MsgInfo(EQ_PRESET, "EQ_PRESET", "app", false),
         ART_BLOCK to MsgInfo(ART_BLOCK, "ART_BLOCK", "dev", false),
         LYR_GET to MsgInfo(LYR_GET, "LYR_GET", "app", false),
+        ART_PICK to MsgInfo(ART_PICK, "ART_PICK", "dev", false),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -153,7 +155,8 @@ object Feature {
     const val eqPresets = 9
     const val artBlock = 10
     const val lyricsGet = 11
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet")
+    const val artPick = 12
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick")
 }
 
 object Enums {
@@ -607,6 +610,13 @@ object Tags {
         const val more = 5
         const val line = 6
     }
+    object ArtPick {
+        const val name = 1
+        const val mbid = 2
+    }
+    object ArtPickReply {
+        const val shown = 1
+    }
     object Error {
         const val code = 1
         const val text = 2
@@ -953,6 +963,13 @@ object Tags {
             4 to Field(4, "offset", Base.U32, null, false),
             5 to Field(5, "more", Base.BOOL, null, false),
             6 to Field(6, "line", Base.RECORD, "LyrLine", true),
+        ),
+        "ART_PICK" to mapOf(
+            1 to Field(1, "name", Base.STR, null, false),
+            2 to Field(2, "mbid", Base.STR, null, false),
+        ),
+        "ART_PICK.reply" to mapOf(
+            1 to Field(1, "shown", Base.BOOL, null, false),
         ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),

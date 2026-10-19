@@ -42,6 +42,7 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.PickedFile
 import net.seilent.funecomp.ui.Shell
 import java.util.UUID
@@ -199,11 +200,12 @@ class Main : ComponentActivity() {
         batteryAsked = prefs().getBoolean(BATTERY_ASKED, false)
         mediaControls = MediaLink.controls(this)
         remember(intent)
-        launch = opens(intent, Remote.debuggable(this))
+        launch = opens(intent, Remote.debuggable(this), Remote.phase != Phase.NONE)
+        if (launch) pickFrom(intent)
         setContent {
             Box(Modifier.fillMaxSize().background(Black)) {
                 val b = battery
-                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, b != null && b != Battery.UNRESTRICTED && !batteryAsked, mediaControls, Lyrics.on, reconnect, reconnectAsk)
+                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, askBattery(), mediaControls, Lyrics.on, reconnect, reconnectAsk)
                 App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits, { e ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
@@ -217,13 +219,14 @@ class Main : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         val paged = remember(intent)
-        val open = opens(intent, Remote.debuggable(this))
+        val open = opens(intent, Remote.debuggable(this), Remote.phase != Phase.NONE)
         Log.i(Remote.TAG, "onNewIntent action=${intent.action} open=$open")
         if (!open) return
         if (!shell.gated && !paged) {
             shell.sheet.close(dismissed = false)
             shell.nav.reset(listOf(Page.Home, Page.NowPlaying))
         }
+        pickFrom(intent)
         launch = true
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) launched()
     }
@@ -234,6 +237,9 @@ class Main : ComponentActivity() {
         reconnect = prefs().getBoolean(RECONNECT, false)
         reconnectAsk = prefs().getBoolean(RECONNECT_ASK, false)
         Remote.shown(true)
+        Remote.pickAsk = { target ->
+            (!shell.gated && !shell.sheet.shown && shell.pick == null && !askBattery() && !reconnectAsk).also { if (it) shell.pick = target }
+        }
         launched()
     }
 
@@ -244,6 +250,7 @@ class Main : ComponentActivity() {
 
     override fun onStop() {
         super.onStop()
+        Remote.pickAsk = null
         if (!isChangingConfigurations) Remote.shown(false)
     }
 
@@ -294,6 +301,14 @@ class Main : ComponentActivity() {
         val pages = intent?.getStringExtra(EXTRA_PAGE)?.let { debugPage(it) } ?: return false
         shell = Shell(Nav(pages))
         return true
+    }
+
+    private fun askBattery() = battery.let { it != null && it != Battery.UNRESTRICTED } && !batteryAsked
+
+    private fun pickFrom(intent: Intent?) {
+        if (intent?.action != ACTION_PICK_ART || !PickNotice.take(this, intent.getStringExtra(EXTRA_PICK_NONCE))) return
+        val name = intent.getStringExtra(EXTRA_PICK_NAME)?.takeIf { it.isNotBlank() } ?: return
+        shell.pick = PickFor(name, intent.getStringExtra(EXTRA_PICK_MBID))
     }
 
     private fun debugPage(name: String): List<Page>? {
@@ -369,6 +384,10 @@ class Main : ComponentActivity() {
         const val EXTRA_LINK = "link"
         const val EXTRA_PAGE = "page"
         const val ACTION_OPEN = "net.seilent.funecomp.OPEN"
+        const val ACTION_PICK_ART = "net.seilent.funecomp.PICK_ART"
+        const val EXTRA_PICK_NAME = "pickName"
+        const val EXTRA_PICK_MBID = "pickMbid"
+        const val EXTRA_PICK_NONCE = "pickNonce"
         private const val BATTERY_ASKED = "batteryAsked"
         const val PREFS = "link"
         const val WANTED = "wanted"
@@ -385,9 +404,9 @@ class Main : ComponentActivity() {
             Remote.logExit(c)
         }
 
-        fun opens(intent: Intent?, debuggable: Boolean): Boolean {
+        fun opens(intent: Intent?, debuggable: Boolean, linked: Boolean = false): Boolean {
             if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return false
-            return intent.action == Intent.ACTION_MAIN || intent.action == ACTION_OPEN || (debuggable && intent.hasExtra(EXTRA_LINK))
+            return intent.action == Intent.ACTION_MAIN || intent.action == ACTION_OPEN || (linked && intent.action == ACTION_PICK_ART) || (debuggable && intent.hasExtra(EXTRA_LINK))
         }
 
         fun sources(context: Context): Sources {

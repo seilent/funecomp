@@ -10,8 +10,8 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply 74000101010001040046444350020200010003020007000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
-hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff0f0000000000000e0400070000000f04000300000010040004000000
+hex hello_reply 74000101010001040046444350020200010003020008000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff1f0000000000000e0400070000000f04000300000010040004000000
 re hello_reply hello
 dec hello_reply 0.len 116
 dec hello_reply 0.type HELLO
@@ -19,7 +19,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 7
+dec hello_reply 0.body.minor 8
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -29,7 +29,7 @@ dec hello_reply 0.body.backdropH 480
 dec hello_reply 0.body.maxPayload 16384
 dec hello_reply 0.body.idleMs 30000
 dec hello_reply 0.body.busyMs 5000
-dec hello_reply 0.body.features 4095
+dec hello_reply 0.body.features 8191
 dec hello_reply 0.body.libRev 7
 dec hello_reply 0.body.settingsRev 3
 dec hello_reply 0.body.snapRev 4
@@ -2315,3 +2315,48 @@ dec state_lyrics_crc 0.body.lyrics true
 dec state_lyrics_crc 0.body.lyricsPlain false
 dec state_lyrics_crc 0.body.lyricsCrc 3205543910
 act state_lyrics_crc accept
+vec art_pick dev
+hex art_pick 36003a040100010c0055746164612048696b61727502240061316232633364342d303030302d343030302d383030302d303030303030303030303031
+dec art_pick 0.len 54
+dec art_pick 0.type ART_PICK
+dec art_pick 0.flags 0x04
+dec art_pick 0.seq 1
+dec art_pick 0.body.name Utada Hikaru
+dec art_pick 0.body.mbid a1b2c3d4-0000-4000-8000-000000000001
+act art_pick accept
+vec art_pick_bare dev
+hex art_pick_bare 08003a0402000105005453554b49
+dec art_pick_bare 0.len 8
+dec art_pick_bare 0.type ART_PICK
+dec art_pick_bare 0.flags 0x04
+dec art_pick_bare 0.seq 2
+dec art_pick_bare 0.body.name TSUKI
+act art_pick_bare accept
+vec art_pick_reply_shown app
+hex art_pick_reply_shown 04003a01010001010001
+re art_pick_reply_shown art_pick
+dec art_pick_reply_shown 0.len 4
+dec art_pick_reply_shown 0.type ART_PICK
+dec art_pick_reply_shown 0.flags 0x01
+dec art_pick_reply_shown 0.seq 1
+dec art_pick_reply_shown 0.body.shown true
+act art_pick_reply_shown accept
+vec art_pick_reply_posted app
+hex art_pick_reply_posted 04003a01010001010000
+re art_pick_reply_posted art_pick
+dec art_pick_reply_posted 0.len 4
+dec art_pick_reply_posted 0.type ART_PICK
+dec art_pick_reply_posted 0.flags 0x01
+dec art_pick_reply_posted 0.seq 1
+dec art_pick_reply_posted 0.body.shown false
+act art_pick_reply_posted accept
+vec art_pick_error_refused app
+hex art_pick_error_refused 19003a030100010100040212006f70656e207468652070686f6e6520617070
+re art_pick_error_refused art_pick
+dec art_pick_error_refused 0.len 25
+dec art_pick_error_refused 0.type ART_PICK
+dec art_pick_error_refused 0.flags 0x03
+dec art_pick_error_refused 0.seq 1
+dec art_pick_error_refused 0.body.code 4
+dec art_pick_error_refused 0.body.text open the phone app
+act art_pick_error_refused accept

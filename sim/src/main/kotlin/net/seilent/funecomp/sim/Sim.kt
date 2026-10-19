@@ -1,6 +1,7 @@
 package net.seilent.funecomp.sim
 
 import net.seilent.funecomp.proto.ArtBlock
+import net.seilent.funecomp.proto.ArtPick
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
@@ -93,6 +94,13 @@ class Sim(private val opts: Options, lib: Library = Library.synthetic()) {
         val c = current?.takeIf { it.closed == null && it.asks } ?: error("no connection with art block")
         val done = CompletableFuture<String>()
         check(c.ask(Msg.ART_BLOCK, q.encode(), Proto.requestTimeoutMs.toLong()) { done.complete(it) }) { "an ask is pending" }
+        return done.get()
+    }
+
+    fun askPick(q: ArtPick): String {
+        val c = current?.takeIf { it.closed == null && it.picks } ?: error("no connection with art pick")
+        val done = CompletableFuture<String>()
+        check(c.ask(Msg.ART_PICK, q.encode(), Proto.requestTimeoutMs.toLong()) { done.complete(it) }) { "an ask is pending" }
         return done.get()
     }
 

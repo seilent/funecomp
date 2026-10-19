@@ -51,6 +51,7 @@ class Shell(
     gated: Boolean = false,
 ) {
     var gated by mutableStateOf(gated)
+    var pick by mutableStateOf<PickFor?>(null)
 }
 
 fun homeItems(device: DeviceState, link: LinkView, sources: Sources): List<HomeItem> {
@@ -104,7 +105,7 @@ fun App(
         ) {
             val nav = shell.nav
             val ctx = Ctx(device, control, nav, shell.sheet, shell.toast)
-            LaunchedEffect(shell.gated, link.phase, link.askBattery, link.askReconnect, shell.sheet.shown) {
+            LaunchedEffect(shell.gated, link.phase, link.askBattery, link.askReconnect, shell.sheet.shown, shell.pick) {
                 if (shell.gated && link.phase == Phase.LIVE) {
                     shell.gated = false
                     shell.sheet.close()
@@ -119,6 +120,12 @@ fun App(
                     shell.sheet.open("reconnect after update", listOf("on", "off"), info = listOf(RECONNECT_INFO), onDismiss = { control.reconnect(false) }) {
                         control.reconnect(it == 0)
                     }
+                }
+                val pick = shell.pick
+                if (pick != null && !shell.gated && !shell.sheet.shown) {
+                    shell.pick = null
+                    control.pickHandled(pick.name)
+                    pickSheet(ctx, pick)
                 }
             }
             if (link.phase == Phase.LIVE) libList(device, control, Enums.View.playlists, "")

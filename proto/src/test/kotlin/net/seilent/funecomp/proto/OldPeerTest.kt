@@ -22,6 +22,7 @@ class OldPeerTest {
     private val v14 = table("/proto-1.4.txt")
     private val v15 = table("/proto-1.5.txt")
     private val v16 = table("/proto-1.6.txt")
+    private val v17 = table("/proto-1.7.txt")
 
     private fun table(name: String): Map<String, Map<Int, Field>> = run {
         val text = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
@@ -163,7 +164,31 @@ class OldPeerTest {
         assertFalse(Groups.allowed(Msg.LYR_GET, Groups.all and (1L shl Feature.lyricsGet).inv()))
         assertTrue(Groups.allowed(Msg.LYR_GET, Groups.mask("lyricsGet")))
         assertEquals(11, Feature.lyricsGet)
-        assertEquals(4095L, Groups.all)
+    }
+
+    @Test
+    fun protocol18FramesDecodeWithThe17TablesToEmptyFields() {
+        assertNull(v17["ART_PICK"])
+        assertNull(v17["ART_PICK.reply"])
+        assertEquals(listOf(1, 2), Node.decode("ART_PICK", body("art_pick"), v17).unknownTags)
+        assertEquals(listOf(1), Node.decode("ART_PICK.reply", body("art_pick_reply_shown"), v17).unknownTags)
+        assertFalse(Groups.allowed(Msg.ART_PICK, Groups.all and (1L shl Feature.artPick).inv()))
+        assertTrue(Groups.allowed(Msg.ART_PICK, Groups.mask("artPick")))
+        assertEquals(12, Feature.artPick)
+        assertEquals(8191L, Groups.all)
+    }
+
+    @Test
+    fun artPickBuildersMatchTheVectors() {
+        val mbid = "a1b2c3d4-0000-4000-8000-000000000001"
+        assertEquals(ArtPick("Utada Hikaru", mbid), ArtPick.from(Node.decode("ART_PICK", body("art_pick"))))
+        assertArrayEquals(body("art_pick"), ArtPick("Utada Hikaru", mbid).encode())
+        assertEquals(ArtPick("TSUKI", null), ArtPick.from(Node.decode("ART_PICK", body("art_pick_bare"))))
+        assertArrayEquals(body("art_pick_reply_shown"), ArtPickReply(true).encode())
+        assertArrayEquals(body("art_pick_reply_posted"), ArtPickReply(false).encode())
+        val e = ErrorReply.from(Node.decode("error", body("art_pick_error_refused")))
+        assertEquals(4, e.code)
+        assertEquals("open the phone app", e.text)
     }
 
     @Test

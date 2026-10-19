@@ -1,6 +1,8 @@
 package net.seilent.funecomp.sim
 
 import net.seilent.funecomp.proto.ArtBlock
+import net.seilent.funecomp.proto.ArtPick
+import net.seilent.funecomp.proto.ArtPickReply
 import net.seilent.funecomp.proto.Bye
 import net.seilent.funecomp.proto.ErrorReply
 import net.seilent.funecomp.proto.Frame
@@ -48,6 +50,8 @@ class Conn(
     private var ask: Ask? = null
 
     val asks: Boolean get() = Groups.allowed(Msg.ART_BLOCK, appFeatures) && Groups.allowed(Msg.ART_BLOCK, faults.features)
+
+    val picks: Boolean get() = Groups.allowed(Msg.ART_PICK, appFeatures) && Groups.allowed(Msg.ART_PICK, faults.features)
 
     fun ask(type: Int, body: ByteArray, timeoutMs: Long, done: (String) -> Unit): Boolean {
         val s = synchronized(lock) {
@@ -191,7 +195,14 @@ class Conn(
         if (f.isReply) {
             if (f.type == Msg.PING && f.seq == pingSeq) pingSeq = null
             if (synchronized(lock) { ask?.let { it.type == f.type && it.seq == f.seq } } == true) {
-                answered(f.seq, if (f.isError) ErrorReply.from(body).let { "error ${it.code} ${it.text ?: ""}".trim() } else "ok")
+                answered(
+                    f.seq,
+                    when {
+                        f.isError -> ErrorReply.from(body).let { "error ${it.code} ${it.text ?: ""}".trim() }
+                        f.type == Msg.ART_PICK -> "ok shown=${ArtPickReply.from(body).shown}"
+                        else -> "ok"
+                    },
+                )
             }
             return
         }
@@ -243,6 +254,9 @@ class Conn(
         helloDone = true
         device.greet(this)
         faults.bye?.let { return bye(it) }
+        faults.askPick?.let { (name, ms) ->
+            if (picks) ticker.schedule({ ask(Msg.ART_PICK, ArtPick(name, device.lib.tracks.firstNotNullOfOrNull { it.mbidOf(name) }).encode(), Proto.requestTimeoutMs.toLong()) {} }, ms, TimeUnit.MILLISECONDS)
+        }
         if (faults.noRead) {
             silent = true
             log("no-read: silent")

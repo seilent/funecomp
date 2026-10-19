@@ -42,6 +42,8 @@ import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
 import net.seilent.funecomp.link.Transport
 import net.seilent.funecomp.proto.ArtBlock
+import net.seilent.funecomp.proto.ArtPick
+import net.seilent.funecomp.proto.ArtPickReply
 import net.seilent.funecomp.proto.Bye
 import net.seilent.funecomp.proto.EqPresetReply
 import net.seilent.funecomp.proto.Groups
@@ -85,6 +87,7 @@ object Remote : Control {
     private const val ART = "art"
     private const val ART_WAKE_MS = 60_000L
     private const val TRANSITION_PAD_MS = 1_000L
+    private const val OPEN_APP = "open the phone app"
     private val SECRET = Regex("(api_key|key|token|secret)=[^&]*")
     private val ASK_ERRORS = mapOf(
         Err.badValue to "bad value",
@@ -98,6 +101,8 @@ object Remote : Control {
     private val faces = Memo<Found>(FACES)
     internal var forgetting: () -> Unit = {}
     internal var queuedAsk: () -> Unit = {}
+    @Volatile var pickAsk: ((PickFor) -> Boolean)? = null
+    @Volatile private var app: Context? = null
 
     internal var faced: (ByteArray, (() -> Pair<Double, Double>?) -> Pair<Double, Double>?) -> Pair<Bitmap, Pair<Double, Double>?>? =
         { src, face -> codec.faced(src, BACKDROP_SIDE, face) }
@@ -195,7 +200,7 @@ object Remote : Control {
             phase(Phase.CONNECTING)
             Log.i(TAG, "link $spec")
             wake(context)
-            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(features = Groups.mask("artBlock")), SystemClock::elapsedRealtime)
+            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(features = Groups.mask("artBlock", "artPick")), SystemClock::elapsedRealtime)
             link = l
             art = worker(context, l)
             l.start()
@@ -204,6 +209,7 @@ object Remote : Control {
     }
 
     fun stop() {
+        app?.let { PickNotice.clear(it) }
         clockOff()
         synchronized(lock) { drop() }
         wake?.drop(ATTEMPT)
@@ -313,6 +319,7 @@ object Remote : Control {
 
     fun artist(context: Context, http: Http = UrlHttp()): ArtistArt = synchronized(lock) {
         thumbs(context)
+        app = context.applicationContext
         artist ?: run {
             val c = context.applicationContext
             val version = c.packageManager.getPackageInfo(c.packageName, 0).versionName ?: "0"
@@ -425,6 +432,32 @@ object Remote : Control {
         }
     }
 
+    private fun askPick(q: ArtPick, r: Responder) {
+        val name = q.name?.trim()?.takeIf { it.isNotEmpty() }
+        if (name == null || artist == null) {
+            val code = if (name == null) Err.badValue else Err.busy
+            r.error(code, ASK_ERRORS.getValue(code))
+            Log.i(TAG, "art pick ask $name -> $code")
+            return
+        }
+        val target = PickFor(name, Names.mbid(q.mbid))
+        main.post {
+            val shown = pickAsk?.invoke(target) == true
+            val c = app
+            val out = when {
+                shown -> "shown".also { r.ok(ArtPickReply(true).encode()) }
+                c != null && PickNotice.post(c, target) -> "notice".also { r.ok(ArtPickReply(false).encode()) }
+                else -> "${Err.refused} notifications off".also { r.error(Err.refused, OPEN_APP) }
+            }
+            Log.i(TAG, "art pick ask $name -> $out")
+        }
+        queuedAsk()
+    }
+
+    override fun pickHandled(name: String) {
+        app?.let { PickNotice.done(it, name) }
+    }
+
     override fun pickLink(text: String, done: (Offered) -> Unit) = offered(done) { it.offer(text) }
 
     override fun takeTile(t: Tile, done: (Offered) -> Unit) = offered(done) { it.take(t) }
@@ -476,6 +509,7 @@ object Remote : Control {
         val mbid = if (offer.kind == ArtPicks.ARTIST) offer.mbid else Names.mbid(target.mbid)
         val p = ArtPicks.Pick(k, k2, target.name.trim(), offer.kind, offer.source, offer.url, offer.id, offer.src?.let { ArtCache.sha256(it) } ?: "", offer.credit, mbid, System.currentTimeMillis())
         Log.i(TAG, "art pick ${p.name} ${p.kind} ${p.source} ${p.keys}")
+        pickHandled(p.name)
         picked(a) {
             a.picks.list().filter { o -> o.keys.any { it in p.keys } }.forEach { a.forget(it.cacheKey) }
             a.picks.add(p)
@@ -487,6 +521,7 @@ object Remote : Control {
     override fun undoPick(p: ArtPicks.Pick) {
         val a = artist ?: return
         Log.i(TAG, "art undo pick ${p.name}")
+        pickHandled(p.name)
         picked(a) {
             a.picks.remove(p)
             a.forget(p.cacheKey)
@@ -922,7 +957,12 @@ object Remote : Control {
         }
 
         override fun onRequest(type: Int, body: Node, responder: Responder): Boolean {
-            if (!live || type != Msg.ART_BLOCK) return false
+            if (!live) return false
+            if (type == Msg.ART_PICK) {
+                askPick(ArtPick.from(body), responder)
+                return true
+            }
+            if (type != Msg.ART_BLOCK) return false
             val q = ArtBlock.from(body)
             val dev = spec
             val h = device.hello
@@ -939,6 +979,7 @@ object Remote : Control {
 
         override fun onClosed(reason: String) {
             if (!live) return
+            app?.let { PickNotice.clear(it) }
             update { it.copy(hello = null) }
             dapLyrics.poke()
             heart.down()

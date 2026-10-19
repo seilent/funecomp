@@ -42,6 +42,7 @@ class Faults(specs: List<String>) {
     val enums = ArrayList<EnumFault>()
     var features = Groups.all
     var askBlock: Pair<Int, Long>? = null
+    var askPick: Pair<String, Long>? = null
     var favsBusy = 0
     var favsBusyText = "busy"
     var staleState = false
@@ -77,6 +78,10 @@ class Faults(specs: List<String>) {
                     val cmd = Enums.BlockCmd.names.entries.firstOrNull { it.value == v.substringBefore('@') }?.key
                         ?: throw IllegalArgumentException("ask-block: unknown cmd in $v")
                     askBlock = cmd to (v.substringAfter('@', "").toLongOrNull() ?: throw IllegalArgumentException("ask-block: delay missing in $v"))
+                }
+                "ask-pick" -> {
+                    val ms = v.substringAfterLast('@', "").toLongOrNull() ?: throw IllegalArgumentException("ask-pick: delay missing in $v")
+                    askPick = v.substringBeforeLast('@') to ms
                 }
                 "stale-state" -> staleState = true
                 "eq-hidden" -> eqHidden += v
@@ -120,6 +125,7 @@ class Options(
         if (minor < 5) faults.features = faults.features and Groups.mask("eqPresets").inv()
         if (minor < 6) faults.features = faults.features and Groups.mask("artBlock").inv()
         if (minor < 7) faults.features = faults.features and Groups.mask("lyricsGet").inv()
+        if (minor < 8) faults.features = faults.features and Groups.mask("artPick").inv()
     }
 
     companion object {

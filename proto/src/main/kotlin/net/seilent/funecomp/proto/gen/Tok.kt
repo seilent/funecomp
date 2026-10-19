@@ -504,6 +504,7 @@ object Tok {
     const val motion_toastHold = 3500f
     const val motion_toastOut = 250f
     const val motion_toastTravel = 40f
+    const val motion_lyricSlide = 350f
     const val motion_listChange = 220f
     const val motion_listChangeStagger = 50f
     const val motion_listChangeCap = 10f
@@ -1118,6 +1119,7 @@ object TokUnit {
     const val motion_toastHold = "ms"
     const val motion_toastOut = "ms"
     const val motion_toastTravel = "u"
+    const val motion_lyricSlide = "ms"
     const val motion_listChange = "ms"
     const val motion_listChangeStagger = "ms"
     const val motion_listChangeCap = "count"

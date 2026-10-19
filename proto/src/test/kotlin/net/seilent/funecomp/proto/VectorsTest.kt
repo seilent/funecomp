@@ -171,6 +171,7 @@ class VectorsTest {
             Msg.UPD_BEGIN -> UpdBeginReply.from(n).encode()
             Msg.EQ_PRESET -> EqPresetReply.from(n).encode()
             Msg.LYR_GET -> LyrGetReply.from(n).encode()
+            Msg.ART_PICK -> ArtPickReply.from(n).encode()
             else -> null
         }
         return when (f.type) {
@@ -185,6 +186,7 @@ class VectorsTest {
             Msg.IMG_ABORT -> ImgAbort.from(n).encode()
             Msg.UPD_ABORT -> UpdAbort.from(n).encode()
             Msg.ART_BLOCK -> ArtBlock.from(n).encode()
+            Msg.ART_PICK -> ArtPick.from(n).encode()
             else -> null
         }
     }

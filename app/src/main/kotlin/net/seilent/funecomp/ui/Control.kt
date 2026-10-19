@@ -96,6 +96,7 @@ interface Control {
     fun pick(target: PickFor, offer: Offer) {}
     fun undoPick(p: ArtPicks.Pick) {}
     fun tryAgain(p: ArtPicks.Pick) {}
+    fun pickHandled(name: String) {}
 }
 
 const val LIB_PAGE = 100L

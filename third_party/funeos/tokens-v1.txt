@@ -503,6 +503,7 @@ motion.toastIn 350 ms
 motion.toastHold 3500 ms
 motion.toastOut 250 ms
 motion.toastTravel 40 u
+motion.lyricSlide 350 ms
 motion.listChange 220 ms
 motion.listChangeStagger 50 ms
 motion.listChangeCap 10 count
