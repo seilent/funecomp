@@ -209,7 +209,7 @@ class Main : ComponentActivity() {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
                     } catch (_: ActivityNotFoundException) {
                     }
-                }, Scrobbles.view, Firmwares.view, Remote.blocked)
+                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show)
             }
         }
     }

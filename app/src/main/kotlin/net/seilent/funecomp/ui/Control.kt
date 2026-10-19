@@ -66,6 +66,7 @@ interface Control {
     fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) {}
     fun mediaControls(on: Boolean) {}
     fun lyrics(on: Boolean) {}
+    fun nowPlayingShown(on: Boolean) {}
     fun reconnect(on: Boolean) {}
     fun wantArt(slot: Int, track: Long, px: Int, album: String?) {}
     fun art(track: Long, px: Int): ImageBitmap? = null

@@ -21,6 +21,7 @@ class OldPeerTest {
     private val v13 = table("/proto-1.3.txt")
     private val v14 = table("/proto-1.4.txt")
     private val v15 = table("/proto-1.5.txt")
+    private val v16 = table("/proto-1.6.txt")
 
     private fun table(name: String): Map<String, Map<Int, Field>> = run {
         val text = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
@@ -149,6 +150,38 @@ class OldPeerTest {
         assertFalse(Groups.allowed(Msg.ART_BLOCK, Groups.all and (1L shl Feature.artBlock).inv()))
         assertTrue(Groups.allowed(Msg.ART_BLOCK, Groups.mask("artBlock")))
         assertEquals(10, Feature.artBlock)
+    }
+
+    @Test
+    fun protocol17FramesDecodeWithThe16TablesToEmptyFields() {
+        assertNull(v16["LYR_GET"])
+        assertNull(v16["LYR_GET.reply"])
+        assertEquals(listOf(34), Node.decode("STATE", body("state_lyrics_crc"), v16).unknownTags)
+        assertNull(State.from(Node.decode("STATE", body("state_lyrics_crc"), v16)).lyricsCrc)
+        assertEquals(3205543910L, State.from(Node.decode("STATE", body("state_lyrics_crc"))).lyricsCrc)
+        assertEquals(listOf(1, 2, 3, 4, 5, 6, 6), Node.decode("LYR_GET.reply", body("lyr_get_synced"), v16).unknownTags)
+        assertFalse(Groups.allowed(Msg.LYR_GET, Groups.all and (1L shl Feature.lyricsGet).inv()))
+        assertTrue(Groups.allowed(Msg.LYR_GET, Groups.mask("lyricsGet")))
+        assertEquals(11, Feature.lyricsGet)
+        assertEquals(4095L, Groups.all)
+    }
+
+    @Test
+    fun lyrGetBuildersAndCrcMatchTheVectors() {
+        assertArrayEquals(body("lyr_get"), Req.lyrGet(103, 0, null))
+        assertArrayEquals(body("lyr_get_have_ask"), Req.lyrGet(103, 0, 3205543910))
+        val synced = LyrGetReply.from(Node.decode("LYR_GET.reply", body("lyr_get_synced")))
+        assertEquals(LyrGetReply(3205543910, Enums.LyricsKind.synced, 2, 0, false, listOf(LyrLine(0, "Light on the water"), LyrLine(2000, "Every road leads back home"))), synced)
+        assertArrayEquals(body("lyr_get_synced"), synced.encode())
+        assertEquals(3205543910L, lyricsCrc(Enums.LyricsKind.synced, synced.lines))
+        val plain = LyrGetReply.from(Node.decode("LYR_GET.reply", body("lyr_get_plain")))
+        assertEquals(listOf(LyrLine(null, "Light on the water"), LyrLine(null, ""), LyrLine(null, "Every road leads back home")), plain.lines)
+        assertArrayEquals(body("lyr_get_plain"), plain.encode())
+        assertEquals(576987232L, lyricsCrc(Enums.LyricsKind.plain, plain.lines))
+        assertEquals(576987232L, lyricsCrc(Enums.LyricsKind.plain, plain.lines.map { it.copy(ms = 2000) }))
+        val have = LyrGetReply.from(Node.decode("LYR_GET.reply", body("lyr_get_have")))
+        assertEquals(LyrGetReply(3205543910, Enums.LyricsKind.synced, 2, 0, false, emptyList()), have)
+        assertEquals(10, ErrorReply.from(Node.decode("error", body("lyr_get_error_notfound"))).code)
     }
 
     @Test

@@ -5,6 +5,7 @@ import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
+import java.util.zip.CRC32
 
 object Groups {
     val core: Set<Int> = setOf(Msg.HELLO, Msg.PING, Msg.BYE, Msg.STATE, Msg.TRANSPORT, Msg.VOLUME)
@@ -21,6 +22,7 @@ object Groups {
         "clockAuto" to emptySet(),
         "eqPresets" to setOf(Msg.EQ_PRESET),
         "artBlock" to setOf(Msg.ART_BLOCK),
+        "lyricsGet" to setOf(Msg.LYR_GET),
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -191,6 +193,7 @@ data class State(
     val favorite: Boolean? = null,
     val snapRev: Long? = null,
     val lyricsPlain: Boolean? = null,
+    val lyricsCrc: Long? = null,
 ) {
     fun encode() = tlv {
         enum(Tags.State.source, source)
@@ -226,6 +229,7 @@ data class State(
         u8(Tags.State.maxVolumePct, maxVolumePct)
         bool(Tags.State.favorite, favorite)
         u32(Tags.State.snapRev, snapRev)
+        u32(Tags.State.lyricsCrc, lyricsCrc)
     }
 
     companion object {
@@ -263,6 +267,7 @@ data class State(
             n.bool(Tags.State.favorite),
             n.long(Tags.State.snapRev),
             n.bool(Tags.State.lyricsPlain),
+            n.long(Tags.State.lyricsCrc),
         )
     }
 }
@@ -605,6 +610,51 @@ data class ArtBlock(val cmd: Int?, val name: String?, val mbid: String?, val crc
     companion object {
         fun from(n: Node) = ArtBlock(n.int(Tags.ArtBlock.cmd), n.str(Tags.ArtBlock.name), n.str(Tags.ArtBlock.mbid), n.long(Tags.ArtBlock.crc))
     }
+}
+
+data class LyrLine(val ms: Long?, val text: String) {
+    fun write(o: TlvWriter) = o.apply {
+        u32(Tags.LyrLine.ms, ms)
+        str(Tags.LyrLine.text, text)
+    }
+
+    val size: Int get() = TlvWriter().rec(Tags.LyrGetReply.line) { write(this) }.size
+}
+
+data class LyrGetReply(val crc: Long?, val kind: Int?, val total: Long?, val offset: Long?, val more: Boolean?, val lines: List<LyrLine>) {
+    fun encode() = tlv {
+        u32(Tags.LyrGetReply.crc, crc)
+        enum(Tags.LyrGetReply.kind, kind)
+        u32(Tags.LyrGetReply.total, total)
+        u32(Tags.LyrGetReply.offset, offset)
+        bool(Tags.LyrGetReply.more, more)
+        lines.forEach { l -> rec(Tags.LyrGetReply.line) { l.write(this) } }
+    }
+
+    companion object {
+        fun from(n: Node) = LyrGetReply(
+            n.long(Tags.LyrGetReply.crc),
+            n.int(Tags.LyrGetReply.kind),
+            n.long(Tags.LyrGetReply.total),
+            n.long(Tags.LyrGetReply.offset),
+            n.bool(Tags.LyrGetReply.more),
+            n.nodes(Tags.LyrGetReply.line).map { LyrLine(it.long(Tags.LyrLine.ms), it.str(Tags.LyrLine.text) ?: "") },
+        )
+    }
+}
+
+fun lyricsCrc(kind: Int, lines: List<LyrLine>): Long {
+    val c = CRC32()
+    c.update(kind)
+    for (l in lines) {
+        if (kind == Enums.LyricsKind.synced) {
+            val ms = l.ms ?: 0
+            for (i in 0 until 4) c.update((ms ushr (8 * i)).toInt() and 0xFF)
+        }
+        c.update(l.text.toByteArray(Charsets.UTF_8))
+        c.update(0x0A)
+    }
+    return c.value
 }
 
 data class EqPresetReply(val key: String?) {

@@ -6,13 +6,19 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -20,6 +26,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import kotlin.math.roundToInt
@@ -40,17 +47,29 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.Constraints
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
+import net.seilent.funecomp.state.LyricsFetch
 
 private const val BACKDROP_FADE_MS = 2000
+private const val MIC_INK_LEFT = 8f
+private const val MIC_INK_RIGHT = 24f
+private const val MIC_INK_TOP = 3f
+private const val MIC_INK_BOTTOM = 30f
+private val PLAIN = Roles.npAlbum.copy(case = Case.MIXED)
 
 fun formatTime(ms: Long): String {
     val total = maxOf(0L, ms / 1000)
@@ -131,12 +150,48 @@ fun BackRing(onBack: () -> Unit) {
 }
 
 @Composable
-fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack: () -> Unit, onQueue: () -> Unit, art: BackdropArt? = null, onBackdrop: ((BackdropArt) -> Unit)? = null) {
+fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack: () -> Unit, onQueue: () -> Unit, art: BackdropArt? = null, lyrics: LyricsFetch.Show = LyricsFetch.Show.Off, onBackdrop: ((BackdropArt) -> Unit)? = null) {
     val ui = LocalUi.current
     val s = device.playback.state
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val playing = s.playing == true
+    val scope = rememberCoroutineScope()
+    var lyricMode by remember { mutableStateOf(false) }
+    var lyricTarget by remember { mutableStateOf(false) }
+    var turning by remember { mutableStateOf(false) }
+    val layer = remember { Animatable(1f) }
+    val shade = remember { Animatable(0f) }
+    val canLyrics = LyricsFetch.has(device)
+    fun toggleLyrics() {
+        if (turning) return
+        turning = true
+        lyricTarget = !lyricMode
+        scope.launch {
+            val spec = tween<Float>(Tok.motion_variantFade.toInt(), easing = Decel)
+            launch { shade.animateTo(if (lyricTarget) 1f else 0f, spec) }
+            layer.animateTo(0f, spec)
+            lyricMode = lyricTarget
+            layer.animateTo(1f, spec)
+            turning = false
+        }
+    }
+    LaunchedEffect(Unit) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            control.nowPlayingShown(true)
+            try {
+                awaitCancellation()
+            } finally {
+                control.nowPlayingShown(false)
+            }
+        }
+    }
+    val view = LocalView.current
+    val hold = lyricTarget && playing && lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.STARTED)
+    DisposableEffect(view, hold) {
+        view.keepScreenOn = hold
+        onDispose { view.keepScreenOn = false }
+    }
     LaunchedEffect(playing, device.playback.receivedAt) {
         now = SystemClock.elapsedRealtime()
         if (!playing) return@LaunchedEffect
@@ -190,57 +245,78 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack:
         }.testTag("np"),
     ) {
         Backdrop(art)
+        if (art != null && shade.value > 0f) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha * shade.value)).testTag("np.shade"))
         val held = art?.takeIf { it.entry != null }
+        val forward: () -> Unit = { if (held != null) onBackdrop?.invoke(held) }
         if (held != null && onBackdrop != null) Box(Modifier.fillMaxSize().press({}, { onBackdrop(held) }).testTag("np.backdrop"))
         BackRing(onBack)
         Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
-        RoleText(s.artist ?: "", Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))
-        RoleText(s.album ?: "", Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("np.album"))
-        if (artSide > 0f) {
-            val track = s.track
-            val px = artSide.roundToInt()
-            LaunchedEffect(track, px, device.hello) { if (track != null) control.wantArt(Thumbs.NOW_PLAYING, track, px, s.album) }
-            Box(Modifier.at(artX, artY).size(artSide.dp()).background(Color(Tok.color_tile)).testTag("np.art")) {
-                track?.let { control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
+        if (lyricMode) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = layer.value }) {
+                LyricsColumn(device, lyrics, upcoming.firstOrNull(), lifecycle, ::toggleLyrics, forward)
             }
-        }
-        if (s.track != null) {
-            val thick = ui.px(Tok.npProgressThick).dp()
-            Box(Modifier.at(artX, progressY).size(artSide.dp(), thick).background(white(Tok.alpha_low)))
-            Box(Modifier.at(artX, progressY).size((artSide * fraction).dp(), thick).background(Accent).testTag("np.progress"))
-            RoleText(formatTime(position), Roles.time, Modifier.atBaseline(artX, timeBaseline).testTag("np.elapsed"))
-            val remaining = if (duration > 0) "-" + formatTime(duration - position) else ""
-            RoleText(remaining, Roles.time, Modifier.atBaseline(artX + artSide, timeBaseline, ax = 1f).testTag("np.remaining"))
-            val margin = ui.px(Tok.edge - Tok.npSeekBandX0)
-            val bandW = artSide + 2 * margin
-            Box(
-                Modifier.at(artX - margin, progressY).size(bandW.dp(), (titleTop - progressY).coerceAtLeast(0f).dp()).testTag("np.seek")
-                    .pointerInput(duration, artSide) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown()
-                            fun f(x: Float) = ((x - margin) / artSide).coerceIn(0f, 1f)
-                            seekFraction = f(down.position.x)
-                            var last = down.position.x
-                            while (true) {
-                                val e = awaitPointerEvent()
-                                val c = e.changes.firstOrNull() ?: break
-                                if (!c.pressed) break
-                                last = c.position.x
-                                seekFraction = f(last)
-                                c.consume()
-                            }
-                            val target = (f(last) * duration).toLong()
-                            if (duration > 0) control.transport(Enums.TransportCmd.seek, seekMs = target)
-                            seekFraction = null
-                        }
-                    },
-            )
-        }
-        Box(Modifier.at(textX, titleTop).size(textW.dp(), (titleBottom - titleTop).coerceAtLeast(0f).dp()).press({ onQueue() }).testTag("np.titleBlock"))
-        RoleText(s.title ?: "", Roles.npTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"))
-        upcoming.forEachIndexed { i, t ->
-            val x = textX + ui.px(Tok.npNextIndent)
-            RoleText(t, Roles.npNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
+        } else {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = layer.value }) {
+                RoleText(s.artist ?: "", Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))
+                RoleText(s.album ?: "", Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("np.album"))
+                if (artSide > 0f) {
+                    val track = s.track
+                    val px = artSide.roundToInt()
+                    LaunchedEffect(track, px, device.hello) { if (track != null) control.wantArt(Thumbs.NOW_PLAYING, track, px, s.album) }
+                    val enter = if (canLyrics) Modifier.press({ toggleLyrics() }, forward) else Modifier
+                    Box(Modifier.at(artX, artY).size(artSide.dp()).background(Color(Tok.color_tile)).then(enter).testTag("np.art")) {
+                        track?.let { control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
+                    }
+                }
+                if (s.track != null) {
+                    val thick = ui.px(Tok.npProgressThick).dp()
+                    Box(Modifier.at(artX, progressY).size(artSide.dp(), thick).background(white(Tok.alpha_low)))
+                    Box(Modifier.at(artX, progressY).size((artSide * fraction).dp(), thick).background(Accent).testTag("np.progress"))
+                    RoleText(formatTime(position), Roles.time, Modifier.atBaseline(artX, timeBaseline).testTag("np.elapsed"))
+                    val remaining = if (duration > 0) "-" + formatTime(duration - position) else ""
+                    RoleText(remaining, Roles.time, Modifier.atBaseline(artX + artSide, timeBaseline, ax = 1f).testTag("np.remaining"))
+                    val margin = ui.px(Tok.edge - Tok.npSeekBandX0)
+                    val bandW = artSide + 2 * margin
+                    Box(
+                        Modifier.at(artX - margin, progressY).size(bandW.dp(), (titleTop - progressY).coerceAtLeast(0f).dp()).testTag("np.seek")
+                            .pointerInput(duration, artSide) {
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    fun f(x: Float) = ((x - margin) / artSide).coerceIn(0f, 1f)
+                                    seekFraction = f(down.position.x)
+                                    var last = down.position.x
+                                    while (true) {
+                                        val e = awaitPointerEvent()
+                                        val c = e.changes.firstOrNull() ?: break
+                                        if (!c.pressed) break
+                                        last = c.position.x
+                                        seekFraction = f(last)
+                                        c.consume()
+                                    }
+                                    val target = (f(last) * duration).toLong()
+                                    if (duration > 0) control.transport(Enums.TransportCmd.seek, seekMs = target)
+                                    seekFraction = null
+                                }
+                            },
+                    )
+                }
+                Box(Modifier.at(textX, titleTop).size(textW.dp(), (titleBottom - titleTop).coerceAtLeast(0f).dp()).press({ onQueue() }).testTag("np.titleBlock"))
+                RoleText(s.title ?: "", Roles.npTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"))
+                val markSide = Roles.npNext.size * Tok.capHeight * Tok.glyphBox / (MIC_INK_BOTTOM - MIC_INK_TOP)
+                val markX = ui.w - Tok.edge - MIC_INK_RIGHT * markSide / Tok.glyphBox
+                val markY = ui.npNextBaseline - MIC_INK_BOTTOM * markSide / Tok.glyphBox
+                val nextRight = ui.px(if (canLyrics) markX + MIC_INK_LEFT * markSide / Tok.glyphBox - Tok.statusGap else ui.w - Tok.edge)
+                upcoming.forEachIndexed { i, t ->
+                    val x = textX + ui.px(Tok.npNextIndent)
+                    RoleText(t, Roles.npNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, (if (i == 0) nextRight else ui.px(ui.w - Tok.edge)) - x).testTag("np.next.$i"))
+                }
+                if (canLyrics) {
+                    Glyph(GlyphName.MIC, markSide, white(Roles.npNext.alpha), Modifier.at(ui.px(markX), ui.px(markY)).testTag("np.mark"))
+                    val cx = markX + (MIC_INK_LEFT + MIC_INK_RIGHT) / 2 * markSide / Tok.glyphBox
+                    val cy = markY + (MIC_INK_TOP + MIC_INK_BOTTOM) / 2 * markSide / Tok.glyphBox
+                    Box(Modifier.at(ui.px(cx), ui.px(cy), 0.5f, 0.5f).size(ui.px(Tok.npRing).dp()).press({ toggleLyrics() }, forward).testTag("np.mark.hit"))
+                }
+            }
         }
         val repeat = s.repeat ?: Enums.Repeat.off
         val glyphs = listOfNotNull(GlyphName.SHUFFLE, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, GlyphName.HEART.takeIf { Heart.shown(device.hello, s) })
@@ -274,6 +350,80 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack:
                     }
                 }) { down = it },
             )
+        }
+    }
+}
+
+@Composable
+private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: String?, lifecycle: Lifecycle, onTap: () -> Unit, onLong: () -> Unit) {
+    val ui = LocalUi.current
+    val s = device.playback.state
+    val x = ui.px(Tok.edge)
+    val w = ui.px(ui.w - Tok.edge) - x
+    val room = ui.npLyricBottom - ui.npLyricTop
+    val surface = Modifier.at(x, ui.px(ui.npLyricTop)).size(w.dp(), ui.px(room).coerceAtLeast(0f).dp())
+    val copy = (lyrics as? LyricsFetch.Show.Lines)?.takeIf { it.track == s.track && it.copy.crc == s.lyricsCrc }?.copy
+    val measurer = rememberTextMeasurer()
+    val styles = listOf(Roles.npTitle, Roles.npNext, PLAIN).map { textStyle(it, white(1f)) }
+    val wraps = remember(copy, s.title, next, w, ui.u) { HashMap<Pair<String, Int>, List<String>>() }
+    fun wrap(t: String, style: Int): List<String> = if (t.isEmpty()) emptyList() else wraps.getOrPut(t to style) {
+        val r = measurer.measure(t, styles[style], constraints = Constraints(maxWidth = w.roundToInt().coerceAtLeast(1)))
+        (0 until r.lineCount).map { t.substring(r.getLineStart(it), r.getLineEnd(it, visibleEnd = true)) }
+    }
+    if (copy != null && copy.kind == Enums.LyricsKind.plain) {
+        val pitch = Tok.npAlbumBaseline - Tok.npTextTop
+        val rows = remember(copy, w, ui.u) { LyricRows.plain(copy.lines.map { it.text }) { wrap(it, 2) } }
+        val viewH = ui.px(LyricRows.plainRoom(room, pitch))
+        val p = ui.px(pitch)
+        var off by remember(copy, w, ui.u) { mutableFloatStateOf(0f) }
+        val limit = (rows.size * p - viewH).coerceAtLeast(0f)
+        val scroll = rememberScrollableState { d ->
+            val old = off
+            off = (off - d).coerceIn(0f, limit)
+            old - off
+        }
+        Box(surface.scrollable(scroll, Orientation.Vertical, flingBehavior = rememberFling()).press({ onTap() }, onLong).testTag("np.lyrics")) {
+            Box(Modifier.fillMaxWidth().height(viewH.dp()).clipToBounds()) {
+                val half = ui.px(pitch + Tok.capHeight * PLAIN.size) / 2
+                var i = (off / p).toInt()
+                while (i < rows.size && i * p - off < viewH) {
+                    if (rows[i].isNotEmpty()) RoleText(rows[i], PLAIN, Modifier.atBaseline(0f, i * p - off + half, w).testTag("np.lyric.plain.$i"))
+                    i++
+                }
+            }
+        }
+        return
+    }
+    val lines = copy?.lines
+    var at by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
+    val playing = s.playing == true
+    LaunchedEffect(lines, playing, device.playback.receivedAt) {
+        at = SystemClock.elapsedRealtime()
+        if (lines == null || !playing) return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                at = SystemClock.elapsedRealtime()
+                val pos = device.positionMs(at)
+                delay(LyricsFetch.dueMs(lines, LyricsFetch.index(lines, pos), pos) ?: break)
+            }
+        }
+    }
+    val index = lines?.let { LyricsFetch.index(it, device.positionMs(at)) } ?: -1
+    Box(surface.press({ onTap() }, onLong).testTag("np.lyrics")) {
+        if (copy == null && lyrics != LyricsFetch.Show.None) return@Box
+        key(s.track, copy) {
+            val dip = rememberDip(index.toString())
+            val shownIndex = dip.shown.toInt()
+            val rows = LyricRows.synced(lines?.map { it.text }, shownIndex, s.title ?: "", next, { t, big -> wrap(t, if (big) 0 else 1) }, room, NP_LYRIC_PITCH, Tok.npNextPitch)
+            Box(Modifier.fillMaxSize().dip(dip)) {
+                rows.forEachIndexed { n, r ->
+                    val current = r.kind == LyricRows.Kind.CURRENT
+                    val role = if (current) Roles.npTitle else Roles.npNext
+                    val pitch = if (current) NP_LYRIC_PITCH else Tok.npNextPitch
+                    val alpha = if (r.kind == LyricRows.Kind.PREVIOUS) Tok.alpha_low else role.alpha
+                    RoleText(r.text, role, Modifier.atBaseline(0f, ui.px(r.slot + (pitch + Tok.capHeight * role.size) / 2), w).testTag("np.lyric.${r.kind.name.lowercase()}.$n"), alpha = alpha)
+                }
+            }
         }
     }
 }

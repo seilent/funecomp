@@ -121,6 +121,12 @@ object Req {
         u32(Tags.ArtGet.have, have)
     }
 
+    fun lyrGet(track: Long, offset: Long, have: Long?) = tlv {
+        u64(Tags.LyrGet.track, track)
+        u32(Tags.LyrGet.offset, offset)
+        u32(Tags.LyrGet.have, have)
+    }
+
     fun lrcPut(track: Long, libRev: Long?, text: ByteArray, crc: Long, snapRev: Long? = null) = tlv {
         u64(Tags.LrcPut.track, track)
         u32(Tags.LrcPut.libRev, libRev)

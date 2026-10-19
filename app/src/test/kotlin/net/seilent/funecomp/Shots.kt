@@ -32,12 +32,14 @@ import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Battery
@@ -85,6 +87,7 @@ class Shot(
     val faults: List<String> = emptyList(),
     val cardEq: List<String> = emptyList(),
     val ime: Float = 0f,
+    val lyrics: ((DeviceState) -> LyricsFetch.Show)? = null,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -141,6 +144,51 @@ private fun held(c: SimControl) {
 private fun longTitle(c: SimControl) {
     val p = c.device.playback
     c.device = c.device.copy(playback = p.copy(state = p.state.copy(title = "Svefn-g-englar (Live at the Hammersmith Apollo, London, 2001 remaster)")))
+}
+
+private val SUNG = listOf(
+    "Light on the water", "Every road leads back home", "I kept the porch light on for you", "Through the rain and the long night", "",
+    "We were young and the city was loud", "Hold on, hold on", "Morning comes slow over the river and the bridge we crossed", "Say my name like you used to",
+    "Every road leads back home", "Light on the water", "And I will wait", "Till the last train leaves", "Light on the water",
+)
+
+private val SUNG_JA = listOf(
+    "夜明け前の街を歩いて", "君の声がまだ聞こえる", "遠く遠く光る川の向こうへ", "", "忘れないで", "朝が来るまでここにいるよ",
+    "雨上がりの空に虹がかかる日を待っている", "ありがとう、またね", "夜明け前の街を歩いて", "君の声がまだ聞こえる", "さよならは言わないで", "光の中へ",
+)
+
+private fun stamped(texts: List<String>, from: Long = 30_000) = texts.mapIndexed { i, t -> LyrLine(from + 4_000L * i, t) }
+
+private fun lyricsOn(plain: Boolean = false): (SimControl) -> Unit = { c ->
+    playing(c)
+    val p = c.device.playback
+    c.device = c.device.copy(playback = p.copy(state = p.state.copy(lyrics = !plain, lyricsPlain = plain, lyricsCrc = 1)))
+}
+
+private fun lyricsLast(c: SimControl) {
+    lyricsOn()(c)
+    val p = c.device.playback
+    c.device = c.device.copy(playback = p.copy(state = p.state.copy(slot = (p.state.slots ?: 1) - 1)))
+}
+
+private fun lyricsAt(ms: Long): (SimControl) -> Unit = { c ->
+    lyricsOn()(c)
+    val p = c.device.playback
+    c.device = c.device.copy(playback = p.copy(state = p.state.copy(positionMs = ms)))
+}
+
+private fun shown(lines: List<LyrLine>, kind: Int = Enums.LyricsKind.synced): (DeviceState) -> LyricsFetch.Show = { d ->
+    LyricsFetch.Show.Lines(d.playback.state.track!!, LyricsFetch.Copy(1, kind, lines))
+}
+
+private val PLAIN_TEXT = (SUNG.take(4) + "" + "[Chorus]" + SUNG.drop(5).take(4) + "" + SUNG + "" + SUNG).map { LyrLine(null, it) }
+
+private val LONG_LINE = SUNG.take(7) + listOf("la ".repeat(1366).take(Proto.lyrLineMax)) + SUNG.drop(8)
+
+private val LONG_CURRENT = SUNG.take(7) + listOf("Morning comes slow over the river and the bridge we crossed when the city was loud and we were young and every road led back home to you") + SUNG.drop(8)
+
+private fun Shots.lyricsMode() {
+    rule.onNodeWithTag("np.art").performClick()
 }
 
 private fun emptyQueue(c: SimControl) {
@@ -470,6 +518,22 @@ val SHOTS = listOf(
     Shot("scrobbling-entry", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE) { rule.onNodeWithTag("scrobble.key").performClick() },
     Shot("np-block", pages = NP, prep = ::held, artEntry = HELD) { rule.onNodeWithTag("np.backdrop").performTouchInput { longClick() } },
     Shot("np-block-wrong", pages = NP, prep = ::held, artEntry = HELD, wrong = true) { rule.onNodeWithTag("np.backdrop").performTouchInput { longClick() } },
+    Shot("lyr-mark", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))),
+    Shot("lyr-mark-nonext", pages = NP, prep = ::lyricsLast, artEntry = HELD, lyrics = shown(stamped(SUNG))),
+    Shot("lyr-synced", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))) { lyricsMode() },
+    Shot("lyr-before", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG, 70_000))) { lyricsMode() },
+    Shot("lyr-plain", pages = NP, prep = lyricsOn(plain = true), artEntry = HELD, lyrics = shown(PLAIN_TEXT, Enums.LyricsKind.plain)) { lyricsMode() },
+    Shot("lyr-plain-scrolled", pages = NP, prep = lyricsOn(plain = true), artEntry = HELD, lyrics = shown(PLAIN_TEXT, Enums.LyricsKind.plain), after = 3000) {
+        lyricsMode()
+        settle(1000)
+        rule.onNodeWithTag("np.lyrics").performTouchInput { swipeUp() }
+    },
+    Shot("lyr-none", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = { LyricsFetch.Show.None }) { lyricsMode() },
+    Shot("lyr-long", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(LONG_CURRENT))) { lyricsMode() },
+    Shot("lyr-long4096", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(LONG_LINE))) { lyricsMode() },
+    Shot("lyr-cjk", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG_JA))) { lyricsMode() },
+    Shot("lyr-cue", pages = NP, prep = lyricsAt(2_000), artEntry = HELD, lyrics = shown(listOf(LyrLine(0, "Till the last train leaves")) + stamped(SUNG.drop(1), 6_000))) { lyricsMode() },
+    Shot("lyr-nobackdrop", pages = NP, prep = lyricsOn(), lyrics = shown(stamped(SUNG))) { lyricsMode() },
     Shot("artistart-blocked-1", pages = HOME + Page.ArtistArt, blocked = BLOCKED.take(1), credits = CREDITS) { scrollTo("art.blocked.0") },
     Shot("artistart-blocked-12", pages = HOME + Page.ArtistArt, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.blocked.11") },
     Shot("artistart-order", pages = HOME + Page.ArtistArt, sources = ORDERED) { scrollTo("art.order.5") },
@@ -571,7 +635,7 @@ class Shots {
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
                     val held = f.first.artEntry?.let { BackdropArt(backdrop ?: plain, null, it, f.first.wrong) }
-                    App(c.device, f.first.link, c, shell, f.first.sources, {}, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * f.first.ime).dp))
+                    App(c.device, f.first.link, c, shell, f.first.sources, {}, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * f.first.ime).dp))
                 }
             }
         }

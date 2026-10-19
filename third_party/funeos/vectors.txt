@@ -10,8 +10,8 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply 74000101010001040046444350020200010003020006000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
-hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff070000000000000e0400070000000f04000300000010040004000000
+hex hello_reply 74000101010001040046444350020200010003020007000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ff0f0000000000000e0400070000000f04000300000010040004000000
 re hello_reply hello
 dec hello_reply 0.len 116
 dec hello_reply 0.type HELLO
@@ -19,7 +19,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 6
+dec hello_reply 0.body.minor 7
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -29,7 +29,7 @@ dec hello_reply 0.body.backdropH 480
 dec hello_reply 0.body.maxPayload 16384
 dec hello_reply 0.body.idleMs 30000
 dec hello_reply 0.body.busyMs 5000
-dec hello_reply 0.body.features 2047
+dec hello_reply 0.body.features 4095
 dec hello_reply 0.body.libRev 7
 dec hello_reply 0.body.settingsRev 3
 dec hello_reply 0.body.snapRev 4
@@ -2223,3 +2223,95 @@ dec img_begin_meta 0.body.wrongArtist true
 dec img_begin_meta 0.body.source Wikimedia Commons
 dec img_begin_meta 0.body.credit Jane Doe
 act img_begin_meta accept
+vec lyr_get app
+hex lyr_get 120039044600010800670000000000000002040000000000
+dec lyr_get 0.len 18
+dec lyr_get 0.type LYR_GET
+dec lyr_get 0.flags 0x04
+dec lyr_get 0.seq 70
+dec lyr_get 0.body.track 103
+dec lyr_get 0.body.offset 0
+act lyr_get accept
+vec lyr_get_synced dev
+hex lyr_get_synced 630039014600010400e6b710bf02010000030400020000000404000000000005010000061c00010400000000000212004c69676874206f6e2074686520776174
+hex lyr_get_synced 6572062400010400d0070000021a00457665727920726f6164206c65616473206261636b20686f6d65
+re lyr_get_synced lyr_get
+dec lyr_get_synced 0.len 99
+dec lyr_get_synced 0.type LYR_GET
+dec lyr_get_synced 0.flags 0x01
+dec lyr_get_synced 0.seq 70
+dec lyr_get_synced 0.body.crc 3205543910
+dec lyr_get_synced 0.body.kind synced
+dec lyr_get_synced 0.body.total 2
+dec lyr_get_synced 0.body.offset 0
+dec lyr_get_synced 0.body.more false
+dec lyr_get_synced 0.body.line[0].ms 0
+dec lyr_get_synced 0.body.line[0].text Light on the water
+dec lyr_get_synced 0.body.line[1].ms 2000
+dec lyr_get_synced 0.body.line[1].text Every road leads back home
+act lyr_get_synced accept
+vec lyr_get_plain dev
+hex lyr_get_plain 5b003901460001040060206422020100010304000300000004040000000000050100000615000212004c69676874206f6e207468652077617465720603000200
+hex lyr_get_plain 00061d00021a00457665727920726f6164206c65616473206261636b20686f6d65
+re lyr_get_plain lyr_get
+dec lyr_get_plain 0.len 91
+dec lyr_get_plain 0.type LYR_GET
+dec lyr_get_plain 0.flags 0x01
+dec lyr_get_plain 0.seq 70
+dec lyr_get_plain 0.body.crc 576987232
+dec lyr_get_plain 0.body.kind plain
+dec lyr_get_plain 0.body.total 3
+dec lyr_get_plain 0.body.offset 0
+dec lyr_get_plain 0.body.more false
+dec lyr_get_plain 0.body.line[0].text Light on the water
+dec lyr_get_plain 0.body.line[1].text
+dec lyr_get_plain 0.body.line[2].text Every road leads back home
+act lyr_get_plain accept
+vec lyr_get_have_ask app
+hex lyr_get_have_ask 190039044700010800670000000000000002040000000000030400e6b710bf
+dec lyr_get_have_ask 0.len 25
+dec lyr_get_have_ask 0.type LYR_GET
+dec lyr_get_have_ask 0.flags 0x04
+dec lyr_get_have_ask 0.seq 71
+dec lyr_get_have_ask 0.body.track 103
+dec lyr_get_have_ask 0.body.offset 0
+dec lyr_get_have_ask 0.body.have 3205543910
+act lyr_get_have_ask accept
+vec lyr_get_have dev
+hex lyr_get_have 1d0039014700010400e6b710bf02010000030400020000000404000000000005010000
+re lyr_get_have lyr_get_have_ask
+dec lyr_get_have 0.len 29
+dec lyr_get_have 0.type LYR_GET
+dec lyr_get_have 0.flags 0x01
+dec lyr_get_have 0.seq 71
+dec lyr_get_have 0.body.crc 3205543910
+dec lyr_get_have 0.body.kind synced
+dec lyr_get_have 0.body.total 2
+dec lyr_get_have 0.body.offset 0
+dec lyr_get_have 0.body.more false
+act lyr_get_have accept
+vec lyr_get_error_notfound dev
+hex lyr_get_error_notfound 1000390346000101000a0209006e6f7420666f756e64
+re lyr_get_error_notfound lyr_get
+dec lyr_get_error_notfound 0.len 16
+dec lyr_get_error_notfound 0.type LYR_GET
+dec lyr_get_error_notfound 0.flags 0x03
+dec lyr_get_error_notfound 0.seq 70
+dec lyr_get_error_notfound 0.body.code 10
+dec lyr_get_error_notfound 0.body.text not found
+act lyr_get_error_notfound accept
+vec state_lyrics_crc dev
+hex state_lyrics_crc 2d001000050001010000020100000308006700000000000000090400dc0500000c0100011d01000121010000220400e6b710bf
+dec state_lyrics_crc 0.len 45
+dec state_lyrics_crc 0.type STATE
+dec state_lyrics_crc 0.flags 0x00
+dec state_lyrics_crc 0.seq 5
+dec state_lyrics_crc 0.body.source local
+dec state_lyrics_crc 0.body.output wired
+dec state_lyrics_crc 0.body.track 103
+dec state_lyrics_crc 0.body.positionMs 1500
+dec state_lyrics_crc 0.body.playing true
+dec state_lyrics_crc 0.body.lyrics true
+dec state_lyrics_crc 0.body.lyricsPlain false
+dec state_lyrics_crc 0.body.lyricsCrc 3205543910
+act state_lyrics_crc accept

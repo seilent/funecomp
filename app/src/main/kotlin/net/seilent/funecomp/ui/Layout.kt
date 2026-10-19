@@ -15,6 +15,7 @@ private const val NP_ARTIST_RISE = 24f
 private const val NP_PROGRESS_FROM_BOTTOM = 156f
 private const val NP_TITLE_FROM_BOTTOM = 118f
 const val NP_NEXT_COUNT = 3
+const val NP_LYRIC_PITCH = 31.2f
 private const val NP_RING_FROM_BOTTOM = 40f
 private const val NP_SURPLUS_BELOW = 1f / 3f
 private const val NP_COLUMN_RIGHT = 216f
@@ -56,6 +57,8 @@ val Ui.npArt get() = if (landscape) {
 val Ui.npTitleBaseline get() = if (landscape) NP_TITLE_LANDSCAPE else h - NP_TITLE_FROM_BOTTOM - npLift
 val Ui.npNextBaseline get() = if (landscape) NP_NEXT_LANDSCAPE else npTitleBaseline + Tok.npNextPitch
 val Ui.npRingY get() = h - NP_RING_FROM_BOTTOM - npLift
+val Ui.npLyricTop get() = npAlbumBaseline - (Tok.npAlbumBaseline - Tok.npTextTop)
+val Ui.npLyricBottom get() = npNextBaseline + Tok.npNextPitch * (NP_NEXT_COUNT - 1)
 private val Ui.npLift get() = if (landscape) 0f else (h - Ui.PORTRAIT_H).coerceAtLeast(0f) * NP_SURPLUS_BELOW
 
 fun Ui.npRingCenter(index: Int): Float {

@@ -41,6 +41,7 @@ enum class GlyphName(val fill: Boolean, val d: List<Any>) {
     BATTERY(false, listOf("M", 3, 9, "H", 25, "V", 23, "H", 3, "Z", "M", 27, 13, "V", 19)),
     PLUS(false, listOf("M", 16, 4, "V", 28, "M", 4, 16, "H", 28)),
     MINUS(false, listOf("M", 4, 16, "H", 28)),
+    MIC(true, listOf("M", 12, 7, "A", 4, 4, 0, "0", "1", 20, 7, "V", 17.5, "A", 4, 4, 0, "0", "1", 12, 17.5, "Z", "M", 8, 12.6, "V", 17.4, "A", 8, 8, 0, "0", "0", 24, 17.4, "V", 12.6, "H", 21.8, "V", 17.4, "A", 5.8, 5.8, 0, "0", "1", 10.2, 17.4, "V", 12.6, "Z", "M", 14.85, 25.3, "V", 27.6, "H", 17.15, "V", 25.3, "Z", "M", 11.5, 27.6, "V", 30, "H", 20.5, "V", 27.6, "Z")),
 }
 
 private fun path(g: GlyphName, k: Float): Path {

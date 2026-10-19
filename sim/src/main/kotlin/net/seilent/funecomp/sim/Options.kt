@@ -119,6 +119,7 @@ class Options(
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
         if (minor < 5) faults.features = faults.features and Groups.mask("eqPresets").inv()
         if (minor < 6) faults.features = faults.features and Groups.mask("artBlock").inv()
+        if (minor < 7) faults.features = faults.features and Groups.mask("lyricsGet").inv()
     }
 
     companion object {

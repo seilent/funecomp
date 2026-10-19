@@ -154,6 +154,7 @@ object Remote : Control {
     private var transition: ScheduledFuture<*>? = null
     @Volatile private var thumbs: ThumbWorker? = null
     private val heart = Heart()
+    val dapLyrics = DapLyrics({ link?.session }, { device }) { Log.i(TAG, it) }
     @Volatile private var heartToast: ((String, String) -> Unit)? = null
     private val main = Handler(Looper.getMainLooper())
 
@@ -196,6 +197,7 @@ object Remote : Control {
         wake?.drop(ATTEMPT)
         wake?.drop(ART)
         update { DeviceState() }
+        dapLyrics.poke()
         everLive = false
         bluetoothOff = false
         phase(Phase.NONE)
@@ -288,6 +290,8 @@ object Remote : Control {
     override fun log(message: String) {
         Log.i(TAG, message)
     }
+
+    override fun nowPlayingShown(on: Boolean) = dapLyrics.shown(on)
 
     fun mediaArt(track: Long, px: Int): Bitmap? = thumbs?.media(track, px)
 
@@ -563,6 +567,7 @@ object Remote : Control {
     fun lrcPut(track: Long, libRev: Long?, snapRev: Long?, text: ByteArray, crc: Long, synced: Boolean, done: (Int?) -> Unit) {
         val s = link?.session ?: return done(-1)
         s.request(Msg.LRC_PUT, Req.lrcPut(track, libRev, text, crc, snapRev)) { r ->
+            if (r is Session.Result.Ok) dapLyrics.dropped(track)
             Log.i(TAG, "lrc put ${java.lang.Long.toUnsignedString(track)} ${text.size} ${if (synced) "synced" else "plain"} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
             done(
                 when (r) {
@@ -736,6 +741,7 @@ object Remote : Control {
             Scrobbles.session()
             Firmwares.hello(hello.board, hello.version)
             Lyrics.session()
+            dapLyrics.session()
             if (synchronized(clock) { clock.hello(hello) }) sendClock("hello")
             phase(Phase.LIVE)
             wake?.drop(ATTEMPT)
@@ -753,6 +759,7 @@ object Remote : Control {
             if (type == Msg.STATE || type == Msg.QUEUE) Lyrics.poke()
             if (type == Msg.LIB || type == Msg.QUEUE) synchronized(asked) { asked.removeAll { k -> k.startsWith(if (type == Msg.LIB) "lib " else "queue ") } }
             if (type != Msg.STATE) return
+            dapLyrics.poke()
             val s = State.from(body)
             (s.snapRev ?: s.libRev)?.let { r -> if (r != (old.snapRev ?: old.libRev)) thumbs?.rev(r) }
             heartShow(heart.state(s))
@@ -792,6 +799,7 @@ object Remote : Control {
         override fun onClosed(reason: String) {
             if (!live) return
             update { it.copy(hello = null) }
+            dapLyrics.poke()
             heart.down()
             art?.cancel()
             clockOff()

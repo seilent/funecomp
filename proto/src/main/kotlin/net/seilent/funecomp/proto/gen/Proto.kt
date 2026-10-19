@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "258e76b5daa26232e99e1f8522887c9a260cf7fd"
-    const val PROTO_SHA256 = "d00d811bca24ab725859e2f9aaa9a4cd20afc3df045b3f97918956edc548be17"
-    const val VECTORS_SHA256 = "59ed30292fdb3f357cbe5d6180eddf8e09ea8e6664681a2f60846965c9993849"
+    const val COMMIT = "da588bcd1722c95345739d75f3733be3f0c0f7d1"
+    const val PROTO_SHA256 = "a7c115e7de01794a592d1b68c28ce630ad70e2c323757b84487648d08dc5ec21"
+    const val VECTORS_SHA256 = "fed5d5852ea3d02fada9e1f897176adb7dbf29408af4caa560ec0abc6a62b8f7"
     const val TOKENS_SHA256 = "6ec9e3b80e9c857e924e2a26602d9fd282176337545ef938b4f7113a332f4bd5"
     const val TOKENSV1_SHA256 = "7463c4af8a045b4e5f2561bd4ff488de8edc667358e266ce781950ddac2e35a0"
 }
@@ -18,7 +18,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 6
+    const val minor = 7
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -47,6 +47,7 @@ object Proto {
     const val artMinPx = 64
     const val lrcMaxBytes = 15360
     const val updChunk = 16320
+    const val lyrLineMax = 4096
 }
 
 object Msg {
@@ -83,6 +84,7 @@ object Msg {
     const val IMG_ABORT = 0x36
     const val EQ_PRESET = 0x37
     const val ART_BLOCK = 0x38
+    const val LYR_GET = 0x39
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -117,6 +119,7 @@ object Msg {
         IMG_ABORT to MsgInfo(IMG_ABORT, "IMG_ABORT", "dev", true),
         EQ_PRESET to MsgInfo(EQ_PRESET, "EQ_PRESET", "app", false),
         ART_BLOCK to MsgInfo(ART_BLOCK, "ART_BLOCK", "dev", false),
+        LYR_GET to MsgInfo(LYR_GET, "LYR_GET", "app", false),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -149,7 +152,8 @@ object Feature {
     const val clockAuto = 8
     const val eqPresets = 9
     const val artBlock = 10
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock")
+    const val lyricsGet = 11
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet")
 }
 
 object Enums {
@@ -285,6 +289,11 @@ object Enums {
         const val wrongArtist = 1
         val names: Map<Int, String> = mapOf(0 to "blockImage", 1 to "wrongArtist")
     }
+    object LyricsKind {
+        const val synced = 0
+        const val plain = 1
+        val names: Map<Int, String> = mapOf(0 to "synced", 1 to "plain")
+    }
     val byName: Map<String, Map<Int, String>> = mapOf(
         "SOURCE" to Source.names,
         "OUTPUT" to Output.names,
@@ -305,6 +314,7 @@ object Enums {
         "ABORT_CODE" to AbortCode.names,
         "EQ_PRESET_OP" to EqPresetOp.names,
         "BLOCK_CMD" to BlockCmd.names,
+        "LYRICS_KIND" to LyricsKind.names,
     )
 }
 
@@ -373,6 +383,7 @@ object Tags {
         const val favorite = 31
         const val snapRev = 32
         const val lyricsPlain = 33
+        const val lyricsCrc = 34
     }
     object Schema {
         const val pivot = 1
@@ -583,6 +594,19 @@ object Tags {
         const val mbid = 3
         const val crc = 4
     }
+    object LyrGet {
+        const val track = 1
+        const val offset = 2
+        const val have = 3
+    }
+    object LyrGetReply {
+        const val crc = 1
+        const val kind = 2
+        const val total = 3
+        const val offset = 4
+        const val more = 5
+        const val line = 6
+    }
     object Error {
         const val code = 1
         const val text = 2
@@ -636,6 +660,10 @@ object Tags {
     object ImgEntry {
         const val name = 1
         const val mbid = 2
+    }
+    object LyrLine {
+        const val ms = 1
+        const val text = 2
     }
     val scopes: Map<String, Map<Int, Field>> = mapOf(
         "HELLO" to mapOf(
@@ -702,6 +730,7 @@ object Tags {
             31 to Field(31, "favorite", Base.BOOL, null, false),
             32 to Field(32, "snapRev", Base.U32, null, false),
             33 to Field(33, "lyricsPlain", Base.BOOL, null, false),
+            34 to Field(34, "lyricsCrc", Base.U32, null, false),
         ),
         "SCHEMA" to mapOf(
             1 to Field(1, "pivot", Base.STR, null, false),
@@ -912,6 +941,19 @@ object Tags {
             3 to Field(3, "mbid", Base.STR, null, false),
             4 to Field(4, "crc", Base.U32, null, false),
         ),
+        "LYR_GET" to mapOf(
+            1 to Field(1, "track", Base.U64, null, false),
+            2 to Field(2, "offset", Base.U32, null, false),
+            3 to Field(3, "have", Base.U32, null, false),
+        ),
+        "LYR_GET.reply" to mapOf(
+            1 to Field(1, "crc", Base.U32, null, false),
+            2 to Field(2, "kind", Base.ENUM, "LYRICS_KIND", false),
+            3 to Field(3, "total", Base.U32, null, false),
+            4 to Field(4, "offset", Base.U32, null, false),
+            5 to Field(5, "more", Base.BOOL, null, false),
+            6 to Field(6, "line", Base.RECORD, "LyrLine", true),
+        ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),
             2 to Field(2, "text", Base.STR, null, false),
@@ -965,6 +1007,10 @@ object Tags {
         "ImgEntry" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
             2 to Field(2, "mbid", Base.STR, null, false),
+        ),
+        "LyrLine" to mapOf(
+            1 to Field(1, "ms", Base.U32, null, false),
+            2 to Field(2, "text", Base.STR, null, false),
         ),
     )
 }

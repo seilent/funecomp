@@ -11,11 +11,14 @@ import net.seilent.funecomp.proto.ImgBeginReply
 import net.seilent.funecomp.proto.ImgEntry
 import net.seilent.funecomp.proto.ImgListReply
 import net.seilent.funecomp.proto.Lib
+import net.seilent.funecomp.proto.LyrGetReply
+import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.PageInfo
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Queue
 import net.seilent.funecomp.proto.QueueItem
+import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.Schema
 import net.seilent.funecomp.proto.SetReply
@@ -24,6 +27,7 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.UpdAbort
 import net.seilent.funecomp.proto.UpdBeginReply
 import net.seilent.funecomp.proto.listView
+import net.seilent.funecomp.proto.lyricsCrc
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
@@ -58,6 +62,38 @@ private const val UPDATE_BATTERY_MIN = 50
 private const val MIB = 1L shl 20
 private const val UPDATE_RESERVE = 64L shl 20
 private val SYNCED = Regex("^\\[[0-9]+:[0-9]{2}(\\.[0-9]+)?]", RegexOption.MULTILINE)
+private val STAMP = Regex("^\\[([0-9]+):([0-9]{2}(\\.[0-9]+)?)]")
+private val ID_TAG = Regex("^\\[[A-Za-z]+:.*]$")
+private val OFFSET = Regex("^\\[offset:\\s*([+-]?[0-9]+)\\s*]$", RegexOption.IGNORE_CASE)
+
+class Lyr(val kind: Int, val lines: List<LyrLine>) {
+    val crc: Long = lyricsCrc(kind, lines)
+
+    companion object {
+        fun parse(text: String): Lyr? {
+            val raw = text.lines().map { it.trim() }
+            if (!SYNCED.containsMatchIn(text)) {
+                val plain = raw.filterNot { ID_TAG.matches(it) }.dropLastWhile { it.isEmpty() }
+                return if (plain.isEmpty()) null else Lyr(Enums.LyricsKind.plain, plain.map { LyrLine(null, cut(it)) })
+            }
+            val shift = raw.firstNotNullOfOrNull { OFFSET.find(it)?.groupValues?.get(1)?.toLong() } ?: 0L
+            val out = ArrayList<LyrLine>()
+            for (l in raw) {
+                var rest = l
+                val stamps = ArrayList<Long>()
+                while (true) {
+                    val m = STAMP.find(rest) ?: break
+                    stamps += m.groupValues[1].toLong() * 60_000 + Math.round(m.groupValues[2].toDouble() * 1000)
+                    rest = rest.substring(m.range.last + 1)
+                }
+                for (ms in stamps) out += LyrLine((ms - shift).coerceAtLeast(0), cut(rest.trim()))
+            }
+            return Lyr(Enums.LyricsKind.synced, out.sortedBy { it.ms })
+        }
+
+        private fun cut(s: String) = Req.cap(s, Proto.lyrLineMax)!!
+    }
+}
 private val MD5 = Regex("^[0-9a-f]{32}$")
 private const val EQ_DIR = "/data/flatdap/eq/"
 private val CARD_PROFILE = Profile(-30, listOf(Band(Enums.BandType.peak, -1, 1_000_000, -20, 141)))
@@ -163,18 +199,22 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private val v15: Boolean get() = opts.minor >= 5
     private val started = clock()
     private var lastBattery = -1
-    private val have = HashMap<Long, Have>()
+    private val lyrs = HashMap<Long, Lyr>()
     private val arts = HashMap<Pair<Long, Int>, Art>()
     private var upd: Upd? = null
     private var favsBusy = faults.favsBusy
 
     init {
         opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f ->
-            f.name.removeSuffix(".lrc").toULongOrNull()?.let { have[it.toLong()] = if (SYNCED.containsMatchIn(f.readText())) Have.Synced else Have.Plain }
+            val id = f.name.removeSuffix(".lrc").toULongOrNull()?.toLong()
+            val l = Lyr.parse(f.readText())
+            if (id != null && l != null) lyrs[id] = l
         }
     }
 
-    private enum class Have { Synced, Plain }
+    private fun hasSynced(id: Long) = lyrs[id]?.kind == Enums.LyricsKind.synced
+
+    private fun hasPlain(id: Long) = lyrs[id]?.kind == Enums.LyricsKind.plain
 
     class Art(val crc: Long, val w: Int, val h: Int, val bytes: ByteArray, val source: Pair<Long, Long>)
     class Upd(val board: String, val size: Long, val md5: String, val part: File)
@@ -263,11 +303,12 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             if (v12) opts.cardTotalMiB else null,
             if (v12) volumePercent(volume) else null,
             if (v12) prefs.getValue("volumeStep").toIntOrNull() ?: 5 else null,
-            if (v12 && t != null) have[t.id] == Have.Synced else null,
+            if (v12 && t != null) hasSynced(t.id) else null,
             if (v12) prefs.getValue("maxVolume").toIntOrNull() ?: 100 else null,
             if (v13 && t != null && favsBusy == 0) t.id in lib.favorites else null,
             if (v13) lib.snapRev else null,
-            if (v14 && t != null) have[t.id] == Have.Plain else null,
+            if (v14 && t != null) hasPlain(t.id) else null,
+            if (allowed(Msg.LYR_GET) && t != null) lyrs[t.id]?.crc else null,
         ).encode()
     }
 
@@ -366,6 +407,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
             Msg.ART_GET -> artGet(body)
             Msg.LRC_PUT -> lrcPut(body)
             Msg.LRC_DEL -> lrcDel(body)
+            Msg.LYR_GET -> lyrGet(body)
             Msg.UPD_BEGIN -> updBegin(body)
             Msg.UPD_END -> updEnd(body)
             else -> Answer.Fail(Err.unknown, "unknown")
@@ -649,7 +691,7 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         val items = queue.map { id ->
             val t = lib.byId[id]
             when {
-                v12 && t != null -> QueueItem(id, t.title, t.artists, t.mbids, t.album, t.durationMs, have[id] == Have.Synced, if (v14) have[id] == Have.Plain else null)
+                v12 && t != null -> QueueItem(id, t.title, t.artists, t.mbids, t.album, t.durationMs, hasSynced(id), if (v14) hasPlain(id) else null)
                 v11 && t != null -> QueueItem(id, t.title, t.artists, t.mbids)
                 else -> QueueItem(id, t?.title)
             }
@@ -965,10 +1007,10 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
         val s = String(text, Charsets.UTF_8)
         val synced = SYNCED.containsMatchIn(s)
         if (!synced && !v14) return Answer.Fail(Err.badValue, "not synced lrc")
-        if (s.isBlank()) return Answer.Fail(Err.badValue, "empty")
-        if (!synced && have[track] == Have.Synced) return Answer.Fail(Err.refused, "refused")
+        val parsed = Lyr.parse(s) ?: return Answer.Fail(Err.badValue, "empty")
+        if (!synced && hasSynced(track)) return Answer.Fail(Err.refused, "refused")
         opts.lrcDir?.let { File(it.apply { mkdirs() }, "${java.lang.Long.toUnsignedString(track)}.lrc").writeBytes(text) }
-        have[track] = if (synced) Have.Synced else Have.Plain
+        lyrs[track] = parsed
         opts.log("stored lrc track=${java.lang.Long.toUnsignedString(track)} bytes=${text.size} kind=${if (synced) "synced" else "plain"}")
         return Answer.Ok(state = queue.getOrNull(slot) == track)
     }
@@ -976,7 +1018,35 @@ class Device(private val opts: Options, val lib: Library, private val clock: () 
     private fun lrcDel(b: Node): Answer {
         val track = b.long(Tags.LrcDel.track) ?: return Answer.Fail(Err.badValue, "no track")
         opts.lrcDir?.let { File(it, "${java.lang.Long.toUnsignedString(track)}.lrc").delete() }
-        return Answer.Ok(state = have.remove(track) != null && queue.getOrNull(slot) == track)
+        return Answer.Ok(state = lyrs.remove(track) != null && queue.getOrNull(slot) == track)
+    }
+
+    private fun lyrGet(b: Node): Answer {
+        val track = b.long(Tags.LyrGet.track) ?: return Answer.Fail(Err.badValue, "no track")
+        if (track !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
+        val l = lyrs[track] ?: return Answer.Fail(Err.notFound, "not found")
+        val offset = b.long(Tags.LyrGet.offset) ?: 0
+        val have = b.long(Tags.LyrGet.have)
+        val id = java.lang.Long.toUnsignedString(track)
+        if (offset == 0L && have == l.crc) {
+            opts.log("lyr have track=$id")
+            return Answer.Ok(LyrGetReply(l.crc, l.kind, l.lines.size.toLong(), 0, false, emptyList()).encode())
+        }
+        if (offset > 0 && have != null && have != l.crc) {
+            opts.log("lyr restart track=$id")
+            return lyrPage(id, l, 0)
+        }
+        if (offset >= l.lines.size) return Answer.Fail(Err.badValue, "offset over total")
+        return lyrPage(id, l, offset.toInt())
+    }
+
+    private fun lyrPage(id: String, l: Lyr, at: Int): Answer {
+        val total = l.lines.size.toLong()
+        val head = if (at == 0) LyrGetReply(l.crc, l.kind, total, 0, true, emptyList()) else LyrGetReply(null, null, null, at.toLong(), true, emptyList())
+        val n = PageInfo.fill(l.lines.map { it.size }, at, head.encode().size)
+        val more = at + n < l.lines.size
+        opts.log("lyr get track=$id offset=$at lines=$n total=$total")
+        return Answer.Ok(head.copy(more = more, lines = l.lines.subList(at, at + n)).encode())
     }
 
     private fun updName() = if (board.name == "v1") "v1.upt" else "update.upt"

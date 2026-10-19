@@ -31,6 +31,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LibKey
+import net.seilent.funecomp.state.LyricsFetch
 
 private const val ACCENT_KEY = "accentHue"
 private const val BACKGROUND_INFO = "works with the screen off"
@@ -80,6 +81,7 @@ fun App(
     scrobble: ScrobbleView = ScrobbleView(),
     firmware: FirmwareView = FirmwareView(),
     blocked: List<ArtBlocks.Record> = emptyList(),
+    lyrics: LyricsFetch.Show = LyricsFetch.Show.Off,
     insets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     ime: WindowInsets = WindowInsets.ime,
 ) {
@@ -123,7 +125,7 @@ fun App(
             }
             Stack(nav) { page ->
                 when (page) {
-                    Page.NowPlaying -> NowPlaying(device, control, shell.toast, { nav.pop() }, { nav.push(Page.Queue) }, art) { held -> artSheet(ctx, held) }
+                    Page.NowPlaying -> NowPlaying(device, control, shell.toast, { nav.pop() }, { nav.push(Page.Queue) }, art, lyrics) { held -> artSheet(ctx, held) }
                     Page.Home -> Home(homeItems(device, link, sources)) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)
