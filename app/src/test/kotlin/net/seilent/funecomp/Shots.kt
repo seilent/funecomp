@@ -295,6 +295,37 @@ private val STRIPS = listOf(1000L, 350L, 200L, 120L, 80L).map { Strip("short-$it
     Strip("snap-late300", short(1000), 4000, 6300),
 )
 
+private val POOL = mapOf(
+    'a' to listOf("Light on the water", "Lights out", "Say my name again", "Nothing left to lose", "Under the last light", "Hold on", "Paper moon", "Quiet field", "Run with me", "One more mile"),
+    'b' to listOf("Every road leads back home", "Under a paper moon", "Across the quiet field", "Hold on until the morning"),
+    'c' to listOf("We were young and the night was ours", "We kept on running through the rain"),
+    'd' to listOf("Light on the water, we were young and the night was ours", "Under a paper moon, across the quiet field"),
+    'e' to listOf(FOUR, "Every road leads back home, hold on until the morning comes"),
+)
+
+private fun pooled(name: String, code: String, from: Int): Strip {
+    val used = HashMap<Char, Int>()
+    var t = if (from < 0) 6000L else 0L
+    val lines = code.mapIndexed { k, ch ->
+        val pool = POOL.getValue(ch)
+        val n = used.getOrDefault(ch, 0)
+        used[ch] = n + 1
+        LyrLine(t, pool[n % pool.size]).also { t += if (k > from) 1000L else 2000L }
+    }
+    val stamps = lines.map { it.ms ?: 0 }
+    return Strip(name, lines, if (from < 0) stamps[0] - 1000 else stamps[from], stamps[from + 1])
+}
+
+private val HOLDS = STRIPS.filter { it.name.endsWith("-1000") && it.name != "cue-1000" }.map { Strip(it.name.removeSuffix("-1000"), it.lines, it.from, it.to) } + listOf(
+    pooled("oneto1", "aaaaaaaaa", 2),
+    pooled("oneto2", "aaabaaaaa", 2),
+    pooled("line01", "abaaaaaa", 0),
+    pooled("twoto1", "aabaaaaaa", 2),
+    pooled("twoto2", "aabbaaaaa", 2),
+    pooled("first2", "baaaaaaa", -1),
+    pooled("partfit", "aabcaaebeaac", 2),
+)
+
 private fun Shots.lyricsMode() {
     rule.onNodeWithTag("np.art").performClick()
 }
@@ -837,6 +868,37 @@ class Shots {
                 for (at in es.sorted().distinct()) {
                     rule.mainClock.advanceTimeBy(start + at - rule.mainClock.currentTime, ignoreFrameDuration = true)
                     shot(at)
+                }
+            }
+        }
+        for (size in SIZES) {
+            for (hold in HOLDS) {
+                val name = "lyrhold-${hold.name}-${size.name}"
+                if (only.split(',').none { name.contains(it) }) continue
+                val c = SimControl("ap80")
+                lyricsOn()(c)
+                pause(c, hold.from)
+                control = c
+                shell = Shell(Nav(NP))
+                frame = Shot(name, pages = NP, artEntry = HELD, lyrics = shown(hold.lines)) to size
+                settle(1000)
+                lyricsMode()
+                settle(1000)
+                val shot = { at: Long -> rule.onNodeWithTag("frame").captureRoboImage(File(dir, "$name/e%03d.png".format(at)).path) }
+                val hold0 = rule.mainClock.currentTime
+                for (at in 0L until 200L step 25) {
+                    rule.mainClock.advanceTimeBy(hold0 + at - rule.mainClock.currentTime, ignoreFrameDuration = true)
+                    shot(at)
+                }
+                val before = column()
+                pause(c, hold.to)
+                rule.mainClock.advanceTimeByFrame()
+                rule.mainClock.advanceTimeByFrame()
+                assertEquals(name, before, column())
+                val start = rule.mainClock.currentTime
+                for (at in 0L..550L step 25) {
+                    rule.mainClock.advanceTimeBy(start + at - rule.mainClock.currentTime, ignoreFrameDuration = true)
+                    shot(200 + at)
                 }
             }
         }

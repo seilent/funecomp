@@ -11,6 +11,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.click
@@ -44,6 +47,7 @@ import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.state.LyricsFetch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -53,6 +57,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
+import kotlin.math.abs
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -285,6 +290,59 @@ class NowPlayingLyricsTest {
         playAt(20_100)
         advance(75)
         midAndEnd("line 2 caught 100 ms late", 20_000)
+    }
+
+    private val four = "We kept on running through the rain until the city lights went out"
+
+    private fun grow(x: String) = listOf("Light on the water", "Lights out", "Say my name again", x, "Nothing left to lose", "Under the last light", "Hold on", "Paper moon", "Quiet field")
+        .zip(listOf(0L, 2000L, 4000L, 6000L, 7000L, 8000L, 9000L, 10000L, 11000L)) { t, ms -> LyrLine(ms, t) }
+
+    private fun tagged(prefix: String) = rule.onAllNodes(SemanticsMatcher(prefix) { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith(prefix) == true }).fetchSemanticsNodes()
+
+    private fun below() = rule.onAllNodesWithText("Nothing left to lose").fetchSemanticsNodes().map { it.positionInRoot.y }
+
+    @Test
+    fun theRowsBelowAGrowingLineHoldThenShowLower() {
+        start()
+        enterBy("np.art")
+        val track = c.device.playback.state.track!!
+        val x = listOf("Every road leads back home", "We were young and the night was ours", "Light on the water, we were young and the night was ours", four).firstOrNull { t ->
+            lyrics = LyricsFetch.Show.Lines(track, LyricsFetch.Copy(1, Enums.LyricsKind.synced, grow(t)))
+            playAt(6_500)
+            advance(100)
+            tagged("np.lyric.current.").size == 2
+        }
+        assertNotNull(x)
+        playAt(5_000)
+        advance(100)
+        val a = below().single()
+        playAt(6_000)
+        advance(16)
+        val frames = ArrayList<Pair<Float?, Map<String, Float>>>()
+        repeat(30) {
+            frames += below().singleOrNull() to tagged("np.lyric.line.").associate { it.config[SemanticsProperties.TestTag] to it.boundsInRoot.bottom }
+            advance(16)
+        }
+        val b = below().single()
+        assertTrue("$a to $b", b > a + 1f)
+        val sides = frames.map { (y, _) ->
+            when {
+                y == null -> null
+                abs(y - a) <= 1f -> 1
+                abs(y - b) <= 1f -> 2
+                else -> throw AssertionError("line 4 at $y, not $a or $b")
+            }
+        }
+        assertTrue(sides.contains(1))
+        assertEquals(sides.filterNotNull().sorted(), sides.filterNotNull())
+        assertTrue(sides.contains(2))
+        for (k in 1 until frames.size) {
+            if (sides[k] != sides[k - 1]) continue
+            for ((tag, y1) in frames[k].second) {
+                val before = frames[k - 1].second[tag] ?: continue
+                assertTrue("$tag bottom $before to $y1 at frame $k", y1 <= before + 0.01f)
+            }
+        }
     }
 
     @Test

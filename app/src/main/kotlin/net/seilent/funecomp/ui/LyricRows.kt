@@ -14,8 +14,8 @@ object LyricRows {
 
     class Blocks(val list: List<Block>, val vis: Float)
 
-    data class Draw(val line: Int, val top: Float, val h: Float, val y0: Float, val y1: Float, val a: Block?, val b: Block?, val alphaA: Float, val alphaB: Float, val change: Boolean) {
-        val forms: List<Pair<Block, Float>> get() = listOfNotNull(a?.takeIf { b == null || change }?.let { it to alphaA }, b?.let { it to alphaB })
+    data class Draw(val line: Int, val top: Float, val h: Float, val y0: Float, val y1: Float, val a: Block?, val b: Block?, val alphaA: Float, val alphaB: Float, val change: Boolean, val side: Int) {
+        val forms: List<Pair<Block, Float>> get() = listOfNotNull(a?.takeIf { b == null || change || side != 0 }?.let { it to alphaA }, b?.let { it to alphaB })
     }
 
     private const val EPS = 0.001f
@@ -83,9 +83,9 @@ object LyricRows {
         return out
     }
 
-    private class Span(val line: Int, val a: Block?, val b: Block?, val top: Float, val h: Float)
+    private class Span(val line: Int, val a: Block?, val b: Block?, var top: Float, var h: Float, var side: Int = 0)
 
-    fun column(a: Blocks?, b: Blocks, p: Float, edge: (Float) -> Float): List<Draw> {
+    fun column(a: Blocks?, b: Blocks, to: Int, p: Float, room: Float, edge: (Float) -> Float): List<Draw> {
         val spans = ArrayList<Span>()
         if (a == null) {
             for (y in b.list) spans += Span(y.line, y, y, y.top, y.h)
@@ -93,7 +93,30 @@ object LyricRows {
             fun inB(line: Int) = b.list.firstOrNull { it.line == line }
             fun inA(line: Int) = a.list.firstOrNull { it.line == line }
             fun drawn(line: Int) = spans.first { it.a?.line == line || it.b?.line == line }
-            for (x in a.list) inB(x.line)?.let { y -> spans += Span(x.line, x, y, lerp(x.top, y.top, p), lerp(x.h, y.h, p)) }
+            val shared = a.list.mapNotNull { x -> inB(x.line)?.let { x to it } }
+            for ((x, y) in shared) spans += Span(x.line, x, y, lerp(x.top, y.top, p), lerp(x.h, y.h, p))
+            val inc = shared.indexOfFirst { it.first.line == to }
+            if (inc >= 0) {
+                val late = p >= 0.5f
+                fun at(i: Int) = if (late) shared[i].second else shared[i].first
+                val nx = shared.indexOfFirst { it.first.line > to }
+                val held = nx >= 0 && shared[nx].second.top > shared[nx].first.top
+                if (held) {
+                    for (i in shared.indices) {
+                        if (shared[i].first.line <= to) continue
+                        spans[i].side = if (late) 2 else 1
+                        spans[i].top = at(i).top
+                        spans[i].h = at(i).h
+                    }
+                }
+                val lim = when {
+                    held -> at(nx).top
+                    nx >= 0 -> lerp(shared[nx].first.top, shared[nx].second.top, p)
+                    else -> room
+                }
+                val s = spans[inc]
+                s.h = min(s.top + at(inc).h, lim) - s.top
+            }
             for (i in a.list.indices.reversed()) {
                 val x = a.list[i]
                 if (inB(x.line) != null) continue
@@ -114,7 +137,7 @@ object LyricRows {
             }
         }
         val colY0 = edge(0f)
-        val colY1 = edge(lerp(a?.vis ?: b.vis, b.vis, p))
+        val colY1 = edge(bottom(a, b))
         return spans.map { d ->
             val y0 = max(colY0, edge(d.top))
             val y1 = max(y0, min(colY1, edge(d.top + d.h)))
@@ -124,17 +147,19 @@ object LyricRows {
             var alphaA = 0f
             var alphaB = 0f
             when {
-                fa != null && fb != null && !change -> alphaB = lerp(fa.alpha, fb.alpha, p)
-                change -> {
+                fa != null && fb != null && (change || d.side != 0) -> {
                     alphaA = if (p < 0.5f) fa.alpha * (1f - 2f * p) else 0f
                     alphaB = if (p < 0.5f) 0f else fb.alpha * (2f * p - 1f)
                 }
+                fa != null && fb != null -> alphaB = lerp(fa.alpha, fb.alpha, p)
                 fa != null -> alphaA = fa.alpha * (1f - p)
                 fb != null -> alphaB = fb.alpha * p
             }
-            Draw(d.line, d.top, d.h, y0, y1, fa, fb, alphaA, alphaB, change)
+            Draw(d.line, d.top, d.h, y0, y1, fa, fb, alphaA, alphaB, change, d.side)
         }
     }
+
+    fun bottom(a: Blocks?, b: Blocks) = if (a == null) b.vis else max(a.vis, b.vis)
 
     private fun text(texts: List<String>?, line: Int, big: Boolean, title: String, next: String?) = if (line >= 0 && texts != null) texts[line] else if (big) title else next ?: ""
 

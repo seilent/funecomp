@@ -1,0 +1,76 @@
+diff --git a/player/build.sh b/player/build.sh
+index c459ccb..27ba3ec 100755
+--- a/player/build.sh
++++ b/player/build.sh
+@@ -730,6 +730,23 @@ case $what in
+     mips) deps; build_mips ;;
+     test) run_tests ;;
+     shots) shots ;;
++    gold)
++        fixtures
++        demo
++        rm -rf "$out/demo-large"
++        cp -a "$out/demo" "$out/demo-large"
++        echo size=large > "$out/demo-large/data/settings.ini"
++        mkdir -p "$out/gold"
++        for c in short long4 fromlong cjk first empty prevhide last oneto1 oneto2 line01 twoto1 twoto2 first2 partfit; do
++            for z in std large; do
++                size=""
++                [[ $z == large ]] && size=-large
++                FUNEOS_LYRGOLD=1 shot "$out/host/funeos" "$out/tmp/gold-$c-$z.png" "lyslide:12000:$c:1000" "$size" \
++                    2> "$out/gold/$c-$z.err"
++                rm -f "$out/tmp/gold-$c-$z.png"
++            done
++        done
++        ;;
+     all)
+         deps
+         toolchain
+diff --git a/player/ui/nowplaying.cpp b/player/ui/nowplaying.cpp
+index e95819b..33f919f 100644
+--- a/player/ui/nowplaying.cpp
++++ b/player/ui/nowplaying.cpp
+@@ -3,6 +3,7 @@
+ #include <algorithm>
+ #include <cstdint>
+ #include <cstdio>
++#include <cstdlib>
+ 
+ #include "../core/curves.h"
+ #include "accent.h"
+@@ -292,6 +293,35 @@ void NowPlaying::draw_lyrics(Canvas& c, const Look& l, int64_t now)
+         slide_crc_ = lyrics_->crc;
+     }
+     bool slide = slide_at_ >= 0 && line >= 0;
++    static int gold_from = -9, gold_to = -9;
++    if (slide && getenv("FUNEOS_LYRGOLD") && (gold_from != slide_from_ || gold_to != line)) {
++        gold_from = slide_from_;
++        gold_to = line;
++        const SizeTable& gs = sz();
++        fprintf(stderr, "gold meta cp %d np %d top %d bottom %d u %d cur %d next %d low %d fade %d\n", gs.npLyricPitch, gs.npNextPitch,
++                tok::npTextTop, tok::npTitleY + tok::npNextPitch, tok::u, gs.npLyric.alpha, gs.npLyricNext.alpha, tok::alpha_low, l.alpha);
++        for (int i = 0; i < (int)lyrics_->lines.size(); i++)
++            fprintf(stderr, "gold line %d %lld %d %d %s\n", i, (long long)lyrics_->lines[(size_t)i].ms, (int)wrapped(i, false).size(),
++                    (int)wrapped(i, true).size(), lyrics_->lines[(size_t)i].text.c_str());
++        fprintf(stderr, "gold slide %d %d d %d\n", slide_from_, line, slide_d_);
++        int half_t = 0;
++        for (int t = 0; t <= 65536; t++)
++            if (curve(Curve::ExpOut6, t) < kOne / 2)
++                half_t = t;
++        std::vector<int> gold_t;
++        for (int k = 0; k <= 14; k++)
++            gold_t.push_back((int)((int64_t)k * 25 * 65536 / 350));
++        gold_t.push_back(half_t);
++        gold_t.push_back(half_t + 1);
++        std::sort(gold_t.begin(), gold_t.end());
++        for (int t : gold_t) {
++            fx gp = curve(Curve::ExpOut6, t);
++            draw_column(c, slide_from_, line, gp, dx, l.alpha);
++            fprintf(stderr, "gold t %d p %d bottom %d\n", t, gp, column_bottom());
++            for (const ColumnRow& r : col_rows_)
++                fprintf(stderr, "gold row %d %d %d %d %d %d %d %d %d\n", r.line, r.y0, r.y1, r.top, r.h, r.a_old, r.a_new, r.form_change ? 1 : 0, r.side);
++        }
++    }
+     fx p = slide ? curve(Curve::ExpOut6, progress(now - slide_at_, slide_d_)) : kOne;
+     draw_column(c, slide ? slide_from_ : line, line, p, dx, l.alpha);
+ }

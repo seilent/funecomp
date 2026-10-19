@@ -20,7 +20,7 @@ class LyricRowsTest {
 
     private fun rows(texts: List<String>?, index: Int, room: Float = 100f, title: String = "Title", next: String? = "Next"): List<Row> {
         val out = ArrayList<Row>()
-        for (d in LyricRows.column(null, blocks(texts, index, room, title, next), 1f) { it }) {
+        for (d in LyricRows.column(null, blocks(texts, index, room, title, next), index, 1f, room) { it }) {
             for ((k, _) in d.forms) {
                 LyricRows.lines(k, texts, title, next, wrap).forEachIndexed { i, t ->
                     val slot = d.top + i * k.pitch
@@ -123,10 +123,10 @@ class LyricRowsTest {
         for (room in listOf(298f, 176f, 170f, 60f)) {
             for (to in 0 until device.size) {
                 val (a, b) = slide(to - 1, to, room)
-                val staticA = shown(LyricRows.column(null, blocks(device, to - 1, room, w = words, cp = cp, np = np), 1f) { it })
-                val staticB = shown(LyricRows.column(null, blocks(device, to, room, w = words, cp = cp, np = np), 1f) { it })
-                assertEquals("room $room to $to at 0", staticA.map { listOf(it.text, it.big, it.top, it.alpha) }.toSet(), shown(LyricRows.column(a, b, 0f) { it }).map { listOf(it.text, it.big, it.top, it.alpha) }.toSet())
-                assertEquals("room $room to $to at 1", staticB.map { listOf(it.text, it.big, it.top, it.alpha) }.toSet(), shown(LyricRows.column(a, b, 1f) { it }).map { listOf(it.text, it.big, it.top, it.alpha) }.toSet())
+                val staticA = shown(LyricRows.column(null, blocks(device, to - 1, room, w = words, cp = cp, np = np), to - 1, 1f, room) { it })
+                val staticB = shown(LyricRows.column(null, blocks(device, to, room, w = words, cp = cp, np = np), to, 1f, room) { it })
+                assertEquals("room $room to $to at 0", staticA.map { listOf(it.text, it.big, it.top, it.alpha) }.toSet(), shown(LyricRows.column(a, b, to, 0f, room) { it }).map { listOf(it.text, it.big, it.top, it.alpha) }.toSet())
+                assertEquals("room $room to $to at 1", staticB.map { listOf(it.text, it.big, it.top, it.alpha) }.toSet(), shown(LyricRows.column(a, b, to, 1f, room) { it }).map { listOf(it.text, it.big, it.top, it.alpha) }.toSet())
             }
         }
     }
@@ -137,12 +137,12 @@ class LyricRowsTest {
         val p = ExpOut6.transform(0.5f)
         val topA = a.list.first { it.line == 3 }.top
         val topB = b.list.first { it.line == 3 }.top
-        val mid = LyricRows.column(a, b, p) { it }.first { it.line == 3 }
+        val mid = LyricRows.column(a, b, 3, p, 298f) { it }.first { it.line == 3 }
         assertEquals(topA + (topB - topA) * p, mid.top, 1f / 64)
         assertEquals(b.list.first { it.line == 3 }.alpha * (2 * p - 1), mid.alphaB, 1f / 256)
         assertTrue(mid.change)
-        val before = LyricRows.column(a, b, 0.49f) { it }.first { it.line == 3 }
-        val after = LyricRows.column(a, b, 0.51f) { it }.first { it.line == 3 }
+        val before = LyricRows.column(a, b, 3, 0.49f, 298f) { it }.first { it.line == 3 }
+        val after = LyricRows.column(a, b, 3, 0.51f, 298f) { it }.first { it.line == 3 }
         assertEquals(0f, before.alphaB, 0f)
         assertTrue(before.alphaA > 0f)
         assertEquals(0f, after.alphaA, 0f)
@@ -158,7 +158,7 @@ class LyricRowsTest {
                     var e = 0
                     while (e <= Tok.motion_lyricSlide + 16) {
                         val p = ExpOut6.transform((e / Tok.motion_lyricSlide).coerceIn(0f, 1f))
-                        val r = LyricRows.column(a, b, p) { ceil(it * scale) }.filter { it.y1 > it.y0 }
+                        val r = LyricRows.column(a, b, to, p, room) { ceil(it * scale) }.filter { it.y1 > it.y0 }
                         for (i in r.indices) for (j in i + 1 until r.size) {
                             assertTrue("room $room scale $scale to $to e $e lines ${r[i].line} ${r[j].line}", minOf(r[i].y1, r[j].y1) <= maxOf(r[i].y0, r[j].y0))
                         }
@@ -177,7 +177,7 @@ class LyricRowsTest {
         assertEquals(1, LyricRows.lines(cur, device, "", null, words).size)
         val small = blocks(device, 3, 60f, w = words, cp = cp, np = np)
         assertEquals(cp + np, small.vis, 0.001f)
-        val draws = LyricRows.column(null, small, 1f) { it }
+        val draws = LyricRows.column(null, small, 3, 1f, 60f) { it }
         assertEquals(cp + np, draws.maxOf { it.y1 }, 0.001f)
     }
 
@@ -186,13 +186,13 @@ class LyricRowsTest {
         val empty = listOf("", "")
         val (a, b) = LyricRows.pair(blocks(empty, -1, 60f, cp = cp, np = np), blocks(empty, 0, 60f, cp = cp, np = np), { 0 }, np)
         assertTrue(a.list.isEmpty())
-        val first = LyricRows.column(a, b, 0.5f) { it }.single()
+        val first = LyricRows.column(a, b, 0, 0.5f, 60f) { it }.single()
         assertEquals(0f, first.top, 0f)
         assertEquals(cp / 2, first.h, 0.001f)
         val texts = listOf("", "x")
         val (c, d) = LyricRows.pair(blocks(texts, 0, 20f, cp = cp, np = np), blocks(texts, 1, 20f, cp = cp, np = np), { 1 }, np)
         assertTrue(d.list.isEmpty())
-        val last = LyricRows.column(c, d, 0.5f) { it }.single()
+        val last = LyricRows.column(c, d, 1, 0.5f, 20f) { it }.single()
         assertEquals(1, last.line)
         assertEquals(0f, last.top, 0f)
         assertEquals(np / 2, last.h, 0.001f)

@@ -434,10 +434,10 @@ private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: St
             val edge = { v: Float -> ceil(ui.px(v)) }
             val run = slide
             val draws = if (run == null || texts == null) {
-                LyricRows.column(null, blocks(shown), 1f, edge)
+                LyricRows.column(null, blocks(shown), shown, 1f, room, edge)
             } else {
                 val (a, b) = LyricRows.pair(blocks(run.from), blocks(shown), { wrapRow(texts[it], false).size }, Tok.npNextPitch)
-                LyricRows.column(a, b, LyricSlide.p(run, frame), edge)
+                LyricRows.column(a, b, shown, LyricSlide.p(run, frame), room, edge)
             }
             var n = 0
             for (d in draws) {
