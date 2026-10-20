@@ -154,7 +154,7 @@ class ListenBrainz(
                 l.album?.takeIf { it.isNotBlank() }?.let { append(",\"release_name\":").append(quote(it)) }
                 append(",\"additional_info\":{")
                 l.durationS?.let { append("\"duration_ms\":").append(it * 1000).append(',') }
-                append("\"media_player\":\"funeos\",\"submission_client\":\"funecomp\",\"submission_client_version\":").append(quote(version))
+                append("\"media_player\":\"funeOS\",\"submission_client\":\"funecomp\",\"submission_client_version\":").append(quote(version))
                 append("}}}")
             }
             append("]}")

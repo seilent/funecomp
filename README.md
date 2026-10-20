@@ -1,6 +1,6 @@
 # funeCOMP
 
-Android remote for [funeos](https://github.com/seilent/funeos) on the Hidizs AP80 and TempoTec V1, over Bluetooth.
+Android remote for [funeOS](https://github.com/seilent/funeos) on the Hidizs AP80 and TempoTec V1, over Bluetooth.
 Playback, volume, queue, library, settings and EQ from the phone. Artist photos are fetched on the phone and pushed to
 the device as the Now Playing backdrop.
 
