@@ -54,9 +54,9 @@ class Shell(
     var pick by mutableStateOf<PickFor?>(null)
 }
 
-fun homeItems(device: DeviceState, link: LinkView, sources: Sources): List<HomeItem> {
+fun homeItems(device: DeviceState, link: LinkView): List<HomeItem> {
     val playlists = device.lib.pages[LibKey(Enums.View.playlists, "")]?.total
-    val pivots = device.schema.rows.mapNotNull { it.pivot }.distinct()
+    val pivots = settingsPivots(device.schema.rows)
     val s = device.playback.state
     val playing = s.title ?: if (link.phase == Phase.LIVE) songs(s.slots ?: 0L) else statusText(link)
     return listOf(
@@ -64,7 +64,7 @@ fun homeItems(device: DeviceState, link: LinkView, sources: Sources): List<HomeI
         HomeItem("music", "artists albums songs", Page.Music),
         HomeItem("connection", if (link.phase == Phase.LIVE) link.device ?: device.hello?.board ?: "" else statusText(link), Page.Connection),
         HomeItem("playlists", if (playlists != null && playlists > 0) (if (playlists == 1L) "1 playlist" else "$playlists playlists") else if (playlists == 0L) "0 playlists" else "", Page.Playlists),
-        HomeItem("artist art", sources.ordered.joinToString(" "), Page.ArtistArt),
+        HomeItem("online", ONLINE_PIVOTS.joinToString(" "), Page.Online()),
         HomeItem("settings", pivots.joinToString(" "), Page.Settings),
     )
 }
@@ -85,6 +85,7 @@ fun App(
     blocked: List<ArtBlocks.Record> = emptyList(),
     lyrics: LyricsFetch.Show = LyricsFetch.Show.Off,
     picks: List<ArtPicks.Pick> = emptyList(),
+    scrobbleLabels: Boolean = true,
     insets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     ime: WindowInsets = WindowInsets.ime,
 ) {
@@ -109,8 +110,12 @@ fun App(
             LaunchedEffect(shell.gated, link.phase, link.askBattery, link.askReconnect, shell.sheet.shown, shell.pick) {
                 if (shell.gated && link.phase == Phase.LIVE) {
                     shell.gated = false
-                    shell.sheet.close()
-                    nav.reset(listOf(Page.Home, Page.NowPlaying))
+                    if (nav.top == Page.Connection) {
+                        shell.sheet.close()
+                        nav.reset(listOf(Page.Home, Page.NowPlaying))
+                    } else {
+                        nav.replaceRoot(Page.Home)
+                    }
                 }
                 if (link.askBattery && link.phase == Phase.LIVE && !shell.sheet.shown) {
                     shell.sheet.open("background", listOf("allow", "not now"), info = listOf(BACKGROUND_INFO), onDismiss = { control.backgroundLater() }) {
@@ -136,12 +141,13 @@ fun App(
             Stack(nav) { page ->
                 when (page) {
                     Page.NowPlaying -> NowPlaying(device, control, shell.toast, { nav.pop() }, { nav.push(Page.Queue) }, art, lyrics) { held -> artSheet(ctx, held, picks) }
-                    Page.Home -> Home(homeItems(device, link, sources), { control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
+                    Page.Home -> Home(homeItems(device, link), { control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)
                     Page.Playlists -> Playlists(ctx)
-                    Page.Settings -> SettingsPage(ctx)
-                    Page.Connection -> ConnectionPage(ctx, link, scrobble, firmware)
+                    Page.Settings -> SettingsPage(ctx, firmware)
+                    Page.Connection -> ConnectionPage(ctx, link, scrobble, firmware, gated = shell.gated)
+                    is Page.Online -> OnlinePage(ctx, page, sources, onSources, credits, onCredit, blocked, picks, scrobble, link.lyrics, scrobbleLabels)
                     Page.ArtistArt -> ArtistArtPage(ctx, sources, onSources, credits, onCredit, blocked, picks)
                     Page.ArtPicked -> ArtPickedPage(ctx, picks)
                     Page.ArtBlocked -> ArtBlockedPage(ctx, blocked)

@@ -27,6 +27,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
@@ -66,6 +67,8 @@ import net.seilent.funecomp.ui.ScrobbleView
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.TextEntry
 import net.seilent.funecomp.ui.browseCols
+import net.seilent.funecomp.ui.ONLINE_LYRICS
+import net.seilent.funecomp.ui.ONLINE_SCROBBLING
 import net.seilent.funecomp.ui.flatBand
 import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
@@ -110,6 +113,7 @@ class Shot(
     val picks: List<ArtPicks.Pick> = emptyList(),
     val cols: ((Float) -> Int)? = null,
     val gated: Boolean = false,
+    val labels: Boolean = true,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -384,6 +388,29 @@ private val SCROBBLE = ScrobbleView(Accounts(true, "0123456789abcdef0123456789ab
 
 private val FW = HOME + Page.Connection + Page.Firmware
 
+private val ONLINE = HOME + Page.Online()
+private val GATED = LinkView(Phase.CONNECTING, "AP80")
+private const val LONG_VERSION = "0.4.0-dev-118-g3c887a9-uirework-dirty+20261021"
+
+private fun Shots.tapRow(tag: String) {
+    scrollTo(tag)
+    rule.onNodeWithTag(tag).performClick()
+    settle(600)
+}
+
+private fun Shots.about() {
+    for (p in listOf("library", "display", "power", "system")) {
+        rule.onNodeWithTag("pivot.$p").performClick()
+        settle(1000)
+    }
+    tapRow("set.about")
+}
+
+private fun state(edit: (net.seilent.funecomp.proto.State) -> net.seilent.funecomp.proto.State): (SimControl) -> Unit = { c ->
+    val p = c.device.playback
+    c.device = c.device.copy(playback = p.copy(state = edit(p.state)))
+}
+
 private val FOUND = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true)
 
 private val EQ = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)
@@ -650,14 +677,14 @@ val SHOTS = listOf(
     Shot("firmware-found", board = "v1", pages = FW, firmware = FOUND),
     Shot("firmware-dev", board = "v1", pages = FW, firmware = FOUND.copy(newer = null, info = "device runs a dev build")),
     Shot("firmware-download", board = "v1", pages = FW, firmware = FOUND) { rule.onNodeWithTag("fw.release").performClick() },
-    Shot("firmware-downloading", board = "v1", pages = FW, firmware = FOUND.copy(downloading = true, download = "42 %", checkDaily = true)),
-    Shot("firmware-paused", board = "v1", pages = FW, firmware = FOUND.copy(download = "paused 42 %")),
+    Shot("firmware-downloading", board = "v1", pages = FW, firmware = FOUND.copy(downloading = true, download = "42%", checkDaily = true)),
+    Shot("firmware-paused", board = "v1", pages = FW, firmware = FOUND.copy(download = "paused 42%")),
     Shot("firmware-mismatch", board = "v1", pages = FW, firmware = FOUND.copy(info = "checksum mismatch")),
     Shot("firmware-ready", board = "v1", pages = FW, firmware = FOUND.copy(ready = true)) { rule.onNodeWithTag("fw.release").performClick() },
     Shot("firmware-picked", board = "v1", pages = FW) { rule.onNodeWithTag("fw.pick").performClick() },
-    Shot("firmware-sending", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42 %")),
+    Shot("firmware-sending", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%")),
     Shot("firmware-sent", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, info = "ready on the dap")),
-    Shot("firmware-send-cancel", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42 %")) { rule.onNodeWithTag("fw.send").performClick() },
+    Shot("firmware-send-cancel", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%")) { rule.onNodeWithTag("fw.send").performClick() },
     Shot("lyrics", pages = HOME + Page.Connection + Page.Lyrics),
     Shot("lyrics-on", pages = HOME + Page.Connection + Page.Lyrics, link = LinkView(Phase.LIVE, "AP80", everLive = true, lyrics = true)),
     Shot("connection", pages = HOME + Page.Connection),
@@ -747,6 +774,46 @@ val SHOTS = listOf(
     Shot("pick-browse-empty", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, true)),
     Shot("pick-browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, false)),
     Shot("pick-browse-unavailable-tiles", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(11, false)),
+    Shot("connection-gated", pages = listOf(Page.Connection), link = GATED, gated = true),
+    Shot("online-art", pages = ONLINE),
+    Shot("online-art-ordered", pages = ONLINE, sources = ORDERED),
+    Shot("online-art-sheet-commons", pages = ONLINE) { tapRow("art.src.commons") },
+    Shot("online-art-sheet-middle", pages = ONLINE, sources = ORDERED) { tapRow("art.src.theaudiodb") },
+    Shot("online-art-sheet-last", pages = ONLINE, sources = ORDERED) { tapRow("art.src.youtube") },
+    Shot("online-art-sheet-fanart-nokey", pages = ONLINE, sources = ORDERED) { tapRow("art.src.fanarttv") },
+    Shot("online-art-sheet-fanart-key", pages = ONLINE, sources = ORDERED.copy(fanartTvKey = "0123456789abcdef")) { tapRow("art.src.fanarttv") },
+    Shot("online-art-moved", pages = ONLINE, sources = ORDERED) {
+        tapRow("art.src.theaudiodb")
+        rule.onNodeWithTag("sheet.item.2").performClick()
+    },
+    Shot("online-art-key", pages = ONLINE, sources = ORDERED, ime = AEQ_IME) {
+        tapRow("art.src.fanarttv")
+        rule.onNodeWithTag("sheet.item.4").performClick()
+    },
+    Shot("online-art-gated", pages = listOf(Page.Connection), link = GATED, gated = true) { rule.onNodeWithTag("conn.online").performClick() },
+    Shot("online-art-lists", pages = ONLINE, picks = PICKS, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.credits") },
+    Shot("online-art-lists-blocked-1", pages = ONLINE, blocked = BLOCKED.take(1), credits = CREDITS) { scrollTo("art.credits") },
+    Shot("online-art-lists-creditsonly", pages = ONLINE, credits = CREDITS) { scrollTo("art.credits") },
+    Shot("online-lyrics", pages = HOME + Page.Online(ONLINE_LYRICS)),
+    Shot("online-lyrics-sheet", pages = HOME + Page.Online(ONLINE_LYRICS), link = LinkView(Phase.LIVE, "AP80", everLive = true, lyrics = true)) { tapRow("lyr.src.lrclib") },
+    Shot("online-scrobbling", pages = HOME + Page.Online(ONLINE_SCROBBLING)),
+    Shot("online-scrobbling-set", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE),
+    Shot("online-scrobbling-failed", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE.copy(accounts = SCROBBLE.accounts.copy(lastFmSession = ""), lastFm = "sign in failed", listenBrainz = "invalid")),
+    Shot("online-scrobbling-entry", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { tapRow("scrobble.key") },
+    Shot("online-scrobbling-plain", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, labels = false),
+    Shot("settings-about", pages = HOME + Page.Settings) { about() },
+    Shot("settings-about-v1", board = "v1", pages = HOME + Page.Settings) { about() },
+    Shot("settings-about-sending", board = "v1", pages = HOME + Page.Settings, firmware = FOUND.copy(ready = true, send = "firmware 42%")) { about() },
+    Shot("settings-about-nohello", pages = HOME + Page.Settings, prep = { it.device = it.device.copy(hello = null) }) { about() },
+    Shot("settings-about-fallback", pages = HOME + Page.Settings, prep = { it.device = it.device.copy(schema = it.device.schema.copy(rows = it.device.schema.rows.filter { r -> r.key != "about" })) }) { about() },
+    Shot("settings-about-scrolled", pages = HOME + Page.Settings) {
+        about()
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("sheet.list").performScrollToIndex(0)
+        rule.mainClock.autoAdvance = false
+    },
+    Shot("settings-about-nostate", pages = HOME + Page.Settings, prep = state { it.copy(battery = null, charging = null, cardFreeMiB = null, cardTotalMiB = null) }) { about() },
+    Shot("settings-about-longversion", pages = HOME + Page.Settings, prep = { it.device = it.device.copy(hello = it.device.hello?.copy(version = LONG_VERSION)) }) { about() },
 )
 
 @RunWith(RobolectricTestRunner::class)
@@ -759,6 +826,7 @@ class Shots {
     private var frame by mutableStateOf<Pair<Shot, Size>?>(null)
     private var control by mutableStateOf<SimControl?>(null)
     private var shell by mutableStateOf(Shell())
+    private var sources by mutableStateOf(Sources())
 
     fun settle(ms: Long) {
         rule.waitForIdle()
@@ -828,7 +896,7 @@ class Shots {
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
                     val held = f.first.artEntry?.let { BackdropArt(backdrop ?: plain, null, it, f.first.wrong) }
-                    App(c.device, f.first.link, c, shell, f.first.sources, {}, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * f.first.ime).dp))
+                    App(c.device, f.first.link, c, shell, sources, { sources = it }, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, scrobbleLabels = f.first.labels, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * f.first.ime).dp))
                 }
             }
         }
@@ -841,6 +909,7 @@ class Shots {
                 c.device = c.device.copy(schema = c.device.schema.copy(rows = c.device.schema.rows.map { if (it.key == "dateTime") it.copy(words = listOf(CLOCK)) else it }))
                 shot.prep(c)
                 if (shot.gated) c.device = DeviceState()
+                sources = shot.sources
                 browseCols = shot.cols ?: { Tok.gridCols.toInt() }
                 control = c
                 shell = Shell(Nav(shot.pages), gated = shot.gated)

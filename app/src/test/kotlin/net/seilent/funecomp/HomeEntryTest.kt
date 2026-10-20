@@ -10,7 +10,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
-import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LibKey
@@ -65,21 +64,35 @@ class HomeEntryTest {
     fun nowPlayingIsTheFirstHomeItemWithItsStateAsSubtitle() {
         val c = SimControl("ap80")
         val live = LinkView(Phase.LIVE, "AP80")
-        val items = homeItems(c.device, live, Sources())
-        assertEquals(listOf("now playing", "music", "connection", "playlists", "artist art", "settings"), items.map { it.name })
+        val items = homeItems(c.device, live)
+        assertEquals(listOf("now playing", "music", "connection", "playlists", "online", "settings"), items.map { it.name })
         assertEquals(Page.NowPlaying, items[0].page)
+        assertEquals("art lyrics scrobbling", items[4].subtitle)
+        assertEquals(Page.Online(), items[4].page)
         assertEquals(c.device.playback.state.title, items[0].subtitle)
         val p = c.device.playback
         val empty = c.device.copy(playback = p.copy(state = p.state.copy(track = null, title = null, slots = 0)))
-        assertEquals("0 songs", homeItems(empty, live, Sources())[0].subtitle)
+        assertEquals("0 songs", homeItems(empty, live)[0].subtitle)
         val queued = c.device.copy(playback = p.copy(state = p.state.copy(track = null, title = null, slots = 12)))
-        assertEquals("12 songs", homeItems(queued, live, Sources())[0].subtitle)
+        assertEquals("12 songs", homeItems(queued, live)[0].subtitle)
         val down = LinkView(Phase.DOWN, "AP80", everLive = true)
-        assertEquals(c.device.playback.state.title, homeItems(c.device, down, Sources())[0].subtitle)
-        assertEquals(statusText(down), homeItems(DeviceState(), down, Sources())[0].subtitle)
-        assertEquals("", homeItems(DeviceState(), live, Sources())[3].subtitle)
+        assertEquals(c.device.playback.state.title, homeItems(c.device, down)[0].subtitle)
+        assertEquals(statusText(down), homeItems(DeviceState(), down)[0].subtitle)
+        assertEquals("", homeItems(DeviceState(), live)[3].subtitle)
         val none = DeviceState(lib = LibMirror(pages = mapOf(LibKey(Enums.View.playlists, "") to LibList(total = 0))))
-        assertEquals("0 playlists", homeItems(none, live, Sources())[3].subtitle)
+        assertEquals("0 playlists", homeItems(none, live)[3].subtitle)
+    }
+
+    @Test
+    fun theSettingsSubtitleReadsTheSettingsPivots() {
+        val c = SimControl("ap80")
+        val live = LinkView(Phase.LIVE, "AP80")
+        val rows = c.device.schema.rows
+        assertEquals(rows.mapNotNull { it.pivot }.distinct().joinToString(" "), homeItems(c.device, live)[5].subtitle)
+        val noSystem = c.device.copy(schema = c.device.schema.copy(rows = rows.filter { it.pivot != "system" }))
+        assertTrue(rows.any { it.pivot == "system" })
+        assertTrue(homeItems(noSystem, live)[5].subtitle.endsWith(" system"))
+        assertEquals("", homeItems(DeviceState(), live)[5].subtitle)
     }
 
     @Test
@@ -88,7 +101,7 @@ class HomeEntryTest {
         val c = sim!!
         assertEquals(1, c.sent.count { it == "LIB_GET" })
         assertEquals(0L, c.device.lib.pages[LibKey(Enums.View.playlists, "")]?.total)
-        assertEquals("0 playlists", homeItems(c.device, LinkView(Phase.LIVE, "AP80"), Sources())[3].subtitle)
+        assertEquals("0 playlists", homeItems(c.device, LinkView(Phase.LIVE, "AP80"))[3].subtitle)
     }
 
     @Test

@@ -24,6 +24,9 @@ import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
 
 private const val SKIA_CAMERA_UNIT = 72f
+const val ONLINE_ART = 0
+const val ONLINE_LYRICS = 1
+const val ONLINE_SCROBBLING = 2
 
 sealed interface Page {
     data object NowPlaying : Page
@@ -40,6 +43,7 @@ sealed interface Page {
     data object Scrobbling : Page
     data object Firmware : Page
     data object Lyrics : Page
+    data class Online(val pivot: Int = ONLINE_ART) : Page
     data class AutoEq(val output: Int) : Page
     data class Artist(val name: String, val songs: Long? = null) : Page
     data class Album(val key: String, val title: String, val artist: String) : Page
@@ -110,6 +114,7 @@ fun debugPages(name: String): List<Page>? {
         "scrobbling" -> base + Page.Connection + Page.Scrobbling
         "firmware" -> base + Page.Connection + Page.Firmware
         "lyrics" -> base + Page.Connection + Page.Lyrics
+        "online" -> base + Page.Online()
         else -> when {
             name.startsWith("artist:") -> base + Page.Music + Page.Artist(name.removePrefix("artist:"))
             name.startsWith("album:") -> {

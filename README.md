@@ -10,7 +10,7 @@ the device as the Now Playing backdrop.
 2. Pair the phone from its Bluetooth settings and confirm the code on both screens.
 3. Open funeCOMP: it shows Connection until the device is linked. Pick the device under DEVICE.
 
-Artist art sources (TheAudioDB, Discogs, fanart.tv, YouTube, Deezer) are off by default: Home > Artist art.
+Artist art sources (TheAudioDB, Discogs, fanart.tv, YouTube, Deezer) are off by default: Home > Online > Art.
 
 Android 12 or newer.
 

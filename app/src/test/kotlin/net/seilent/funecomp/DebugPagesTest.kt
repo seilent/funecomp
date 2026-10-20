@@ -28,6 +28,7 @@ class DebugPagesTest {
             "scrobbling" to home + Page.Connection + Page.Scrobbling,
             "firmware" to home + Page.Connection + Page.Firmware,
             "lyrics" to home + Page.Connection + Page.Lyrics,
+            "online" to home + Page.Online(),
             "artist:Radiohead" to home + Page.Music + Page.Artist("Radiohead"),
             "album:k|In Rainbows|Radiohead" to home + Page.Music + Page.Album("k", "In Rainbows", "Radiohead"),
             "album:k" to home + Page.Music + Page.Album("k", "", ""),

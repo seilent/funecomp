@@ -34,8 +34,8 @@ import java.util.Locale
 
 private const val REMEDY = "settings > system > pair phone app"
 private const val PAIR_HINT = "pair on the device"
-private const val BLOCKED = "blocked"
-private const val CREDITS = "credits"
+const val BLOCKED = "blocked"
+const val CREDITS = "credits"
 private const val NO_PICKED = "no picked images"
 private const val NO_BLOCKED = "no blocked images"
 private const val NO_CREDITS = "no credits"
@@ -60,7 +60,7 @@ fun statusText(link: LinkView) = when {
     else -> "not set"
 }
 
-fun batteryText(s: State) = "${s.battery} %" + if (s.charging == true) " charging" else ""
+fun batteryText(s: State) = "${s.battery}%" + if (s.charging == true) " charging" else ""
 
 fun cardText(s: State): String? {
     val free = s.cardFreeMiB ?: return null
@@ -73,7 +73,7 @@ private const val MIB_PER_GB = 1024.0
 private class Line(val title: String, val value: String, val info: Boolean = false, val tag: String, val tap: () -> Unit = {})
 
 @Composable
-fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleView(), firmware: FirmwareView = FirmwareView()) {
+fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleView(), firmware: FirmwareView = FirmwareView(), gated: Boolean = false) {
     val ui = LocalUi.current
     var focus by remember { mutableStateOf("device") }
     val read = { ctx.control.bonded().sortedByDescending { it.companion } }
@@ -101,6 +101,7 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleVi
         if (hint) add(Line(PAIR_HINT, "", info = true, tag = "pairhint"))
         if (remedy) add(Line(REMEDY, "", info = true, tag = "remedy", tap = tryAgain)) else if (hint) add(Line(REMEDY, "", info = true, tag = "pairpath"))
         if (hint) add(Line("bluetooth settings", "", tag = "btsettings") { ctx.control.openBluetoothSettings() })
+        if (gated) add(Line("online", "", tag = "online") { ctx.nav.push(Page.Online()) })
         if (hello != null) {
             add(Line("board", hello.board ?: "", tag = "board"))
             add(Line("version", hello.version ?: "", tag = "version"))
@@ -167,19 +168,12 @@ fun ArtistArtPage(
         Toggle("youtube", sources.youtube, Sources.YOUTUBE) { it.copy(youtube = !it.youtube) },
         Toggle("deezer", sources.deezer, Sources.DEEZER) { it.copy(deezer = !it.deezer) },
     )
-    val above = Tok.detailLabelBaseline - Tok.detailRingTop - Tok.detailRing
     val orderAt = toggles.size + 1
     val pickAt = orderAt + 2 + sources.order.size
     val pickedAt = pickAt + 1
     val lists = listOf(Triple(PICKED, picks, Page.ArtPicked), Triple(BLOCKED, blocked, Page.ArtBlocked), Triple(CREDITS, credits, Page.ArtCredits)).filter { it.second.isNotEmpty() }
     val tags = toggles.map { it.tag } + listOf("key", "order", "order.info") + sources.order.indices.map { "order.$it" } + "pick" + lists.map { it.first }
     val at = tags.indexOf(focus).takeIf { it >= 0 } ?: pickAt
-    @Composable
-    fun Label(text: String, i: Int) {
-        Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(above + Tok.detailLabelDrop).dp())) {
-            RoleText(text, Roles.sectionLabel, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(above)))
-        }
-    }
     HubPage("artist art", { ctx.nav.pop() }, count = sources.ordered.joinToString(" ")) {
         Rows(ui.contentTop, focus = at) {
             itemsIndexed(toggles, key = { _, t -> t.tag }) { i, t ->
@@ -200,7 +194,7 @@ fun ArtistArtPage(
                     }
                 }
             }
-            item(key = "order") { Label("order", orderAt) }
+            item(key = "order") { SectionLabel("order", orderAt) }
             item(key = "order.info") { SettingsRow("new lookups and the current artist", "", Modifier.enter { orderAt + 1 }, info = true) }
             itemsIndexed(sources.order, key = { _, id -> "order $id" }) { j, id ->
                 val i = orderAt + 2 + j

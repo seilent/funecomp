@@ -216,7 +216,7 @@ class LinkService : Service() {
                     ALERT_ID,
                     Notification.Builder(this, DAP)
                         .setSmallIcon(android.R.drawable.stat_sys_warning)
-                        .setContentTitle("${Remote.board ?: "dap"} battery ${e.pct} %")
+                        .setContentTitle("${Remote.board ?: "dap"} battery ${e.pct}%")
                         .setContentIntent(open())
                         .setAutoCancel(true)
                         .build(),

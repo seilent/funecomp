@@ -131,9 +131,9 @@ object Firmwares {
         if (!d.has("update")) return "device has no updater"
         val st = d.playback.state
         if (st.output != null && st.output != Enums.Output.wired) return "dap on bluetooth output"
-        if ((st.battery ?: 0) < DAP_MIN && st.charging != true) return "dap battery under $DAP_MIN %"
+        if ((st.battery ?: 0) < DAP_MIN && st.charging != true) return "dap battery under $DAP_MIN%"
         val bm = c.getSystemService(BatteryManager::class.java)
-        if (bm != null && bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) < PHONE_MIN && !bm.isCharging) return "phone battery under $PHONE_MIN %"
+        if (bm != null && bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) < PHONE_MIN && !bm.isCharging) return "phone battery under $PHONE_MIN%"
         return null
     }
 
@@ -144,7 +144,7 @@ object Firmwares {
             return
         }
         sending = true
-        set { it.copy(send = if (it.send.isEmpty()) "firmware 0 %" else it.send, info = "") }
+        set { it.copy(send = if (it.send.isEmpty()) "firmware 0%" else it.send, info = "") }
         sendExec.execute {
             try {
                 val v = try {
@@ -189,7 +189,7 @@ object Firmwares {
             !stopSend && Remote.phase == Phase.LIVE && refusal() == null && PushGate.open(Remote.device, SystemClock.elapsedRealtime())
         }) { at ->
             Remote.holdWake(WAKE, WAKE_MS)
-            val t = "firmware ${if (src.size > 0) at * 100 / src.size else 0} %"
+            val t = "firmware ${if (src.size > 0) at * 100 / src.size else 0}%"
             if (t != view.send) set { it.copy(send = t) }
         }.run()
         Log.i(Remote.TAG, "firmware send ${src.name} -> ${r.javaClass.simpleName.lowercase()}")
@@ -350,7 +350,7 @@ object Firmwares {
         }
     }
 
-    private fun percent(have: Long, size: Long) = "${if (size > 0) (have * 100 / size).coerceIn(0, 100) else 0} %"
+    private fun percent(have: Long, size: Long) = "${if (size > 0) (have * 100 / size).coerceIn(0, 100) else 0}%"
 
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

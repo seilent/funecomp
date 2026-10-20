@@ -86,9 +86,9 @@ class BackgroundTest {
     fun serviceStaysUpAcrossADropAndStopClearsThePhase() {
         val spec = sim()
         val c = Robolectric.buildService(LinkService::class.java, startIntent(spec)).create().startCommand(0, 1)
-        waitFor { Remote.phase == Phase.LIVE && text() == "connected, dap 87 %" }
+        waitFor { Remote.phase == Phase.LIVE && text() == "connected, dap 87%" }
         sims.forEach { it.stop() }
-        waitFor { Remote.phase != Phase.LIVE && text() != "connected, dap 87 %" }
+        waitFor { Remote.phase != Phase.LIVE && text() != "connected, dap 87%" }
         assertFalse(shadowOf(c.get()).isStoppedBySelf)
         c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
         shadowOf(Looper.getMainLooper()).idle()
@@ -99,7 +99,7 @@ class BackgroundTest {
         assertNull(Remote.onPhase)
 
         val again = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
-        waitFor { Remote.phase == Phase.LIVE && text() == "connected, dap 87 %" }
+        waitFor { Remote.phase == Phase.LIVE && text() == "connected, dap 87%" }
         again.destroy()
     }
 
@@ -157,7 +157,7 @@ class BackgroundTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(Phase.DOWN, Remote.phase)
         app.sendBroadcast(Intent(BluetoothAdapter.ACTION_STATE_CHANGED).putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_ON))
-        waitFor { Remote.phase == Phase.LIVE && text() == "connected, dap 87 %" }
+        waitFor { Remote.phase == Phase.LIVE && text() == "connected, dap 87%" }
         c.destroy()
     }
 
@@ -171,7 +171,7 @@ class BackgroundTest {
         assertEquals("media", n.channelId)
         MediaLink.controls(app, false)
         c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_MEDIA)).startCommand(0, 2)
-        waitFor { text() == "connected, dap 87 %" }
+        waitFor { text() == "connected, dap 87%" }
         assertEquals("link", shadowOf(app.getSystemService(NotificationManager::class.java)).getNotification(1)!!.channelId)
         c.destroy()
     }
@@ -182,10 +182,10 @@ class BackgroundTest {
         val nm = shadowOf(app.getSystemService(NotificationManager::class.java))
         waitFor { Remote.phase == Phase.LIVE && text()?.startsWith("connected, dap ") == true }
         waitFor { nm.getNotification(2) != null }
-        assertEquals("v1 battery 15 %", nm.getNotification(2)!!.extras.getCharSequence("android.title")?.toString())
+        assertEquals("v1 battery 15%", nm.getNotification(2)!!.extras.getCharSequence("android.title")?.toString())
         assertEquals("dap", nm.getNotification(2)!!.channelId)
-        waitFor { text() == "connected, dap 14 %" }
-        assertEquals("v1 battery 15 %", nm.getNotification(2)!!.extras.getCharSequence("android.title")?.toString())
+        waitFor { text() == "connected, dap 14%" }
+        assertEquals("v1 battery 15%", nm.getNotification(2)!!.extras.getCharSequence("android.title")?.toString())
         c.destroy()
     }
 

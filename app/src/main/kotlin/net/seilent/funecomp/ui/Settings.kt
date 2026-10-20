@@ -70,6 +70,10 @@ private const val FLAT_GRID_STEP = 6
 private const val FLAT_Q100 = 140
 private const val MILLI = 1000
 private const val TYPE_VALUE = "type value"
+private const val ABOUT_KEY = "about"
+private const val SYSTEM = "system"
+private const val CREDIT = "seilent"
+private const val UPDATE_FIRMWARE = "update firmware"
 
 fun Row.word(v: String?): String {
     if (v == null) return words.firstOrNull() ?: ""
@@ -213,11 +217,39 @@ private class Opened(val token: Any, val row: Row)
 
 private fun Row.same(o: Row) = values == o.values && words == o.words && flags == o.flags && kind == o.kind && min == o.min && max == o.max
 
+fun settingsRows(rows: List<Row>): List<Row> {
+    val shown = rows.filter { it.kind != Enums.RowKind.action || it.actionCmd() != null }
+    if (shown.isEmpty() || shown.any { it.key == ABOUT_KEY }) return shown
+    return shown + Row(ABOUT_KEY, "ABOUT", SYSTEM, Enums.RowKind.info)
+}
+
+fun settingsPivots(rows: List<Row>) = settingsRows(rows).mapNotNull { it.pivot }.distinct()
+
+fun aboutSheet(ctx: Ctx, device: () -> DeviceState, firmware: () -> FirmwareView) {
+    ctx.sheet.open(
+        ABOUT_KEY,
+        listOf(UPDATE_FIRMWARE),
+        infoLines = {
+            val h = device().hello
+            if (h == null) listOf(CREDIT) else listOf("funeOS ${h.version ?: ""}".trim(), CREDIT, "board", "dap battery", "card")
+        },
+        infoValues = {
+            val d = device()
+            val h = d.hello
+            val st = d.playback.state
+            if (h == null) emptyList() else listOf("", "", h.board ?: "", if (st.battery != null) batteryText(st) else "", cardText(st) ?: "")
+        },
+        infoMixed = { if (device().hello == null) listOf(true) else listOf(true, true) },
+        itemValues = { listOf(firmwareText(firmware())) },
+    ) { ctx.nav.push(Page.Firmware) }
+}
+
 @Composable
-fun SettingsPage(ctx: Ctx) {
+fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
     val ui = LocalUi.current
-    val rows = ctx.device.schema.rows.filter { it.kind != Enums.RowKind.action || it.actionCmd() != null }
+    val rows = settingsRows(ctx.device.schema.rows)
     val pivots = rows.mapNotNull { it.pivot }.distinct()
+    val fw by rememberUpdatedState(firmware)
     var pivot by rememberSaveable { mutableIntStateOf(0) }
     val values = ctx.device.settings.values
     var edit by remember { mutableStateOf<Edit?>(null) }
@@ -293,19 +325,21 @@ fun SettingsPage(ctx: Ctx) {
                     val editing = edit?.key == key
                     val v = if (editing) editValue else values[key]
                     val eqRow = key == EQ_KEY && eqOn
+                    val aboutRow = key == ABOUT_KEY
                     val sleepRow = r.sleep()
                     val minutes = if (sleepRow) sleepMinutes(ctx.device) else 0
                     SettingsRow(
                         r.label ?: key,
                         when {
                             eqRow -> profileName(ctx.device, activeEqOutput(ctx.device))
+                            aboutRow -> ctx.device.hello?.version ?: ""
                             sleepRow -> sleepText(r, minutes)
                             else -> r.display(v)
                         },
                         Modifier.enter { i }.testTag("set.$key"),
                         focused = focus == i,
                         editing = editing,
-                        info = r.kind == Enums.RowKind.info && !eqRow,
+                        info = r.kind == Enums.RowKind.info && !eqRow && !aboutRow,
                         swatch = if (key == ACCENT_KEY) accentFor(v?.toIntOrNull()) else null,
                     ) { x ->
                         if (edit != null && !editing) {
@@ -327,6 +361,7 @@ fun SettingsPage(ctx: Ctx) {
                                 ctx.control.draft(Enums.DraftKind.clock, unixS = now / MILLI, zoneS = java.util.TimeZone.getDefault().getOffset(now) / MILLI)
                             }
                             r.kind == Enums.RowKind.action -> r.actionCmd()?.let { ctx.control.action(it) }
+                            aboutRow -> aboutSheet(ctx, { live }, { fw })
                             !r.editable() -> {}
                             r.kind == Enums.RowKind.toggle -> send(r.flip(values[key]), r)
                             r.kind == Enums.RowKind.range -> {
