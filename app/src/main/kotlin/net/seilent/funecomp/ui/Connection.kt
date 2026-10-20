@@ -1,6 +1,7 @@
 package net.seilent.funecomp.ui
 
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -67,7 +68,7 @@ fun cardText(s: State): String? {
 
 private const val MIB_PER_GB = 1024.0
 
-private class Line(val title: String, val value: String, val info: Boolean = false, val tag: String, val tap: () -> Unit = {})
+private class Line(val title: String, val value: String, val info: Boolean = false, val tag: String, val tap: (Int) -> Unit = {})
 
 @Composable
 fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
@@ -79,16 +80,18 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
         bonded = read()
         onPauseOrDispose {}
     }
-    val tryAgain = { if (link.permission) ctx.control.retry() else ctx.control.askPermission() }
+    val tryAgain: (Int) -> Unit = { if (link.permission) ctx.control.retry() else ctx.control.askPermission() }
+    val scroll = rememberLazyListState()
+    fun keep(i: Int) = Keep(scroll, i, ui.px(ui.contentTop))
     val lines = buildList {
-        add(Line("device", link.device ?: "not set", tag = "device") {
+        add(Line("device", link.device ?: "not set", tag = "device") { i ->
             if (!link.permission) {
                 ctx.control.askPermission()
             } else {
                 val list = read()
                 bonded = list
                 val at = list.indexOfFirst { it.name == link.device || it.address == link.device }.coerceAtLeast(0)
-                ctx.sheet.open("device", list.map { it.name }, at) { ctx.control.choose(list[it].address) }
+                ctx.sheet.open("device", list.map { it.name }, at, keep = keep(i)) { ctx.control.choose(list[it].address) }
             }
         })
         add(Line("status", statusText(link), tag = "status", tap = tryAgain))
@@ -99,17 +102,17 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
         if (hint) add(Line("bluetooth settings", "", tag = "btsettings") { ctx.control.openBluetoothSettings() })
         if (gated) add(Line("online", "", tag = "online") { ctx.nav.push(Page.Online()) })
         link.battery?.let { add(Line("background", it.word, tag = "background") { ctx.control.allowBackground() }) }
-        add(Line("phone media controls", if (link.mediaControls) "on" else "off", tag = "media") { ctx.control.mediaControls(!link.mediaControls) })
-        add(Line("reconnect on update", if (link.reconnect) "on" else "off", tag = "reconnect") { ctx.control.reconnect(!link.reconnect) })
+        add(Line("phone media controls", if (link.mediaControls) ON else OFF, tag = "media") { i -> onOffSheet(ctx, "phone media controls", link.mediaControls, keep(i)) { ctx.control.mediaControls(it) } })
+        add(Line("reconnect on update", if (link.reconnect) ON else OFF, tag = "reconnect") { i -> onOffSheet(ctx, "reconnect on update", link.reconnect, keep(i)) { ctx.control.reconnect(it) } })
         if (link.phase != Phase.NONE) add(Line("disconnect", "", tag = "disconnect") { ctx.control.disconnect() })
     }
     val at = lines.indexOfFirst { it.tag == focus }.coerceAtLeast(0)
     HubPage("connection", { ctx.nav.pop() }) {
-        Rows(ui.contentTop, focus = at) {
+        Rows(ui.contentTop, scroll, focus = at) {
             itemsIndexed(lines, key = { _, l -> l.tag }) { i, l ->
                 SettingsRow(l.title, l.value, Modifier.enter { i }.testTag("conn.${l.tag}"), focused = at == i, info = l.info) {
                     focus = l.tag
-                    l.tap()
+                    l.tap(i)
                 }
             }
         }

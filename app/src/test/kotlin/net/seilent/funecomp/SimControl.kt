@@ -204,6 +204,11 @@ class SimControl(
     }
 
     val reconnects = ArrayList<Boolean>()
+    val medias = ArrayList<Boolean>()
+
+    override fun mediaControls(on: Boolean) {
+        medias += on
+    }
 
     override fun reconnect(on: Boolean) {
         reconnects += on

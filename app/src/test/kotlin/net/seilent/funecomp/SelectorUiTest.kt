@@ -235,17 +235,27 @@ class SelectorUiTest {
     }
 
     @Test
-    fun aToggleTapFlipsWithOneSet() {
+    fun aToggleTapOpensTheOffOnSheet() {
         val c = start("ap80", "library", "display")
         assertEquals("on", c.device.settings.values["quickplay"])
         tap("quickplay")
-        assertFalse(shell.sheet.shown)
+        assertTrue(shell.sheet.shown)
+        assertEquals("quickplay", shell.sheet.title)
+        assertEquals(listOf("OFF", "ON"), shell.sheet.items)
+        assertEquals(1, shell.sheet.focus)
+        assertEquals(emptyList<String>(), writes(c))
+        assertEquals("on", c.device.settings.values["quickplay"])
+        shell.sheet.close()
+        settle(600)
+        assertEquals(emptyList<String>(), writes(c))
+        tap("quickplay")
+        pick(1)
+        assertEquals(emptyList<String>(), writes(c))
+        tap("quickplay")
+        pick(0)
         assertEquals(listOf("SET"), writes(c))
         assertEquals("off", c.device.settings.values["quickplay"])
         shows("quickplay", "OFF")
-        tap("quickplay")
-        assertEquals(2, sets(c))
-        assertEquals("on", c.device.settings.values["quickplay"])
     }
 
     @Test
@@ -292,6 +302,18 @@ class SelectorUiTest {
         tap("volumeStep")
         val s = c.device.schema
         c.device = c.device.copy(schema = s.copy(rows = s.rows.filter { it.key != "volumeStep" }))
+        settle(600)
+        assertFalse(shell.sheet.shown)
+        assertEquals(emptyList<String>(), writes(c))
+    }
+
+    @Test
+    fun aSchemaTurningAToggleReadOnlyClosesItsSheet() {
+        val c = start("ap80", "library", "display")
+        tap("quickplay")
+        assertTrue(shell.sheet.shown)
+        val s = c.device.schema
+        c.device = c.device.copy(schema = s.copy(rows = s.rows.map { if (it.key == "quickplay") it.copy(flags = listOf(Enums.RowFlag.readOnly)) else it }))
         settle(600)
         assertFalse(shell.sheet.shown)
         assertEquals(emptyList<String>(), writes(c))

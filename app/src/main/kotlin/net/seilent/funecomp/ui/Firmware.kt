@@ -1,6 +1,7 @@
 package net.seilent.funecomp.ui
 
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
@@ -46,13 +47,15 @@ fun firmwareText(v: FirmwareView) = when {
     else -> ""
 }
 
-private class FwItem(val title: String, val value: String, val tag: String, val info: Boolean = false, val tap: () -> Unit = {})
+private class FwItem(val title: String, val value: String, val tag: String, val info: Boolean = false, val tap: (Int) -> Unit = {})
 
 @Composable
 fun FirmwarePage(ctx: Ctx, view: FirmwareView) {
     val ui = LocalUi.current
     var focus by remember { mutableStateOf("check") }
     val board = ctx.device.hello?.board
+    val list = rememberLazyListState()
+    fun keep(i: Int) = Keep(list, i, ui.px(ui.contentTop))
     val items = buildList {
         add(FwItem("check", view.status, "check") { ctx.control.firmwareCheck() })
         if (view.info.isNotEmpty()) add(FwItem(view.info, "", "info", info = true))
@@ -97,16 +100,16 @@ fun FirmwarePage(ctx: Ctx, view: FirmwareView) {
                 }
             }
         })
-        add(FwItem("check releases", if (view.checkDaily) "on" else "off", "daily") { ctx.control.firmwareSettings(!view.checkDaily, view.prereleases) })
-        add(FwItem("prereleases", if (view.prereleases) "on" else "off", "pre") { ctx.control.firmwareSettings(view.checkDaily, !view.prereleases) })
+        add(FwItem("auto check", if (view.checkDaily) ON else OFF, "daily") { i -> onOffSheet(ctx, "auto check", view.checkDaily, keep(i)) { ctx.control.firmwareSettings(it, view.prereleases) } })
+        add(FwItem("prereleases", if (view.prereleases) ON else OFF, "pre") { i -> onOffSheet(ctx, "prereleases", view.prereleases, keep(i)) { ctx.control.firmwareSettings(view.checkDaily, it) } })
     }
     val at = items.indexOfFirst { it.tag == focus }.coerceAtLeast(0)
     HubPage("firmware", { ctx.nav.pop() }, count = firmwareText(view)) {
-        Rows(ui.contentTop, focus = at) {
+        Rows(ui.contentTop, list, focus = at) {
             itemsIndexed(items, key = { _, l -> l.tag }) { i, l ->
                 SettingsRow(l.title, l.value, Modifier.enter { i }.testTag("fw.${l.tag}"), focused = at == i, info = l.info) {
                     focus = l.tag
-                    l.tap()
+                    l.tap(i)
                 }
             }
         }

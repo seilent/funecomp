@@ -47,6 +47,7 @@ import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.statusText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -253,12 +254,35 @@ class BehaviorTest {
     }
 
     @Test
-    fun reconnectRowToggles() {
-        val (c, _) = start(listOf(Page.Home, Page.Connection), LinkView(Phase.LIVE, "V1", reconnect = true))
+    fun reconnectAndMediaRowsOpenTheOffOnSheet() {
+        val (c, shell) = start(listOf(Page.Home, Page.Connection), LinkView(Phase.LIVE, "V1", reconnect = true, mediaControls = false))
         rule.onNode(hasText("on", ignoreCase = true) and hasAnyAncestor(hasTestTag("conn.reconnect"))).assertExists()
         rule.onNodeWithTag("conn.reconnect").performClick()
-        settle(300)
+        settle(500)
+        assertEquals("reconnect on update", shell.sheet.title)
+        assertEquals(listOf("off", "on"), shell.sheet.items)
+        assertEquals(1, shell.sheet.focus)
+        tapSheetItem(1)
+        assertEquals(emptyList<Boolean>(), c.reconnects)
+        rule.onNodeWithTag("conn.reconnect").performClick()
+        settle(500)
+        shell.sheet.close()
+        settle(500)
+        assertEquals(emptyList<Boolean>(), c.reconnects)
+        rule.onNodeWithTag("conn.reconnect").performClick()
+        settle(500)
+        tapSheetItem(0)
         assertEquals(listOf(false), c.reconnects)
+        rule.onNodeWithTag("conn.media").performClick()
+        settle(500)
+        assertEquals("phone media controls", shell.sheet.title)
+        assertEquals(0, shell.sheet.focus)
+        tapSheetItem(0)
+        assertEquals(emptyList<Boolean>(), c.medias)
+        rule.onNodeWithTag("conn.media").performClick()
+        settle(500)
+        tapSheetItem(1)
+        assertEquals(listOf(true), c.medias)
     }
 
     @Test
@@ -766,12 +790,46 @@ class BehaviorTest {
     }
 
     @Test
+    fun prereleasesOnTheCoverScreenScrollsAboveThePanel() {
+        val c = SimControl("v1")
+        val shell = Shell(Nav(listOf(Page.Home, Page.Settings, Page.Firmware)))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            Box(Modifier.requiredSize(361.dp, 399.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell, firmware = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true)) }
+        }
+        settle(1000)
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("fw.pre"))
+        rule.mainClock.autoAdvance = false
+        settle(300)
+        rule.onNodeWithTag("fw.pre").performClick()
+        settle(600)
+        assertTrue(shell.sheet.shown)
+        val d = rule.density.density
+        val gutter = Ui.of(361 * d, 399 * d).px(Tok.gutter)
+        val row = rule.onNodeWithTag("fw.pre").fetchSemanticsNode().boundsInRoot
+        val panel = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot
+        assertTrue("${row.bottom} ${panel.top} $gutter", row.bottom <= panel.top - gutter + 1.5f)
+    }
+
+    @Test
     fun firmwareRowsDriveTheControl() {
         val pages = listOf(Page.Home, Page.Settings, Page.Firmware)
         val (c, shell) = start(pages, firmware = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true))
         rule.onNodeWithTag("fw.check").performClick()
         rule.onNodeWithTag("fw.daily").performClick()
+        settle(500)
+        assertEquals("auto check", shell.sheet.title)
+        assertEquals(listOf("off", "on"), shell.sheet.items)
+        assertEquals(0, shell.sheet.focus)
+        tapSheetItem(0)
+        rule.onNodeWithTag("fw.daily").performClick()
+        settle(500)
+        tapSheetItem(1)
         rule.onNodeWithTag("fw.pre").performClick()
+        settle(500)
+        assertEquals(1, shell.sheet.focus)
+        tapSheetItem(0)
         assertEquals(listOf("check", "settings true true", "settings false false"), c.firmware)
         rule.onNodeWithTag("fw.release").performClick()
         settle(500)

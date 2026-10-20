@@ -160,7 +160,7 @@ sealed class Send {
 
 private fun Row.sleep() = key == SLEEP_KEY && kind == Enums.RowKind.draft
 
-fun Row.selects() = editable() && kind != Enums.RowKind.range && kind != Enums.RowKind.toggle
+fun Row.selects() = editable() && kind != Enums.RowKind.range
 
 fun Row.selector(live: String?, minutes: Int): Selector {
     val items = values.map { word(it) }
@@ -179,13 +179,6 @@ fun Row.picked(i: Int, live: String?, minutes: Int): Send? {
     if (v == live) return null
     if (kind == Enums.RowKind.draft) return draftKind(key)?.let { Send.Draft(it, v) }
     return key?.let { Send.Set(it, v) }
-}
-
-fun Row.flip(live: String?): Send? {
-    if (values.isEmpty()) return null
-    val i = values.indexOf(live)
-    val v = if (i < 0) values[0] else values[(i + 1) % values.size]
-    return if (v == live) null else key?.let { Send.Set(it, v) }
 }
 
 fun Row.refusal() = Send.Refuse((label ?: key ?: "").lowercase(), "${min ?: 0} to ${max ?: min ?: 0}")
@@ -363,7 +356,6 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                             r.kind == Enums.RowKind.action -> r.actionCmd()?.let { ctx.control.action(it) }
                             aboutRow -> aboutSheet(ctx, { live }, { fw })
                             !r.editable() -> {}
-                            r.kind == Enums.RowKind.toggle -> send(r.flip(values[key]), r)
                             r.kind == Enums.RowKind.range -> {
                                 edit = Edit(key, values[key])
                                 editValue = values[key]

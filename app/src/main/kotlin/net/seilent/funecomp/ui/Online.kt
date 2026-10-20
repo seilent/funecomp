@@ -39,8 +39,9 @@ fun SectionLabel(text: String, i: Int) {
 fun sourceSheet(ctx: Ctx, label: String, on: Boolean?, at: Int, size: Int, key: String?, keep: Keep?, set: (Boolean) -> Unit, move: (Int) -> Unit, onKey: () -> Unit = {}) {
     val rows = buildList<Triple<String, String, () -> Unit>> {
         if (on != null) {
-            add(Triple(OFF, "") { if (on) set(false) })
-            add(Triple(ON, "") { if (!on) set(true) })
+            val pick = { v: Boolean -> { if (v != on) set(v) } }
+            add(Triple(OFF, "", pick(false)))
+            add(Triple(ON, "", pick(true)))
         }
         if (at > 0) add(Triple(MOVE_UP, "") { move(-1) })
         if (at < size - 1) add(Triple(MOVE_DOWN, "") { move(1) })

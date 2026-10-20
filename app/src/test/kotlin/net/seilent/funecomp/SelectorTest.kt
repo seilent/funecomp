@@ -3,7 +3,6 @@ package net.seilent.funecomp
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.ui.Send
-import net.seilent.funecomp.ui.flip
 import net.seilent.funecomp.ui.picked
 import net.seilent.funecomp.ui.selects
 import net.seilent.funecomp.ui.selector
@@ -57,7 +56,7 @@ class SelectorTest {
         assertTrue(usb.selects())
         assertTrue(codec.selects())
         assertTrue(sleep.selects())
-        assertFalse(quickplay.selects())
+        assertTrue(quickplay.selects())
         assertFalse(phone.selects())
         assertFalse(balance.selects())
         assertFalse(clock.selects())
@@ -87,13 +86,13 @@ class SelectorTest {
     }
 
     @Test
-    fun aToggleFlipsToTheNextValue() {
-        assertEquals(Send.Set("quickplay", "on"), quickplay.flip("off"))
-        assertEquals(Send.Set("quickplay", "off"), quickplay.flip("on"))
-        assertEquals(Send.Set("quickplay", "off"), quickplay.flip("auto"))
-        assertEquals(Send.Set("quickplay", "off"), quickplay.flip(null))
-        val three = quickplay.copy(values = listOf("a", "b", "c"))
-        assertEquals(Send.Set("quickplay", "a"), three.flip("c"))
+    fun aToggleListsItsWordsAndSetsOnlyAChange() {
+        val sel = quickplay.selector("on", 0)
+        assertEquals(listOf("OFF", "ON"), sel.items)
+        assertEquals(1, sel.focus)
+        assertEquals(Send.Set("quickplay", "off"), quickplay.picked(0, "on", 0))
+        assertNull(quickplay.picked(1, "on", 0))
+        assertFalse(phone.selects())
     }
 
     @Test

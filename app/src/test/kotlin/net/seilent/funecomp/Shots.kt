@@ -684,6 +684,8 @@ val SHOTS = listOf(
     Shot("firmware-picked", board = "v1", pages = FW) { rule.onNodeWithTag("fw.pick").performClick() },
     Shot("firmware-sending", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%")),
     Shot("firmware-sent", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, info = "ready on the dap")),
+    Shot("firmware-autocheck-sheet", board = "v1", pages = FW) { tapRow("fw.daily") },
+    Shot("firmware-prereleases-sheet", board = "v1", pages = FW) { tapRow("fw.pre") },
     Shot("firmware-send-cancel", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%")) { rule.onNodeWithTag("fw.send").performClick() },
     Shot("connection", pages = HOME + Page.Connection),
     Shot("connection-refused", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused)),
@@ -697,9 +699,8 @@ val SHOTS = listOf(
     Shot("connection-stopped", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "V1", battery = Battery.UNRESTRICTED), prep = { it.device = DeviceState() }),
     Shot("background", board = "v1", pages = NP, prep = ::playing, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.OPTIMIZED, askBattery = true)),
     Shot("reconnect", board = "v1", pages = NP, prep = ::playing, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.UNRESTRICTED, askReconnect = true)),
-    Shot("connection-reconnect", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.UNRESTRICTED, reconnect = true)) {
-        scrollTo("conn.reconnect")
-    },
+    Shot("connection-reconnect-sheet", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.UNRESTRICTED, reconnect = true)) { tapRow("conn.reconnect") },
+    Shot("connection-media-sheet", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.UNRESTRICTED)) { tapRow("conn.media") },
     Shot("np-block", pages = NP, prep = ::held, artEntry = HELD) { holdBackdrop() },
     Shot("np-block-wrong", pages = NP, prep = ::held, artEntry = HELD, wrong = true) { holdBackdrop() },
     Shot("lyr-mark", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))),
