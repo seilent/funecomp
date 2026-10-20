@@ -1,5 +1,7 @@
 package net.seilent.funecomp
 
+import net.seilent.funecomp.ui.ONLINE_LYRICS
+import net.seilent.funecomp.ui.ONLINE_SCROBBLING
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.debugPages
 import org.junit.Assert.assertEquals
@@ -21,13 +23,13 @@ class DebugPagesTest {
             "eq" to home + Page.Settings + Page.Eq(0),
             "autoeq" to home + Page.Settings + Page.Eq(0) + Page.AutoEq(0),
             "connection" to home + Page.Connection,
-            "art" to home + Page.ArtistArt,
-            "artpicked" to home + Page.ArtistArt + Page.ArtPicked,
-            "artblocked" to home + Page.ArtistArt + Page.ArtBlocked,
-            "artcredits" to home + Page.ArtistArt + Page.ArtCredits,
-            "scrobbling" to home + Page.Connection + Page.Scrobbling,
-            "firmware" to home + Page.Connection + Page.Firmware,
-            "lyrics" to home + Page.Connection + Page.Lyrics,
+            "art" to home + Page.Online(),
+            "artpicked" to home + Page.Online() + Page.ArtPicked,
+            "artblocked" to home + Page.Online() + Page.ArtBlocked,
+            "artcredits" to home + Page.Online() + Page.ArtCredits,
+            "scrobbling" to home + Page.Online(ONLINE_SCROBBLING),
+            "firmware" to home + Page.Settings + Page.Firmware,
+            "lyrics" to home + Page.Online(ONLINE_LYRICS),
             "online" to home + Page.Online(),
             "artist:Radiohead" to home + Page.Music + Page.Artist("Radiohead"),
             "album:k|In Rainbows|Radiohead" to home + Page.Music + Page.Album("k", "In Rainbows", "Radiohead"),

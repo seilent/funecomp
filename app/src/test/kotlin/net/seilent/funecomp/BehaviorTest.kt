@@ -289,8 +289,8 @@ class BehaviorTest {
     @Test
     fun batteryAndDisconnectLines() {
         val (c, _) = start(listOf(Page.Home, Page.Connection), LinkView(Phase.LIVE, "V1", battery = Battery.RESTRICTED))
-        rule.onNode(hasText("restricted", ignoreCase = true) and hasAnyAncestor(hasTestTag("conn.battery"))).assertExists()
-        rule.onNodeWithTag("conn.battery").performClick()
+        rule.onNode(hasText("restricted", ignoreCase = true) and hasAnyAncestor(hasTestTag("conn.background"))).assertExists()
+        rule.onNodeWithTag("conn.background").performClick()
         settle(300)
         assertEquals(1, c.allows)
         rule.mainClock.autoAdvance = true
@@ -299,13 +299,14 @@ class BehaviorTest {
         rule.onNodeWithTag("conn.disconnect").performClick()
         settle(300)
         assertEquals(1, c.disconnects)
+        for (t in listOf("board", "version", "dapbattery", "card", "firmware", "lyrics", "scrobbling")) assertEquals(0, rule.onAllNodesWithTag("conn.$t").fetchSemanticsNodes().size)
     }
 
     @Test
     fun stoppedLinkHasNoDisconnectLine() {
         start(listOf(Page.Home, Page.Connection), LinkView(Phase.NONE, "V1", battery = Battery.UNRESTRICTED))
         rule.onNode(hasText("stopped", ignoreCase = true) and hasAnyAncestor(hasTestTag("conn.status"))).assertExists()
-        rule.onNode(hasText("unrestricted", ignoreCase = true) and hasAnyAncestor(hasTestTag("conn.battery"))).assertExists()
+        rule.onNode(hasText("unrestricted", ignoreCase = true) and hasAnyAncestor(hasTestTag("conn.background"))).assertExists()
         assertEquals(0, rule.onAllNodesWithTag("conn.disconnect").fetchSemanticsNodes().size)
     }
 
@@ -335,7 +336,7 @@ class BehaviorTest {
     }
 
     private fun deviceRows(board: String, brightness: String) {
-        start(listOf(Page.Home, Page.Settings), board = board)
+        val (_, shell) = start(listOf(Page.Home, Page.Settings), board = board)
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.crossfeed"))
         rule.mainClock.autoAdvance = false
@@ -361,6 +362,11 @@ class BehaviorTest {
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.about"))
         rule.mainClock.autoAdvance = false
         settle(1000)
+        rule.onNodeWithTag("set.about").performClick()
+        settle(600)
+        assertEquals("about", shell.sheet.title)
+        shell.sheet.close()
+        settle(600)
         assertEquals(board == "v1", rule.onAllNodesWithTag("set.wifi").fetchSemanticsNodes().isNotEmpty())
         if (board == "v1") row("set.wifi", "WI-FI")
     }
@@ -761,7 +767,7 @@ class BehaviorTest {
 
     @Test
     fun firmwareRowsDriveTheControl() {
-        val pages = listOf(Page.Home, Page.Connection, Page.Firmware)
+        val pages = listOf(Page.Home, Page.Settings, Page.Firmware)
         val (c, shell) = start(pages, firmware = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true))
         rule.onNodeWithTag("fw.check").performClick()
         rule.onNodeWithTag("fw.daily").performClick()

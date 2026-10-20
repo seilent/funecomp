@@ -28,7 +28,6 @@ import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.roundToInt
 
@@ -38,7 +37,6 @@ const val BLOCK_IMAGE = "block image"
 const val WRONG_ARTIST = "wrong artist"
 const val TRY_AGAIN = "try again"
 const val PICKED = "picked"
-const val NO_LIBRARY = "no library"
 const val NO_IMAGE = "no image"
 const val LINK_BROKEN = "link broken"
 private const val PASTE_LINK = "paste link"
@@ -80,16 +78,6 @@ private fun pasteLink(ctx: Ctx, target: PickFor) = ctx.sheet.openEntry(PASTE_LIN
 fun confirmPick(ctx: Ctx, target: PickFor, offer: Offer) {
     val info = listOf(Sources.label(offer.source), offer.title).filter { it.isNotBlank() }.joinToString(", ")
     ctx.sheet.open(target.name, listOf(USE_IMAGE, CANCEL), info = listOf(info)) { if (it == 0) ctx.control.pick(target, offer) }
-}
-
-@Composable
-fun PickArtistPage(ctx: Ctx) {
-    HubPage(PICK_IMAGE, { ctx.nav.pop() }) {
-        Pane(ctx, Enums.View.artists, "") { _, r, _ ->
-            val name = r.name ?: ""
-            RowSpec(name, songs(r.count ?: 0), countLine = true, tap = { pickSheet(ctx, PickFor(name, r.mbid, library = true)) })
-        }
-    }
 }
 
 @Composable

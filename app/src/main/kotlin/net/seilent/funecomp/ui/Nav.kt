@@ -36,19 +36,15 @@ sealed interface Page {
     data object Playlists : Page
     data object Settings : Page
     data object Connection : Page
-    data object ArtistArt : Page
     data object ArtPicked : Page
     data object ArtBlocked : Page
     data object ArtCredits : Page
-    data object Scrobbling : Page
     data object Firmware : Page
-    data object Lyrics : Page
     data class Online(val pivot: Int = ONLINE_ART) : Page
     data class AutoEq(val output: Int) : Page
     data class Artist(val name: String, val songs: Long? = null) : Page
     data class Album(val key: String, val title: String, val artist: String) : Page
     data class Eq(val output: Int) : Page
-    data object PickArtist : Page
     data class Browse(val target: PickFor) : Page
 }
 
@@ -107,13 +103,13 @@ fun debugPages(name: String): List<Page>? {
         "eq" -> base + Page.Settings + Page.Eq(0)
         "autoeq" -> base + Page.Settings + Page.Eq(0) + Page.AutoEq(0)
         "connection" -> base + Page.Connection
-        "art" -> base + Page.ArtistArt
-        "artpicked" -> base + Page.ArtistArt + Page.ArtPicked
-        "artblocked" -> base + Page.ArtistArt + Page.ArtBlocked
-        "artcredits" -> base + Page.ArtistArt + Page.ArtCredits
-        "scrobbling" -> base + Page.Connection + Page.Scrobbling
-        "firmware" -> base + Page.Connection + Page.Firmware
-        "lyrics" -> base + Page.Connection + Page.Lyrics
+        "art" -> base + Page.Online()
+        "artpicked" -> base + Page.Online() + Page.ArtPicked
+        "artblocked" -> base + Page.Online() + Page.ArtBlocked
+        "artcredits" -> base + Page.Online() + Page.ArtCredits
+        "scrobbling" -> base + Page.Online(ONLINE_SCROBBLING)
+        "firmware" -> base + Page.Settings + Page.Firmware
+        "lyrics" -> base + Page.Online(ONLINE_LYRICS)
         "online" -> base + Page.Online()
         else -> when {
             name.startsWith("artist:") -> base + Page.Music + Page.Artist(name.removePrefix("artist:"))

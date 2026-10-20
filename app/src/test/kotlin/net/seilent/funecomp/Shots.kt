@@ -386,7 +386,7 @@ private val ORDERED = Sources(theAudioDb = true, fanartTv = true, deezer = true,
 
 private val SCROBBLE = ScrobbleView(Accounts(true, "0123456789abcdef0123456789abcdef", "secret", "seilent", "session", true, "token", "seilent"), queued = 3)
 
-private val FW = HOME + Page.Connection + Page.Firmware
+private val FW = HOME + Page.Settings + Page.Firmware
 
 private val ONLINE = HOME + Page.Online()
 private val GATED = LinkView(Phase.CONNECTING, "AP80")
@@ -685,8 +685,6 @@ val SHOTS = listOf(
     Shot("firmware-sending", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%")),
     Shot("firmware-sent", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, info = "ready on the dap")),
     Shot("firmware-send-cancel", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%")) { rule.onNodeWithTag("fw.send").performClick() },
-    Shot("lyrics", pages = HOME + Page.Connection + Page.Lyrics),
-    Shot("lyrics-on", pages = HOME + Page.Connection + Page.Lyrics, link = LinkView(Phase.LIVE, "AP80", everLive = true, lyrics = true)),
     Shot("connection", pages = HOME + Page.Connection),
     Shot("connection-refused", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused)),
     Shot("connection-permission", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "AP80", permission = false)),
@@ -694,7 +692,7 @@ val SHOTS = listOf(
     Shot("connection-refused-nobond", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused), prep = ::noBond),
     Shot("connection-nobond", pages = HOME + Page.Connection, link = LinkView(Phase.NONE), prep = ::noBond),
     Shot("connection-nobond-device", pages = HOME + Page.Connection, link = LinkView(Phase.NONE), prep = ::noBond) { rule.onNodeWithTag("conn.device").performClick() },
-    Shot("connection-battery", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.OPTIMIZED)),
+    Shot("connection-background", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.OPTIMIZED)),
     Shot("connection-restricted", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.DOWN, "V1", everLive = true, battery = Battery.RESTRICTED)),
     Shot("connection-stopped", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "V1", battery = Battery.UNRESTRICTED), prep = { it.device = DeviceState() }),
     Shot("background", board = "v1", pages = NP, prep = ::playing, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.OPTIMIZED, askBattery = true)),
@@ -702,11 +700,6 @@ val SHOTS = listOf(
     Shot("connection-reconnect", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.UNRESTRICTED, reconnect = true)) {
         scrollTo("conn.reconnect")
     },
-    Shot("artistart", pages = HOME + Page.ArtistArt),
-    Shot("scrobbling", pages = HOME + Page.Connection + Page.Scrobbling),
-    Shot("scrobbling-set", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE),
-    Shot("scrobbling-failed", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE.copy(accounts = SCROBBLE.accounts.copy(lastFmSession = ""), lastFm = "sign in failed", listenBrainz = "invalid")),
-    Shot("scrobbling-entry", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE) { rule.onNodeWithTag("scrobble.key").performClick() },
     Shot("np-block", pages = NP, prep = ::held, artEntry = HELD) { holdBackdrop() },
     Shot("np-block-wrong", pages = NP, prep = ::held, artEntry = HELD, wrong = true) { holdBackdrop() },
     Shot("lyr-mark", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))),
@@ -725,31 +718,14 @@ val SHOTS = listOf(
     Shot("lyr-cjk", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG_JA))) { lyricsMode() },
     Shot("lyr-cue", pages = NP, prep = lyricsAt(2_000), artEntry = HELD, lyrics = shown(listOf(LyrLine(0, "Till the last train leaves")) + stamped(SUNG.drop(1), 6_000))) { lyricsMode() },
     Shot("lyr-nobackdrop", pages = NP, prep = lyricsOn(), lyrics = shown(stamped(SUNG))) { lyricsMode() },
-    Shot("artistart-blocked-1", pages = HOME + Page.ArtistArt, blocked = BLOCKED.take(1), credits = CREDITS) { scrollTo("art.credits") },
-    Shot("artistart-blocked-12", pages = HOME + Page.ArtistArt, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.credits") },
-    Shot("artistart-noblocked", pages = HOME + Page.ArtistArt, credits = CREDITS) { scrollTo("art.credits") },
-    Shot("artblocked-1", pages = HOME + Page.ArtistArt + Page.ArtBlocked, blocked = BLOCKED.take(1), credits = CREDITS),
-    Shot("artblocked-12", pages = HOME + Page.ArtistArt + Page.ArtBlocked, blocked = BLOCKED, credits = CREDITS),
-    Shot("artblocked-12-end", pages = HOME + Page.ArtistArt + Page.ArtBlocked, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.blocked.11") },
-    Shot("artblocked-empty", pages = HOME + Page.ArtistArt + Page.ArtBlocked, credits = CREDITS),
-    Shot("artpicked", pages = HOME + Page.ArtistArt + Page.ArtPicked, picks = PICKS, blocked = BLOCKED.take(1)),
-    Shot("artpicked-empty", pages = HOME + Page.ArtistArt + Page.ArtPicked, blocked = BLOCKED.take(1)),
-    Shot("artcredits", pages = HOME + Page.ArtistArt + Page.ArtCredits, credits = CREDITS),
-    Shot("artcredits-empty", pages = HOME + Page.ArtistArt + Page.ArtCredits),
-    Shot("artistart-order", pages = HOME + Page.ArtistArt, sources = ORDERED) { scrollTo("art.order.5") },
-    Shot("artistart-order-first", pages = HOME + Page.ArtistArt, sources = ORDERED) {
-        scrollTo("art.order.0")
-        rule.onNodeWithTag("art.order.0").performClick()
-    },
-    Shot("artistart-order-middle", pages = HOME + Page.ArtistArt, sources = ORDERED) {
-        scrollTo("art.order.2")
-        rule.onNodeWithTag("art.order.2").performClick()
-    },
-    Shot("artistart-order-last", pages = HOME + Page.ArtistArt, sources = ORDERED) {
-        scrollTo("art.order.5")
-        rule.onNodeWithTag("art.order.5").performClick()
-    },
-    Shot("artistart-credits", pages = HOME + Page.ArtistArt, credits = CREDITS) { scrollTo("art.credits") },
+    Shot("artblocked-1", pages = ONLINE + Page.ArtBlocked, blocked = BLOCKED.take(1), credits = CREDITS),
+    Shot("artblocked-12", pages = ONLINE + Page.ArtBlocked, blocked = BLOCKED, credits = CREDITS),
+    Shot("artblocked-12-end", pages = ONLINE + Page.ArtBlocked, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.blocked.11") },
+    Shot("artblocked-empty", pages = ONLINE + Page.ArtBlocked, credits = CREDITS),
+    Shot("artpicked", pages = ONLINE + Page.ArtPicked, picks = PICKS, blocked = BLOCKED.take(1)),
+    Shot("artpicked-empty", pages = ONLINE + Page.ArtPicked, blocked = BLOCKED.take(1)),
+    Shot("artcredits", pages = ONLINE + Page.ArtCredits, credits = CREDITS),
+    Shot("artcredits-empty", pages = ONLINE + Page.ArtCredits),
     Shot("pick-np-second", pages = NP, prep = ::held, artEntry = HELD) { shell ->
         holdBackdrop()
         settle(600)
@@ -763,8 +739,6 @@ val SHOTS = listOf(
         pasteLink(shell, "https://www.youtube.com/@tsukiniterasarete")
         rule.onNodeWithTag("entry").performImeAction()
     },
-    Shot("pick-settings", pages = HOME + Page.ArtistArt, picks = PICKS, blocked = BLOCKED.take(1)) { scrollTo("art.blocked") },
-    Shot("pick-library", pages = HOME + Page.ArtistArt + Page.PickArtist),
     Shot("pick-artists-sheet", pages = HOME + Page.Music) { rule.onNodeWithTag("row.0").performTouchInput { longClick() } },
     Shot("pick-browse-loading", pages = NP + Page.Browse(PickFor("TSUKI"))),
     Shot("pick-browse-more", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(5, null)),

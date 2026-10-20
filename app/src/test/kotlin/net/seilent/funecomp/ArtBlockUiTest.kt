@@ -182,8 +182,8 @@ class ArtBlockUiTest {
     }
 
     @Test
-    fun theArtistArtPageListsBlocksAndUndoes() {
-        val shell = start(listOf(Page.Home, Page.ArtistArt), blocked = records)
+    fun theArtPivotListsBlocksAndUndoes() {
+        val shell = start(listOf(Page.Home, Page.Online()), blocked = records)
         scrollTo("art.blocked")
         tap("art.blocked")
         assertEquals(Page.ArtBlocked, shell.nav.top)
@@ -196,7 +196,7 @@ class ArtBlockUiTest {
 
     @Test
     fun emptyListsHaveNoRowAndARowShowsItsSize() {
-        start(listOf(Page.Home, Page.ArtistArt), blocked = records, credits = credited.take(1))
+        start(listOf(Page.Home, Page.Online()), blocked = records, credits = credited.take(1))
         scrollTo("art.blocked")
         rule.onNode(hasText("2") and hasAnyAncestor(hasTestTag("art.blocked"))).assertExists()
         rule.onNode(hasText("1") and hasAnyAncestor(hasTestTag("art.credits"))).assertExists()
@@ -205,7 +205,7 @@ class ArtBlockUiTest {
 
     @Test
     fun aCreditRowOpensItsPage() {
-        val shell = start(listOf(Page.Home, Page.ArtistArt), credits = credited)
+        val shell = start(listOf(Page.Home, Page.Online()), credits = credited)
         scrollTo("art.credits")
         tap("art.credits")
         assertEquals(Page.ArtCredits, shell.nav.top)
@@ -215,7 +215,7 @@ class ArtBlockUiTest {
 
     @Test
     fun theLastUnblockKeepsThePageWithItsLine() {
-        val shell = start(listOf(Page.Home, Page.ArtistArt, Page.ArtBlocked), blocked = records.take(1), credits = credited)
+        val shell = start(listOf(Page.Home, Page.Online(), Page.ArtBlocked), blocked = records.take(1), credits = credited)
         tap("art.blocked.0")
         tap("sheet.item.0")
         assertEquals(Page.ArtBlocked, shell.nav.top)
@@ -231,7 +231,7 @@ class ArtBlockUiTest {
     @Test
     fun anUnblockFocusesTheNextRow() {
         val three = records + ArtBlocks.Block("name:radiohead", null, "commons", "y", "s", "Radiohead", 0)
-        val shell = start(listOf(Page.Home, Page.ArtistArt, Page.ArtBlocked), blocked = three)
+        val shell = start(listOf(Page.Home, Page.Online(), Page.ArtBlocked), blocked = three)
         tap("art.blocked.1")
         tap("sheet.item.0")
         assertEquals(listOf("unblock Muto"), calls)
@@ -243,7 +243,7 @@ class ArtBlockUiTest {
     @Test
     fun theFocusFollowsItsRecordWhenARowAboveGoes() {
         val four = records + ArtBlocks.Block("name:radiohead", null, "commons", "y", "s", "Radiohead", 0) + ArtBlocks.Block("name:utada", null, "deezer", "z", "s", "Utada", -1)
-        val shell = start(listOf(Page.Home, Page.ArtistArt, Page.ArtBlocked), blocked = four)
+        val shell = start(listOf(Page.Home, Page.Online(), Page.ArtBlocked), blocked = four)
         tap("art.blocked.2")
         shell.sheet.close()
         settle(1000)
@@ -256,13 +256,13 @@ class ArtBlockUiTest {
 
     @Test
     fun anEmptyCreditsPageShowsItsLine() {
-        start(listOf(Page.Home, Page.ArtistArt, Page.ArtCredits))
+        start(listOf(Page.Home, Page.Online(), Page.ArtCredits))
         rule.onNodeWithTag("art.credits.empty").assertExists()
     }
 
     @Test
     fun aPopKeepsTheFocusOnTheListRow() {
-        val shell = start(listOf(Page.Home, Page.ArtistArt), blocked = records, credits = credited)
+        val shell = start(listOf(Page.Home, Page.Online()), blocked = records, credits = credited)
         scrollTo("art.blocked")
         tap("art.blocked")
         assertEquals(Page.ArtBlocked, shell.nav.top)
@@ -284,22 +284,19 @@ class ArtBlockUiTest {
     }
 
     @Test
-    fun theOrderSheetMovesASource() {
-        val shell = start(listOf(Page.Home, Page.ArtistArt))
-        rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.order.5"))
-        rule.mainClock.autoAdvance = false
-        rule.onNodeWithTag("art.order.0").performClick()
-        settle(500)
+    fun theSourceSheetMovesASource() {
+        val shell = start(listOf(Page.Home, Page.Online()))
+        tap("art.src.commons")
         assertEquals(listOf("move down"), shell.sheet.items)
-        rule.onNodeWithTag("sheet.item.0").performClick()
-        settle(500)
+        tap("sheet.item.0")
         assertEquals(listOf("theaudiodb", "commons", "fanarttv", "discogs", "youtube", "deezer"), sources.order)
-        rule.onNodeWithTag("art.order.5").performClick()
-        settle(500)
-        assertEquals(listOf("move up"), shell.sheet.items)
-        rule.onNodeWithTag("sheet.item.0").performClick()
-        settle(500)
+        scrollTo("art.src.deezer")
+        tap("art.src.deezer")
+        assertEquals(listOf("off", "on", "move up"), shell.sheet.items)
+        assertEquals(1, shell.sheet.focus)
+        tap("sheet.item.2")
         assertEquals(listOf("theaudiodb", "commons", "fanarttv", "discogs", "deezer", "youtube"), sources.order)
+        assertTrue(barOn("art.src.deezer"))
+        assertFalse(barOn("art.src.youtube"))
     }
 }

@@ -246,7 +246,7 @@ class OnlineTest {
         val status = bounds("conn.status")
         val online = bounds("conn.online")
         assertEquals(status.bottom, online.top, 1.5f)
-        assertTrue(online.bottom <= bounds("conn.board").top + 1.5f)
+        assertEquals(online.bottom, bounds("conn.media").top, 1.5f)
         rule.onNodeWithTag("conn.online").performClick()
         settle(1000)
         assertEquals(listOf(Page.Connection, Page.Online()), shell.nav.stack.toList())

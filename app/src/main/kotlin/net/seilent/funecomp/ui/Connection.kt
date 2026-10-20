@@ -1,7 +1,5 @@
 package net.seilent.funecomp.ui
 
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
@@ -26,7 +24,6 @@ import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
@@ -73,16 +70,15 @@ private const val MIB_PER_GB = 1024.0
 private class Line(val title: String, val value: String, val info: Boolean = false, val tag: String, val tap: () -> Unit = {})
 
 @Composable
-fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleView(), firmware: FirmwareView = FirmwareView(), gated: Boolean = false) {
+fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
     val ui = LocalUi.current
-    var focus by remember { mutableStateOf("device") }
+    var focus by rememberSaveable { mutableStateOf("device") }
     val read = { ctx.control.bonded().sortedByDescending { it.companion } }
     var bonded by remember { mutableStateOf(read()) }
     LifecycleResumeEffect(link.permission) {
         bonded = read()
         onPauseOrDispose {}
     }
-    val hello = ctx.device.hello
     val tryAgain = { if (link.permission) ctx.control.retry() else ctx.control.askPermission() }
     val lines = buildList {
         add(Line("device", link.device ?: "not set", tag = "device") {
@@ -102,23 +98,13 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleVi
         if (remedy) add(Line(REMEDY, "", info = true, tag = "remedy", tap = tryAgain)) else if (hint) add(Line(REMEDY, "", info = true, tag = "pairpath"))
         if (hint) add(Line("bluetooth settings", "", tag = "btsettings") { ctx.control.openBluetoothSettings() })
         if (gated) add(Line("online", "", tag = "online") { ctx.nav.push(Page.Online()) })
-        if (hello != null) {
-            add(Line("board", hello.board ?: "", tag = "board"))
-            add(Line("version", hello.version ?: "", tag = "version"))
-        }
-        val st = ctx.device.playback.state
-        if (hello != null && st.battery != null) add(Line("dap battery", batteryText(st), tag = "dapbattery"))
-        if (hello != null) cardText(st)?.let { add(Line("card", it, tag = "card")) }
-        link.battery?.let { add(Line("battery", it.word, tag = "battery") { ctx.control.allowBackground() }) }
+        link.battery?.let { add(Line("background", it.word, tag = "background") { ctx.control.allowBackground() }) }
         add(Line("phone media controls", if (link.mediaControls) "on" else "off", tag = "media") { ctx.control.mediaControls(!link.mediaControls) })
         add(Line("reconnect on update", if (link.reconnect) "on" else "off", tag = "reconnect") { ctx.control.reconnect(!link.reconnect) })
-        add(Line("lyrics", if (link.lyrics) "lrclib" else "off", tag = "lyrics") { ctx.nav.push(Page.Lyrics) })
-        add(Line("scrobbling", scrobbleText(scrobble), tag = "scrobbling") { ctx.nav.push(Page.Scrobbling) })
-        add(Line("firmware", firmwareText(firmware), tag = "firmware") { ctx.nav.push(Page.Firmware) })
         if (link.phase != Phase.NONE) add(Line("disconnect", "", tag = "disconnect") { ctx.control.disconnect() })
     }
     val at = lines.indexOfFirst { it.tag == focus }.coerceAtLeast(0)
-    HubPage("connection", { ctx.nav.pop() }, count = statusText(link)) {
+    HubPage("connection", { ctx.nav.pop() }) {
         Rows(ui.contentTop, focus = at) {
             itemsIndexed(lines, key = { _, l -> l.tag }) { i, l ->
                 SettingsRow(l.title, l.value, Modifier.enter { i }.testTag("conn.${l.tag}"), focused = at == i, info = l.info) {
@@ -129,8 +115,6 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, scrobble: ScrobbleView = ScrobbleVi
         }
     }
 }
-
-private class Toggle(val title: String, val on: Boolean, val tag: String, val flip: (Sources) -> Sources)
 
 fun artSheet(ctx: Ctx, held: BackdropArt?, picks: List<ArtPicks.Pick> = emptyList()) {
     val e = held?.entry ?: return artistChooser(ctx)
@@ -145,90 +129,6 @@ fun artSheet(ctx: Ctx, held: BackdropArt?, picks: List<ArtPicks.Pick> = emptyLis
             WRONG_ARTIST -> ctx.control.wrongArtist(e)
             PICK_IMAGE -> pickSheet(ctx, target)
             UNDO_PICK -> pick?.let { p -> ctx.control.undoPick(p) }
-        }
-    }
-}
-
-@Composable
-fun ArtistArtPage(
-    ctx: Ctx,
-    sources: Sources,
-    onSources: (Sources) -> Unit,
-    credits: List<ArtCache.Entry> = emptyList(),
-    onCredit: (ArtCache.Entry) -> Unit = {},
-    blocked: List<ArtBlocks.Record> = emptyList(),
-    picks: List<ArtPicks.Pick> = emptyList(),
-) {
-    val ui = LocalUi.current
-    var focus by rememberSaveable { mutableStateOf(Sources.THE_AUDIO_DB) }
-    val toggles = listOf(
-        Toggle("theaudiodb", sources.theAudioDb, Sources.THE_AUDIO_DB) { it.copy(theAudioDb = !it.theAudioDb) },
-        Toggle("discogs", sources.discogs, Sources.DISCOGS) { it.copy(discogs = !it.discogs) },
-        Toggle("fanart.tv", sources.fanartTv, Sources.FANART_TV) { it.copy(fanartTv = !it.fanartTv) },
-        Toggle("youtube", sources.youtube, Sources.YOUTUBE) { it.copy(youtube = !it.youtube) },
-        Toggle("deezer", sources.deezer, Sources.DEEZER) { it.copy(deezer = !it.deezer) },
-    )
-    val orderAt = toggles.size + 1
-    val pickAt = orderAt + 2 + sources.order.size
-    val pickedAt = pickAt + 1
-    val lists = listOf(Triple(PICKED, picks, Page.ArtPicked), Triple(BLOCKED, blocked, Page.ArtBlocked), Triple(CREDITS, credits, Page.ArtCredits)).filter { it.second.isNotEmpty() }
-    val tags = toggles.map { it.tag } + listOf("key", "order", "order.info") + sources.order.indices.map { "order.$it" } + "pick" + lists.map { it.first }
-    val at = tags.indexOf(focus).takeIf { it >= 0 } ?: pickAt
-    HubPage("artist art", { ctx.nav.pop() }, count = sources.ordered.joinToString(" ")) {
-        Rows(ui.contentTop, focus = at) {
-            itemsIndexed(toggles, key = { _, t -> t.tag }) { i, t ->
-                SettingsRow(t.title, if (t.on) "on" else "off", Modifier.enter { i }.testTag("art.${t.tag}"), focused = at == i) {
-                    focus = tags[i]
-                    onSources(t.flip(sources))
-                }
-            }
-            item(key = "key") {
-                val i = toggles.size
-                SettingsRow("fanart.tv key", if (sources.fanartTvKey.isBlank()) "not set" else "set", Modifier.enter { i }.testTag("art.key"), focused = at == i) {
-                    focus = tags[i]
-                    ctx.sheet.openEntry("fanart.tv key") {
-                        TextEntry(sources.fanartTvKey, secret = true) { k ->
-                            ctx.sheet.close()
-                            onSources(sources.copy(fanartTvKey = k.trim()))
-                        }
-                    }
-                }
-            }
-            item(key = "order") { SectionLabel("order", orderAt) }
-            item(key = "order.info") { SettingsRow("new lookups and the current artist", "", Modifier.enter { orderAt + 1 }, info = true) }
-            itemsIndexed(sources.order, key = { _, id -> "order $id" }) { j, id ->
-                val i = orderAt + 2 + j
-                val value = when {
-                    id == Wikimedia.SOURCE -> "always"
-                    id == Sources.FANART_TV && sources.fanartTv && sources.fanartTvKey.isBlank() -> "no key"
-                    id in sources.enabled -> "on"
-                    else -> "off"
-                }
-                SettingsRow(Sources.label(id), value, Modifier.enter { i }.testTag("art.order.$j"), focused = at == i) {
-                    focus = tags[i]
-                    val moves = buildList {
-                        if (j > 0) add("move up" to -1)
-                        if (j < sources.order.size - 1) add("move down" to 1)
-                    }
-                    ctx.sheet.open(Sources.label(id), moves.map { it.first }) { k -> onSources(sources.moved(id, moves[k].second)) }
-                }
-            }
-            item(key = "pick") {
-                val library = ctx.device.has("library")
-                SettingsRow(PICK_IMAGE, if (library) "" else NO_LIBRARY, Modifier.enter { pickAt }.testTag("art.pick"), focused = at == pickAt) {
-                    focus = tags[pickAt]
-                    if (library) ctx.nav.push(Page.PickArtist)
-                }
-            }
-            lists.forEachIndexed { k, (title, list, page) ->
-                item(key = title) {
-                    val i = pickedAt + k
-                    SettingsRow(title, "${list.size}", Modifier.enter { i }.testTag("art.$title"), focused = at == i) {
-                        focus = title
-                        ctx.nav.push(page)
-                    }
-                }
-            }
         }
     }
 }

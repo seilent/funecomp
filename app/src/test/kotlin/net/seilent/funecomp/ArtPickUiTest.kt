@@ -279,37 +279,9 @@ class ArtPickUiTest {
     }
 
     @Test
-    fun theSettingsRowOpensTheLibraryChooser() {
-        val (shell, _) = start(listOf(Page.Home, Page.ArtistArt))
-        rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.pick"))
-        rule.mainClock.autoAdvance = false
-        tap("art.pick")
-        assertEquals(Page.PickArtist, shell.nav.top)
-        settle(1000)
-        tap("row.1")
-        assertEquals("Other", shell.sheet.title)
-        tap("sheet.item.1")
-        assertEquals(Page.Browse(PickFor("Other", dj, library = true)), shell.nav.top)
-    }
-
-    @Test
-    fun noLinkMeansNoLibrary() {
-        val (shell, c) = start(listOf(Page.Home, Page.ArtistArt), link = Phase.NONE)
-        c.device = DeviceState()
-        settle(500)
-        rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.pick"))
-        rule.mainClock.autoAdvance = false
-        rule.onNode(hasText("no library", ignoreCase = true) and hasAnyAncestor(hasTestTag("art.pick"))).assertExists()
-        tap("art.pick")
-        assertEquals(Page.ArtistArt, shell.nav.top)
-    }
-
-    @Test
     fun pickedRowsShowTheirStateAndABrokenOneTriesAgain() {
         val picks = listOf(pick("A", at = 3), pick("B", failedAt = 5, at = 2), pick("C", kind = ArtPicks.NONE, at = 1))
-        val (shell, _) = start(listOf(Page.Home, Page.ArtistArt), picks = picks)
+        val (shell, _) = start(listOf(Page.Home, Page.Online()), picks = picks)
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.picked"))
         rule.mainClock.autoAdvance = false
@@ -328,7 +300,7 @@ class ArtPickUiTest {
 
     @Test
     fun theLastUndoKeepsThePageWithItsLine() {
-        val (shell, _) = start(listOf(Page.Home, Page.ArtistArt, Page.ArtPicked), picks = listOf(pick("A")))
+        val (shell, _) = start(listOf(Page.Home, Page.Online(), Page.ArtPicked), picks = listOf(pick("A")))
         tap("art.picked.0")
         tap("sheet.item.0")
         assertEquals(listOf("undo A"), calls)
