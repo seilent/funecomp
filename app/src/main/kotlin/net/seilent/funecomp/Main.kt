@@ -45,6 +45,7 @@ import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.PickedFile
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.debugPages
 import java.util.UUID
 
 class Main : ComponentActivity() {
@@ -298,7 +299,7 @@ class Main : ComponentActivity() {
         name = deviceName(spec)
         if (!Remote.debuggable(this)) return false
         intent?.getStringExtra(EXTRA_LINK)?.let { store(it) }
-        val pages = intent?.getStringExtra(EXTRA_PAGE)?.let { debugPage(it) } ?: return false
+        val pages = intent?.getStringExtra(EXTRA_PAGE)?.let { debugPages(it) } ?: return false
         shell = Shell(Nav(pages))
         return true
     }
@@ -309,36 +310,6 @@ class Main : ComponentActivity() {
         if (intent?.action != ACTION_PICK_ART || !PickNotice.take(this, intent.getStringExtra(EXTRA_PICK_NONCE))) return
         val name = intent.getStringExtra(EXTRA_PICK_NAME)?.takeIf { it.isNotBlank() } ?: return
         shell.pick = PickFor(name, intent.getStringExtra(EXTRA_PICK_MBID), origin = intent.getIntExtra(EXTRA_PICK_ORIGIN, -1).takeIf { it >= 0 })
-    }
-
-    private fun debugPage(name: String): List<Page>? {
-        val base = listOf(Page.Home)
-        return when (name) {
-            "home" -> base
-            "nowplaying" -> base + Page.NowPlaying
-            "queue" -> base + Page.NowPlaying + Page.Queue
-            "music" -> base + Page.Music
-            "playlists" -> base + Page.Playlists
-            "settings" -> base + Page.Settings
-            "eq" -> base + Page.Settings + Page.Eq(0)
-            "autoeq" -> base + Page.Settings + Page.Eq(0) + Page.AutoEq(0)
-            "connection" -> base + Page.Connection
-            "art" -> base + Page.ArtistArt
-            "artpicked" -> base + Page.ArtistArt + Page.ArtPicked
-            "artblocked" -> base + Page.ArtistArt + Page.ArtBlocked
-            "artcredits" -> base + Page.ArtistArt + Page.ArtCredits
-            "scrobbling" -> base + Page.Connection + Page.Scrobbling
-            "firmware" -> base + Page.Connection + Page.Firmware
-            "lyrics" -> base + Page.Connection + Page.Lyrics
-            else -> when {
-                name.startsWith("artist:") -> base + Page.Music + Page.Artist(name.removePrefix("artist:"))
-                name.startsWith("album:") -> {
-                    val p = name.removePrefix("album:").split('|')
-                    base + Page.Music + Page.Album(p[0], p.getOrElse(1) { "" }, p.getOrElse(2) { "" })
-                }
-                else -> null
-            }
-        }
     }
 
     private fun deviceName(spec: String?): String? {

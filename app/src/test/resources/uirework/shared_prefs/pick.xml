@@ -1,0 +1,5 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="nonce">00000000-0000-0000-0000-000000000001</string>
+    <string name="uireworkSentinel">fixture pick</string>
+</map>

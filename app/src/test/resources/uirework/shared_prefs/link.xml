@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <string name="link">rfcomm:00:00:00:00:00:03</string>
+    <boolean name="wanted" value="true" />
+    <boolean name="reconnect" value="true" />
+    <boolean name="reconnectAsk" value="true" />
+    <boolean name="batteryAsked" value="true" />
+    <string name="uireworkSentinel">fixture link</string>
+</map>

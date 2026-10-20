@@ -23,6 +23,8 @@ import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.Ui
+import net.seilent.funecomp.proto.gen.Tok
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -42,11 +44,13 @@ class SelectorUiTest {
 
     private val shell = Shell(Nav(listOf(Page.Home, Page.Settings)))
 
-    private fun start(board: String = "ap80", vararg pivots: String): SimControl {
+    private fun start(board: String = "ap80", vararg pivots: String): SimControl = startAt(411, 960, board, *pivots)
+
+    private fun startAt(w: Int, h: Int, board: String = "ap80", vararg pivots: String): SimControl {
         val c = SimControl(board)
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
+            Box(Modifier.requiredSize(w.dp, h.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
         }
         settle(1000)
         for (p in pivots) {
@@ -104,6 +108,61 @@ class SelectorUiTest {
         assertEquals(listOf("SET"), writes(c))
         assertEquals("10", c.device.settings.values["volumeStep"])
         shows("volumeStep", "10%")
+    }
+
+    private fun clearsThePanel(key: String, w: Int, h: Int) {
+        val d = rule.density.density
+        val gutter = Ui.of(w * d, h * d).px(Tok.gutter)
+        val row = rule.onNodeWithTag("set.$key").fetchSemanticsNode().boundsInRoot
+        val panel = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot
+        assertTrue("${row.bottom} ${panel.top} $gutter", row.bottom <= panel.top - gutter + 1.5f)
+    }
+
+    private fun top(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
+
+    private fun scrolledTo(key: String): Float {
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.$key"))
+        rule.mainClock.autoAdvance = false
+        settle(300)
+        return top("set.$key")
+    }
+
+    @Test
+    fun theLastValueRowScrollsPastTheEndAndBack() {
+        val c = start()
+        val before = scrolledTo("resume")
+        rule.onNodeWithTag("set.resume").performClick()
+        settle(600)
+        assertTrue(shell.sheet.shown)
+        clearsThePanel("resume", 411, 960)
+        shell.sheet.close()
+        settle(1000)
+        assertEquals(before, top("set.resume"), 1.5f)
+        assertEquals(emptyList<String>(), writes(c))
+    }
+
+    @Test
+    fun aLandscapeSheetTallerThanTheRoomLeavesTheLastRowInPlace() {
+        startAt(960, 411)
+        val before = scrolledTo("resume")
+        rule.onNodeWithTag("set.resume").performClick()
+        settle(600)
+        assertTrue(shell.sheet.shown)
+        assertEquals(before, top("set.resume"), 1.5f)
+    }
+
+    @Test
+    fun aValueSheetScrollsItsRowAboveThePanel() {
+        val c = start()
+        tap("crossfeed")
+        assertTrue(shell.sheet.shown)
+        clearsThePanel("crossfeed", 411, 960)
+        val row = rule.onNodeWithTag("set.crossfeed").fetchSemanticsNode().boundsInRoot
+        assertTrue(row.top >= rule.onNodeWithTag("rows").fetchSemanticsNode().boundsInRoot.top)
+        shell.sheet.close()
+        settle(600)
+        assertEquals(emptyList<String>(), writes(c))
     }
 
     @Test

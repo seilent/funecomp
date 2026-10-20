@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <boolean name="checkDaily" value="true" />
+    <boolean name="prereleases" value="false" />
+    <long name="lastCheck" value="1761000000000" />
+    <string name="uireworkSentinel">fixture firmware</string>
+</map>

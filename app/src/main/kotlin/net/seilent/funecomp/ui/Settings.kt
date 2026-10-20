@@ -256,12 +256,12 @@ fun SettingsPage(ctx: Ctx) {
             }
         }
     }
-    fun select(r: Row) {
+    fun select(r: Row, keep: Keep) {
         val key = r.key ?: return
         val token = key to ++serial
         val sel = r.selector(values[key], minutesLeft())
         opened = Opened(token, r)
-        ctx.sheet.open((r.label ?: key).lowercase(), sel.items, sel.focus, sel.info, owner = token) { i ->
+        ctx.sheet.open((r.label ?: key).lowercase(), sel.items, sel.focus, sel.info, owner = token, keep = keep) { i ->
             if (sel.typed && i == sel.items.lastIndex) typeMinutes(r, token) else send(r.picked(i, live.settings.values[key], minutesLeft()), r)
         }
     }
@@ -285,8 +285,9 @@ fun SettingsPage(ctx: Ctx) {
         val active = pivots.getOrNull(shown)
         val shownRows = rows.filter { it.pivot == active }
         var focus by rememberSaveable(active) { mutableIntStateOf(0) }
+        val list = rememberLazyListState()
         Box(Modifier.fillMaxSize()) {
-            Rows(ui.contentTop, scroll = edit == null, focus = focus) {
+            Rows(ui.contentTop, list, scroll = edit == null, focus = focus) {
                 itemsIndexed(shownRows, key = { i, r -> r.key ?: "row$i" }) { i, r ->
                     val key = r.key ?: ""
                     val editing = edit?.key == key
@@ -332,7 +333,7 @@ fun SettingsPage(ctx: Ctx) {
                                 edit = Edit(key, values[key])
                                 editValue = values[key]
                             }
-                            r.selects() -> select(r)
+                            r.selects() -> select(r, Keep(list, i, ui.px(ui.contentTop)))
                         }
                     }
                 }
@@ -419,7 +420,7 @@ private fun EqRows(ctx: Ctx, output: Int) {
     lines += EqLine("profile", "profile", profileName(ctx.device, output), false) {
         val names = eq?.names.orEmpty()
         val keys = names.map { it.key }
-        ctx.sheet.open("profile", names.map { it.name ?: it.key }, keys.indexOf(key).coerceAtLeast(0)) { ctx.control.eqSet(output, key = keys[it]) }
+        ctx.sheet.open("profile", names.map { it.name ?: it.key }, keys.indexOf(key).coerceAtLeast(0), keep = Keep(state, lines.indexOfFirst { it.id == "profile" }, ui.px(ui.contentTop))) { ctx.control.eqSet(output, key = keys[it]) }
     }
     val entry = eq?.names?.firstOrNull { it.key == key }
     val presets = ctx.device.has("eqPresets")
@@ -489,7 +490,7 @@ private fun EqRows(ctx: Ctx, output: Int) {
                     }
                     lines += EqLine(id, FIELDS[f], value, true) {
                         when (f) {
-                            FIELD_TYPE -> ctx.sheet.open("type", TYPE_LONG.map { it.second }, TYPE_LONG.indexOfFirst { it.first == band.type }.coerceAtLeast(0)) {
+                            FIELD_TYPE -> ctx.sheet.open("type", TYPE_LONG.map { it.second }, TYPE_LONG.indexOfFirst { it.first == band.type }.coerceAtLeast(0), keep = Keep(state, lines.indexOfFirst { it.id == id }, ui.px(ui.contentTop))) {
                                 setBand(i, band.copy(type = TYPE_LONG[it].first))
                             }
                             FIELD_FREQ -> typedAt(id, "frequency", band.hz().roundToInt().toString(), Tok.eq_freqMin, Tok.eq_freqMax, "hz") { v ->

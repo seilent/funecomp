@@ -14,6 +14,7 @@ import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -210,9 +211,12 @@ fun Rows(
         Modifier.offset { IntOffset(ui.px(x).roundToInt(), ui.px(top).roundToInt()) }
             .size((ui.px(ui.w) - ui.px(x)).dp(), (ui.px(ui.h) - ui.px(top)).dp()).clipToBounds(),
     ) {
+        val sheet = LocalSheet.current
+        val past = if (sheet != null && sheet.pastList === state) sheet.past else 0f
         LazyColumn(
             Modifier.fillMaxSize().testTag("rows"),
             state = state,
+            contentPadding = PaddingValues(bottom = past.dp()),
             flingBehavior = rememberFling(),
             userScrollEnabled = scroll,
             content = content,

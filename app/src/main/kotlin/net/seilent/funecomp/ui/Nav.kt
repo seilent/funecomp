@@ -75,6 +75,10 @@ class Nav(start: List<Page> = listOf(Page.Home, Page.NowPlaying)) {
         stack.addAll(pages)
     }
 
+    fun replaceRoot(p: Page) {
+        stack[0] = p
+    }
+
     fun popTo(p: Page) {
         val i = stack.lastIndexOf(p)
         if (i < 0) {
@@ -84,6 +88,36 @@ class Nav(start: List<Page> = listOf(Page.Home, Page.NowPlaying)) {
         if (i == stack.size - 1) return
         forward = false
         while (stack.size > i + 1) stack.removeAt(stack.size - 1)
+    }
+}
+
+fun debugPages(name: String): List<Page>? {
+    val base = listOf(Page.Home)
+    return when (name) {
+        "home" -> base
+        "nowplaying" -> base + Page.NowPlaying
+        "queue" -> base + Page.NowPlaying + Page.Queue
+        "music" -> base + Page.Music
+        "playlists" -> base + Page.Playlists
+        "settings" -> base + Page.Settings
+        "eq" -> base + Page.Settings + Page.Eq(0)
+        "autoeq" -> base + Page.Settings + Page.Eq(0) + Page.AutoEq(0)
+        "connection" -> base + Page.Connection
+        "art" -> base + Page.ArtistArt
+        "artpicked" -> base + Page.ArtistArt + Page.ArtPicked
+        "artblocked" -> base + Page.ArtistArt + Page.ArtBlocked
+        "artcredits" -> base + Page.ArtistArt + Page.ArtCredits
+        "scrobbling" -> base + Page.Connection + Page.Scrobbling
+        "firmware" -> base + Page.Connection + Page.Firmware
+        "lyrics" -> base + Page.Connection + Page.Lyrics
+        else -> when {
+            name.startsWith("artist:") -> base + Page.Music + Page.Artist(name.removePrefix("artist:"))
+            name.startsWith("album:") -> {
+                val p = name.removePrefix("album:").split('|')
+                base + Page.Music + Page.Album(p[0], p.getOrElse(1) { "" }, p.getOrElse(2) { "" })
+            }
+            else -> null
+        }
     }
 }
 

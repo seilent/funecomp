@@ -102,6 +102,7 @@ fun App(
             LocalAccent provides accent,
             LocalViewConfiguration provides touch,
             LocalOverscrollFactory provides null,
+            LocalSheet provides shell.sheet,
         ) {
             val nav = shell.nav
             val ctx = Ctx(device, control, nav, shell.sheet, shell.toast)

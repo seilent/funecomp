@@ -1,0 +1,12 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <boolean name="lastfm" value="true" />
+    <string name="apiKey">fixtureapikey</string>
+    <string name="secret">fixturesecret</string>
+    <string name="lastfmUser">fixtureuser</string>
+    <string name="lastfmSession">fixturesession</string>
+    <boolean name="listenbrainz" value="true" />
+    <string name="token">fixturetoken</string>
+    <string name="listenbrainzUser">fixturelbuser</string>
+    <string name="uireworkSentinel">fixture scrobble</string>
+</map>

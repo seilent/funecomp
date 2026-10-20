@@ -109,6 +109,7 @@ class Shot(
     val held: Boolean = false,
     val picks: List<ArtPicks.Pick> = emptyList(),
     val cols: ((Float) -> Int)? = null,
+    val gated: Boolean = false,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -124,6 +125,7 @@ val SIZES = listOf(
 )
 
 private val HOME = listOf(Page.Home)
+private const val CLOCK = "2026-10-21 12:00"
 private val NP = HOME + Page.NowPlaying
 private val ALBUM_KEY = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim.Library.synthetic().tracks.first().id)
 
@@ -678,8 +680,8 @@ val SHOTS = listOf(
     Shot("scrobbling-set", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE),
     Shot("scrobbling-failed", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE.copy(accounts = SCROBBLE.accounts.copy(lastFmSession = ""), lastFm = "sign in failed", listenBrainz = "invalid")),
     Shot("scrobbling-entry", pages = HOME + Page.Connection + Page.Scrobbling, scrobble = SCROBBLE) { rule.onNodeWithTag("scrobble.key").performClick() },
-    Shot("np-block", pages = NP, prep = ::held, artEntry = HELD) { rule.onNodeWithTag("np.backdrop").performTouchInput { longClick() } },
-    Shot("np-block-wrong", pages = NP, prep = ::held, artEntry = HELD, wrong = true) { rule.onNodeWithTag("np.backdrop").performTouchInput { longClick() } },
+    Shot("np-block", pages = NP, prep = ::held, artEntry = HELD) { holdBackdrop() },
+    Shot("np-block-wrong", pages = NP, prep = ::held, artEntry = HELD, wrong = true) { holdBackdrop() },
     Shot("lyr-mark", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))),
     Shot("lyr-mark-nonext", pages = NP, prep = ::lyricsLast, artEntry = HELD, lyrics = shown(stamped(SUNG))),
     Shot("lyr-synced", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))) { lyricsMode() },
@@ -836,10 +838,12 @@ class Shots {
                 if (only.isNotEmpty() && only.split(',').none { "${shot.name}-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue
                 val c = SimControl(shot.board, artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
+                c.device = c.device.copy(schema = c.device.schema.copy(rows = c.device.schema.rows.map { if (it.key == "dateTime") it.copy(words = listOf(CLOCK)) else it }))
                 shot.prep(c)
+                if (shot.gated) c.device = DeviceState()
                 browseCols = shot.cols ?: { Tok.gridCols.toInt() }
                 control = c
-                shell = Shell(Nav(shot.pages))
+                shell = Shell(Nav(shot.pages), gated = shot.gated)
                 frame = shot to size
                 settle(1000)
                 shot.act(this, shell)
