@@ -48,24 +48,30 @@ val Ui.npTextX get() = if (landscape) NP_COLUMN_RIGHT else Tok.edge
 val Ui.npArtistBaseline get() = if (landscape) NP_ARTIST_LANDSCAPE else npAlbumBaseline - NP_ARTIST_RISE
 val Ui.npAlbumBaseline get() = if (landscape) NP_ALBUM_LANDSCAPE else npArtTop - NP_ALBUM_RISE
 val Ui.npArtTop get() = if (landscape) NP_ART_TOP_LANDSCAPE else npProgressY - npArt
-val Ui.npProgressY get() = if (landscape) NP_ART_TOP_LANDSCAPE + npArt + NP_PROGRESS_GAP_LANDSCAPE else h - NP_PROGRESS_FROM_BOTTOM - npLift
+val Ui.npProgressY get() = if (landscape) NP_ART_TOP_LANDSCAPE + npArt + NP_PROGRESS_GAP_LANDSCAPE else h - NP_PROGRESS_FROM_BOTTOM - npRowExtra - npLift
 val Ui.npArt get() = if (landscape) {
     min(NP_ART_MAX, h - NP_ART_LANDSCAPE_STACK)
 } else {
-    min(NP_ART_MAX, min(w - 2 * Tok.edge, h - NP_ART_STACK))
+    min(NP_ART_MAX, min(w - 2 * Tok.edge, h - NP_ART_STACK - npRowExtra))
 }.coerceAtLeast(0f)
-val Ui.npTitleBaseline get() = if (landscape) NP_TITLE_LANDSCAPE else h - NP_TITLE_FROM_BOTTOM - npLift
+val Ui.npTitleBaseline get() = if (landscape) NP_TITLE_LANDSCAPE else h - NP_TITLE_FROM_BOTTOM - npRowExtra - npLift
 val Ui.npNextBaseline get() = if (landscape) NP_NEXT_LANDSCAPE else npTitleBaseline + Tok.npNextPitch
-val Ui.npRingY get() = h - NP_RING_FROM_BOTTOM - npLift
-val Ui.npLyricTop get() = npAlbumBaseline - (Tok.npAlbumBaseline - Tok.npTextTop)
+val Ui.npRingY get() = h - (NP_RING_FROM_BOTTOM - Tok.npRing / 2) - Tok.overlayRing / 2 - npLift
+val Ui.npLyricTop get() = if (landscape) npAlbumBaseline - (Tok.npAlbumBaseline - Tok.npTextTop) else npLyricBottom - NP_LYRIC_ROOM
 val Ui.npLyricBottom get() = npNextBaseline + Tok.npNextPitch * (NP_NEXT_COUNT - 1)
-private val Ui.npLift get() = if (landscape) 0f else (h - Ui.PORTRAIT_H).coerceAtLeast(0f) * NP_SURPLUS_BELOW
+private val Ui.npLift get() = if (landscape) 0f else (h - Ui.PORTRAIT_H - npRowExtra).coerceAtLeast(0f) * NP_SURPLUS_BELOW
+private val Ui.npRowExtra get() = if (landscape) 0f else Tok.overlayRing - Tok.npRing
+private val NP_LYRIC_ROOM = NP_ART_MAX + NP_ALBUM_RISE + (Tok.npAlbumBaseline - Tok.npTextTop) + (NP_PROGRESS_FROM_BOTTOM - NP_TITLE_FROM_BOTTOM) + Tok.npNextPitch * NP_NEXT_COUNT
 
 fun Ui.npRingCenter(index: Int): Float {
     val f = NP_RING_X[index]
     if (!landscape) return w * f
     return NP_COLUMN_RIGHT + (w - NP_COLUMN_RIGHT - Tok.edge) * f
 }
+
+fun Ui.npTransportX(index: Int) = (npRingCenter(index) + npRingCenter(index + 1)) / 2
+
+fun npHeartFits(art: Float) = art >= Tok.npRing + 2 * Tok.detailRingInset
 
 val Ui.detailNameBaseline get() = pivotBaseline + Tok.detailNameDrop
 val Ui.detailLabelBaseline get() = if (landscape) contentTop + Tok.capHeight * Roles.sectionLabel.size else DETAIL_LABEL_BASELINE

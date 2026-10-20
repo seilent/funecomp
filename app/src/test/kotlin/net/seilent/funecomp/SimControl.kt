@@ -90,7 +90,10 @@ class SimControl(
 
     fun tick() = sim.tick(out)
 
+    val transports = ArrayList<Int>()
+
     override fun transport(cmd: Int, seekMs: Long?, on: Boolean?, repeat: Int?) {
+        transports += cmd
         req(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat))
     }
 

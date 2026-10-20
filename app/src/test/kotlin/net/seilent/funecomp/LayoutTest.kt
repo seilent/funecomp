@@ -24,9 +24,14 @@ import net.seilent.funecomp.ui.npAlbumBaseline
 import net.seilent.funecomp.ui.npArt
 import net.seilent.funecomp.ui.npArtTop
 import net.seilent.funecomp.ui.npArtistBaseline
+import net.seilent.funecomp.ui.npHeartFits
+import net.seilent.funecomp.ui.npLyricBottom
+import net.seilent.funecomp.ui.npLyricTop
 import net.seilent.funecomp.ui.npProgressY
+import net.seilent.funecomp.ui.npRingCenter
 import net.seilent.funecomp.ui.npRingY
 import net.seilent.funecomp.ui.npTitleBaseline
+import net.seilent.funecomp.ui.npTransportX
 import net.seilent.funecomp.ui.step
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -41,41 +46,78 @@ class LayoutTest {
         assertEquals(272f, ui.w, 1e-3f)
         assertFalse(ui.landscape)
         assertEquals(168f, ui.npArt, 1e-3f)
-        assertEquals(427.111f, ui.npProgressY, 1e-3f)
+        assertEquals(405.778f, ui.npProgressY, 1e-3f)
         assertEquals(ui.npProgressY, ui.npArtTop + ui.npArt, 1e-3f)
         assertEquals(ui.npArtTop - 14f, ui.npAlbumBaseline, 1e-3f)
         assertEquals(ui.npAlbumBaseline - 24f, ui.npArtistBaseline, 1e-3f)
-        assertEquals(465.111f, ui.npTitleBaseline, 1e-3f)
+        assertEquals(443.778f, ui.npTitleBaseline, 1e-3f)
         for (album in listOf(ui, Ui.of(272f, 480f), Ui.of(360f, 640f))) {
             assertEquals(117f, album.albumArtistBaseline, 1e-3f)
             assertEquals(141f, album.albumTitleBaseline, 1e-3f)
             assertEquals(155f, album.albumArtTop, 1e-3f)
         }
         val zune = Ui.of(272f, 480f)
-        assertEquals(156f, zune.npArtTop, 1e-3f)
-        assertEquals(118f, zune.npArtistBaseline, 1e-3f)
+        assertEquals(137f, zune.npArt, 1e-3f)
+        assertEquals(155f, zune.npArtTop, 1e-3f)
+        assertEquals(117f, zune.npArtistBaseline, 1e-3f)
     }
 
     @Test
     fun npBottomStackLiftsByAThirdOfTheSurplus() {
         val flip = Ui.of(411f, 960f - 148f / 2.625f)
         assertEquals(598.016f, flip.h, 1e-3f)
-        assertEquals(402.677f, flip.npProgressY, 1e-3f)
-        assertEquals(234.677f, flip.npArtTop, 1e-3f)
-        assertEquals(196.677f, flip.npArtistBaseline, 1e-3f)
-        assertEquals(440.677f, flip.npTitleBaseline, 1e-3f)
-        assertEquals(518.677f, flip.npRingY, 1e-3f)
+        assertEquals(381.344f, flip.npProgressY, 1e-3f)
+        assertEquals(213.344f, flip.npArtTop, 1e-3f)
+        assertEquals(175.344f, flip.npArtistBaseline, 1e-3f)
+        assertEquals(419.344f, flip.npTitleBaseline, 1e-3f)
+        assertEquals(513.344f, flip.npRingY, 1e-3f)
         val small = Ui.of(360f, 640f - 148f / 2.625f)
         assertEquals(480f, small.h, 1e-3f)
-        assertEquals(324f, small.npProgressY, 1e-3f)
-        assertEquals(362f, small.npTitleBaseline, 1e-3f)
-        assertEquals(440f, small.npRingY, 1e-3f)
+        assertEquals(292f, small.npProgressY, 1e-3f)
+        assertEquals(330f, small.npTitleBaseline, 1e-3f)
+        assertEquals(424f, small.npRingY, 1e-3f)
         val land = Ui.of(960f - 109f / 2.625f, 411f - 148f / 2.625f)
         assertTrue(land.landscape)
         assertEquals(272f, land.h, 1e-3f)
         assertEquals(246f, land.npProgressY, 1e-3f)
         assertEquals(116f, land.npTitleBaseline, 1e-3f)
-        assertEquals(232f, land.npRingY, 1e-3f)
+        assertEquals(216f, land.npRingY, 1e-3f)
+    }
+
+    @Test
+    fun theLyricsBandIs298InPortrait() {
+        for (ui in listOf(Ui.of(272f, 480f), Ui.of(360f, 640f - 148f / 2.625f), Ui.of(411f, 960f - 148f / 2.625f))) {
+            assertEquals(298f, ui.npLyricBottom - ui.npLyricTop, 1e-3f)
+        }
+        val flip = Ui.of(411f, 960f - 148f / 2.625f)
+        assertEquals(flip.npArtistBaseline, flip.npLyricTop, 1e-3f)
+        assertEquals(86f, Ui.of(272f, 480f).npLyricTop, 1e-3f)
+        val land = Ui.of(960f - 109f / 2.625f, 411f - 148f / 2.625f)
+        assertEquals(60f, land.npLyricTop, 1e-3f)
+        assertEquals(176f, land.npLyricBottom, 1e-3f)
+    }
+
+    @Test
+    fun transportSitsAtTheRingMidpoints() {
+        val ui = Ui.of(272f, 480f)
+        assertEquals((ui.npRingCenter(0) + ui.npRingCenter(1)) / 2, ui.npTransportX(0), 1e-3f)
+        assertEquals((ui.npRingCenter(1) + ui.npRingCenter(2)) / 2, ui.npTransportX(1), 1e-3f)
+        assertEquals(85.68f, ui.npTransportX(0), 1e-3f)
+    }
+
+    @Test
+    fun heartFitsOnlyOnA48Art() {
+        assertFalse(npHeartFits(47.9f))
+        assertTrue(npHeartFits(48f))
+    }
+
+    @Test
+    fun theCoverIsLandscape() {
+        val cover = Ui.of(948f, 748f)
+        assertTrue(cover.landscape)
+        assertEquals(480f, cover.w, 1e-3f)
+        assertEquals(378.734f, cover.h, 1e-3f)
+        assertEquals(322.734f, cover.npRingY, 1e-3f)
     }
 
     @Test

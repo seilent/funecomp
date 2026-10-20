@@ -204,6 +204,32 @@ class NowPlayingLyricsTest {
     }
 
     @Test
+    fun aHeartTapDoesNotEnterLyrics() {
+        start()
+        enterBy("np.heart")
+        assertEquals(1, c.actions.count { it.first == Enums.ActionCmd.favorite })
+        assertFalse(exists("np.lyrics"))
+    }
+
+    @Test
+    fun aHeartLongPressOpensNoSheet() {
+        val shell = start()
+        rule.onNodeWithTag("np.heart").performTouchInput { longClick() }
+        settle(500)
+        assertFalse(shell.sheet.shown)
+        assertFalse(exists("np.lyrics"))
+    }
+
+    @Test
+    fun theHeartHidesInLyricsMode() {
+        start()
+        assertTrue(exists("np.heart"))
+        enterBy("np.art")
+        assertTrue(exists("np.lyrics"))
+        assertFalse(exists("np.heart"))
+    }
+
+    @Test
     fun aPlainDragScrollsAndDoesNotLeave() {
         start(copy = plain, kind = Enums.LyricsKind.plain)
         enterBy("np.art")
