@@ -1,4 +1,4 @@
-# funecomp
+# funeCOMP
 
 Android remote for [funeos](https://github.com/seilent/funeos) on the Hidizs AP80 and TempoTec V1, over Bluetooth.
 Playback, volume, queue, library, settings and EQ from the phone. Artist photos are fetched on the phone and pushed to
@@ -8,7 +8,7 @@ the device as the Now Playing backdrop.
 
 1. On the device: Settings > System > PHONE APP on, then PAIR PHONE APP.
 2. Pair the phone from its Bluetooth settings and confirm the code on both screens.
-3. Open funecomp: it shows Connection until the device is linked. Pick the device under DEVICE.
+3. Open funeCOMP: it shows Connection until the device is linked. Pick the device under DEVICE.
 
 Artist art sources (TheAudioDB, Discogs, fanart.tv, YouTube, Deezer) are off by default: Home > Artist art.
 

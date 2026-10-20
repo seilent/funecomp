@@ -244,7 +244,7 @@ class LinkService : Service() {
         )
         return Notification.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
-            .setContentTitle("funecomp")
+            .setContentTitle("funeCOMP")
             .setContentText(text)
             .setContentIntent(open)
             .addAction(Notification.Action.Builder(null, "stop", stop).build())
