@@ -693,8 +693,17 @@ val SHOTS = listOf(
     Shot("lyr-cjk", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG_JA))) { lyricsMode() },
     Shot("lyr-cue", pages = NP, prep = lyricsAt(2_000), artEntry = HELD, lyrics = shown(listOf(LyrLine(0, "Till the last train leaves")) + stamped(SUNG.drop(1), 6_000))) { lyricsMode() },
     Shot("lyr-nobackdrop", pages = NP, prep = lyricsOn(), lyrics = shown(stamped(SUNG))) { lyricsMode() },
-    Shot("artistart-blocked-1", pages = HOME + Page.ArtistArt, blocked = BLOCKED.take(1), credits = CREDITS) { scrollTo("art.blocked.0") },
-    Shot("artistart-blocked-12", pages = HOME + Page.ArtistArt, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.blocked.11") },
+    Shot("artistart-blocked-1", pages = HOME + Page.ArtistArt, blocked = BLOCKED.take(1), credits = CREDITS) { scrollTo("art.credits") },
+    Shot("artistart-blocked-12", pages = HOME + Page.ArtistArt, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.credits") },
+    Shot("artistart-noblocked", pages = HOME + Page.ArtistArt, credits = CREDITS) { scrollTo("art.credits") },
+    Shot("artblocked-1", pages = HOME + Page.ArtistArt + Page.ArtBlocked, blocked = BLOCKED.take(1), credits = CREDITS),
+    Shot("artblocked-12", pages = HOME + Page.ArtistArt + Page.ArtBlocked, blocked = BLOCKED, credits = CREDITS),
+    Shot("artblocked-12-end", pages = HOME + Page.ArtistArt + Page.ArtBlocked, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.blocked.11") },
+    Shot("artblocked-empty", pages = HOME + Page.ArtistArt + Page.ArtBlocked, credits = CREDITS),
+    Shot("artpicked", pages = HOME + Page.ArtistArt + Page.ArtPicked, picks = PICKS, blocked = BLOCKED.take(1)),
+    Shot("artpicked-empty", pages = HOME + Page.ArtistArt + Page.ArtPicked, blocked = BLOCKED.take(1)),
+    Shot("artcredits", pages = HOME + Page.ArtistArt + Page.ArtCredits, credits = CREDITS),
+    Shot("artcredits-empty", pages = HOME + Page.ArtistArt + Page.ArtCredits),
     Shot("artistart-order", pages = HOME + Page.ArtistArt, sources = ORDERED) { scrollTo("art.order.5") },
     Shot("artistart-order-first", pages = HOME + Page.ArtistArt, sources = ORDERED) {
         scrollTo("art.order.0")
@@ -708,11 +717,7 @@ val SHOTS = listOf(
         scrollTo("art.order.5")
         rule.onNodeWithTag("art.order.5").performClick()
     },
-    Shot("artistart-credits", pages = HOME + Page.ArtistArt, credits = CREDITS) {
-        rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.credit.2"))
-        rule.mainClock.autoAdvance = false
-    },
+    Shot("artistart-credits", pages = HOME + Page.ArtistArt, credits = CREDITS) { scrollTo("art.credits") },
     Shot("pick-np-second", pages = NP, prep = ::held, artEntry = HELD) { shell ->
         holdBackdrop()
         settle(600)
@@ -726,7 +731,7 @@ val SHOTS = listOf(
         pasteLink(shell, "https://www.youtube.com/@tsukiniterasarete")
         rule.onNodeWithTag("entry").performImeAction()
     },
-    Shot("pick-settings", pages = HOME + Page.ArtistArt, picks = PICKS, blocked = BLOCKED.take(1)) { scrollTo("art.picked.2") },
+    Shot("pick-settings", pages = HOME + Page.ArtistArt, picks = PICKS, blocked = BLOCKED.take(1)) { scrollTo("art.blocked") },
     Shot("pick-library", pages = HOME + Page.ArtistArt + Page.PickArtist),
     Shot("pick-artists-sheet", pages = HOME + Page.Music) { rule.onNodeWithTag("row.0").performTouchInput { longClick() } },
     Shot("pick-browse-loading", pages = NP + Page.Browse(PickFor("TSUKI"))),

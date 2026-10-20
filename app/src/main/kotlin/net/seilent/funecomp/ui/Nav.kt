@@ -34,6 +34,9 @@ sealed interface Page {
     data object Settings : Page
     data object Connection : Page
     data object ArtistArt : Page
+    data object ArtPicked : Page
+    data object ArtBlocked : Page
+    data object ArtCredits : Page
     data object Scrobbling : Page
     data object Firmware : Page
     data object Lyrics : Page

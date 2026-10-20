@@ -4,10 +4,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import kotlin.math.roundToInt
@@ -32,6 +34,11 @@ import java.util.Locale
 
 private const val REMEDY = "settings > system > pair phone app"
 private const val PAIR_HINT = "pair on the device"
+private const val BLOCKED = "blocked"
+private const val CREDITS = "credits"
+private const val NO_PICKED = "no picked images"
+private const val NO_BLOCKED = "no blocked images"
+private const val NO_CREDITS = "no credits"
 
 fun byeText(reason: Int?) = when (reason) {
     Enums.ByeReason.refused -> "refused"
@@ -152,7 +159,7 @@ fun ArtistArtPage(
     picks: List<ArtPicks.Pick> = emptyList(),
 ) {
     val ui = LocalUi.current
-    var focus by remember { mutableIntStateOf(0) }
+    var focus by rememberSaveable { mutableStateOf(Sources.THE_AUDIO_DB) }
     val toggles = listOf(
         Toggle("theaudiodb", sources.theAudioDb, Sources.THE_AUDIO_DB) { it.copy(theAudioDb = !it.theAudioDb) },
         Toggle("discogs", sources.discogs, Sources.DISCOGS) { it.copy(discogs = !it.discogs) },
@@ -164,8 +171,9 @@ fun ArtistArtPage(
     val orderAt = toggles.size + 1
     val pickAt = orderAt + 2 + sources.order.size
     val pickedAt = pickAt + 1
-    val blockedAt = pickedAt + if (picks.isEmpty()) 0 else 1 + picks.size
-    val creditsAt = blockedAt + if (blocked.isEmpty()) 0 else 1 + blocked.size
+    val lists = listOf(Triple(PICKED, picks, Page.ArtPicked), Triple(BLOCKED, blocked, Page.ArtBlocked), Triple(CREDITS, credits, Page.ArtCredits)).filter { it.second.isNotEmpty() }
+    val tags = toggles.map { it.tag } + listOf("key", "order", "order.info") + sources.order.indices.map { "order.$it" } + "pick" + lists.map { it.first }
+    val at = tags.indexOf(focus).takeIf { it >= 0 } ?: pickAt
     @Composable
     fun Label(text: String, i: Int) {
         Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(above + Tok.detailLabelDrop).dp())) {
@@ -173,17 +181,17 @@ fun ArtistArtPage(
         }
     }
     HubPage("artist art", { ctx.nav.pop() }, count = sources.ordered.joinToString(" ")) {
-        Rows(ui.contentTop, focus = focus) {
+        Rows(ui.contentTop, focus = at) {
             itemsIndexed(toggles, key = { _, t -> t.tag }) { i, t ->
-                SettingsRow(t.title, if (t.on) "on" else "off", Modifier.enter { i }.testTag("art.${t.tag}"), focused = focus == i) {
-                    focus = i
+                SettingsRow(t.title, if (t.on) "on" else "off", Modifier.enter { i }.testTag("art.${t.tag}"), focused = at == i) {
+                    focus = tags[i]
                     onSources(t.flip(sources))
                 }
             }
             item(key = "key") {
                 val i = toggles.size
-                SettingsRow("fanart.tv key", if (sources.fanartTvKey.isBlank()) "not set" else "set", Modifier.enter { i }.testTag("art.key"), focused = focus == i) {
-                    focus = i
+                SettingsRow("fanart.tv key", if (sources.fanartTvKey.isBlank()) "not set" else "set", Modifier.enter { i }.testTag("art.key"), focused = at == i) {
+                    focus = tags[i]
                     ctx.sheet.openEntry("fanart.tv key") {
                         TextEntry(sources.fanartTvKey, secret = true) { k ->
                             ctx.sheet.close()
@@ -202,8 +210,8 @@ fun ArtistArtPage(
                     id in sources.enabled -> "on"
                     else -> "off"
                 }
-                SettingsRow(Sources.label(id), value, Modifier.enter { i }.testTag("art.order.$j"), focused = focus == i) {
-                    focus = i
+                SettingsRow(Sources.label(id), value, Modifier.enter { i }.testTag("art.order.$j"), focused = at == i) {
+                    focus = tags[i]
                     val moves = buildList {
                         if (j > 0) add("move up" to -1)
                         if (j < sources.order.size - 1) add("move down" to 1)
@@ -213,53 +221,91 @@ fun ArtistArtPage(
             }
             item(key = "pick") {
                 val library = ctx.device.has("library")
-                SettingsRow(PICK_IMAGE, if (library) "" else NO_LIBRARY, Modifier.enter { pickAt }.testTag("art.pick"), focused = focus == pickAt) {
-                    focus = pickAt
+                SettingsRow(PICK_IMAGE, if (library) "" else NO_LIBRARY, Modifier.enter { pickAt }.testTag("art.pick"), focused = at == pickAt) {
+                    focus = tags[pickAt]
                     if (library) ctx.nav.push(Page.PickArtist)
                 }
             }
-            if (picks.isNotEmpty()) {
-                item(key = "picked") { Label(PICKED, pickedAt) }
-                itemsIndexed(picks, key = { _, p -> "picked ${p.key} ${p.at}" }) { j, p ->
-                    val i = pickedAt + 1 + j
-                    val broken = p.kind != ArtPicks.NONE && p.failedAt != null
-                    val line = when {
-                        p.kind == ArtPicks.NONE -> NO_IMAGE
-                        broken -> LINK_BROKEN
-                        else -> Sources.label(p.source)
-                    }
-                    CreditRow(p.name, listOf(line), Modifier.enter { i }.testTag("art.picked.$j"), focused = focus == i) {
-                        focus = i
-                        val items = listOf(UNDO_PICK) + if (broken) listOf(TRY_AGAIN) else emptyList()
-                        ctx.sheet.open(p.name, items) { k -> if (k == 0) ctx.control.undoPick(p) else ctx.control.tryAgain(p) }
+            lists.forEachIndexed { k, (title, list, page) ->
+                item(key = title) {
+                    val i = pickedAt + k
+                    SettingsRow(title, "${list.size}", Modifier.enter { i }.testTag("art.$title"), focused = at == i) {
+                        focus = title
+                        ctx.nav.push(page)
                     }
                 }
             }
-            if (blocked.isNotEmpty()) {
-                item(key = "blocked") { Label("blocked", blockedAt) }
-                itemsIndexed(blocked, key = { _, r -> "blocked ${r.javaClass.simpleName} ${r.key} ${r.at}" }) { j, r ->
-                    val i = blockedAt + 1 + j
-                    val lines = when (r) {
-                        is ArtBlocks.Block -> listOf(Sources.label(r.source))
-                        is ArtBlocks.Reject -> listOf("wrong artist")
-                    }
-                    CreditRow(r.name, lines, Modifier.enter { i }.testTag("art.blocked.$j"), focused = focus == i) {
-                        focus = i
-                        ctx.sheet.open(r.name, listOf("unblock")) { ctx.control.unblock(r) }
-                    }
+        }
+    }
+}
+
+@Composable
+private fun ArtList(ctx: Ctx, title: String, keys: List<String>, empty: String, row: @Composable (Int, Modifier, Boolean, () -> Unit) -> Unit) {
+    val ui = LocalUi.current
+    var focus by rememberSaveable { mutableStateOf<String?>(null) }
+    var last by rememberSaveable { mutableIntStateOf(0) }
+    val found = keys.indexOf(focus)
+    val at = if (found >= 0) found else last.coerceAtMost(keys.size - 1)
+    SideEffect {
+        if (at >= 0) {
+            last = at
+            focus = keys[at]
+        }
+    }
+    HubPage(title, { ctx.nav.pop() }) {
+        if (keys.isEmpty()) {
+            StateLine(empty, "art.$title.empty")
+        } else {
+            Rows(ui.contentTop, focus = at) {
+                itemsIndexed(keys, key = { _, k -> k }) { i, k ->
+                    row(i, Modifier.enter { i }, at == i) { focus = k }
                 }
             }
-            if (credits.isNotEmpty()) {
-                item(key = "credits") { Label("credits", creditsAt) }
-                itemsIndexed(credits, key = { _, e -> "credit ${e.key}" }) { j, e ->
-                    val i = creditsAt + 1 + j
-                    val c = e.credit ?: return@itemsIndexed
-                    CreditRow(e.name, listOf(c.author, c.license), Modifier.enter { i }.testTag("art.credit.$j"), focused = focus == i) {
-                        focus = i
-                        if (c.page.startsWith("https://")) onCredit(e)
-                    }
-                }
-            }
+        }
+    }
+}
+
+@Composable
+fun ArtPickedPage(ctx: Ctx, picks: List<ArtPicks.Pick>) {
+    ArtList(ctx, PICKED, picks.map { "picked ${it.key} ${it.at}" }, NO_PICKED) { j, m, focused, take ->
+        val p = picks[j]
+        val broken = p.kind != ArtPicks.NONE && p.failedAt != null
+        val line = when {
+            p.kind == ArtPicks.NONE -> NO_IMAGE
+            broken -> LINK_BROKEN
+            else -> Sources.label(p.source)
+        }
+        CreditRow(p.name, listOf(line), m.testTag("art.picked.$j"), focused = focused) {
+            take()
+            val items = listOf(UNDO_PICK) + if (broken) listOf(TRY_AGAIN) else emptyList()
+            ctx.sheet.open(p.name, items) { k -> if (k == 0) ctx.control.undoPick(p) else ctx.control.tryAgain(p) }
+        }
+    }
+}
+
+@Composable
+fun ArtBlockedPage(ctx: Ctx, blocked: List<ArtBlocks.Record>) {
+    ArtList(ctx, BLOCKED, blocked.map { "blocked ${it.javaClass.simpleName} ${it.key} ${it.at}" }, NO_BLOCKED) { j, m, focused, take ->
+        val r = blocked[j]
+        val lines = when (r) {
+            is ArtBlocks.Block -> listOf(Sources.label(r.source))
+            is ArtBlocks.Reject -> listOf("wrong artist")
+        }
+        CreditRow(r.name, lines, m.testTag("art.blocked.$j"), focused = focused) {
+            take()
+            ctx.sheet.open(r.name, listOf("unblock")) { ctx.control.unblock(r) }
+        }
+    }
+}
+
+@Composable
+fun ArtCreditsPage(ctx: Ctx, credits: List<ArtCache.Entry>, onCredit: (ArtCache.Entry) -> Unit) {
+    val shown = credits.mapNotNull { e -> e.credit?.let { e to it } }
+    ArtList(ctx, CREDITS, shown.map { "credit ${it.first.key}" }, NO_CREDITS) { j, m, focused, take ->
+        val (e, c) = shown[j]
+        CreditRow(e.name, listOf(c.author, c.license), m.testTag("art.credit.$j"), focused = focused) {
+            take()
+            if (c.page.startsWith("https://")) onCredit(e)
         }
     }
 }

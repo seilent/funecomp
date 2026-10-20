@@ -324,6 +324,9 @@ class Main : ComponentActivity() {
             "autoeq" -> base + Page.Settings + Page.Eq(0) + Page.AutoEq(0)
             "connection" -> base + Page.Connection
             "art" -> base + Page.ArtistArt
+            "artpicked" -> base + Page.ArtistArt + Page.ArtPicked
+            "artblocked" -> base + Page.ArtistArt + Page.ArtBlocked
+            "artcredits" -> base + Page.ArtistArt + Page.ArtCredits
             "scrobbling" -> base + Page.Connection + Page.Scrobbling
             "firmware" -> base + Page.Connection + Page.Firmware
             "lyrics" -> base + Page.Connection + Page.Lyrics

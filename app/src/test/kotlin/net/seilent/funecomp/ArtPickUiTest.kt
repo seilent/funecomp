@@ -2,6 +2,9 @@ package net.seilent.funecomp
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.test.hasAnyAncestor
@@ -65,7 +68,10 @@ class ArtPickUiTest {
     private val offer = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", null, null, "月-Tsuki-", ByteArray(1))
     private val lib = Library(listOf(Track(1, "TSUKI, Other", listOf("TSUKI", "Other"), "A", "TSUKI", "Song", 200_000, "a", "a.flac", listOf("", dj))))
 
+    private var shownPicks by mutableStateOf<List<ArtPicks.Pick>>(emptyList())
+
     private fun start(pages: List<Page>, art: BackdropArt? = null, picks: List<ArtPicks.Pick> = emptyList(), library: Library = lib, link: Phase = Phase.LIVE): Pair<Shell, SimControl> {
+        shownPicks = picks
         val c = SimControl("ap80", library)
         val control = object : Control by c {
             override fun pickLink(text: String, done: (Offered) -> Unit) {
@@ -91,6 +97,7 @@ class ArtPickUiTest {
 
             override fun undoPick(p: ArtPicks.Pick) {
                 calls += "undo ${p.name}"
+                shownPicks = shownPicks - p
             }
 
             override fun tryAgain(p: ArtPicks.Pick) {
@@ -101,7 +108,7 @@ class ArtPickUiTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) {
-                App(c.device, LinkView(link, "AP80", everLive = true), control, shell, Sources(youtube = true), art = art, picks = picks)
+                App(c.device, LinkView(link, "AP80", everLive = true), control, shell, Sources(youtube = true), art = art, picks = shownPicks)
             }
         }
         settle(1000)
@@ -304,8 +311,11 @@ class ArtPickUiTest {
         val picks = listOf(pick("A", at = 3), pick("B", failedAt = 5, at = 2), pick("C", kind = ArtPicks.NONE, at = 1))
         val (shell, _) = start(listOf(Page.Home, Page.ArtistArt), picks = picks)
         rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.picked.2"))
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("art.picked"))
         rule.mainClock.autoAdvance = false
+        tap("art.picked")
+        assertEquals(Page.ArtPicked, shell.nav.top)
+        settle(500)
         tap("art.picked.1")
         assertEquals("B", shell.sheet.title)
         assertEquals(listOf("undo pick", "try again"), shell.sheet.items)
@@ -314,6 +324,20 @@ class ArtPickUiTest {
         assertEquals(listOf("undo pick"), shell.sheet.items)
         tap("sheet.item.0")
         assertEquals(listOf("again B", "undo C"), calls)
+    }
+
+    @Test
+    fun theLastUndoKeepsThePageWithItsLine() {
+        val (shell, _) = start(listOf(Page.Home, Page.ArtistArt, Page.ArtPicked), picks = listOf(pick("A")))
+        tap("art.picked.0")
+        tap("sheet.item.0")
+        assertEquals(listOf("undo A"), calls)
+        assertEquals(Page.ArtPicked, shell.nav.top)
+        rule.onNodeWithTag("art.picked.0").assertDoesNotExist()
+        rule.onNodeWithTag("art.picked.empty").assertExists()
+        shell.nav.pop()
+        settle(1000)
+        rule.onNodeWithTag("art.picked").assertDoesNotExist()
     }
 
     @Test
