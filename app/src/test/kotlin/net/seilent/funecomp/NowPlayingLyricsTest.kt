@@ -15,6 +15,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
@@ -30,6 +31,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
@@ -38,6 +40,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.test.espresso.Espresso
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.gen.Enums
@@ -74,8 +77,14 @@ import kotlin.math.abs
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w411dp-h960dp-420dpi")
 class NowPlayingLyricsTest {
+    private class Scale(var factor: Float) : MotionDurationScale {
+        override val scaleFactor get() = factor
+    }
+
+    private val scale = Scale(1f)
+
     @get:Rule
-    val rule = createComposeRule()
+    val rule = createComposeRule(scale)
 
     private class Owner : LifecycleOwner {
         val registry = LifecycleRegistry(this)
@@ -114,7 +123,7 @@ class NowPlayingLyricsTest {
         val shell = Shell(Nav(listOf(Page.Home, Page.NowPlaying)))
         owner.registry.currentState = Lifecycle.State.RESUMED
         rule.mainClock.autoAdvance = false
-        rule.setContent {
+        rule.setUptimeContent {
             view = LocalView.current
             remember(view) {
                 window = activity(view.context).window
@@ -167,7 +176,7 @@ class NowPlayingLyricsTest {
     }
 
     @Test
-    fun theArtTapAndTheMarkTapEnterAndAColumnTapLeaves() {
+    fun theArtTapAndTheMarkTapEnterAndTheRingLeaves() {
         start()
         enterBy("np.art")
         assertTrue(exists("np.lyrics"))
@@ -176,6 +185,8 @@ class NowPlayingLyricsTest {
         assertFalse(exists("np.titleBlock"))
         rule.onNodeWithText("line 2").assertIsDisplayed()
         enterBy("np.lyrics")
+        assertTrue(exists("np.lyrics"))
+        enterBy("back")
         assertTrue(exists("np.title"))
         assertFalse(exists("np.lyrics"))
         enterBy("np.mark.hit")
@@ -183,19 +194,304 @@ class NowPlayingLyricsTest {
     }
 
     @Test
-    fun aTapDuringTheFadeDoesNothing() {
-        start()
+    fun anArtTapDuringTheEnterFadeReverses() {
+        val shell = start()
+        for (tag in listOf("np.art", "np.mark.hit")) {
+            rule.onNodeWithTag(tag).performClick()
+            settle(200)
+            rule.onNodeWithTag(tag).performClick()
+            settle(100)
+            assertTrue(tag, exists("np.shade"))
+            settle(120)
+            normalOn(shell)
+        }
+    }
+
+    @Test
+    fun withAnimationsOffTheFadeSnapsBothWays() {
+        scale.factor = 0f
+        val shell = start()
         rule.onNodeWithTag("np.art").performClick()
-        settle(200)
-        rule.onNodeWithTag("np.art").performClick()
-        settle(1000)
+        settle(16)
         assertTrue(exists("np.lyrics"))
-        rule.onNodeWithTag("np.lyrics").performClick()
-        settle(200)
-        rule.onNodeWithTag("np.lyrics").performClick()
-        settle(1000)
+        assertFalse(exists("np.title"))
+        ring()
+        settle(16)
+        normalOn(shell)
+    }
+
+    @Test
+    fun aDoubleScaleStretchesTheFadeAndTheReverse() {
+        scale.factor = 2f
+        val shell = start()
+        rule.onNodeWithTag("np.art").performClick()
+        settle(600)
+        assertTrue(exists("np.title"))
+        assertTrue(exists("np.shade"))
+        settle(300)
+        assertTrue(exists("np.lyrics"))
+        assertFalse(exists("np.title"))
+        settle(700)
+        ring()
+        settle(1600)
+        normalOn(shell)
+        rule.onNodeWithTag("np.art").performClick()
+        settle(400)
+        rule.onNodeWithTag("np.art").performClick()
+        settle(300)
+        assertTrue(exists("np.shade"))
+        assertTrue(exists("np.title"))
+        settle(120)
+        normalOn(shell)
+    }
+
+    private fun normalOn(shell: Shell) {
         assertTrue(exists("np.title"))
         assertFalse(exists("np.lyrics"))
+        assertFalse(exists("np.shade"))
+        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
+    }
+
+    private fun back() {
+        Espresso.pressBack()
+    }
+
+    private fun ring() {
+        rule.onNodeWithTag("back").performClick()
+    }
+
+    @Test
+    fun theBackRingClosesTheViewAndStays() {
+        val shell = start()
+        enterBy("np.art")
+        ring()
+        settle(1000)
+        normalOn(shell)
+    }
+
+    @Test
+    fun androidBackClosesTheViewAndStays() {
+        val shell = start()
+        enterBy("np.art")
+        back()
+        settle(1000)
+        normalOn(shell)
+    }
+
+    @Test
+    fun backOutsideTheViewPops() {
+        val shell = start()
+        back()
+        settle(1500)
+        assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+        shell.nav.push(Page.NowPlaying)
+        settle(1500)
+        ring()
+        settle(1500)
+        assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+    }
+
+    @Test
+    fun aSheetOverTheViewClosesFirst() {
+        val shell = start()
+        enterBy("np.art")
+        rule.onNodeWithTag("np.lyrics").performTouchInput { longClick() }
+        settle(500)
+        assertTrue(shell.sheet.shown)
+        back()
+        settle(500)
+        assertFalse(shell.sheet.shown)
+        assertTrue(exists("np.lyrics"))
+        back()
+        settle(1000)
+        normalOn(shell)
+        back()
+        settle(1500)
+        assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+    }
+
+    @Test
+    fun aScrimTapKeepsTheView() {
+        val shell = start()
+        enterBy("np.art")
+        rule.onNodeWithTag("np.lyrics").performTouchInput { longClick() }
+        settle(500)
+        assertTrue(shell.sheet.shown)
+        rule.onRoot().performTouchInput { click(topCenter.copy(y = top + 10f)) }
+        settle(500)
+        assertFalse(shell.sheet.shown)
+        assertTrue(exists("np.lyrics"))
+        back()
+        settle(1000)
+        normalOn(shell)
+    }
+
+    @Test
+    fun anArtTapInTheCloseFadeDoesNothing() {
+        val shell = start()
+        enterBy("np.art")
+        back()
+        settle(500)
+        assertTrue(exists("np.title"))
+        rule.onNodeWithTag("np.art").performClick()
+        settle(1000)
+        normalOn(shell)
+    }
+
+    @Test
+    fun backDuringTheEnterFadeReverses() {
+        val shell = start()
+        for (at in listOf(200L, 500L)) {
+            rule.onNodeWithTag("np.art").performClick()
+            settle(at)
+            if (at > 400) assertTrue(exists("np.lyrics"))
+            back()
+            settle(at - 32)
+            assertTrue("$at", exists("np.shade"))
+            settle(40)
+            normalOn(shell)
+        }
+    }
+
+    @Test
+    fun theScreenHoldEndsAtTheBack() {
+        start()
+        flags(true, playing = true)
+        settle(100)
+        rule.onNodeWithTag("np.art").performClick()
+        settle(200)
+        assertTrue(view.keepScreenOn)
+        back()
+        settle(20)
+        assertTrue(exists("np.shade"))
+        assertFalse(view.keepScreenOn)
+    }
+
+    @Test
+    fun anEnterThenABackInTheSameFrame() {
+        val shell = start()
+        rule.onNodeWithTag("np.art").performClick()
+        back()
+        settle(50)
+        normalOn(shell)
+    }
+
+    @Test
+    fun duringAReverseBackRingAndArtDoNothing() {
+        val shell = start()
+        rule.onNodeWithTag("np.art").performClick()
+        settle(600)
+        back()
+        settle(400)
+        assertTrue(exists("np.title"))
+        assertTrue(exists("np.shade"))
+        back()
+        ring()
+        rule.onNodeWithTag("np.art").performClick()
+        settle(1000)
+        normalOn(shell)
+    }
+
+    @Test
+    fun ringDuringTheEnterFadeReverses() {
+        val shell = start()
+        rule.onNodeWithTag("np.art").performClick()
+        settle(200)
+        ring()
+        settle(250)
+        normalOn(shell)
+    }
+
+    @Test
+    fun backDuringTheCloseFadeDoesNothing() {
+        val shell = start()
+        for (second in listOf(::back, ::ring)) {
+            if (shell.nav.top != Page.NowPlaying) shell.nav.push(Page.NowPlaying)
+            settle(1500)
+            enterBy("np.art")
+            back()
+            settle(200)
+            second()
+            settle(1000)
+            normalOn(shell)
+            back()
+            settle(1500)
+            assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+        }
+    }
+
+    private fun item(shell: Shell, text: String) {
+        rule.onNodeWithTag("sheet.item.${shell.sheet.items.indexOf(text)}").performClick()
+        settle(500)
+    }
+
+    @Test
+    fun aPushedPageTakesBackFirst() {
+        val shell = start()
+        enterBy("np.art")
+        rule.onNodeWithTag("np.lyrics").performTouchInput { longClick() }
+        settle(500)
+        item(shell, "pick image")
+        rule.onNodeWithTag("sheet.item.${shell.sheet.items.indexOf("browse")}").performClick()
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        assertTrue(shell.nav.top is Page.Browse)
+        assertTrue(exists("np.lyrics"))
+        back()
+        settle(1500)
+        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
+        assertTrue(exists("np.lyrics"))
+        rule.onNodeWithTag("np.lyrics").performTouchInput { longClick() }
+        settle(500)
+        item(shell, "pick image")
+        item(shell, "browse")
+        settle(1500)
+        assertTrue(shell.nav.top is Page.Browse)
+        assertFalse(exists("np.lyrics"))
+        back()
+        settle(1500)
+        normalOn(shell)
+    }
+
+    @Test
+    fun backAfterStopAndStart() {
+        val shell = start()
+        enterBy("np.art")
+        owner.registry.currentState = Lifecycle.State.CREATED
+        settle(100)
+        owner.registry.currentState = Lifecycle.State.RESUMED
+        settle(100)
+        back()
+        settle(1000)
+        normalOn(shell)
+    }
+
+    @Test
+    fun theFlagsDropWhileShown() {
+        val shell = start()
+        enterBy("np.art")
+        flags(false)
+        settle(100)
+        assertTrue(exists("np.lyrics"))
+        back()
+        settle(1000)
+        assertFalse(exists("np.lyrics"))
+        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
+    }
+
+    @Test
+    fun aColumnTapStaysInTheView() {
+        start()
+        enterBy("np.art")
+        enterBy("np.lyrics")
+        rule.onNodeWithText("line 2").assertIsDisplayed()
+        assertFalse(exists("np.title"))
+        lyrics = LyricsFetch.Show.Lines(c.device.playback.state.track!!, LyricsFetch.Copy(1, Enums.LyricsKind.plain, plain))
+        settle(500)
+        assertTrue(exists("np.lyric.plain.0"))
+        enterBy("np.lyrics")
+        assertTrue(exists("np.lyric.plain.0"))
+        assertFalse(exists("np.title"))
     }
 
     private fun sheetFrom(shell: Shell, tag: String) {
@@ -264,7 +560,8 @@ class NowPlayingLyricsTest {
         val shell = start()
         enterBy("np.mark.hit")
         assertEquals(Page.NowPlaying, shell.nav.top)
-        enterBy("np.lyrics")
+        back()
+        settle(1000)
         rule.onNodeWithTag("np.titleBlock").performTouchInput { click(centerLeft) }
         settle(1000)
         assertEquals(Page.Queue, shell.nav.top)
@@ -452,7 +749,7 @@ class NowPlayingLyricsTest {
     fun leavingTheModeMidSlideLeavesNoFrameLoop() {
         intoLine1()
         advance(950)
-        rule.onNodeWithTag("np.lyrics").performClick()
+        back()
         advance(1000)
         assertFalse(exists("np.lyrics"))
         assertFalse(exists("np.lyric.line.2"))
@@ -493,7 +790,7 @@ class NowPlayingLyricsTest {
         flags(true, playing = true)
         settle(100)
         assertTrue(view.keepScreenOn)
-        enterBy("np.lyrics")
+        enterBy("back")
         assertFalse(view.keepScreenOn)
         enterBy("np.art")
         assertTrue(view.keepScreenOn)
@@ -756,7 +1053,7 @@ class NowPlayingLyricsTest {
     fun closingTheViewMidSlideClears() {
         begin(every(1000), 1300)
         at(2100, 1)
-        rule.onNodeWithTag("np.lyrics").performClick()
+        ring()
         advance(f)
         assertEquals(0, pin())
         while (exists("np.lyrics")) {
@@ -771,7 +1068,7 @@ class NowPlayingLyricsTest {
     fun closingTheViewBeforeALeadNeverArms() {
         begin(every(1000), 1300)
         at(1700, 0)
-        rule.onNodeWithTag("np.lyrics").performClick()
+        ring()
         while (exists("np.lyrics")) {
             assertEquals(0, pin())
             advance(16)

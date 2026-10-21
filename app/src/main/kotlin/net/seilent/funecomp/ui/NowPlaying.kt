@@ -1,10 +1,12 @@
 package net.seilent.funecomp.ui
 
 import android.os.SystemClock
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.MutatorMutex
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -21,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -30,8 +33,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 import net.seilent.funecomp.art.Thumbs
@@ -61,6 +66,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.currentStateAsState
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Enums
@@ -70,6 +76,8 @@ import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LyricsFetch
 
 internal const val PIN_LEAD_MS = 200L
+val LocalUptime = staticCompositionLocalOf<() -> Long> { SystemClock::uptimeMillis }
+
 private const val MIC_INK_LEFT = 8f
 private const val MIC_INK_RIGHT = 24f
 private const val MIC_INK_TOP = 3f
@@ -162,32 +170,76 @@ fun BackRing(onBack: () -> Unit) {
 }
 
 @Composable
-fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack: () -> Unit, onQueue: () -> Unit, art: BackdropArt? = null, lyrics: LyricsFetch.Show = LyricsFetch.Show.Off, onBackdrop: ((BackdropArt?) -> Unit)? = null) {
+fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack: () -> Unit, onQueue: () -> Unit, active: Boolean, art: BackdropArt? = null, lyrics: LyricsFetch.Show = LyricsFetch.Show.Off, onBackdrop: ((BackdropArt?) -> Unit)? = null) {
     val ui = LocalUi.current
     val s = device.playback.state
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val playing = s.playing == true
     val scope = rememberCoroutineScope()
-    var lyricMode by remember { mutableStateOf(false) }
     var lyricTarget by remember { mutableStateOf(false) }
-    var turning by remember { mutableStateOf(false) }
-    val layer = remember { Animatable(1f) }
-    val shade = remember { Animatable(0f) }
+    var fade by remember { mutableStateOf<LyricFade.Dir?>(null) }
+    var reversing by remember { mutableStateOf(false) }
+    var elapsed by remember { mutableFloatStateOf(0f) }
+    var start by remember { mutableStateOf<Long?>(null) }
+    val motion = remember { MutatorMutex() }
+    val uptime = LocalUptime.current
     val canLyrics = LyricsFetch.has(device)
-    fun toggleLyrics() {
-        if (turning) return
-        turning = true
-        lyricTarget = !lyricMode
+    fun fadeTo(on: Boolean) {
+        lyricTarget = on
+        fade = if (on) LyricFade.Dir.Enter else LyricFade.Dir.Close
+        reversing = false
+        start = null
         scope.launch {
-            val spec = tween<Float>(Tok.motion_variantFade.toInt(), easing = Decel)
-            launch { shade.animateTo(if (lyricTarget) 1f else 0f, spec) }
-            layer.animateTo(0f, spec)
-            lyricMode = lyricTarget
-            layer.animateTo(1f, spec)
-            turning = false
+            motion.mutate {
+                start = null
+                elapsed = 0f
+                val k = currentCoroutineContext()[MotionDurationScale]?.scaleFactor ?: 1f
+                while (k > 0f && elapsed < LyricFade.T) {
+                    withFrameMillis { t -> elapsed = LyricFade.forward(start ?: t.also { start = it }, t, k) }
+                }
+                fade = null
+                elapsed = 0f
+            }
         }
     }
+    fun reverse() {
+        lyricTarget = false
+        reversing = true
+        val from = start
+        val at = uptime()
+        scope.launch {
+            motion.mutate {
+                val k = currentCoroutineContext()[MotionDurationScale]?.scaleFactor ?: 1f
+                if (k > 0f) {
+                    val b = LyricFade.back(from, at, k)
+                    do {
+                        withFrameMillis { t -> elapsed = LyricFade.reverse(b, t, k) }
+                    } while (elapsed > 0f)
+                }
+                elapsed = 0f
+                fade = null
+                reversing = false
+            }
+        }
+    }
+    fun lyricsKey() {
+        when {
+            fade == null -> fadeTo(true)
+            fade == LyricFade.Dir.Enter && !reversing -> reverse()
+        }
+    }
+    fun back() {
+        when {
+            fade == LyricFade.Dir.Enter && !reversing -> reverse()
+            fade != null -> {}
+            lyricTarget -> fadeTo(false)
+            else -> onBack()
+        }
+    }
+    fun frame() = fade?.let { LyricFade.frame(it, elapsed) } ?: LyricFade.Frame(lyricTarget, 1f, if (lyricTarget) 1f else 0f)
+    val drawn by remember { derivedStateOf { frame().lyrics } }
+    val shaded by remember { derivedStateOf { frame().shade > 0f } }
     LaunchedEffect(Unit) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             control.nowPlayingShown(true)
@@ -214,6 +266,8 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack:
             }
         }
     }
+    val sheet = LocalSheet.current
+    BackHandler(active && sheet?.shown != true) { back() }
     var touches by remember { mutableIntStateOf(0) }
     var idle by remember { mutableStateOf(false) }
     LaunchedEffect(touches) {
@@ -257,25 +311,26 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack:
         }.testTag("np"),
     ) {
         Backdrop(art)
-        if (art != null && shade.value > 0f) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha * shade.value)).testTag("np.shade"))
+        if (art != null && shaded) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).graphicsLayer { alpha = frame().shade }.background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha)).testTag("np.shade"))
         val held = art?.takeIf { it.entry != null }
         val forward: () -> Unit = { if (held != null) onBackdrop?.invoke(held) }
+        val lyricsTap: () -> Unit = {}
         if (onBackdrop != null && (held != null || s.artists.isNotEmpty())) Box(Modifier.fillMaxSize().press({}, { onBackdrop(held) }).testTag("np.backdrop"))
-        BackRing(onBack)
+        BackRing { back() }
         Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
-        if (lyricMode) {
-            Box(Modifier.fillMaxSize().graphicsLayer { alpha = layer.value }) {
-                LyricsColumn(device, lyrics, upcoming.firstOrNull(), lifecycle, lyricTarget, ::toggleLyrics, forward)
+        if (drawn) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = frame().alpha }) {
+                LyricsColumn(device, lyrics, upcoming.firstOrNull(), lifecycle, lyricTarget, lyricsTap, forward)
             }
         } else {
-            Box(Modifier.fillMaxSize().graphicsLayer { alpha = layer.value }) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = frame().alpha }) {
                 RoleText(s.artist ?: "", Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))
                 RoleText(s.album ?: "", Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("np.album"))
                 if (artSide > 0f) {
                     val track = s.track
                     val px = artSide.roundToInt()
                     LaunchedEffect(track, px, device.hello) { if (track != null) control.wantArt(Thumbs.NOW_PLAYING, track, px, s.album) }
-                    val enter = if (canLyrics) Modifier.press({ toggleLyrics() }, forward) else Modifier
+                    val enter = if (canLyrics) Modifier.press({ lyricsKey() }, forward) else Modifier
                     Box(Modifier.at(artX, artY).size(artSide.dp()).background(Color(Tok.color_tile)).then(enter).testTag("np.art")) {
                         track?.let { control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
                     }
@@ -348,7 +403,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack:
                     Glyph(GlyphName.MIC, markSide, white(Roles.npNext.alpha), Modifier.at(ui.px(markX), ui.px(markY)).testTag("np.mark"))
                     val cx = markX + (MIC_INK_LEFT + MIC_INK_RIGHT) / 2 * markSide / Tok.glyphBox
                     val cy = markY + (MIC_INK_TOP + MIC_INK_BOTTOM) / 2 * markSide / Tok.glyphBox
-                    Box(Modifier.at(ui.px(cx), ui.px(cy), 0.5f, 0.5f).size(ui.px(Tok.npRing).dp()).press({ toggleLyrics() }, forward).testTag("np.mark.hit"))
+                    Box(Modifier.at(ui.px(cx), ui.px(cy), 0.5f, 0.5f).size(ui.px(Tok.npRing).dp()).press({ lyricsKey() }, forward).testTag("np.mark.hit"))
                 }
             }
         }
