@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -37,13 +38,22 @@ class Overlay {
     var shows by mutableIntStateOf(0)
         private set
 
-    private var until = 0L
+    var hides by mutableIntStateOf(0)
+        private set
+
+    var until by mutableLongStateOf(0L)
+        private set
 
     val visible get() = SystemClock.uptimeMillis() < until
 
     fun show() {
         until = SystemClock.uptimeMillis() + Tok.motion_volumeHide.toLong() + Tok.motion_volumeFade.toLong()
         shows++
+    }
+
+    fun hide() {
+        until = SystemClock.uptimeMillis()
+        hides++
     }
 }
 
@@ -53,8 +63,12 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     val d = LocalDensity.current
     val alpha = remember { Animatable(0f) }
     val pop = remember { Animatable(1f) }
-    LaunchedEffect(overlay.shows) {
+    LaunchedEffect(overlay.shows, overlay.hides) {
         if (overlay.shows == 0) return@LaunchedEffect
+        if (!overlay.visible) {
+            alpha.animateTo(0f, tween(Tok.motion_volumeFade.toInt(), easing = Decel))
+            return@LaunchedEffect
+        }
         launch { alpha.animateTo(1f, tween(Tok.motion_volumeShow.toInt(), easing = LinearEasing)) }
         launch {
             pop.snapTo(Tok.motion_toggleScale)

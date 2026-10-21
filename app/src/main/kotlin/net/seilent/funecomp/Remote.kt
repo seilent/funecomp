@@ -353,6 +353,12 @@ object Remote : Control {
 
     override fun nowPlayingShown(on: Boolean) = dapLyrics.shown(on)
 
+    override fun lyricsMode() = app?.let { LyricsMode.on(it) } == true
+
+    override fun lyricsMode(on: Boolean) {
+        app?.let { LyricsMode.on(it, on) }
+    }
+
     fun mediaArt(track: Long, px: Int): Bitmap? = thumbs?.media(track, px)
 
     fun onMediaArt(f: (() -> Unit)?) {

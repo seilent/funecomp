@@ -296,10 +296,10 @@ private val SUNG_JA = listOf(
 
 private fun stamped(texts: List<String>, from: Long = 30_000) = texts.mapIndexed { i, t -> LyrLine(from + 4_000L * i, t) }
 
-private fun lyricsOn(plain: Boolean = false): (SimControl) -> Unit = { c ->
+internal fun lyricsOn(plain: Boolean = false): (SimControl) -> Unit = { c ->
     playing(c)
-    val p = c.device.playback
-    c.device = c.device.copy(playback = p.copy(state = p.state.copy(lyrics = !plain, lyricsPlain = plain, lyricsCrc = 1)))
+    val s = c.device.playback.state
+    c.device = c.device.withState(s.copy(lyrics = !plain, lyricsPlain = plain, lyricsCrc = 1), SystemClock.elapsedRealtime())
 }
 
 private fun lyricsLast(c: SimControl) {

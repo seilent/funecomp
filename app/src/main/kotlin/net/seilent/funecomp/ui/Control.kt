@@ -82,6 +82,8 @@ interface Control {
     suspend fun autoEqView(list: AutoEqList, query: String): AutoEqList.View = withContext(Dispatchers.Default) { list.view(query) }
     fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) {}
     fun mediaControls(on: Boolean) {}
+    fun lyricsMode(): Boolean
+    fun lyricsMode(on: Boolean)
     fun lyricSource(id: String, on: Boolean) {}
     fun lyricMove(id: String, by: Int) {}
     fun nowPlayingShown(on: Boolean) {}

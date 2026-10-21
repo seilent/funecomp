@@ -13,6 +13,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.xmlpull.v1.XmlPullParser
 import java.io.File
 import java.io.FileNotFoundException
 
@@ -110,5 +111,29 @@ class PrefsUpgradeTest {
         Firmwares.init(app)
         assertTrue(Firmwares.view.checkDaily)
         assertFalse(Firmwares.view.prereleases)
+    }
+
+    private fun excludes(id: Int): List<String> {
+        val x = app.resources.getXml(id)
+        val out = ArrayList<String>()
+        var section = ""
+        while (x.next() != XmlPullParser.END_DOCUMENT) {
+            if (x.eventType != XmlPullParser.START_TAG) continue
+            if (x.name == "exclude") out += "$section ${x.getAttributeValue(null, "domain")} ${x.getAttributeValue(null, "path")}" else section = x.name
+        }
+        return out
+    }
+
+    @Test
+    fun theLyricsModeReadsOffUntilSetAndStaysInTheBackup() {
+        assertFalse(LyricsMode.on(app))
+        LyricsMode.on(app, true)
+        assertTrue(LyricsMode.on(app))
+        assertEquals(mapOf("mode" to true), app.getSharedPreferences(LyricsMode.PREFS, Context.MODE_PRIVATE).all)
+        Lyrics.init(app)
+        assertEquals(LyricSources(), Lyrics.sources)
+        val rules = excludes(R.xml.backup_rules) + excludes(R.xml.data_extraction_rules)
+        for (section in listOf("full-backup-content", "cloud-backup", "device-transfer")) assertTrue(section, rules.contains("$section sharedpref art.xml"))
+        assertTrue(rules.toString(), rules.none { it.endsWith(" ${LyricsMode.PREFS}.xml") })
     }
 }

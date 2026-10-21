@@ -225,6 +225,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val arts = HashMap<Pair<Long, Int>, Art>()
     private var upd: Upd? = null
     private var favsBusy = faults.favsBusy
+    private var flagTrack: Long? = null
+    private var flagAt = 0L
+    private var late = false
 
     init {
         opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f ->
@@ -317,6 +320,13 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         shown = key
         val bat = battery()
         lastBattery = bat
+        if (t?.id != flagTrack) {
+            flagTrack = t?.id
+            flagAt = now()
+            late = faults.lyricsLate != null
+        }
+        if (late && now() - flagAt >= (faults.lyricsLate ?: 0)) late = false
+        val unread = t != null && (late || t.title in faults.lyricsAbsent)
         State(
             source, Enums.Output.wired, t?.id, t?.title, t?.artist, t?.artists.orEmpty(),
             t?.mbids.orEmpty(), t?.durationMs, position(), sample, sent, playing, shuffle, repeat,
@@ -326,12 +336,12 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             if (v12) opts.cardTotalMiB else null,
             if (v12) volumePercent(volume) else null,
             if (v12) prefs.getValue("volumeStep").toIntOrNull() ?: 5 else null,
-            if (v12 && t != null) hasSynced(t.id) else null,
+            if (v12 && t != null && !unread) hasSynced(t.id) else null,
             if (v12) prefs.getValue("maxVolume").toIntOrNull() ?: 100 else null,
             if (v13 && t != null && favsBusy == 0) t.id in lib.favorites else null,
             if (v13) lib.snapRev else null,
-            if (v14 && t != null) hasPlain(t.id) else null,
-            if (allowed(Msg.LYR_GET) && t != null) lyrs[t.id]?.crc else null,
+            if (v14 && t != null && !unread) hasPlain(t.id) else null,
+            if (allowed(Msg.LYR_GET) && t != null && !unread) lyrs[t.id]?.crc else null,
             if (v110) false else null,
         ).encode()
     }
@@ -348,6 +358,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             send(out, Msg.STATE, state())
         } else if (playing && t != null && position() >= t.durationMs) {
             advance(1, auto = true)
+            send(out, Msg.STATE, state())
+        } else if (late && now() - flagAt >= (faults.lyricsLate ?: 0)) {
             send(out, Msg.STATE, state())
         } else if (playing && now() - lastStateAt >= Proto.stateIntervalMs) {
             send(out, Msg.STATE, state())

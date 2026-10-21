@@ -89,6 +89,7 @@ fun App(
     scrobbleLabels: Boolean = true,
     insets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     ime: WindowInsets = WindowInsets.ime,
+    liveDevice: () -> DeviceState = { device },
 ) {
     val density = LocalDensity.current
     val dir = LocalLayoutDirection.current
@@ -142,7 +143,7 @@ fun App(
             }
             Stack(nav, browse) { page ->
                 when (page) {
-                    Page.NowPlaying -> NowPlaying(device, control, shell.toast, { nav.pop() }, { nav.push(Page.Queue) }, nav.top == Page.NowPlaying, art, lyrics) { held -> artSheet(ctx, held, picks) }
+                    Page.NowPlaying -> NowPlaying(device, control, shell.toast, shell.overlay, { nav.pop() }, { nav.push(Page.Queue) }, nav.top == Page.NowPlaying, art, lyrics, liveDevice) { held -> artSheet(ctx, held, picks) }
                     Page.Home -> Home(homeItems(device, link), { control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)

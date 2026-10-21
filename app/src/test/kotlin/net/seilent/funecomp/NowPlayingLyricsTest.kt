@@ -16,6 +16,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
@@ -57,6 +58,7 @@ import net.seilent.funecomp.ui.RefreshPin
 import net.seilent.funecomp.ui.RefreshPin.ModeInfo
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LyricsFetch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -105,14 +107,26 @@ class NowPlayingLyricsTest {
     private val synced = (0 until 12).map { LyrLine(it * 10_000L, "line $it") }
     private val plain = (0 until 200).map { LyrLine(null, "plain $it") }
 
-    private fun flags(on: Boolean?, playing: Boolean = false) {
+    private fun flags(on: Boolean?, playing: Boolean = false, plain: Boolean? = on?.let { false }) {
         val s = c.device.playback.state
-        c.device = c.device.withState(s.copy(lyrics = on, lyricsPlain = on?.let { false }, lyricsCrc = if (on == true) 1 else null, playing = playing, positionMs = 25_000), 0)
+        c.device = c.device.withState(s.copy(lyrics = on, lyricsPlain = plain, lyricsCrc = if (on == true || plain == true) 1 else null, playing = playing, positionMs = 25_000), SystemClock.elapsedRealtime())
     }
 
-    private fun start(minor: Int = 7, on: Boolean? = true, copy: List<LyrLine>? = synced, kind: Int = Enums.LyricsKind.synced, art: Boolean = true): Shell {
+    private fun track(id: Long, on: Boolean?, plain: Boolean? = on?.let { false }, playing: Boolean = false) {
+        val s = c.device.playback.state
+        lyrics = when {
+            on == true -> LyricsFetch.Show.Lines(id, LyricsFetch.Copy(1, Enums.LyricsKind.synced, synced))
+            plain == true -> LyricsFetch.Show.Lines(id, LyricsFetch.Copy(1, Enums.LyricsKind.plain, this.plain))
+            on == false -> LyricsFetch.Show.None
+            else -> LyricsFetch.Show.Blank
+        }
+        c.device = c.device.withState(s.copy(track = id, title = "track $id", lyrics = on, lyricsPlain = plain, lyricsCrc = if (on == true || plain == true) 1 else null, playing = playing, positionMs = 0), SystemClock.elapsedRealtime())
+    }
+
+    private fun start(minor: Int = 7, on: Boolean? = true, copy: List<LyrLine>? = synced, kind: Int = Enums.LyricsKind.synced, art: Boolean = true, mode: Boolean = false, plain: Boolean? = on?.let { false }): Shell {
         c = SimControl("ap80", minor = minor)
-        flags(on)
+        c.mode = mode
+        flags(on, plain = plain)
         val track = c.device.playback.state.track!!
         lyrics = if (copy == null) LyricsFetch.Show.None else LyricsFetch.Show.Lines(track, LyricsFetch.Copy(1, kind, copy))
         val control = object : Control by c {
@@ -131,7 +145,7 @@ class NowPlayingLyricsTest {
             }
             CompositionLocalProvider(LocalLifecycleOwner provides owner, LocalConfiguration provides (config ?: LocalConfiguration.current)) {
                 Box(Modifier.requiredSize(411.dp, 960.dp)) {
-                    App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, art = if (art) BackdropArt(ImageBitmap(8, 8), null, entry) else null, lyrics = lyrics)
+                    App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, art = if (art) BackdropArt(ImageBitmap(8, 8), null, entry) else null, lyrics = lyrics, liveDevice = { c.device })
                 }
             }
         }
@@ -141,7 +155,7 @@ class NowPlayingLyricsTest {
 
     private fun settle(ms: Long) {
         rule.waitForIdle()
-        rule.mainClock.advanceTimeBy(ms)
+        advance(ms)
         rule.waitForIdle()
     }
 
@@ -158,6 +172,8 @@ class NowPlayingLyricsTest {
         assertFalse(exists("np.mark"))
         enterBy("np.art")
         assertFalse(exists("np.lyrics"))
+        enterBy("np.art")
+        assertFalse(c.mode)
         flags(false)
         settle(100)
         assertFalse(exists("np.mark"))
@@ -165,14 +181,17 @@ class NowPlayingLyricsTest {
         settle(100)
         assertTrue(exists("np.mark"))
         rule.onNodeWithTag("np.mark").assertIsDisplayed()
+        assertFalse(exists("np.lyrics"))
     }
 
     @Test
     fun aMinor6PeerWithoutBit11HasNoMarkOrEntry() {
-        start(minor = 6)
+        val shell = start(minor = 6)
         assertFalse(exists("np.mark"))
         enterBy("np.art")
         assertFalse(exists("np.lyrics"))
+        assertFalse(c.mode)
+        assertEquals(0, shell.toast.shows)
     }
 
     @Test
@@ -450,7 +469,14 @@ class NowPlayingLyricsTest {
         assertFalse(exists("np.lyrics"))
         back()
         settle(1500)
+        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
+        lyricsOn()
+        back()
+        settle(1000)
         normalOn(shell)
+        back()
+        settle(1500)
+        assertEquals(listOf(Page.Home), shell.nav.stack.toList())
     }
 
     @Test
@@ -467,16 +493,15 @@ class NowPlayingLyricsTest {
     }
 
     @Test
-    fun theFlagsDropWhileShown() {
+    fun aSameTrackDropLeaves() {
         val shell = start()
         enterBy("np.art")
         flags(false)
         settle(100)
-        assertTrue(exists("np.lyrics"))
-        back()
-        settle(1000)
-        assertFalse(exists("np.lyrics"))
-        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
+        assertTrue(exists("np.shade"))
+        settle(900)
+        normalOn(shell)
+        assertTrue(c.mode)
     }
 
     @Test
@@ -776,7 +801,7 @@ class NowPlayingLyricsTest {
     }
 
     @Test
-    fun theModeEndsWhenNowPlayingClosesAndTheScreenHoldFollowsIt() {
+    fun theScreenHoldFollowsTheViewAndTheModeOutlivesNowPlaying() {
         val shell = start()
         assertEquals(listOf(true), shown)
         flags(true, playing = true)
@@ -805,10 +830,13 @@ class NowPlayingLyricsTest {
         settle(1500)
         assertFalse(view.keepScreenOn)
         assertEquals(listOf(true, false, true, false), shown)
+        assertTrue(c.mode)
         shell.nav.push(Page.NowPlaying)
         settle(1500)
-        assertTrue(exists("np.title"))
-        assertFalse(exists("np.lyrics"))
+        lyricsOn()
+        assertTrue(view.keepScreenOn)
+        enterBy("back")
+        assertFalse(c.mode)
         assertFalse(view.keepScreenOn)
     }
 
@@ -1162,5 +1190,626 @@ class NowPlayingLyricsTest {
         config = Configuration(view.resources.configuration).apply { keyboard = if (keyboard == Configuration.KEYBOARD_QWERTY) Configuration.KEYBOARD_12KEY else Configuration.KEYBOARD_QWERTY }
         advance(f)
         assertEquals(8, pin())
+    }
+
+    private fun lyricsOn() {
+        assertTrue(exists("np.lyrics"))
+        assertFalse(exists("np.title"))
+    }
+
+    private fun normal() {
+        assertTrue(exists("np.title"))
+        assertFalse(exists("np.lyrics"))
+        assertFalse(exists("np.shade"))
+    }
+
+    private fun inView(): Shell {
+        val shell = start()
+        enterBy("np.art")
+        lyricsOn()
+        assertTrue(c.mode)
+        return shell
+    }
+
+    @Test
+    fun opensInLyricsWhenTheModeIsOn() {
+        start(mode = true)
+        lyricsOn()
+        assertTrue(exists("np.shade"))
+        assertTrue(c.mode)
+    }
+
+    @Test
+    fun opensInLyricsOnTheFirstFrame() {
+        c = SimControl("ap80")
+        c.mode = true
+        flags(true)
+        lyrics = LyricsFetch.Show.Lines(c.device.playback.state.track!!, LyricsFetch.Copy(1, Enums.LyricsKind.synced, synced))
+        owner.registry.currentState = Lifecycle.State.RESUMED
+        rule.mainClock.autoAdvance = false
+        rule.setUptimeContent {
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                Box(Modifier.requiredSize(411.dp, 960.dp)) {
+                    App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), c, Shell(Nav(listOf(Page.Home, Page.NowPlaying))), art = BackdropArt(ImageBitmap(8, 8), null, entry), lyrics = lyrics, liveDevice = { c.device })
+                }
+            }
+        }
+        rule.mainClock.advanceTimeByFrame()
+        lyricsOn()
+        assertTrue(exists("np.shade"))
+    }
+
+    @Test
+    fun opensNormalWhenTheTrackHasNone() {
+        start(on = false, copy = null, mode = true)
+        normal()
+        assertTrue(c.mode)
+    }
+
+    @Test
+    fun opensNormalOnAPlainTrackWithTheModeOn() {
+        start(on = false, plain = true, copy = plain, kind = Enums.LyricsKind.plain, mode = true)
+        normal()
+        settle(2000)
+        normal()
+    }
+
+    @Test
+    fun opensNormalWhilePendingThenEnters() {
+        start(on = null, mode = true)
+        normal()
+        flags(true)
+        settle(1000)
+        lyricsOn()
+    }
+
+    @Test
+    fun theArtOnATrackWithoutLyricsTogglesTheMode() {
+        val shell = start(on = false, copy = null)
+        rule.onNodeWithTag("np.art").performClick()
+        settle(100)
+        assertTrue(c.mode)
+        assertEquals("lyrics mode on", shell.toast.artist)
+        assertEquals("", shell.toast.title)
+        assertFalse(exists("np.mark"))
+        settle(1000)
+        normal()
+        rule.onNodeWithTag("np.art").performClick()
+        settle(100)
+        assertFalse(c.mode)
+        assertEquals("lyrics mode off", shell.toast.artist)
+        track(2, null)
+        settle(1000)
+        rule.onNodeWithTag("np.art").performClick()
+        settle(100)
+        assertTrue(c.mode)
+        assertEquals("lyrics mode on", shell.toast.artist)
+        settle(1000)
+        normal()
+        flags(true)
+        settle(100)
+        assertTrue(exists("np.shade"))
+        settle(900)
+        lyricsOn()
+    }
+
+    @Test
+    fun theArtLongPressOpensThePickOnATrackWithoutLyrics() {
+        val shell = start(on = false, copy = null, art = false)
+        val artist = c.device.playback.state.artists.first()
+        rule.onNodeWithTag("np.art").performTouchInput { longClick() }
+        settle(500)
+        assertEquals(artist, shell.sheet.title)
+        shell.sheet.close()
+        settle(500)
+        flags(true)
+        lyrics = LyricsFetch.Show.Lines(c.device.playback.state.track!!, LyricsFetch.Copy(1, Enums.LyricsKind.synced, synced))
+        settle(100)
+        rule.onNodeWithTag("np.art").performTouchInput { longClick() }
+        settle(500)
+        assertEquals(artist, shell.sheet.title)
+        shell.sheet.close()
+        settle(500)
+        rule.onNodeWithTag("np.mark.hit").performTouchInput { longClick() }
+        settle(500)
+        assertEquals(artist, shell.sheet.title)
+        assertTrue(shell.sheet.shown)
+        shell.sheet.close()
+        settle(500)
+        enterBy("np.art")
+        rule.onNodeWithTag("np.lyrics").performTouchInput { longClick() }
+        settle(500)
+        assertEquals(artist, shell.sheet.title)
+        shell.sheet.close()
+        settle(500)
+        lyricsOn()
+        back()
+        settle(1000)
+        val p = c.device.playback
+        c.device = c.device.copy(playback = p.copy(state = p.state.copy(artists = emptyList())))
+        settle(100)
+        rule.onNodeWithTag("np.art").performTouchInput { longClick() }
+        settle(500)
+        assertFalse(shell.sheet.shown)
+        assertFalse(exists("np.lyrics"))
+    }
+
+    @Test
+    fun anLrcDelOnAHandEntryLeavesWithTheModeOn() {
+        val shell = start(on = false, plain = true, copy = plain, kind = Enums.LyricsKind.plain, mode = true)
+        normal()
+        enterBy("np.art")
+        lyricsOn()
+        settle(2000)
+        lyricsOn()
+        flags(false, plain = false)
+        settle(100)
+        assertTrue(exists("np.shade"))
+        settle(900)
+        normalOn(shell)
+        assertTrue(c.mode)
+        flags(false, plain = true)
+        settle(2000)
+        normalOn(shell)
+    }
+
+    @Test
+    fun theKeyUnderTheVolumeOverlayHidesItFirst() {
+        val shell = start(on = false, copy = null)
+        shell.overlay.show()
+        settle(200)
+        assertTrue(exists("overlay"))
+        rule.onNodeWithTag("np.art").performClick()
+        assertFalse(shell.overlay.visible)
+        settle(100)
+        assertTrue(c.mode)
+        assertEquals("lyrics mode on", shell.toast.artist)
+        settle(Tok.motion_volumeFade.toLong())
+        assertFalse(exists("overlay"))
+        flags(true)
+        settle(1000)
+        lyricsOn()
+        back()
+        settle(1000)
+        normal()
+        shell.overlay.show()
+        settle(200)
+        rule.onNodeWithTag("np.art").performClick()
+        assertFalse(shell.overlay.visible)
+        settle(1000)
+        lyricsOn()
+        shell.overlay.show()
+        settle(200)
+        val before = c.sent.size
+        rule.onNodeWithTag("overlay.plus").performClick()
+        settle(100)
+        assertTrue(c.sent.size > before)
+        assertTrue(shell.overlay.visible)
+        lyricsOn()
+        back()
+        settle(200)
+        shell.overlay.show()
+        settle(200)
+        rule.onNodeWithTag("np.art").performClick()
+        assertTrue(shell.overlay.visible)
+    }
+
+    @Test
+    fun anEnterSavesTheModeAndBackClearsIt() {
+        start()
+        for (tag in listOf("np.art", "np.mark.hit")) {
+            assertFalse(c.mode)
+            enterBy(tag)
+            assertTrue(tag, c.mode)
+            back()
+            settle(1000)
+            assertFalse(tag, c.mode)
+        }
+    }
+
+    @Test
+    fun anEnterThenABackInTheSameFrameKeepsTheModeOff() {
+        val shell = start()
+        rule.onNodeWithTag("np.art").performClick()
+        back()
+        settle(50)
+        normalOn(shell)
+        assertFalse(c.mode)
+    }
+
+    @Test
+    fun aTrackChangeFadeWaitsForTheSettleWindow() {
+        val shell = inView()
+        track(2, false, playing = true)
+        settle(880)
+        assertTrue(view.keepScreenOn)
+        settle(40)
+        assertFalse(view.keepScreenOn)
+        settle(1300)
+        normalOn(shell)
+        assertTrue(c.mode)
+    }
+
+    @Test
+    fun aSkipBurstGivesOneFadeAtTheEnd() {
+        val shell = inView()
+        track(2, false)
+        settle(300)
+        track(3, false)
+        settle(300)
+        track(4, true)
+        repeat(20) {
+            settle(100)
+            lyricsOn()
+        }
+        track(5, false)
+        settle(300)
+        track(6, false, playing = true)
+        settle(880)
+        assertTrue(view.keepScreenOn)
+        settle(40)
+        assertFalse(view.keepScreenOn)
+        settle(1300)
+        normalOn(shell)
+    }
+
+    @Test
+    fun aPendingTrackKeepsTheView() {
+        val shell = inView()
+        track(2, null)
+        settle(9000)
+        lyricsOn()
+        track(2, true)
+        settle(2000)
+        lyricsOn()
+        track(3, false)
+        settle(2000)
+        normalOn(shell)
+        track(4, null)
+        settle(3000)
+        normalOn(shell)
+        flags(true)
+        settle(100)
+        assertTrue(exists("np.shade"))
+        settle(1000)
+        lyricsOn()
+        assertTrue(c.mode)
+    }
+
+    @Test
+    fun aCueTrackWithoutFlagsLeavesAndDropsTheHold() {
+        start()
+        flags(true, playing = true)
+        enterBy("np.art")
+        assertTrue(view.keepScreenOn)
+        track(2, null, playing = true)
+        settle(9850)
+        lyricsOn()
+        assertTrue(view.keepScreenOn)
+        settle(200)
+        assertTrue(exists("np.shade"))
+        assertFalse(view.keepScreenOn)
+        settle(1000)
+        normal()
+        flags(true, playing = true)
+        settle(100)
+        assertTrue(exists("np.shade"))
+        assertTrue(view.keepScreenOn)
+        settle(1000)
+        lyricsOn()
+    }
+
+    @Test
+    fun withLyrflagsPendingWaitsForTheFlags() {
+        start()
+        c.device = c.device.copy(hello = c.device.hello?.copy(minor = 15))
+        flags(true, playing = true)
+        enterBy("np.art")
+        track(2, null, playing = true)
+        settle(15_000)
+        lyricsOn()
+        assertTrue(view.keepScreenOn)
+        flags(false, playing = true)
+        settle(100)
+        assertTrue(exists("np.shade"))
+        assertFalse(view.keepScreenOn)
+        settle(1000)
+        normal()
+    }
+
+    @Test
+    fun aPlainTrackShowsNormalWithTheModeOn() {
+        val shell = inView()
+        track(2, false, plain = true, playing = true)
+        settle(880)
+        assertTrue(view.keepScreenOn)
+        settle(40)
+        assertFalse(view.keepScreenOn)
+        settle(1300)
+        normalOn(shell)
+        assertTrue(c.mode)
+    }
+
+    @Test
+    fun theKeyOnAPlainTrackEntersForThatTrack() {
+        val shell = start(on = false, plain = true, copy = plain, kind = Enums.LyricsKind.plain, mode = true)
+        enterBy("np.art")
+        assertTrue(c.mode)
+        settle(2000)
+        lyricsOn()
+        track(3, false)
+        settle(860)
+        lyricsOn()
+        settle(1300)
+        normalOn(shell)
+        track(4, true)
+        settle(2200)
+        lyricsOn()
+        track(5, false, plain = true)
+        settle(2200)
+        normalOn(shell)
+        enterBy("np.art")
+        lyricsOn()
+        back()
+        settle(1000)
+        normalOn(shell)
+        assertFalse(c.mode)
+    }
+
+    @Test
+    fun aSameTrackDropLeavesAndARiseEnters() {
+        val shell = inView()
+        flags(false)
+        settle(1000)
+        normalOn(shell)
+        flags(true)
+        settle(100)
+        assertTrue(exists("np.shade"))
+        settle(900)
+        lyricsOn()
+    }
+
+    @Test
+    fun aSameTrackDropDuringAnEnterFadeWaits() {
+        val shell = start()
+        rule.onNodeWithTag("np.art").performClick()
+        settle(200)
+        flags(false)
+        settle(400)
+        lyricsOn()
+        settle(240)
+        assertTrue(exists("np.shade"))
+        settle(1000)
+        normalOn(shell)
+        assertTrue(c.mode)
+    }
+
+    @Test
+    fun theFollowWaitsUnderASheet() {
+        val shell = inView()
+        rule.onNodeWithTag("np.lyrics").performTouchInput { longClick() }
+        settle(500)
+        assertTrue(shell.sheet.shown)
+        track(2, false)
+        settle(2000)
+        lyricsOn()
+        rule.onRoot().performTouchInput { click(topCenter.copy(y = top + 10f)) }
+        settle(500)
+        assertFalse(shell.sheet.shown)
+        assertTrue(exists("np.title"))
+        settle(1000)
+        normal()
+
+        track(3, true)
+        settle(2000)
+        lyricsOn()
+        shell.overlay.show()
+        track(4, false)
+        val hold = (Tok.motion_volumeHide + Tok.motion_volumeFade).toLong()
+        settle(hold - 100)
+        lyricsOn()
+        settle(500)
+        assertTrue(exists("np.title"))
+        settle(1000)
+        normal()
+    }
+
+    @Test
+    fun theFollowWaitsUnderAPointerDown() {
+        val shell = start(art = false)
+        val p = c.device.playback
+        c.device = c.device.copy(playback = p.copy(state = p.state.copy(artists = emptyList())))
+        enterBy("np.art")
+        lyricsOn()
+        track(2, false)
+        settle(700)
+        rule.onNodeWithTag("np").performTouchInput { down(Offset(width - 4f, height / 2f)) }
+        settle(1300)
+        lyricsOn()
+        assertFalse(shell.sheet.shown)
+        rule.onNodeWithTag("np").performTouchInput { cancel() }
+        settle(500)
+        assertTrue(exists("np.title"))
+        settle(1000)
+        normalOn(shell)
+        track(3, true)
+        settle(700)
+        rule.onNodeWithTag("np").performTouchInput { down(Offset(width - 4f, height / 2f)) }
+        settle(1300)
+        normalOn(shell)
+        rule.onNodeWithTag("np").performTouchInput { up() }
+        settle(1000)
+        lyricsOn()
+    }
+
+    @Test
+    fun backInATrackChangeEnterFadeReversesAndTurnsTheModeOff() {
+        val shell = start(on = false, copy = null, mode = true)
+        track(2, true)
+        settle(900 + 200)
+        assertTrue(exists("np.shade"))
+        back()
+        settle(400)
+        normalOn(shell)
+        assertFalse(c.mode)
+        track(3, true)
+        settle(2000)
+        normalOn(shell)
+    }
+
+    @Test
+    fun aTrackChangeInTheEnterFadeFinishesThenFollows() {
+        val shell = start()
+        rule.onNodeWithTag("np.art").performClick()
+        settle(200)
+        track(2, false)
+        settle(600)
+        lyricsOn()
+        settle(240)
+        lyricsOn()
+        settle(500)
+        assertTrue(exists("np.title"))
+        settle(800)
+        normalOn(shell)
+        assertTrue(c.mode)
+    }
+
+    @Test
+    fun backInATrackChangeLeaveFadeDoesNothing() {
+        val shell = inView()
+        track(2, false)
+        settle(900 + 200)
+        assertTrue(exists("np.shade"))
+        back()
+        settle(1000)
+        normalOn(shell)
+        assertTrue(c.mode)
+        back()
+        settle(1500)
+        assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+    }
+
+    private fun frame() {
+        rule.mainClock.advanceTimeByFrame()
+    }
+
+    @Test
+    fun aTrackChangeWhileStoppedSnaps() {
+        val shell = inView()
+        owner.registry.currentState = Lifecycle.State.CREATED
+        track(2, false)
+        owner.registry.currentState = Lifecycle.State.RESUMED
+        frame()
+        normal()
+        owner.registry.currentState = Lifecycle.State.CREATED
+        track(3, true)
+        owner.registry.currentState = Lifecycle.State.RESUMED
+        frame()
+        lyricsOn()
+        assertTrue(exists("np.shade"))
+        settle(1000)
+        back()
+        settle(1000)
+        rule.onNodeWithTag("np.art").performClick()
+        settle(200)
+        owner.registry.currentState = Lifecycle.State.CREATED
+        owner.registry.currentState = Lifecycle.State.RESUMED
+        frame()
+        lyricsOn()
+        assertTrue(exists("np.shade"))
+        settle(1000)
+        owner.registry.currentState = Lifecycle.State.CREATED
+        track(4, null)
+        owner.registry.currentState = Lifecycle.State.RESUMED
+        frame()
+        lyricsOn()
+        settle(1000)
+        lyricsOn()
+        flags(false)
+        settle(100)
+        assertTrue(exists("np.shade"))
+        settle(900)
+        normalOn(shell)
+    }
+
+    @Test
+    fun thePhoneSourceShowsNormalAndKeepsTheMode() {
+        val shell = inView()
+        val p = c.device.playback
+        c.device = c.device.withState(p.state.copy(source = Enums.Source.phone, track = null, title = null, playing = true), SystemClock.elapsedRealtime())
+        settle(880)
+        assertTrue(view.keepScreenOn)
+        settle(40)
+        assertFalse(view.keepScreenOn)
+        settle(1300)
+        assertFalse(exists("np.lyrics"))
+        assertTrue(c.mode)
+        assertEquals(Page.NowPlaying, shell.nav.top)
+        rule.onNodeWithTag("np.art").performClick()
+        settle(100)
+        assertTrue(c.mode)
+        assertEquals(0, shell.toast.shows)
+        c.device = c.device.withState(p.state.copy(source = Enums.Source.local, playing = true), SystemClock.elapsedRealtime())
+        settle(880)
+        assertFalse(view.keepScreenOn)
+        settle(40)
+        assertTrue(view.keepScreenOn)
+        settle(1300)
+        lyricsOn()
+    }
+
+    @Test
+    fun aNoLyricsTrackBackPopsAndKeepsTheMode() {
+        val shell = start(on = false, copy = null, mode = true)
+        normal()
+        back()
+        settle(1500)
+        assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+        assertTrue(c.mode)
+    }
+
+    @Test
+    fun aStopAndReconnectKeepsTheView() {
+        val shell = inView()
+        val hello = c.device.hello
+        val state = c.device.playback.state
+        c.device = DeviceState()
+        settle(2000)
+        lyricsOn()
+        c.device = DeviceState().withHello(hello!!)
+        settle(2000)
+        lyricsOn()
+        c.device = c.device.withState(state, SystemClock.elapsedRealtime())
+        settle(2000)
+        lyricsOn()
+        track(2, false, playing = true)
+        settle(880)
+        assertTrue(view.keepScreenOn)
+        settle(40)
+        assertFalse(view.keepScreenOn)
+        settle(1300)
+        normalOn(shell)
+    }
+
+    @Test
+    fun aPendingTrackKeepsTheViewThroughALinkDrop() {
+        inView()
+        track(2, null)
+        settle(2000)
+        c.device = DeviceState()
+        settle(15_000)
+        lyricsOn()
+        assertTrue(c.mode)
+    }
+
+    @Test
+    fun aPlainFlagWithoutTheSyncedFlagEntersOnTheKey() {
+        start(on = null, plain = true, copy = plain, kind = Enums.LyricsKind.plain)
+        normal()
+        enterBy("np.art")
+        lyricsOn()
+        assertTrue(c.mode)
+        settle(15_000)
+        lyricsOn()
     }
 }

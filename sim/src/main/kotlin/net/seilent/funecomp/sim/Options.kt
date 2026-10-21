@@ -48,6 +48,8 @@ class Faults(specs: List<String>) {
     var favsBusyText = "busy"
     var staleState = false
     val eqHidden = HashSet<String>()
+    var lyricsLate: Long? = null
+    val lyricsAbsent = HashSet<String>()
 
     init {
         for (spec in specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }) {
@@ -91,6 +93,8 @@ class Faults(specs: List<String>) {
                 }
                 "stale-state" -> staleState = true
                 "eq-hidden" -> eqHidden += v
+                "lyrics-late" -> lyricsLate = v.toLong()
+                "lyrics-absent" -> lyricsAbsent += v
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')

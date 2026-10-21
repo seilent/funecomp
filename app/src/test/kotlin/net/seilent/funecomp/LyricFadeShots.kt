@@ -54,7 +54,9 @@ private val FADE_LINES = listOf(
 
 private val FADE_ENTRY = ArtCache.Entry("a74b1b7f-71a5-4011-9441-d0b5e4122711", "Radiohead", "a74b1b7f-71a5-4011-9441-d0b5e4122711", "commons", Credit("Raph_PH", "CC BY 4.0", "https://commons.wikimedia.org/wiki/File:RadioheadO2211125_composite.jpg", "https://creativecommons.org/licenses/by/4.0"), "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/RadioheadO2211125_composite.jpg/500px-RadioheadO2211125_composite.jpg", 0, "File:RadioheadO2211125 composite.jpg", "s", "Radiohead")
 
-class FadeCase(val name: String, val frames: Int, val pre: () -> Unit = {}, val events: List<Pair<Long, () -> Unit>>)
+private const val BODY_B = "shows on songs with synced lyrics"
+
+class FadeCase(val lead: Boolean, val name: String, val dir: String, val frames: Int, val mode: Boolean, val lyrics: Boolean?, val pages: List<Page>, val pre: () -> Unit = {}, val events: List<Pair<Long, () -> Unit>>)
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -152,6 +154,11 @@ class LyricFadeShots {
         Espresso.pressBack()
     }
 
+    fun song(on: Boolean?) {
+        c.transport(Enums.TransportCmd.next)
+        flags(on)
+    }
+
     fun flags(on: Boolean?) {
         val s = c.device.playback.state
         c.device = c.device.withState(s.copy(playing = false, positionMs = 61_000, lyrics = on, lyricsPlain = on?.let { false }, lyricsCrc = if (on == true) 1 else null), SystemClock.elapsedRealtime())
@@ -163,22 +170,38 @@ class LyricFadeShots {
         }
     }
 
+    fun toastB() {
+        shell.toast.show("lyrics mode on", BODY_B)
+    }
+
     private val fades = listOf(
-        FadeCase("forward", 29, events = listOf(0L to { tap("np.art") })),
-        FadeCase("back-100", 13, events = listOf(0L to { tap("np.art") }, 100L to { back() })),
-        FadeCase("back-380", 29, events = listOf(0L to { tap("np.art") }, 380L to { back() })),
-        FadeCase("back-600", 43, events = listOf(0L to { tap("np.art") }, 600L to { back() })),
-        FadeCase("key-380", 29, events = listOf(0L to { tap("np.art") }, 364L to { tap("np.art") })),
-        FadeCase("close-back-200", 29, pre = { tap("np.art"); settle(1500) }, events = listOf(0L to { back() }, 200L to { back() })),
+        FadeCase(true, "forward", "", 29, false, true, NP_PAGES, events = listOf(0L to { tap("np.art") })),
+        FadeCase(true, "back-100", "", 13, false, true, NP_PAGES, events = listOf(0L to { tap("np.art") }, 100L to { back() })),
+        FadeCase(true, "back-380", "", 29, false, true, NP_PAGES, events = listOf(0L to { tap("np.art") }, 380L to { back() })),
+        FadeCase(true, "back-600", "", 43, false, true, NP_PAGES, events = listOf(0L to { tap("np.art") }, 600L to { back() })),
+        FadeCase(true, "key-380", "", 29, false, true, NP_PAGES, events = listOf(0L to { tap("np.art") }, 364L to { tap("np.art") })),
+        FadeCase(true, "close-back-200", "", 29, false, true, NP_PAGES, pre = { tap("np.art"); settle(1500) }, events = listOf(0L to { back() }, 200L to { back() })),
+        FadeCase(false, "next-none", "follow/", 55, true, true, NP_PAGES, events = listOf(0L to { song(false) })),
+        FadeCase(false, "next-lyrics", "follow/", 55, true, false, NP_PAGES, events = listOf(0L to { song(true) })),
+        FadeCase(false, "skip3", "follow/", 73, true, false, NP_PAGES, events = listOf(0L to { song(false) }, 304L to { song(false) }, 608L to { song(true) })),
+        FadeCase(false, "late", "follow/", 73, true, false, NP_PAGES, events = listOf(0L to { song(null) }, 1504L to { flags(true) })),
+        FadeCase(false, "open", "follow/", 67, true, true, listOf(Page.Home), events = listOf(0L to { shell.nav.push(Page.NowPlaying) })),
+    )
+
+    private val stills = listOf(
+        FadeCase(false, "toast-on-a", "follow/stills/", 0, false, false, NP_PAGES, events = listOf(0L to { tap("np.art") })),
+        FadeCase(false, "toast-on-b", "follow/stills/", 0, false, false, NP_PAGES, events = listOf(0L to { tap("np.art"); toastB() })),
+        FadeCase(false, "toast-off", "follow/stills/", 0, true, false, NP_PAGES, events = listOf(0L to { tap("np.art") })),
     )
 
     private fun begin(k: FadeCase, sz: Size) {
         c = SimControl("v1", artDir = covers)
         c.transport(Enums.TransportCmd.next)
         c.transport(Enums.TransportCmd.seek, seekMs = 61_000)
+        c.mode = k.mode
         mark()
-        flags(true)
-        shell = Shell(Nav(NP_PAGES))
+        flags(k.lyrics)
+        shell = Shell(Nav(k.pages))
         art = BackdropArt(photo, null, FADE_ENTRY)
         size = sz
         gen++
@@ -199,7 +222,7 @@ class LyricFadeShots {
             LaunchedEffect(Unit) { while (true) withFrameMillis { lastFrame = it } }
             key(gen) {
                 Box(Modifier.requiredSize(sz.w.dp, sz.h.dp).testTag("frame")) {
-                    App(c.device, LinkView(Phase.LIVE, "V1", everLive = true), c, shell, art = art, lyrics = lyrics, insets = sz.bars)
+                    App(c.device, LinkView(Phase.LIVE, "V1", everLive = true), c, shell, art = art, lyrics = lyrics, insets = sz.bars, liveDevice = { c.device })
                 }
             }
         }
@@ -208,7 +231,7 @@ class LyricFadeShots {
             for (k in fades) {
                 if (only.isNotEmpty() && only.split(',').none { k.name == it }) continue
                 begin(k, sz)
-                val out = File(dir, "${k.name}/${sz.name}").apply { mkdirs() }
+                val out = File(dir, "${k.dir}${k.name}/${sz.name}").apply { mkdirs() }
                 val ev = k.events.toMutableList()
                 val ms = ArrayList<Long>()
                 for (n in 0 until k.frames) {
@@ -219,11 +242,13 @@ class LyricFadeShots {
                         e.second()
                         if (e.first == 0L) {
                             mark()
-                            val f = lastFrame
-                            tickUntil("a frame after $f") { lastFrame != f }
-                            val lag = rule.mainClock.currentTime - lastFrame
-                            base = lastFrame
-                            sys0 = SystemClock.elapsedRealtime() - lag
+                            if (k.lead) {
+                                val f = lastFrame
+                                tickUntil("a frame after $f") { lastFrame != f }
+                                val lag = rule.mainClock.currentTime - lastFrame
+                                base = lastFrame
+                                sys0 = SystemClock.elapsedRealtime() - lag
+                            }
                         }
                     }
                     tickUntil("the frame at $t") { lastFrame - base >= t - 8 }
@@ -232,6 +257,14 @@ class LyricFadeShots {
                 }
                 val names = (0 until k.frames).joinToString(", ") { "\"f%04d.png\"".format(it) }
                 File(out, "anim.json").writeText("{\"fps\": 30, \"frames\": [$names], \"ms\": [${ms.joinToString(", ")}]}\n")
+            }
+            for (k in stills) {
+                if (only.isNotEmpty() && only.split(',').none { k.name == it }) continue
+                begin(k, sz)
+                k.events.forEach { it.second() }
+                settle(600)
+                val out = File(dir, k.dir).apply { mkdirs() }
+                rule.onNodeWithTag("frame").captureRoboImage(File(out, "${k.name}-${sz.name}.png").path)
             }
         }
     }

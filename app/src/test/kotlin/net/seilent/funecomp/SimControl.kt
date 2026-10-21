@@ -211,6 +211,14 @@ class SimControl(
         medias += on
     }
 
+    var mode by mutableStateOf(false)
+
+    override fun lyricsMode() = mode
+
+    override fun lyricsMode(on: Boolean) {
+        mode = on
+    }
+
     override fun reconnect(on: Boolean) {
         reconnects += on
     }

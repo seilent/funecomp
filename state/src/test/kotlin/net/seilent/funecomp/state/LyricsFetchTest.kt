@@ -7,6 +7,7 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Feature
+import net.seilent.funecomp.proto.gen.Proto
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -167,5 +168,45 @@ class LyricsFetchTest {
         assertEquals(1L, LyricsFetch.dueMs(lines, 0, 2500))
         assertEquals(3000L, LyricsFetch.dueMs(lines, 2, 2000))
         assertNull(LyricsFetch.dueMs(lines, 3, 6000))
+    }
+
+    private fun at(lyrics: Boolean? = true, plain: Boolean? = false, track: Long? = 7, source: Int? = Enums.Source.local, features: Long = Groups.all) =
+        DeviceState(hello(features)).withState(State(source = source, track = track, lyrics = lyrics, lyricsPlain = plain), 5)
+
+    @Test
+    fun followCountsTimedLyricsOnly() {
+        assertNull(LyricsFetch.follow(DeviceState()))
+        assertNull(LyricsFetch.follow(DeviceState().withHello(hello())))
+        assertNull(LyricsFetch.follow(at(lyrics = null, plain = null)))
+        val off = Groups.all and (1L shl Feature.lyricsGet).inv()
+        assertEquals(false, LyricsFetch.follow(at(features = off)))
+        assertEquals(false, LyricsFetch.follow(at(track = null)))
+        assertEquals(false, LyricsFetch.follow(at(lyrics = false, plain = true)))
+        assertEquals(false, LyricsFetch.follow(at(lyrics = false, plain = false)))
+        assertEquals(false, LyricsFetch.follow(at(source = Enums.Source.phone)))
+        assertEquals(true, LyricsFetch.follow(at()))
+        assertEquals(true, LyricsFetch.follow(at(plain = true)))
+    }
+
+    @Test
+    fun lyrflagsIsMinor15OrAbove() {
+        assertFalse(LyricsFetch.lyrflags(DeviceState()))
+        assertFalse(LyricsFetch.lyrflags(DeviceState(hello(minor = 14))))
+        assertTrue(LyricsFetch.lyrflags(DeviceState(hello(minor = 15))))
+        assertTrue(LyricsFetch.lyrflags(DeviceState(hello(minor = 16))))
+    }
+
+    @Test
+    fun pendingResolvesAfterOneStateIntervalBelowMinor15Only() {
+        val ms = Proto.stateIntervalMs.toLong()
+        assertNull(LyricsFetch.resolve(null, 1000, 1000 + ms - 1, false))
+        assertEquals(false, LyricsFetch.resolve(null, 1000, 1000 + ms, false))
+        assertNull(LyricsFetch.resolve(null, 1000, 1000 + ms, true))
+        assertNull(LyricsFetch.resolve(null, 1000, 1000 + 100 * ms, true))
+        for (lyrflags in listOf(false, true)) {
+            assertEquals(true, LyricsFetch.resolve(true, 1000, 1000, lyrflags))
+            assertEquals(true, LyricsFetch.resolve(true, 1000, 1000 + ms, lyrflags))
+            assertEquals(false, LyricsFetch.resolve(false, 1000, 1000, lyrflags))
+        }
     }
 }

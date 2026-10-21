@@ -1,6 +1,7 @@
 package net.seilent.funecomp.state
 
 import net.seilent.funecomp.proto.LyrLine
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
 
@@ -122,11 +123,27 @@ class LyricsFetch {
         const val GROUP = "lyricsGet"
         private const val KEEP = 8
         const val MARKS = 64
+        const val LYRFLAGS_MINOR = 15
 
         fun has(d: DeviceState): Boolean {
             val s = d.playback.state
             return d.has(GROUP) && s.track != null && (s.lyrics == true || s.lyricsPlain == true)
         }
+
+        fun follow(d: DeviceState): Boolean? {
+            val s = d.playback.state
+            return when {
+                d.playback.receivedAt == 0L -> null
+                !d.has(GROUP) || s.track == null || s.source == Enums.Source.phone -> false
+                s.lyrics == null -> null
+                else -> s.lyrics
+            }
+        }
+
+        fun lyrflags(d: DeviceState) = (d.hello?.minor ?: -1) >= LYRFLAGS_MINOR
+
+        fun resolve(f: Boolean?, at: Long, now: Long, lyrflags: Boolean): Boolean? =
+            f ?: if (!lyrflags && now - at >= Proto.stateIntervalMs) false else null
 
         fun index(lines: List<LyrLine>, ms: Long): Int {
             var lo = 0

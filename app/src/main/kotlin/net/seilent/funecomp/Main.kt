@@ -60,6 +60,7 @@ class Main : ComponentActivity() {
     private var reconnectAsk by mutableStateOf(false)
     private var granted by mutableStateOf(true)
     private var mediaControls by mutableStateOf(true)
+    private var lyricsMode by mutableStateOf(false)
     private var spec by mutableStateOf<String?>(null)
     private var sources by mutableStateOf(Sources())
     internal var shell by mutableStateOf(Shell(Nav(listOf(Page.Connection)), gated = true))
@@ -178,6 +179,13 @@ class Main : ComponentActivity() {
             if (Remote.phase != Phase.NONE) startService(Intent(this@Main, LinkService::class.java).setAction(LinkService.ACTION_MEDIA))
         }
 
+        override fun lyricsMode() = lyricsMode
+
+        override fun lyricsMode(on: Boolean) {
+            LyricsMode.on(this@Main, on)
+            lyricsMode = on
+        }
+
         override fun lyricSource(id: String, on: Boolean) = Lyrics.set(id, on)
 
         override fun lyricMove(id: String, by: Int) = Lyrics.move(id, by)
@@ -226,6 +234,7 @@ class Main : ComponentActivity() {
         init(this)
         batteryAsked = prefs().getBoolean(BATTERY_ASKED, false)
         mediaControls = MediaLink.controls(this)
+        lyricsMode = LyricsMode.on(this)
         remember(intent)
         launch = opens(intent, Remote.debuggable(this), Remote.phase != Phase.NONE)
         if (launch) pickFrom(intent)
@@ -238,7 +247,7 @@ class Main : ComponentActivity() {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
                     } catch (_: ActivityNotFoundException) {
                     }
-                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing)
+                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing, liveDevice = { Remote.device })
             }
         }
     }
