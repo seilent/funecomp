@@ -34,7 +34,10 @@ object Names {
 
     fun bare(s: String): String? = channelTail.find(s.trim())?.groupValues?.get(1)?.trim()
 
-    private fun latin(c: Char) = c in 'A'..'Z' || c in 'a'..'z' || c in '0'..'9' || c in '\u00C0'..'\u024F'
+    internal const val LATIN = "A-Za-z0-9\\u00C0-\\u024F"
+    private val latinChar = Regex("[$LATIN]")
+
+    internal fun latin(c: Char) = latinChar.matches(c.toString())
 
     private fun neighbor(s: String, from: Int, step: Int): Char? {
         var i = from
