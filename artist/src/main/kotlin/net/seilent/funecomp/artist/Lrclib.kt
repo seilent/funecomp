@@ -38,10 +38,11 @@ class Lrclib(
             }
         }
         val j = api.json(url(q.track, q.artist, q.durationMs))
-        val d = q.durationMs
         val first = synced(j)
-        val second = if (first == null && d != null && j?.get("instrumental")?.bool != true) split(q, d) else null
-        val found = first ?: second?.takeIf { it.synced } ?: plain(j) ?: second
+        val ask = q.durationMs?.takeIf { first == null && j?.get("instrumental")?.bool != true }
+        val second = ask?.let { split(q, it) }
+        val third = ask?.takeIf { second?.synced != true }?.let { cleaned(q, it) }
+        val found = first ?: second?.takeIf { it.synced } ?: third?.takeIf { it.synced } ?: plain(j) ?: second ?: third
         dir.mkdirs()
         when {
             found == null -> {
@@ -68,9 +69,34 @@ class Lrclib(
     private fun split(q: Query, durationMs: Long): Found? {
         val (track, artist) = LyricNames.split(q.track, q.artist) ?: return null
         val j = api.json(url(track, artist, durationMs)) ?: return null
-        val d = j["duration"].double ?: return null
-        if (LyricNames.fold(j["trackName"].str ?: "") != LyricNames.fold(track) || abs(d - seconds(durationMs)) > MATCH_S) return null
+        if (!matches(j, track, durationMs)) return null
         return synced(j) ?: plain(j)
+    }
+
+    private fun cleaned(q: Query, durationMs: Long): Found? {
+        val c = LyricNames.clean(q.track, q.artist)
+        val sent = hashSetOf(q.track to q.artist)
+        LyricNames.split(q.track, q.artist)?.let { sent += it }
+        val artists = listOfNotNull(c.artist) + c.tags + listOfNotNull(q.artist.takeIf { c.artist == null })
+        val queries = artists.map { c.title to it }.filter { it.first.isNotEmpty() && sent.add(it) }.take(CLEAN_QUERIES)
+        var plain: Found? = null
+        for ((track, artist) in queries) {
+            val j = api.json(url(track, artist, durationMs)) ?: continue
+            if (!matches(j, track, durationMs) || !sameArtist(j["artistName"].str, artist)) continue
+            synced(j)?.let { return it }
+            plain = plain ?: plain(j)
+        }
+        return plain
+    }
+
+    private fun sameArtist(name: String?, artist: String): Boolean {
+        val k = LyricNames.artistKey(artist)
+        return if (k.isEmpty()) Names.fold(name) == Names.fold(artist) else LyricNames.artistKey(name ?: "") == k
+    }
+
+    private fun matches(j: J, track: String, durationMs: Long): Boolean {
+        val d = j["duration"].double ?: return false
+        return LyricNames.fold(j["trackName"].str ?: "") == LyricNames.fold(track) && abs(d - seconds(durationMs)) <= MATCH_S
     }
 
     private fun url(track: String, artist: String, durationMs: Long?): String = buildString {
@@ -85,7 +111,8 @@ class Lrclib(
         private const val JITTER = 0.3
         private const val TRIES = 6
         private const val MATCH_S = 2.0
-        private const val CLEANED = "cleaned=2"
+        private const val CLEANED = "cleaned=3"
+        private const val CLEAN_QUERIES = 3
 
         private fun seconds(ms: Long) = (ms + 500) / 1000
 

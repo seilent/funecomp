@@ -125,12 +125,12 @@ class LyricNamesTest {
     }
 }
 
-data class Tag(val artist: String, val title: String, val durationMs: Long, val pair: Pair<String, String>?, val attempt: Int, val first: String?)
+data class Tag(val artist: String, val title: String, val durationMs: Long, val pair: Pair<String, String>?, val attempt: Int, val first: String?, val cleaned: Int)
 
 object Tags {
     fun all(): List<Tag> = Fixtures.text("lyr-tags.tsv").lineSequence().filter { it.isNotBlank() }.map {
         val f = it.split('\t')
-        Tag(f[0], f[1], f[2].toLong(), if (f[3].isEmpty()) null else f[3] to f[4], f[5].toInt(), f[6].ifEmpty { null })
+        Tag(f[0], f[1], f[2].toLong(), if (f[3].isEmpty()) null else f[3] to f[4], f[5].toInt(), f[6].ifEmpty { null }, f[7].toInt())
     }.toList()
 }
 

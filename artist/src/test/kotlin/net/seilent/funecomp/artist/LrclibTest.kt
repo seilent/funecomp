@@ -63,7 +63,7 @@ class LrclibTest {
         assertFalse(got.synced)
         assertTrue(got.text.startsWith(radioPlain))
         assertEquals(1, f.calls.size)
-        assertEquals("$wall\ncleaned=2", file(radio, "miss").readText())
+        assertEquals("$wall\ncleaned=3", file(radio, "miss").readText())
         assertEquals(got.text, file(radio, "txt").readText())
     }
 
@@ -97,12 +97,12 @@ class LrclibTest {
     }
 
     @Test
-    fun aCleaned1MissWithinSevenDaysIsLookedUpOnceAndRewritten() {
-        file(radio, "miss").writeText("$wall\ncleaned=1")
+    fun aCleaned2MissWithinSevenDaysIsLookedUpOnceAndRewritten() {
+        file(radio, "miss").writeText("$wall\ncleaned=2")
         val f = Fixtures()
         assertTrue(lrclib(f).get(radio)!!.text.startsWith(radioPlain))
         assertEquals(1, f.calls.size)
-        assertEquals("$wall\ncleaned=2", file(radio, "miss").readText())
+        assertEquals("$wall\ncleaned=3", file(radio, "miss").readText())
         lrclib(f).get(radio)
         assertEquals(1, f.calls.size)
     }
@@ -110,7 +110,7 @@ class LrclibTest {
     @Test
     fun aSyncedResultDeletesTxtAndMiss() {
         file(airbag, "txt").writeText("old words")
-        file(airbag, "miss").writeText("${wall - Lrclib.MISS_MS}\ncleaned=2")
+        file(airbag, "miss").writeText("${wall - Lrclib.MISS_MS}\ncleaned=3")
         assertTrue(lrclib(Fixtures()).get(airbag)!!.synced)
         assertEquals(setOf("${airbag.key}.lrc"), tmp.root.list()!!.toSet())
     }
@@ -118,10 +118,10 @@ class LrclibTest {
     @Test
     fun aMissDeletesAnOldTxt() {
         file(durga, "txt").writeText("old words")
-        file(durga, "miss").writeText("${wall - Lrclib.MISS_MS}\ncleaned=2")
+        file(durga, "miss").writeText("${wall - Lrclib.MISS_MS}\ncleaned=3")
         assertNull(lrclib(Fixtures()).get(durga))
         assertFalse(file(durga, "txt").exists())
-        assertEquals("$wall\ncleaned=2", file(durga, "miss").readText())
+        assertEquals("$wall\ncleaned=3", file(durga, "miss").readText())
     }
 
     @Test
@@ -152,7 +152,7 @@ class LrclibTest {
         now += 1
         assertNull(lrclib(f).get(q))
         assertEquals(2, f.calls.size)
-        assertEquals("${wall + Lrclib.MISS_MS}\ncleaned=2", tmp.root.resolve("${q.key}.miss").readText())
+        assertEquals("${wall + Lrclib.MISS_MS}\ncleaned=3", tmp.root.resolve("${q.key}.miss").readText())
     }
 
     @Test
@@ -197,11 +197,12 @@ class LrclibTest {
             assertEquals(t.title, e[3].ifEmpty { null }, got?.text?.lineSequence()?.first())
             if (got?.synced == true) assertEquals(t.title, t.first, got.text.lineSequence().first())
             val made = f.calls.size - before
-            assertEquals(t.title, if (t.attempt == 1 || t.pair == null) 1 else 2, made)
+            assertEquals(t.title, (if (t.attempt == 1 || t.pair == null) 1 else 2) + t.cleaned, made)
         }
-        assertEquals(20, expect.count { it[2] == "synced" })
-        assertEquals(3, expect.count { it[2] == "plain" })
+        assertEquals(21, expect.count { it[2] == "synced" })
+        assertEquals(4, expect.count { it[2] == "plain" })
         assertEquals(15, Tags.all().count { it.attempt == 2 })
+        assertEquals(17, Tags.all().count { it.cleaned > 0 })
         assertEquals(emptyList<String>(), f.missing)
         assertTrue(f.calls.none { "album_name" in it })
         val calls = f.calls.size
@@ -223,8 +224,8 @@ class LrclibTest {
 
     private fun url(track: String, artist: String, s: Int) = "https://lrclib.net/api/get?track_name=${Api.enc(track)}&artist_name=${Api.enc(artist)}&duration=$s"
 
-    private fun stub(track: String, duration: Double, synced: String? = "[00:01.00] line", instrumental: Boolean = false, plain: String? = null): Response {
-        val body = "{\"trackName\":\"$track\",\"duration\":$duration,\"instrumental\":$instrumental,\"plainLyrics\":${plain?.let { "\"$it\"" } ?: "null"},\"syncedLyrics\":${synced?.let { "\"$it\"" } ?: "null"}}"
+    private fun stub(track: String, duration: Double, synced: String? = "[00:01.00] line", instrumental: Boolean = false, plain: String? = null, artist: String? = null): Response {
+        val body = "{\"trackName\":\"$track\",${artist?.let { "\"artistName\":\"$it\"," } ?: ""}\"duration\":$duration,\"instrumental\":$instrumental,\"plainLyrics\":${plain?.let { "\"$it\"" } ?: "null"},\"syncedLyrics\":${synced?.let { "\"$it\"" } ?: "null"}}"
         return Response(200, body.toByteArray())
     }
 
@@ -310,11 +311,11 @@ class LrclibTest {
     fun anUnreadableCacheFileThrowsLyricsFileException() {
         for (ext in listOf("lrc", "miss")) {
             tmp.root.listFiles()?.forEach { it.delete() }
-            file(airbag, ext).apply { writeText("$wall\ncleaned=2") }.setReadable(false)
+            file(airbag, ext).apply { writeText("$wall\ncleaned=3") }.setReadable(false)
             assertThrows(ext, LyricsFileException::class.java) { lrclib(Fixtures()).get(airbag) }
         }
         tmp.root.listFiles()?.forEach { it.delete() }
-        file(airbag, "miss").writeText("$wall\ncleaned=2")
+        file(airbag, "miss").writeText("$wall\ncleaned=3")
         file(airbag, "txt").apply { writeText("words") }.setReadable(false)
         assertThrows(LyricsFileException::class.java) { lrclib(Fixtures()).get(airbag) }
     }
@@ -363,7 +364,7 @@ class LrclibTest {
         val q = Query("フラジール - ぬゆり covered by 明透", "ASU", "MIU", 275_701)
         assertNull(lrclib(f).get(q))
         assertEquals(2, f.calls.size)
-        assertEquals("$wall\ncleaned=2", tmp.root.resolve("${q.key}.miss").readText())
+        assertEquals("$wall\ncleaned=3", tmp.root.resolve("${q.key}.miss").readText())
         now += Lrclib.MISS_MS - 1
         assertNull(lrclib(f).get(q))
         assertEquals(2, f.calls.size)
@@ -384,7 +385,7 @@ class LrclibTest {
         miss.writeText("$wall")
         assertNull(lrclib(f).get(q))
         assertEquals(4, f.calls.size)
-        assertEquals("$wall\ncleaned=2", miss.readText())
+        assertEquals("$wall\ncleaned=3", miss.readText())
         assertNull(lrclib(f).get(q))
         assertEquals(4, f.calls.size)
     }
@@ -410,6 +411,171 @@ class LrclibTest {
         f.queued[reckonerUrl] = ArrayDeque(List(6) { busy })
         val e = assertThrows(IOException::class.java) { lrclib(f).get(Query("Reckoner", "Radiohead", "MIU", 290_100)) }
         assertTrue(e.message!!.startsWith("busy after 6 tries"))
+    }
+
+    @Test
+    fun theCoverTagsGetTheirCapturedLyrics() {
+        val f = Fixtures()
+        val l = lrclib(f)
+        val rows = Fixtures.text("lyc-expect.tsv").lineSequence().filter { it.isNotBlank() }.map { it.split('\t') }.toList()
+        assertEquals(70, rows.size)
+        for (r in rows) {
+            val before = f.calls.size
+            val got = l.get(Query(r[1], r[0], "MIU", r[2].toLong()))
+            assertEquals(r[1], r[3], if (got == null) "miss" else if (got.synced) "synced" else "plain")
+            assertEquals(r[1], r[4].ifEmpty { null }, got?.text?.lineSequence()?.first())
+            assertEquals(r[1], r[5].toInt(), f.calls.size - before)
+        }
+        assertEquals(listOf(37, 8, 25), listOf("synced", "plain", "miss").map { k -> rows.count { it[3] == k } })
+        assertEquals(25, rows.count { it[0] == "meimei" })
+        assertEquals(16, rows.count { it[0] == "meimei" && it[3] == "synced" })
+        val calls = f.calls.size
+        for (r in rows) l.get(Query(r[1], r[0], "MIU", r[2].toLong()))
+        assertEquals(calls, f.calls.size)
+    }
+
+    private val nandemo = Query("なんでもないや カバー 羊羊｜フルVer. #RADWIMPS #届け", "meimei", "MIU", 345_745)
+
+    @Test
+    fun theCaseIsFoundByItsFirstHashtag() {
+        val f = Fixtures()
+        val got = lrclib(f).get(nandemo)!!
+        assertTrue(got.synced)
+        assertTrue(got.text.startsWith("[00:01.64] lr-3b7ae775e774-045"))
+        assertEquals(listOf(url(nandemo.track, "meimei", 346), url("なんでもないや", "RADWIMPS", 346)), f.calls)
+        assertEquals(11123870L, J.parse(Fixtures.text("lr-3b7ae775e774.json"))["id"].double?.toLong())
+        assertEquals(setOf("${nandemo.key}.lrc"), tmp.root.list()!!.toSet())
+    }
+
+    @Test
+    fun aHashtagAnsweredUnderALooseArtistIsAHit() {
+        val f = Fixtures()
+        val q = Query("晩餐歌 カバー 羊羊｜フルVer. #tuki", "meimei", "MIU", 221_576)
+        assertTrue(lrclib(f).get(q)!!.text.startsWith("[00:09.67] lr-d8c6675be8a5-043"))
+        assertEquals(url("晩餐歌", "tuki", 222), f.calls.last())
+        assertEquals("tuki.", J.parse(Fixtures.text("lr-d8c6675be8a5.json"))["artistName"].str)
+    }
+
+    private fun cover(q: Query, cleaned: List<String>, answered: String? = null, answer: Response? = null): Fixtures {
+        tmp.root.listFiles()?.forEach { it.delete() }
+        val f = Fixtures()
+        val s = (q.durationMs!! + 500) / 1000
+        val urls = listOf(url(q.track, q.artist, s.toInt())) + listOfNotNull(LyricNames.split(q.track, q.artist)?.let { url(it.first, it.second, s.toInt()) }) +
+            cleaned.map { url("Song", it, s.toInt()) }
+        for (u in urls) f.queued[u] = ArrayDeque(listOf(Response(404, ByteArray(0))))
+        if (answered != null && answer != null) f.queued[url("Song", answered, s.toInt())] = ArrayDeque(listOf(answer))
+        return f
+    }
+
+    @Test
+    fun aCleanedAnswerNeedsTheQueryArtistKeyForEveryKind() {
+        val kinds = listOf(
+            Query("Song / Artist cover", "Someone", "MIU", 200_000) to listOf("Artist"),
+            Query("Song カバー #Hash", "Someone", "MIU", 200_000) to listOf("Hash", "Someone"),
+            Query("Song カバー", "Someone", "MIU", 200_000) to listOf("Someone"),
+        )
+        for ((q, cleaned) in kinds) {
+            val asked = cleaned.first()
+            for ((artist, hit) in listOf(asked.uppercase() + "." to true, "Other" to false)) {
+                val f = cover(q, cleaned, asked, stub("Song", 200.0, artist = artist))
+                val got = lrclib(f).get(q)
+                assertEquals("${q.track} $artist", if (hit) "[00:01.00] line" else null, got?.text)
+                assertTrue(q.track, url("Song", asked, 200) in f.calls)
+            }
+        }
+    }
+
+    @Test
+    fun anArtistWithNoKeyNeedsTheSameFoldedName() {
+        val q = Query("Song / ¿? 歌ってみた", "Someone", "MIU", 200_000)
+        assertEquals(LyricNames.Clean("Song", "¿?", emptyList()), LyricNames.clean(q.track, q.artist))
+        for ((artist, hit) in listOf(null to false, "!!" to false, "Other" to false, "¿?" to true)) {
+            val f = cover(q, listOf("¿?"), "¿?", stub("Song", 200.0, artist = artist))
+            assertEquals("$artist", if (hit) "[00:01.00] line" else null, lrclib(f).get(q)?.text)
+            assertEquals(url("Song", "¿?", 200), f.calls.last())
+        }
+    }
+
+    @Test
+    fun aCleanedAnswerNeedsTheDurationWithinTwoSeconds() {
+        val q = Query("Song カバー #Hash", "Someone", "MIU", 200_000)
+        for ((d, hit) in listOf(202.0 to true, 198.0 to true, 202.1 to false, 197.9 to false)) {
+            val got = lrclib(cover(q, listOf("Hash", "Someone"), "Hash", stub("Song", d, artist = "Hash"))).get(q)
+            assertEquals("$d", hit, got != null)
+        }
+    }
+
+    @Test
+    fun noCleanedQueryAfterASyncedOrInstrumentalTaggedAnswer() {
+        val q = Query("Song カバー #Hash", "Someone", "MIU", 200_000)
+        val tagged = url(q.track, q.artist, 200)
+        for (r in listOf(stub(q.track, 200.0), stub(q.track, 200.0, synced = null, instrumental = true, plain = "words"))) {
+            tmp.root.listFiles()?.forEach { it.delete() }
+            val f = Fixtures()
+            f.queued[tagged] = ArrayDeque(listOf(r))
+            lrclib(f).get(q)
+            assertEquals(listOf(tagged), f.calls)
+        }
+    }
+
+    @Test
+    fun aSyncedSplitEndsTheLookupAndAPlainOneGoesOnToTheCleanedQuery() {
+        val q = Query("Song / Artist cover", "Someone", "MIU", 200_000)
+        val split = url("Song", "Artist cover", 200)
+        val f = cover(q, listOf("Artist"), "Artist", stub("Song", 200.0, synced = "[00:02.00] cleaned", artist = "Artist"))
+        f.queued[split] = ArrayDeque(listOf(stub("Song", 200.0)))
+        assertEquals(Lrclib.Found("[00:01.00] line", true), lrclib(f).get(q))
+        assertEquals(listOf(url(q.track, q.artist, 200), split), f.calls)
+        val g = cover(q, listOf("Artist"), "Artist", stub("Song", 200.0, synced = "[00:02.00] cleaned", artist = "Artist"))
+        g.queued[split] = ArrayDeque(listOf(stub("Song", 200.0, synced = null, plain = "split words")))
+        assertEquals(Lrclib.Found("[00:02.00] cleaned", true), lrclib(g).get(q))
+        assertEquals(listOf(url(q.track, q.artist, 200), split, url("Song", "Artist", 200)), g.calls)
+    }
+
+    @Test
+    fun aTitleThatCleansToNothingSendsNoCleanedQuery() {
+        val q = Query("- #Hash", "Someone", "MIU", 200_000)
+        assertEquals(LyricNames.Clean("", null, listOf("Hash")), LyricNames.clean(q.track, q.artist))
+        val f = Fixtures()
+        f.queued[url(q.track, q.artist, 200)] = ArrayDeque(listOf(Response(404, ByteArray(0))))
+        assertNull(lrclib(f).get(q))
+        assertEquals(listOf(url(q.track, q.artist, 200)), f.calls)
+    }
+
+    @Test
+    fun aCleanedSyncedBeatsATaggedPlainAndATaggedPlainBeatsACleanedPlain() {
+        val q = Query("Song カバー #Hash", "Someone", "MIU", 200_000)
+        val tagged = url(q.track, q.artist, 200)
+        val f = cover(q, listOf("Hash", "Someone"), "Hash", stub("Song", 200.0, artist = "Hash"))
+        f.queued[tagged] = ArrayDeque(listOf(stub(q.track, 200.0, synced = null, plain = "tagged words")))
+        assertEquals(Lrclib.Found("[00:01.00] line", true), lrclib(f).get(q))
+        val g = cover(q, listOf("Hash", "Someone"), "Someone", stub("Song", 200.0, synced = null, plain = "cleaned words", artist = "Someone"))
+        g.queued[tagged] = ArrayDeque(listOf(stub(q.track, 200.0, synced = null, plain = "tagged words")))
+        assertEquals(Lrclib.Found("tagged words", false), lrclib(g).get(q))
+        assertEquals(listOf(tagged, url("Song", "Hash", 200), url("Song", "Someone", 200)), g.calls)
+        val h = cover(q, listOf("Hash", "Someone"), "Someone", stub("Song", 200.0, synced = null, plain = "cleaned words", artist = "Someone"))
+        assertEquals(Lrclib.Found("cleaned words", false), lrclib(h).get(q))
+        assertEquals("cleaned words", file(q, "txt").readText())
+        assertEquals("$wall\ncleaned=3", file(q, "miss").readText())
+    }
+
+    @Test
+    fun atMostThreeCleanedQueries() {
+        val q = Query("Song カバー #A #B #C", "Someone", "MIU", 200_000)
+        val f = cover(q, listOf("A", "B", "C"))
+        assertNull(lrclib(f).get(q))
+        assertEquals(listOf(url(q.track, q.artist, 200), url("Song", "A", 200), url("Song", "B", 200), url("Song", "C", 200)), f.calls)
+    }
+
+    @Test
+    fun anIoErrorInACleanedQueryLeavesNoMissAndNoTxtChange() {
+        val q = Query("Song カバー #Hash", "Someone", "MIU", 200_000)
+        val f = cover(q, listOf("Hash"), "Hash", Response(500, ByteArray(0)))
+        f.queued[url(q.track, q.artist, 200)] = ArrayDeque(listOf(stub(q.track, 200.0, synced = null, plain = "tagged words")))
+        file(q, "txt").writeText("old words")
+        assertThrows(IOException::class.java) { lrclib(f).get(q) }
+        assertFalse(file(q, "miss").exists())
+        assertEquals("old words", file(q, "txt").readText())
     }
 
     private val airbagUrl = "https://lrclib.net/api/get?track_name=Airbag&artist_name=Radiohead&duration=284"
