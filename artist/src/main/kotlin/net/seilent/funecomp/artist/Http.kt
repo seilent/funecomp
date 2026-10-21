@@ -115,13 +115,20 @@ class Api(
     private val maxRetryAfterMs: Long = 60_000,
     private val jitter: () -> Double = { 0.0 },
 ) {
-    fun get(url: String): Response? {
+    fun get(url: String): Response? = send(url) { http.get(it, mapOf("User-Agent" to userAgent)) }
+
+    fun post(url: String, form: Map<String, String>, headers: Map<String, String>): Response? {
+        val body = form.entries.joinToString("&") { (k, v) -> formEnc(k) + "=" + formEnc(v) }.toByteArray()
+        return send(url) { http.post(it, mapOf("User-Agent" to userAgent) + headers, body) }
+    }
+
+    private fun send(url: String, call: (String) -> Response): Response? {
         val u = if (url.startsWith("http://")) "https://" + url.removePrefix("http://") else url
         repeat(tries) { attempt ->
             val wait = limiter.reserve()
             if (wait > 0) sleep(wait)
             HttpRun.current.get()?.call(u)
-            val r = http.get(u, mapOf("User-Agent" to userAgent))
+            val r = call(u)
             when {
                 r.code in 200..299 -> return r
                 r.code == 503 || r.code == 429 -> {
@@ -147,5 +154,7 @@ class Api(
 
     companion object {
         fun enc(s: String): String = URLEncoder.encode(s, "UTF-8").replace("+", "%20")
+
+        fun formEnc(s: String): String = URLEncoder.encode(s, "UTF-8").replace("*", "%2A").replace("%7E", "~")
     }
 }

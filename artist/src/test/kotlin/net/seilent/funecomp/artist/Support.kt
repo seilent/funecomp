@@ -13,6 +13,7 @@ import javax.imageio.ImageWriteParam
 class Fixtures : Http {
     val calls = ArrayList<String>()
     val agents = ArrayList<String?>()
+    val sent = ArrayList<Map<String, String>>()
     val missing = ArrayList<String>()
     val times = ArrayList<Pair<Long, String>>()
     val queued = HashMap<String, ArrayDeque<Response>>()
@@ -20,9 +21,14 @@ class Fixtures : Http {
     private val index = text("urls.tsv").lineSequence().filter { it.isNotBlank() }
         .associate { it.substringBefore('\t') to it.substringAfter('\t') }
 
-    override fun get(url: String, headers: Map<String, String>): Response {
+    override fun get(url: String, headers: Map<String, String>): Response = serve(url, headers)
+
+    override fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = serve("POST $url ${String(body, Charsets.UTF_8)}", headers)
+
+    private fun serve(url: String, headers: Map<String, String>): Response {
         calls += url
         agents += headers["User-Agent"]
+        sent += headers
         times += now() to url
         queued[url]?.removeFirstOrNull()?.let { return it }
         val f = index[url] ?: run {

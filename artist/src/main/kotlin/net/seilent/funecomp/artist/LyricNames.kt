@@ -3,7 +3,8 @@ package net.seilent.funecomp.artist
 import java.util.Locale
 
 object LyricNames {
-    private const val S = "[\\t-\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000]"
+    internal const val SPACE = "\\t-\\r \\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000"
+    internal const val S = "[$SPACE]"
     private const val END = "(?![\\p{L}\\p{M}\\p{N}\\p{Pc}])"
     private val tails = listOf(
         Regex("(?i)$S*[-(（﴾/]*$S*covered$S+by$END.*$"),
@@ -28,7 +29,7 @@ object LyricNames {
 
     fun fold(s: String): String = s.lowercase(Locale.ROOT).replace("'", "").replace(mark, " ").replace(space, " ").trim()
 
-    private fun tails(s: String): String {
+    internal fun tails(s: String): String {
         var t = s
         for (r in tails) t = r.replace(t, " ").trim().trim(::edge).ifEmpty { t }
         return t.trim(::edge)

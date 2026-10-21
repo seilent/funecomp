@@ -248,6 +248,19 @@ class LrclibTest {
         }
     }
 
+    private val syntheticTaggedPlain = stub("rainy lady / しぐれうい", 255.0, synced = null, plain = "tagged words")
+    private val syntheticSplitPlain = stub("rainy lady", 255.0, synced = null, plain = "split words")
+
+    @Test
+    fun aTaggedPlainBeatsASplitPlain() {
+        val f = Fixtures()
+        f.queued[rainyTag] = ArrayDeque(listOf(syntheticTaggedPlain))
+        f.queued[rainySplit] = ArrayDeque(listOf(syntheticSplitPlain))
+        assertEquals(Lrclib.Found("tagged words", false), lrclib(f).get(rainy))
+        assertEquals(listOf(rainyTag, rainySplit), f.calls)
+        assertEquals("tagged words", file(rainy, "txt").readText())
+    }
+
     @Test
     fun plainOnlyAsTaggedStillTriesTheSplit() {
         val f = Fixtures()

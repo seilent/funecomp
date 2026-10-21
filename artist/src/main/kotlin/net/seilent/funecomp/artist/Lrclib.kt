@@ -16,9 +16,9 @@ class Lrclib(
     mono: () -> Long = { System.nanoTime() / 1_000_000 },
     random: Random = Random.Default,
 ) {
-    data class Found(val text: String, val synced: Boolean)
+    data class Found(val text: String, val synced: Boolean, val source: String = LyricSources.LRCLIB)
 
-    data class Query(val track: String, val artist: String, val album: String?, val durationMs: Long?) {
+    data class Query(val track: String, val artist: String, val album: String?, val durationMs: Long?, val artists: List<String> = emptyList()) {
         val key: String get() = hash("$track\n$artist\n${album ?: ""}\n${durationMs?.let { seconds(it) } ?: ""}")
     }
 
@@ -28,13 +28,13 @@ class Lrclib(
     fun get(q: Query): Found? {
         if (!enabled()) return null
         val hit = File(dir, "${q.key}.lrc")
-        if (hit.isFile) return Found(read(hit), true)
+        if (hit.isFile) return Found(LyricFiles.read(hit), true)
         val txt = File(dir, "${q.key}.txt")
         val miss = File(dir, "${q.key}.miss")
         if (miss.isFile) {
-            val lines = read(miss).lines()
+            val lines = LyricFiles.read(miss).lines()
             if (lines.getOrNull(1) == CLEANED && clock() - (lines[0].trim().toLongOrNull() ?: 0) in 0 until MISS_MS) {
-                return if (txt.isFile) Found(read(txt), false) else null
+                return if (txt.isFile) Found(LyricFiles.read(txt), false) else null
             }
         }
         val j = api.json(url(q.track, q.artist, q.durationMs))
@@ -45,17 +45,17 @@ class Lrclib(
         dir.mkdirs()
         when {
             found == null -> {
-                delete(txt)
-                save(miss, "${clock()}\n$CLEANED")
+                LyricFiles.delete(txt)
+                LyricFiles.save(miss, "${clock()}\n$CLEANED")
             }
             found.synced -> {
-                save(hit, found.text)
-                delete(txt)
-                delete(miss)
+                LyricFiles.save(hit, found.text)
+                LyricFiles.delete(txt)
+                LyricFiles.delete(miss)
             }
             else -> {
-                save(txt, found.text)
-                save(miss, "${clock()}\n$CLEANED")
+                LyricFiles.save(txt, found.text)
+                LyricFiles.save(miss, "${clock()}\n$CLEANED")
             }
         }
         return found
@@ -76,29 +76,6 @@ class Lrclib(
     private fun url(track: String, artist: String, durationMs: Long?): String = buildString {
         append(BASE).append("?track_name=").append(Api.enc(track)).append("&artist_name=").append(Api.enc(artist))
         durationMs?.let { append("&duration=").append(seconds(it)) }
-    }
-
-    private fun save(f: File, text: String) {
-        val tmp = File(f.path + ".tmp")
-        try {
-            tmp.writeText(text)
-        } catch (e: IOException) {
-            throw LyricsFileException("write ${tmp.name}", e)
-        }
-        if (!tmp.renameTo(f)) {
-            f.delete()
-            if (!tmp.renameTo(f)) throw LyricsFileException("rename ${f.name}")
-        }
-    }
-
-    private fun read(f: File): String = try {
-        f.readText()
-    } catch (e: IOException) {
-        throw LyricsFileException("read ${f.name}", e)
-    }
-
-    private fun delete(f: File) {
-        if (f.exists() && !f.delete()) throw LyricsFileException("delete ${f.name}")
     }
 
     companion object {
