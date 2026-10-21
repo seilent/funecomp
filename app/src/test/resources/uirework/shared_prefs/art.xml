@@ -1,11 +1,12 @@
 <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
 <map>
-    <boolean name="theaudiodb" value="true" />
-    <boolean name="discogs" value="true" />
-    <boolean name="fanarttv" value="true" />
+    <int name="defaults" value="2" />
+    <boolean name="theaudiodb" value="false" />
+    <boolean name="discogs" value="false" />
+    <boolean name="fanarttv" value="false" />
     <string name="fanarttvKey">fixturekey</string>
-    <boolean name="deezer" value="true" />
-    <boolean name="youtube" value="true" />
+    <boolean name="deezer" value="false" />
+    <boolean name="youtube" value="false" />
     <string name="order">deezer,youtube,discogs,fanarttv,theaudiodb,commons</string>
     <string name="uireworkSentinel">fixture art</string>
 </map>

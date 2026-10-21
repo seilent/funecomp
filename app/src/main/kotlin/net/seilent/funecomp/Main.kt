@@ -321,16 +321,8 @@ class Main : ComponentActivity() {
 
     private fun saveSources(s: Sources) {
         val reordered = s.order != sources.order
+        writeSources(this, sources, s)
         sources = s
-        getSharedPreferences(ART_PREFS, MODE_PRIVATE).edit()
-            .putBoolean("theaudiodb", s.theAudioDb)
-            .putBoolean("discogs", s.discogs)
-            .putBoolean("fanarttv", s.fanartTv)
-            .putString("fanarttvKey", s.fanartTvKey)
-            .putBoolean("deezer", s.deezer)
-            .putBoolean("youtube", s.youtube)
-            .putString("order", s.order.joinToString(","))
-            .apply()
         if (reordered) Remote.reordered() else Remote.sourcesChanged()
     }
 
@@ -369,6 +361,9 @@ class Main : ComponentActivity() {
         const val RECONNECT = "reconnect"
         const val RECONNECT_ASK = "reconnectAsk"
         const val ART_PREFS = "art"
+        private const val FANART_KEY = "fanarttvKey"
+        private const val ORDER = "order"
+        private val upgrade = Any()
 
         fun init(c: Context) {
             Remote.artist(c)
@@ -384,16 +379,32 @@ class Main : ComponentActivity() {
             return intent.action == Intent.ACTION_MAIN || intent.action == ACTION_OPEN || (linked && intent.action == ACTION_PICK_ART) || (debuggable && intent.hasExtra(EXTRA_LINK))
         }
 
+        internal fun writeSources(context: Context, was: Sources, s: Sources) {
+            val e = context.getSharedPreferences(ART_PREFS, MODE_PRIVATE).edit()
+            if (s.theAudioDb != was.theAudioDb) e.putBoolean(Sources.THE_AUDIO_DB, s.theAudioDb)
+            if (s.discogs != was.discogs) e.putBoolean(Sources.DISCOGS, s.discogs)
+            if (s.fanartTv != was.fanartTv) e.putBoolean(Sources.FANART_TV, s.fanartTv)
+            if (s.fanartTvKey != was.fanartTvKey) e.putString(FANART_KEY, s.fanartTvKey)
+            if (s.deezer != was.deezer) e.putBoolean(Sources.DEEZER, s.deezer)
+            if (s.youtube != was.youtube) e.putBoolean(Sources.YOUTUBE, s.youtube)
+            if (s.order != was.order) e.putString(ORDER, s.order.joinToString(","))
+            e.apply()
+        }
+
         fun sources(context: Context): Sources {
             val p = context.getSharedPreferences(ART_PREFS, MODE_PRIVATE)
+            if (p.getInt(Sources.DEFAULTS, 0) < Sources.DEFAULTS_REV) synchronized(upgrade) {
+                val edit = Sources.upgrade(p.all)
+                if (edit.write) p.edit().apply { edit.remove.forEach { remove(it) } }.putInt(Sources.DEFAULTS, Sources.DEFAULTS_REV).commit()
+            }
             return Sources(
-                p.getBoolean("theaudiodb", false),
-                p.getBoolean("discogs", false),
-                p.getBoolean("fanarttv", false),
-                p.getString("fanarttvKey", "") ?: "",
-                p.getBoolean("deezer", false),
-                p.getBoolean("youtube", false),
-                Sources.order(p.getString("order", null)),
+                p.getBoolean(Sources.THE_AUDIO_DB, true),
+                p.getBoolean(Sources.DISCOGS, true),
+                p.getBoolean(Sources.FANART_TV, true),
+                p.getString(FANART_KEY, "") ?: "",
+                p.getBoolean(Sources.DEEZER, true),
+                p.getBoolean(Sources.YOUTUBE, true),
+                Sources.order(p.getString(ORDER, null)),
             )
         }
     }

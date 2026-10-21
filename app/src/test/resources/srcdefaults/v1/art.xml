@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8' standalone='yes' ?>
+<map>
+    <boolean name="theaudiodb" value="false" />
+    <boolean name="discogs" value="false" />
+    <boolean name="fanarttv" value="false" />
+    <string name="fanarttvKey"></string>
+    <boolean name="deezer" value="false" />
+    <boolean name="youtube" value="false" />
+    <string name="order">commons,theaudiodb,fanarttv,discogs,youtube,deezer</string>
+</map>

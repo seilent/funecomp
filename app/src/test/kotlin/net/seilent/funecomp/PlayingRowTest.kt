@@ -59,7 +59,7 @@ class PlayingRowTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) {
-                App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), c, shell, Sources(), {})
+                App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), c, shell, Sources.NONE, {})
             }
         }
         settle(1000)

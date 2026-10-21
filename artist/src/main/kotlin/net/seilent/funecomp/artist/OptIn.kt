@@ -1,12 +1,12 @@
 package net.seilent.funecomp.artist
 
 data class Sources(
-    val theAudioDb: Boolean = false,
-    val discogs: Boolean = false,
-    val fanartTv: Boolean = false,
+    val theAudioDb: Boolean = true,
+    val discogs: Boolean = true,
+    val fanartTv: Boolean = true,
     val fanartTvKey: String = "",
-    val deezer: Boolean = false,
-    val youtube: Boolean = false,
+    val deezer: Boolean = true,
+    val youtube: Boolean = true,
     val order: List<String> = ORDER,
 ) {
     val enabled: Set<String>
@@ -29,12 +29,26 @@ data class Sources(
         return copy(order = order.toMutableList().apply { add(j, removeAt(i)) })
     }
 
+    class Edit(val remove: Set<String>, val write: Boolean)
+
     companion object {
-        val ORDER = listOf(Wikimedia.SOURCE, "theaudiodb", "fanarttv", "discogs", "youtube", "deezer")
+        val ORDER = listOf("theaudiodb", "fanarttv", "youtube", "discogs", Wikimedia.SOURCE, "deezer")
+        private val OLD_ORDER = listOf(Wikimedia.SOURCE, "theaudiodb", "fanarttv", "discogs", "youtube", "deezer")
+        val NONE = Sources(theAudioDb = false, discogs = false, fanartTv = false, deezer = false, youtube = false, order = OLD_ORDER)
+        const val DEFAULTS = "defaults"
+        const val DEFAULTS_REV = 2
 
         fun order(s: String?): List<String> {
             val known = (s ?: "").split(',').map { it.trim() }.filter { it in ORDER }.distinct()
             return known + ORDER.filter { it !in known }
+        }
+
+        fun upgrade(stored: Map<String, Any?>): Edit {
+            if (((stored[DEFAULTS] as? Int) ?: 0) >= DEFAULTS_REV) return Edit(emptySet(), false)
+            val keyed = (stored["fanarttvKey"] as? String)?.isNotBlank() == true
+            val remove = listOf(THE_AUDIO_DB, DISCOGS, FANART_TV, DEEZER, YOUTUBE).filter { stored[it] == false && !(it == FANART_TV && keyed) }.toMutableSet()
+            if (stored.containsKey("order") && order(stored["order"] as? String) == OLD_ORDER) remove += "order"
+            return Edit(remove, true)
         }
 
         const val THE_AUDIO_DB = "theaudiodb"

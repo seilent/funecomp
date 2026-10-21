@@ -23,7 +23,7 @@ class PickTest {
 
     private val http = Fixtures()
     private val time = FakeTime()
-    private var sources = Sources()
+    private var sources = Sources.NONE
     private var dir = "art"
     private val cache get() = ArtCache(File(tmp.root, dir))
     private val picks by lazy { ArtPicks(File(tmp.root, "artpick.tsv")) }
@@ -66,7 +66,7 @@ class PickTest {
 
     @Test
     fun theChainHitForTheResolvedMbidStaysAfterAPick() {
-        sources = Sources(discogs = true)
+        sources = Sources.NONE.copy(discogs = true)
         val chain = art().get("Tsuki", dj, 240, 320)!!
         assertEquals(Sources.DISCOGS, chain.source)
         val hit = cache.hit(dj)!!
@@ -80,10 +80,10 @@ class PickTest {
 
     @Test
     fun aPickShowsWithItsToggleOffAndAfterAReorder() {
-        sources = Sources(youtube = false)
+        sources = Sources.NONE.copy(youtube = false)
         pick()
         assertEquals(Sources.YOUTUBE, art().get("TSUKI", null, 240, 320)!!.source)
-        sources = Sources(order = Sources.ORDER.reversed())
+        sources = Sources.NONE.copy(order = Sources.NONE.order.reversed())
         assertEquals(Sources.YOUTUBE, art().refresh("TSUKI", null, 240, 320)!!.source)
         assertEquals(Sources.YOUTUBE, art().cachedEntry("TSUKI", null)!!.source)
         assertEquals(1, http.calls.size)

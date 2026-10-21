@@ -174,7 +174,7 @@ class ArtBlockTest {
     private fun deleted() = lines.filter { it == "deleted name=Utada Hikaru" }
 
     private fun chainSim(): Pair<Sim, Int> {
-        app.getSharedPreferences(Main.ART_PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean("theaudiodb", true).commit()
+        app.getSharedPreferences(Main.ART_PREFS, android.content.Context.MODE_PRIVATE).edit().putInt("defaults", 2).putString("order", "commons,theaudiodb,fanarttv,discogs,youtube,deezer").putBoolean("theaudiodb", true).putBoolean("discogs", false).putBoolean("fanarttv", false).putBoolean("deezer", false).putBoolean("youtube", false).commit()
         Remote.artist(app, chain)
         val s = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }))
         sims += s
@@ -426,7 +426,7 @@ class ArtBlockTest {
     @Test
     fun aDeviceBlockPushesTheNextCandidateWithTheAskOriginAndTheStateMbid() {
         val hold = CountDownLatch(1)
-        app.getSharedPreferences(Main.ART_PREFS, android.content.Context.MODE_PRIVATE).edit().putBoolean("theaudiodb", true).commit()
+        app.getSharedPreferences(Main.ART_PREFS, android.content.Context.MODE_PRIVATE).edit().putInt("defaults", 2).putString("order", "commons,theaudiodb,fanarttv,discogs,youtube,deezer").putBoolean("theaudiodb", true).putBoolean("discogs", false).putBoolean("fanarttv", false).putBoolean("deezer", false).putBoolean("youtube", false).commit()
         Remote.artist(app, Http { url, h ->
             if (url == fanart) hold.await(10, TimeUnit.SECONDS)
             chain.get(url, h)

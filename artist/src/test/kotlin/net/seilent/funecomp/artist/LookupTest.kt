@@ -23,7 +23,7 @@ class LookupTest {
 
     private val http = Fixtures()
     private val time = FakeTime()
-    private var sources = Sources()
+    private var sources = Sources.NONE
     private val codec = AwtCodec()
     private val cache by lazy { ArtCache(tmp.newFolder("art")) }
 
@@ -122,19 +122,19 @@ class LookupTest {
 
     @Test
     fun aFanartKeyChangeRetriesAMiss() {
-        sources = Sources(fanartTv = true, fanartTvKey = "one")
+        sources = Sources.NONE.copy(fanartTv = true, fanartTvKey = "one")
         assertNull(art().get("Ado", ado, 384, 480))
         val n = http.calls.size
         assertNull(art().get("Ado", ado, 384, 480))
         assertEquals(n, http.calls.size)
-        sources = Sources(fanartTv = true, fanartTvKey = "two")
+        sources = Sources.NONE.copy(fanartTv = true, fanartTvKey = "two")
         assertNull(art().get("Ado", ado, 384, 480))
         assertTrue(http.calls.size > n)
     }
 
     @Test
     fun forbiddenIsNotCachedAsAMiss() {
-        sources = Sources(fanartTv = true, fanartTvKey = "bad")
+        sources = Sources.NONE.copy(fanartTv = true, fanartTvKey = "bad")
         val n = http.calls.size
         val api = "https://webservice.fanart.tv/v3/music/$ado?api_key=bad"
         http.queued[api] = ArrayDeque(listOf(Response(403, ByteArray(0))))
@@ -164,13 +164,13 @@ class LookupTest {
 
     @Test
     fun oneSourceErrorDoesNotEndTheChain() {
-        sources = Sources(theAudioDb = true, discogs = true)
+        sources = Sources.NONE.copy(theAudioDb = true, discogs = true)
         val adb = "https://www.theaudiodb.com/api/v1/json/123/artist-mb.php?i=$radiohead"
         http.queued[adb] = ArrayDeque(listOf(Response(500, ByteArray(0))))
         assertEquals(Sources.DISCOGS, art().get("Radiohead", radiohead, 384, 480)!!.source)
 
         cache.clear()
-        sources = Sources(theAudioDb = true)
+        sources = Sources.NONE.copy(theAudioDb = true)
         http.queued[adb] = ArrayDeque(listOf(Response(500, ByteArray(0))))
         try {
             art().get("Radiohead", radiohead, 384, 480)
@@ -283,7 +283,7 @@ class LookupTest {
 
     @Test
     fun optInSourcesRunOnlyWhenEnabled() {
-        sources = Sources(theAudioDb = true)
+        sources = Sources.NONE.copy(theAudioDb = true)
         val a = art().get("Radiohead", radiohead, 384, 480)!!
         assertEquals(Sources.THE_AUDIO_DB, a.source)
         assertNull(a.credit)
@@ -293,35 +293,27 @@ class LookupTest {
 
         cache.clear()
         http.calls.clear()
-        sources = Sources(discogs = true)
+        sources = Sources.NONE.copy(discogs = true)
         assertEquals(Sources.DISCOGS, art().get("Radiohead", radiohead, 384, 480)!!.source)
         assertTrue(http.calls.contains("https://api.discogs.com/artists/3840"))
 
         cache.clear()
-        sources = Sources(deezer = true)
+        sources = Sources.NONE.copy(deezer = true)
         assertEquals(Sources.DEEZER, art().get("Radiohead", radiohead, 384, 480)!!.source)
 
         cache.clear()
         http.calls.clear()
-        sources = Sources(fanartTv = true)
+        sources = Sources.NONE.copy(fanartTv = true)
         assertNull(art().get("Radiohead", radiohead, 384, 480))
         assertTrue(http.hosts().none { it == "webservice.fanart.tv" })
         assertTrue(http.missing.isEmpty())
     }
 
     @Test
-    fun allOptInSourcesAreOffByDefault() {
-        val s = Sources()
-        assertEquals(setOf(Wikimedia.SOURCE), s.enabled)
-        assertEquals(setOf(Wikimedia.SOURCE, Sources.FANART_TV), Sources(fanartTv = true, fanartTvKey = "k").enabled)
-        assertEquals(setOf(Wikimedia.SOURCE), Sources(fanartTvKey = "k").enabled)
-    }
-
-    @Test
     fun youtubeChannelAvatarFromTheMusicBrainzRel() {
         assertNull(art().get("コバソロ", kobasolo, 384, 480))
         assertTrue(http.hosts().none { it == "www.youtube.com" })
-        sources = Sources(youtube = true)
+        sources = Sources.NONE.copy(youtube = true)
         val a = art().get("コバソロ", kobasolo, 384, 480)!!
         assertEquals(Sources.YOUTUBE, a.source)
         checkJpeg(a, 384, 480)
@@ -343,13 +335,13 @@ class LookupTest {
         assertNull(art().get("ado", ado, 384, 480))
         assertEquals(n, http.calls.size)
 
-        sources = Sources(youtube = true)
+        sources = Sources.NONE.copy(youtube = true)
         val a = art().get("Ado", null, 384, 480)
         assertTrue(http.calls.size > n)
         assertTrue(http.calls.contains("https://www.youtube.com/channel/UCln9P4Qm3-EAY4aiEPmRwEA"))
         assertNull(a)
 
-        sources = Sources()
+        sources = Sources.NONE
         val m = http.calls.size
         assertNull(art().get("Ado", null, 384, 480))
         assertEquals(m, http.calls.size)
@@ -375,13 +367,13 @@ class LookupTest {
         a.beginMark()
         val n = a.mark()
         assertTrue(a.holds(n))
-        sources = Sources(youtube = true)
+        sources = Sources.NONE.copy(youtube = true)
         assertFalse(a.holds(n))
     }
 
     @Test
     fun hitIsServedFromCacheForBothBoardsAndDroppedWhenItsSourceIsOff() {
-        sources = Sources(theAudioDb = true)
+        sources = Sources.NONE.copy(theAudioDb = true)
         val first = art().get("Radiohead", radiohead, 384, 480)!!
         val n = http.calls.size
         val again = art().get("Radiohead", radiohead, 384, 480)!!
@@ -391,7 +383,7 @@ class LookupTest {
         assertEquals(n, http.calls.size)
         assertEquals(listOf("Radiohead"), cache.entries().map { it.name })
 
-        sources = Sources()
+        sources = Sources.NONE
         assertNull(art().get("Radiohead", radiohead, 384, 480))
         assertTrue(http.calls.size > n)
         assertTrue(cache.entries().isEmpty())
@@ -495,7 +487,7 @@ class LookupTest {
 
     @Test
     fun everyCleanedNameIsTriedBeforeAMissIsCached() {
-        sources = Sources(deezer = true)
+        sources = Sources.NONE.copy(deezer = true)
         val name = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
         assertNull(art().get(name, null, 240, 320))
         assertTrue("missing ${http.missing}", http.missing.isEmpty())
@@ -510,7 +502,7 @@ class LookupTest {
 
     @Test
     fun aMissFromBeforeTheCleanerIsLookedUpOnceMore() {
-        sources = Sources(deezer = true)
+        sources = Sources.NONE.copy(deezer = true)
         val name = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
         val key = "name:${Names.fold(name)}"
         cache.putMiss(key, time.now, sources.enabled)
@@ -649,7 +641,7 @@ class LookupTest {
     @Test
     fun aChannelSuffixedNameFindsTheArtistByItsBareName() {
         val dazbee = "10623c33-205c-49f4-b8a0-55a105dd4fa3"
-        sources = Sources(deezer = true)
+        sources = Sources.NONE.copy(deezer = true)
         val a = art().get("DAZBEE official", null, 240, 320)
         assertTrue("missing ${http.missing}", http.missing.isEmpty())
         assertEquals(dazbee, a!!.mbid)
@@ -659,7 +651,7 @@ class LookupTest {
 
     @Test
     fun aMissCleanedUnderTheOlderRulesIsLookedUpOnceMore() {
-        sources = Sources(deezer = true)
+        sources = Sources.NONE.copy(deezer = true)
         val name = "DAZBEE official"
         val key = "name:${Names.fold(name)}"
         cache.putMiss(key, time.now, sources.enabled)

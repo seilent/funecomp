@@ -61,7 +61,7 @@ class ArtBlockUiTest {
 
     private val calls = ArrayList<String>()
     private val entry = ArtCache.Entry("name:むと", "むと", null, "deezer", null, "https://cdn-images.dzcdn.net/images/artist/0d58cfbc90f2e776608bcdc0c45a4711/1000x1000.jpg", 1, sha = "s")
-    private var sources by mutableStateOf(Sources(deezer = true))
+    private var sources by mutableStateOf(Sources.NONE.copy(deezer = true))
     private var shownBlocked by mutableStateOf<List<ArtBlocks.Record>>(emptyList())
     private val opened = ArrayList<String>()
 

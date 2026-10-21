@@ -20,7 +20,7 @@ class BlockTest {
 
     private val http = Fixtures()
     private val time = FakeTime()
-    private var sources = Sources()
+    private var sources = Sources.NONE
     private var online = true
     private val cache by lazy { ArtCache(tmp.newFolder("art")) }
     private val blocks by lazy { ArtBlocks(java.io.File(tmp.root, "artblock.tsv")) }
@@ -35,7 +35,7 @@ class BlockTest {
 
     @Test
     fun aBlockGivesTheNextCandidateThenTheNextSourceThenAMiss() {
-        sources = Sources(theAudioDb = true, discogs = true)
+        sources = Sources.NONE.copy(theAudioDb = true, discogs = true)
         val seen = ArrayList<Pair<String, String>>()
         while (true) {
             val a = art().get("Radiohead", radiohead, 384, 480) ?: break
@@ -78,7 +78,7 @@ class BlockTest {
 
     @Test
     fun theSameBytesUnderAnotherUrlAreSkippedForThatKey() {
-        sources = Sources(theAudioDb = true)
+        sources = Sources.NONE.copy(theAudioDb = true)
         art().get("Radiohead", radiohead, 384, 480)!!
         val e = shown("Radiohead", radiohead)
         blocks.add(ArtBlocks.Block(e.key, e.mbid, e.source, "another id", cache.sha(e), e.name, 1))
@@ -176,23 +176,23 @@ class BlockTest {
 
     @Test
     fun theOrderRanksTheEnabledSources() {
-        sources = Sources(theAudioDb = true, discogs = true)
+        sources = Sources.NONE.copy(theAudioDb = true, discogs = true)
         assertEquals(Sources.THE_AUDIO_DB, art().get("Radiohead", radiohead, 384, 480)!!.source)
         cache.clear()
         sources = sources.moved(Sources.DISCOGS, -2)
         assertEquals(listOf(Wikimedia.SOURCE, Sources.DISCOGS, Sources.THE_AUDIO_DB, Sources.FANART_TV, Sources.YOUTUBE, Sources.DEEZER), sources.order)
         assertEquals(Sources.DISCOGS, art().get("Radiohead", radiohead, 384, 480)!!.source)
         cache.clear()
-        sources = Sources(theAudioDb = true, order = Sources.order("deezer,discogs"))
+        sources = Sources.NONE.copy(theAudioDb = true, order = Sources.order("deezer,discogs"))
         assertEquals(Sources.THE_AUDIO_DB, art().get("Radiohead", radiohead, 384, 480)!!.source)
-        assertEquals(listOf("deezer", "discogs", "commons", "theaudiodb", "fanarttv", "youtube"), Sources.order("deezer,bogus,discogs,deezer"))
+        assertEquals(listOf("deezer", "discogs", "theaudiodb", "fanarttv", "youtube", "commons"), Sources.order("deezer,bogus,discogs,deezer"))
         assertEquals(Sources.ORDER, Sources.order(null))
-        assertEquals(listOf("commons", "discogs", "theaudiodb"), Sources(theAudioDb = true, discogs = true).moved(Sources.DISCOGS, -2).ordered)
+        assertEquals(listOf("commons", "discogs", "theaudiodb"), Sources.NONE.copy(theAudioDb = true, discogs = true).moved(Sources.DISCOGS, -2).ordered)
     }
 
     @Test
     fun aReorderKeepsHitsAndMisses() {
-        sources = Sources(theAudioDb = true, discogs = true)
+        sources = Sources.NONE.copy(theAudioDb = true, discogs = true)
         art().get("Radiohead", radiohead, 384, 480)!!
         assertNull(art().get("Ado", null, 384, 480))
         val n = http.calls.size
@@ -204,7 +204,7 @@ class BlockTest {
 
     @Test
     fun aRefreshTakesTheNewOrderAndKeepsTheOldImageOnFailure() {
-        sources = Sources(theAudioDb = true, discogs = true)
+        sources = Sources.NONE.copy(theAudioDb = true, discogs = true)
         art().get("Radiohead", radiohead, 384, 480)!!
         sources = sources.moved(Sources.DISCOGS, -2)
         online = false
@@ -225,7 +225,7 @@ class BlockTest {
         http.queued["https://api.deezer.com/search/artist?q=${Api.enc("むと")}"] = ArrayDeque(List(2) { dz })
         http.queued["https://musicbrainz.org/ws/2/artist/$muto?inc=url-rels&fmt=json"] = ArrayDeque(List(2) { mbArtist })
         http.queued[pic] = ArrayDeque(List(2) { Response(200, Images.jpeg(Images.photo(1000, 1000), 92)) })
-        sources = Sources(deezer = true)
+        sources = Sources.NONE.copy(deezer = true)
         blocks.add(ArtBlocks.Block("name:other", null, Sources.DEEZER, md5, "", "other", 1))
         assertNotNull(art().get("むと", null, 240, 320))
         assertEquals(muto, shown("むと", null).key)
@@ -244,7 +244,7 @@ class BlockTest {
             ArrayDeque(List(3) { Response(200, "{\"id\":\"$shiho\",\"name\":\"shiho\",\"relations\":[]}".toByteArray()) })
         http.queued[pic("26cc4f7884f4a1122ee11c72fcbff31d")] = ArrayDeque(List(2) { Response(200, Images.jpeg(Images.photo(1000, 1000, 1), 92)) })
         http.queued[pic("7d0d00dbfa6f87119195f6edb1a83170")] = ArrayDeque(List(2) { Response(200, Images.jpeg(Images.photo(1000, 1000, 2), 92)) })
-        sources = Sources(deezer = true)
+        sources = Sources.NONE.copy(deezer = true)
         assertEquals(Sources.DEEZER, art().get("shiho", shiho, 240, 320)!!.source)
         val first = shown("shiho", shiho)
         assertEquals("26cc4f7884f4a1122ee11c72fcbff31d", ImageIds.of(first))
@@ -269,7 +269,7 @@ class BlockTest {
             http.queued[url] = ArrayDeque(List(2) { Response(200, "<meta property=\"og:image\" content=\"${avatar(k)}\">".toByteArray()) })
             http.queued[avatar(k)] = ArrayDeque(List(2) { Response(200, Images.jpeg(Images.photo(1000, 1000, i + 3L), 92)) })
         }
-        sources = Sources(youtube = true)
+        sources = Sources.NONE.copy(youtube = true)
         assertEquals(Sources.YOUTUBE, art().get("Two", id, 240, 320)!!.source)
         val first = shown("Two", id)
         assertEquals(avatar("AAAA").substringBefore('='), ImageIds.of(first))

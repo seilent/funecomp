@@ -61,7 +61,7 @@ class OnlineTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private var sources by mutableStateOf(Sources())
+    private var sources by mutableStateOf(Sources.NONE)
     private var link by mutableStateOf(LinkView(Phase.LIVE, "AP80", everLive = true))
     private val saved = ArrayList<Sources>()
     private val lyrics = ArrayList<Boolean>()
@@ -134,7 +134,7 @@ class OnlineTest {
 
     @Test
     fun sourceRowsFollowTheLookupOrderWithTheirValues() {
-        sources = Sources(fanartTv = true, deezer = true)
+        sources = Sources.NONE.copy(fanartTv = true, deezer = true)
         start(listOf(Page.Home, Page.Online()))
         val tops = sources.order.map { bounds("art.src.$it").top }
         assertEquals(tops.sorted(), tops)
@@ -148,7 +148,7 @@ class OnlineTest {
 
     @Test
     fun eachSourceSheetHasOnlyTheMovesThatApply() {
-        sources = Sources(fanartTv = true)
+        sources = Sources.NONE.copy(fanartTv = true)
         val (_, shell) = start(listOf(Page.Home, Page.Online()))
         tap("art.src.${Wikimedia.SOURCE}")
         assertEquals("commons", shell.sheet.title)
@@ -177,7 +177,7 @@ class OnlineTest {
         assertEquals(emptyList<Sources>(), saved)
         tap("art.src.${Sources.DISCOGS}")
         pick(1)
-        assertEquals(listOf(Sources(discogs = true)), saved)
+        assertEquals(listOf(Sources.NONE.copy(discogs = true)), saved)
         shows("art.src.${Sources.DISCOGS}", "ON")
     }
 
@@ -194,7 +194,7 @@ class OnlineTest {
 
     @Test
     fun keySavesTheTrimmedKey() {
-        sources = Sources(fanartTv = true)
+        sources = Sources.NONE.copy(fanartTv = true)
         start(listOf(Page.Home, Page.Online()))
         tap("art.src.${Sources.FANART_TV}")
         pick(4)
@@ -241,7 +241,7 @@ class OnlineTest {
     @Test
     fun theGatedRootListsOnlineUnderTheStatusAndLiveKeepsThePage() {
         link = LinkView(Phase.CONNECTING, "AP80")
-        sources = Sources(fanartTv = true)
+        sources = Sources.NONE.copy(fanartTv = true)
         val (_, shell) = start(listOf(Page.Connection), gated = true)
         val status = bounds("conn.status")
         val online = bounds("conn.online")

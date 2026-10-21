@@ -72,7 +72,7 @@ class ArtPickTest {
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
         MediaLink.controls(app, false)
-        app.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE).edit().putBoolean("deezer", true).putBoolean("theaudiodb", true).commit()
+        app.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE).edit().putInt("defaults", 2).putString("order", "commons,theaudiodb,fanarttv,discogs,youtube,deezer").putBoolean("deezer", true).putBoolean("theaudiodb", true).putBoolean("discogs", false).putBoolean("fanarttv", false).putBoolean("youtube", false).commit()
         Remote.resetArtist()
     }
 

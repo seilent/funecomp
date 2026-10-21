@@ -108,7 +108,7 @@ class ArtPickUiTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) {
-                App(c.device, LinkView(link, "AP80", everLive = true), control, shell, Sources(youtube = true), art = art, picks = shownPicks)
+                App(c.device, LinkView(link, "AP80", everLive = true), control, shell, Sources.NONE.copy(youtube = true), art = art, picks = shownPicks)
             }
         }
         settle(1000)
