@@ -8,6 +8,7 @@ import org.junit.Test
 
 class PickLinkTest {
     private val yt = "https://www.youtube.com/"
+    private val ytm = "https://music.youtube.com/"
 
     @Test
     fun theLinkTableParsesOnTheDevice() {
@@ -21,6 +22,20 @@ class PickLinkTest {
             "https://www.youtube.com/channel/UCshort" to PickLink.Unsupported,
             "https://www.youtube.com/watch?v=abc" to PickLink.Unsupported,
             "https://youtu.be/@tsukiniterasarete" to PickLink.Unsupported,
+            "https://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "http://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw/releases?si=x" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "https://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw?si=abc" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "https://music.youtube.com/browse/UC368BL46Vr1Y2ZbyWXY-ebw" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "https://music.youtube.com/@tsukiniterasarete" to PickLink.YouTubeMusic(ytm + "@tsukiniterasarete", yt + "@tsukiniterasarete"),
+            "https://music.youtube.com/@月" to PickLink.YouTubeMusic(ytm + "@月", yt + "@月"),
+            "https://music.youtube.com/watch?v=qwYhKlY4Tx0" to PickLink.Unsupported,
+            "https://music.youtube.com/playlist?list=OLAK5uy_lIP2DkJ3PNan7s1VU1PurL-tKQCDkJBv0" to PickLink.Unsupported,
+            "https://music.youtube.com/browse/MPREb_aaaaaaaaaaa" to PickLink.Unsupported,
+            "https://music.youtube.com/browse/VLPLaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" to PickLink.Unsupported,
+            "https://music.youtube.com/search?q=tsuki" to PickLink.Unsupported,
+            "https://music.youtube.com/explore" to PickLink.Unsupported,
+            "https://music.youtube.com/" to PickLink.Unsupported,
+            "https://music.youtube.com/channel/UCshort" to PickLink.Unsupported,
             "https://musicbrainz.org/artist/91352441-9F79-48c2-81ad-ccdd1e46915a/relationships" to PickLink.MusicBrainz("91352441-9f79-48c2-81ad-ccdd1e46915a"),
             "https://beta.musicbrainz.org/artist/91352441-9f79-48c2-81ad-ccdd1e46915a" to PickLink.MusicBrainz("91352441-9f79-48c2-81ad-ccdd1e46915a"),
             "https://commons.wikimedia.org/wiki/File:Hikaru_Utada_at_Spotify_Tokyo.png" to PickLink.Commons("Hikaru Utada at Spotify Tokyo.png"),
@@ -40,6 +55,7 @@ class PickLinkTest {
         assertEquals("月-Tsuki-", YouTube.ogTitle(head))
         assertEquals("https://yt3.googleusercontent.com/a=s900-c-k-c0x00ffffff-no-rj", YouTube.ogImage(head))
         assertEquals("https://yt3.googleusercontent.com/a=s176-c-k-c0x00ffffff-no-rj", YouTube.sized(YouTube.ogImage(head)!!, 176))
+        assertEquals("https://yt3.googleusercontent.com/a=s1600-rj", YouTube.full(YouTube.ogImage(head)!!))
     }
 
     @Test

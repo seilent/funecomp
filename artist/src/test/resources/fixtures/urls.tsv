@@ -730,3 +730,12 @@ POST https://music.163.com/api/cloudsearch/pc s=%E3%82%AD%E3%83%AA%E3%83%88%E3%8
 POST https://music.163.com/api/song/lyric id=30245012&lv=1&tv=-1	ne-l-30245012.json
 POST https://music.163.com/api/cloudsearch/pc s=Last+words+Imy&type=1&limit=10&offset=0	ne-s-5b0e4b2720a8.json
 POST https://music.163.com/api/song/lyric id=477215111&lv=1&tv=-1	ne-l-477215111.json
+https://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw	ytm-tsuki-channel-head.html
+https://music.youtube.com/@tsukiniterasarete	ytm-tsuki-channel-head.html
+https://music.youtube.com/channel/UCI6B8NkZKqlFWoiC_xE-hzA	ytm-yoasobi-topic-head.html
+https://music.youtube.com/channel/UCzzzzzzzzzzzzzzzzzzzzzz	ytm-undefined-head.html
+https://www.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw	yt-tsukiniterasarete-head.html
+https://www.youtube.com/channel/UCI6B8NkZKqlFWoiC_xE-hzA	yt-yoasobi-topic-head.html
+https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ=s1600-rj	gen:747x748@11
+https://yt3.googleusercontent.com/8BbiNyyI7TOxlf0x0R-4JZB8x7cw-ML-yOjF8QW8rHSrViZacf-AqD-eqg2ccvbYr5C9URAa_vTJI3k=s1600-rj	gen:1600x900@12
+https://yt3.googleusercontent.com/y6q758b0MjT6HIK2YIqUY0Vn3YanapJBTYIYEYHZmSqehYW_dpPGvrM2FhHCqiIqciQznTq7KJI=s900-c-k-c0x00ffffff-no-rj	gen:900x900@13

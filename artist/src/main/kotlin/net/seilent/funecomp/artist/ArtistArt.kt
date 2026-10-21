@@ -170,14 +170,38 @@ class ArtistArt(
             PickLink.Unsupported -> Offered.Refused(PickLink.UNSUPPORTED)
             is PickLink.MusicBrainz -> mb.artist(l.mbid)?.let { a -> Offered.Ok(Offer(ArtPicks.ARTIST, Sources.MUSICBRAINZ, "https://musicbrainz.org/artist/${a.id}", a.id, null, a.id, a.name, null)) }
                 ?: Offered.Refused(PickLink.NOT_FOUND)
-            is PickLink.YouTube -> YouTube.page(otherImages, l.url)?.let { html ->
-                val img = YouTube.ogImage(html) ?: return Offered.Refused(PickLink.NOT_IMAGE)
-                image(Sources.YOUTUBE, img, ImageIds.of(Sources.YOUTUBE, img), null, YouTube.ogTitle(html) ?: "")
-            } ?: Offered.Refused(PickLink.UNREACHABLE)
+            is PickLink.YouTube -> youTube(l.url)
+            is PickLink.YouTubeMusic -> youTubeMusic(l)
             is PickLink.Commons -> commons(l.file)
             is PickLink.Direct -> image(Sources.LINK, l.url, l.url, null, l.url.substringAfterLast('/').substringBefore('?'))
         }
     } catch (e: IOException) {
+        Offered.Refused(PickLink.UNREACHABLE)
+    }
+
+    private fun youTube(url: String): Offered = YouTube.page(otherImages, url)?.let { html ->
+        val img = YouTube.ogImage(html) ?: return Offered.Refused(PickLink.NOT_IMAGE)
+        image(Sources.YOUTUBE, img, ImageIds.of(Sources.YOUTUBE, img), null, YouTube.ogTitle(html) ?: "")
+    } ?: Offered.Refused(PickLink.UNREACHABLE)
+
+    private fun youTubeMusic(l: PickLink.YouTubeMusic): Offered {
+        val music = reached {
+            YouTube.page(otherImages, l.url)?.let { html ->
+                YouTube.ogImage(html)?.let { YouTube.full(it) }?.let { img ->
+                    image(Sources.YOUTUBE, img, ImageIds.of(Sources.YOUTUBE, img), null, YouTube.ogTitle(html) ?: "", YouTube.MUSIC_LABEL)
+                } ?: Offered.Refused(PickLink.NOT_FOUND)
+            } ?: Offered.Refused(PickLink.UNREACHABLE)
+        }
+        if ((music as? Offered.Refused)?.reason == PickLink.NOT_FOUND) return music
+        val www = reached { youTube(l.www) }
+        val ok = listOf(music, www).filterIsInstance<Offered.Ok>().flatMap { it.offers }.distinctBy { it.id }
+        return if (ok.isEmpty()) music else Offered.Ok(ok)
+    }
+
+    private inline fun reached(get: () -> Offered): Offered = try {
+        get()
+    } catch (e: IOException) {
+        if (HttpRun.current.get()?.cancelled == true) throw e
         Offered.Refused(PickLink.UNREACHABLE)
     }
 
@@ -192,11 +216,11 @@ class ArtistArt(
         return image(Wikimedia.SOURCE, c.url, c.id, c.credit, c.id.removePrefix("File:"))
     }
 
-    private fun image(source: String, url: String, id: String, credit: Credit?, title: String): Offered {
+    private fun image(source: String, url: String, id: String, credit: Credit?, title: String, label: String = Sources.label(source)): Offered {
         val src = (images[source] ?: otherImages).get(url)?.body ?: return Offered.Refused(PickLink.UNREACHABLE)
         if (source == Sources.DEEZER && deezer.placeholder(src)) return Offered.Refused(PickLink.NOT_IMAGE)
         check(src)?.let { return Offered.Refused(it) }
-        return Offered.Ok(Offer(ArtPicks.IMAGE, source, url, id, credit, null, title, src))
+        return Offered.Ok(Offer(ArtPicks.IMAGE, source, url, id, credit, null, title, src, label))
     }
 
     fun browse(name: String, mbid: String?, px: Int, sink: (Tile) -> Unit): Boolean {

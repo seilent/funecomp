@@ -228,6 +228,7 @@ class PickTest {
     @Test
     fun theLinkTable() {
         val yt = "https://www.youtube.com/"
+        val ytm = "https://music.youtube.com/"
         val table = mapOf(
             "https://www.youtube.com/@tsukiniterasarete" to PickLink.YouTube(yt + "@tsukiniterasarete"),
             "  https://m.youtube.com/@tsukiniterasarete/videos?x=1 " to PickLink.YouTube(yt + "@tsukiniterasarete"),
@@ -238,6 +239,20 @@ class PickTest {
             "https://www.youtube.com/channel/UCshort" to PickLink.Unsupported,
             "https://www.youtube.com/watch?v=abc" to PickLink.Unsupported,
             "https://youtu.be/@tsukiniterasarete" to PickLink.Unsupported,
+            "https://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "http://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw/releases?si=x" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "https://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw?si=abc" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "https://music.youtube.com/browse/UC368BL46Vr1Y2ZbyWXY-ebw" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "https://music.youtube.com/@tsukiniterasarete" to PickLink.YouTubeMusic(ytm + "@tsukiniterasarete", yt + "@tsukiniterasarete"),
+            "https://music.youtube.com/@月" to PickLink.YouTubeMusic(ytm + "@月", yt + "@月"),
+            "https://music.youtube.com/watch?v=qwYhKlY4Tx0" to PickLink.Unsupported,
+            "https://music.youtube.com/playlist?list=OLAK5uy_lIP2DkJ3PNan7s1VU1PurL-tKQCDkJBv0" to PickLink.Unsupported,
+            "https://music.youtube.com/browse/MPREb_aaaaaaaaaaa" to PickLink.Unsupported,
+            "https://music.youtube.com/browse/VLPLaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" to PickLink.Unsupported,
+            "https://music.youtube.com/search?q=tsuki" to PickLink.Unsupported,
+            "https://music.youtube.com/explore" to PickLink.Unsupported,
+            "https://music.youtube.com/" to PickLink.Unsupported,
+            "https://music.youtube.com/channel/UCshort" to PickLink.Unsupported,
             "https://musicbrainz.org/artist/91352441-9F79-48c2-81ad-ccdd1e46915a/relationships" to PickLink.MusicBrainz(dj),
             "https://beta.musicbrainz.org/artist/$dj" to PickLink.MusicBrainz(dj),
             "https://musicbrainz.org/release/$dj" to PickLink.Unsupported,
@@ -307,6 +322,56 @@ class PickTest {
         http.queued[channel] = ArrayDeque(listOf(Response(200, "<html></html>".toByteArray())))
         assertEquals(PickLink.NOT_IMAGE, refused(art().offer(channel)))
         assertEquals(PickLink.UNREACHABLE, refused(art().offer("https://www.youtube.com/@nobody")))
+    }
+
+    @Test
+    fun aYouTubeMusicLinkOffersThePageImageAndTheChannelAvatar() {
+        val topic = "UCI6B8NkZKqlFWoiC_xE-hzA"
+        val o = art().offer("https://music.youtube.com/channel/$topic?si=x") as Offered.Ok
+        assertEquals(2, o.offers.size)
+        val (music, www) = o.offers
+        assertEquals(Sources.YOUTUBE, music.source)
+        assertEquals("youtube music", music.label)
+        assertEquals("YOASOBI", music.title)
+        assertEquals("https://yt3.googleusercontent.com/8BbiNyyI7TOxlf0x0R-4JZB8x7cw-ML-yOjF8QW8rHSrViZacf-AqD-eqg2ccvbYr5C9URAa_vTJI3k=s1600-rj", music.url)
+        assertEquals(music.url.substringBefore('='), music.id)
+        assertTrue(Fixtures.gen("1600x900@12").contentEquals(music.src))
+        assertEquals(Sources.YOUTUBE, www.source)
+        assertEquals("youtube", www.label)
+        assertEquals("YOASOBI - トピック", www.title)
+        assertEquals("https://yt3.googleusercontent.com/y6q758b0MjT6HIK2YIqUY0Vn3YanapJBTYIYEYHZmSqehYW_dpPGvrM2FhHCqiIqciQznTq7KJI=s900-c-k-c0x00ffffff-no-rj", www.url)
+        assertEquals(listOf("https://music.youtube.com/channel/$topic", "https://www.youtube.com/channel/$topic"), http.calls.filter { "youtube.com/" in it })
+    }
+
+    @Test
+    fun anOwnChannelGivesOneImageSharedWithTheChannelAvatar() {
+        for (link in listOf("https://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw", "https://music.youtube.com/@tsukiniterasarete")) {
+            val o = art().offer(link) as Offered.Ok
+            val m = o.offers.single()
+            assertEquals("youtube music", m.label)
+            assertEquals("月-Tsuki-", m.title)
+            assertEquals("https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ=s1600-rj", m.url)
+            assertEquals(ImageIds.of(Sources.YOUTUBE, avatar), m.id)
+            assertTrue(Fixtures.gen("747x748@11").contentEquals(m.src))
+        }
+        assertEquals(emptyList<String>(), http.missing)
+    }
+
+    @Test
+    fun aYouTubeMusicPageWithNoImageIsNotFoundAndAFailedLoadIsUnreachable() {
+        assertEquals(PickLink.NOT_FOUND, refused(art().offer("https://music.youtube.com/channel/UCzzzzzzzzzzzzzzzzzzzzzz")))
+        assertEquals(listOf("https://music.youtube.com/channel/UCzzzzzzzzzzzzzzzzzzzzzz"), http.calls)
+        assertEquals(PickLink.UNREACHABLE, refused(art().offer("https://music.youtube.com/@nobody")))
+        assertEquals(PickLink.UNSUPPORTED, refused(art().offer("https://music.youtube.com/watch?v=qwYhKlY4Tx0")))
+        val down = ArtistArt({ _, _ -> throw IOException("offline") }, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now })
+        assertEquals(PickLink.UNREACHABLE, refused(down.offer("https://music.youtube.com/@tsukiniterasarete")))
+    }
+
+    @Test
+    fun theMusicSizeReplacesTheWholeSuffix() {
+        assertEquals("https://yt3.googleusercontent.com/a=s1600-rj", YouTube.full("https://yt3.googleusercontent.com/a=w544-c-h544-k-c0x00ffffff-no-l90-rj"))
+        assertEquals("https://yt3.googleusercontent.com/b=s1600-rj", YouTube.full("https://yt3.googleusercontent.com/b=w544-h544-p-l90-rj"))
+        assertEquals("https://yt3.googleusercontent.com/c=s1600-rj", YouTube.full("https://yt3.googleusercontent.com/c"))
     }
 
     @Test

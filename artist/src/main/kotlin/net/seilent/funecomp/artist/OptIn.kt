@@ -128,6 +128,8 @@ class YouTube(private val api: Api) {
         private val OG = Regex("<meta\\s+property=\"og:image\"\\s+content=\"([^\"]+)\"")
         private val TITLE = Regex("<meta\\s+property=\"og:title\"\\s+content=\"([^\"]*)\"")
         private val SIDE = Regex("=s\\d+")
+        const val MUSIC_LABEL = "youtube music"
+        private const val MUSIC_SIZE = "=s1600-rj"
 
         const val MAX_PAGE = 16 shl 20
         private val OG_MARK = "property=\"og:image\"".toByteArray()
@@ -180,6 +182,11 @@ class YouTube(private val api: Api) {
         }
 
         fun sized(url: String, side: Int): String = url.replace(SIDE, "=s$side")
+
+        fun full(url: String): String {
+            val i = url.lastIndexOf('=')
+            return if (i > url.lastIndexOf('/')) url.substring(0, i) + MUSIC_SIZE else url + MUSIC_SIZE
+        }
     }
 }
 
