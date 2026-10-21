@@ -70,7 +70,7 @@ class ArtPickUiTest {
 
     private var shownPicks by mutableStateOf<List<ArtPicks.Pick>>(emptyList())
 
-    private fun start(pages: List<Page>, art: BackdropArt? = null, picks: List<ArtPicks.Pick> = emptyList(), library: Library = lib, link: Phase = Phase.LIVE): Pair<Shell, SimControl> {
+    private fun start(pages: List<Page>, art: BackdropArt? = null, picks: List<ArtPicks.Pick> = emptyList(), library: Library = lib, link: Phase = Phase.LIVE, missing: Set<String> = emptySet()): Pair<Shell, SimControl> {
         shownPicks = picks
         val c = SimControl("ap80", library)
         val control = object : Control by c {
@@ -108,7 +108,7 @@ class ArtPickUiTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) {
-                App(c.device, LinkView(link, "AP80", everLive = true), control, shell, Sources.NONE.copy(youtube = true), art = art, picks = shownPicks)
+                App(c.device, LinkView(link, "AP80", everLive = true), control, shell, Sources.NONE.copy(youtube = true), art = art, picks = shownPicks, galleryMissing = missing)
             }
         }
         settle(1000)
@@ -296,6 +296,17 @@ class ArtPickUiTest {
         assertEquals(listOf("undo pick"), shell.sheet.items)
         tap("sheet.item.0")
         assertEquals(listOf("again B", "undo C"), calls)
+    }
+
+    @Test
+    fun aGalleryPickWithItsFileGoneReadsNoImageWithUndoOnly() {
+        val gone = pick("A").copy(source = Sources.GALLERY, url = "", sha = "aa")
+        val kept = pick("B", at = 0).copy(source = Sources.GALLERY, url = "", sha = "bb")
+        val (shell, _) = start(listOf(Page.Home, Page.Online(), Page.ArtPicked), picks = listOf(gone, kept), missing = setOf("aa"))
+        rule.onNode(hasText("no image", ignoreCase = true) and hasAnyAncestor(hasTestTag("art.picked.0")), useUnmergedTree = true).assertExists()
+        rule.onNode(hasText("gallery", ignoreCase = true) and hasAnyAncestor(hasTestTag("art.picked.1")), useUnmergedTree = true).assertExists()
+        tap("art.picked.0")
+        assertEquals(listOf("undo pick"), shell.sheet.items)
     }
 
     @Test

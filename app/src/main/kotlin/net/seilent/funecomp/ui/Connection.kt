@@ -163,12 +163,12 @@ private fun ArtList(ctx: Ctx, title: String, keys: List<String>, empty: String, 
 }
 
 @Composable
-fun ArtPickedPage(ctx: Ctx, picks: List<ArtPicks.Pick>) {
+fun ArtPickedPage(ctx: Ctx, picks: List<ArtPicks.Pick>, missing: Set<String> = emptySet()) {
     ArtList(ctx, PICKED, picks.map { "picked ${it.key} ${it.at}" }, NO_PICKED) { j, m, focused, take ->
         val p = picks[j]
         val broken = p.kind != ArtPicks.NONE && p.failedAt != null
         val line = when {
-            p.kind == ArtPicks.NONE -> NO_IMAGE
+            p.kind == ArtPicks.NONE || (p.source == Sources.GALLERY && p.sha in missing) -> NO_IMAGE
             broken -> LINK_BROKEN
             else -> Sources.label(p.source)
         }

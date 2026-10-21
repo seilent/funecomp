@@ -58,6 +58,7 @@ data class Sources(
         const val DEEZER = "deezer"
         const val LINK = "link"
         const val MUSICBRAINZ = "musicbrainz"
+        const val GALLERY = "gallery"
 
         private val LABELS = mapOf(
             Wikimedia.SOURCE to "commons",
@@ -68,6 +69,7 @@ data class Sources(
             DEEZER to "deezer",
             LINK to "link",
             MUSICBRAINZ to "musicbrainz",
+            GALLERY to "gallery",
         )
 
         fun label(id: String) = LABELS[id] ?: id

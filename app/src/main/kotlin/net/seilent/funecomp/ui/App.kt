@@ -85,6 +85,7 @@ fun App(
     blocked: List<ArtBlocks.Record> = emptyList(),
     lyrics: LyricsFetch.Show = LyricsFetch.Show.Off,
     picks: List<ArtPicks.Pick> = emptyList(),
+    galleryMissing: Set<String> = emptySet(),
     scrobbleLabels: Boolean = true,
     insets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     ime: WindowInsets = WindowInsets.ime,
@@ -148,7 +149,7 @@ fun App(
                     Page.Settings -> SettingsPage(ctx, firmware)
                     Page.Connection -> ConnectionPage(ctx, link, gated = shell.gated)
                     is Page.Online -> OnlinePage(ctx, page, sources, onSources, credits, onCredit, blocked, picks, scrobble, link.lyrics, scrobbleLabels)
-                    Page.ArtPicked -> ArtPickedPage(ctx, picks)
+                    Page.ArtPicked -> ArtPickedPage(ctx, picks, galleryMissing)
                     Page.ArtBlocked -> ArtBlockedPage(ctx, blocked)
                     Page.ArtCredits -> ArtCreditsPage(ctx, credits, onCredit)
                     Page.Firmware -> FirmwarePage(ctx, firmware)

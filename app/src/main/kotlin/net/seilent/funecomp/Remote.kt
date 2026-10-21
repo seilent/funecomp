@@ -28,6 +28,7 @@ import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
+import net.seilent.funecomp.artist.GalleryStore
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.HttpRun
 import net.seilent.funecomp.artist.ImageIds
@@ -35,6 +36,7 @@ import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.artist.PickLink
+import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.UrlHttp
@@ -144,6 +146,9 @@ object Remote : Control {
         private set
 
     var picks by mutableStateOf<List<ArtPicks.Pick>>(emptyList())
+        private set
+
+    var galleryMissing by mutableStateOf<Set<String>>(emptySet())
         private set
 
     private val backdropLock = Any()
@@ -356,10 +361,11 @@ object Remote : Control {
             network(c)
             val blocks = ArtBlocks(File(c.filesDir, "artblock.tsv")) { Log.w(TAG, it) }
             val picks = ArtPicks(File(c.filesDir, "artpick.tsv")) { Log.w(TAG, it) }
-            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks).also {
+            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks, gallery = GalleryStore(File(c.filesDir, "pickimg")), log = { Log.w(TAG, it) }).also {
                 artist = it
                 showBlocked { blocks.records() }
                 showPicks { picks.list() }
+                blockExec.execute { gallery(it) }
                 Thread({ credits = it.credits() }, "art-credits").apply { isDaemon = true }.start()
             }
         }
@@ -369,6 +375,7 @@ object Remote : Control {
         artist = null
         showBlocked { emptyList() }
         showPicks { emptyList() }
+        galleryMissing = emptySet()
     }
 
     fun sourcesChanged() = art?.want()
@@ -547,7 +554,10 @@ object Remote : Control {
         picked(a) {
             a.picks.list().filter { o -> o.keys.any { it in p.keys } }.forEach { a.forget(it.cacheKey) }
             a.picks.add(p)
-            offer.src?.let { a.store(p, it) }
+            offer.src?.let {
+                if (p.source == Sources.GALLERY) a.gallery?.put(it)
+                a.store(p, it)
+            }
             a.blocks.addPush(p.name, mbid, if (target.library) Enums.ImgOrigin.library else target.origin)
         }
     }
@@ -575,6 +585,7 @@ object Remote : Control {
             change()
             a.picks.save()
             a.blocks.save()
+            gallery(a)
             synchronized(backdropLock) {
                 backdropRev++
                 backdrop = null
@@ -589,6 +600,11 @@ object Remote : Control {
     }
 
     private fun showPicks(list: () -> List<ArtPicks.Pick>) = synchronized(blockedLock) { picks = list() }
+
+    private fun gallery(a: ArtistArt) {
+        a.pruneGallery()?.takeIf { it > 0 }?.let { Log.i(TAG, "art pick pruned $it") }
+        galleryMissing = a.galleryMissing()
+    }
 
     override fun unblock(r: ArtBlocks.Record) {
         val a = artist ?: return

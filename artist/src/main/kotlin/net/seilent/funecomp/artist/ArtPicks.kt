@@ -23,6 +23,10 @@ class ArtPicks(private val file: File? = null, private val log: (String) -> Unit
     }
 
     private val picks = ArrayList<Pick>()
+    var skipped = 0
+        private set
+    var read = false
+        private set
 
     init {
         load()
@@ -99,6 +103,7 @@ class ArtPicks(private val file: File? = null, private val log: (String) -> Unit
     private fun load() {
         val f = file ?: return
         if (!f.isFile) return
+        read = true
         for (l in f.readLines(Charsets.UTF_8)) {
             if (l.isBlank()) continue
             val p = l.split('\t').map { ArtBlocks.unescape(it) }
@@ -109,7 +114,10 @@ class ArtPicks(private val file: File? = null, private val log: (String) -> Unit
                     p[14].ifEmpty { null }, p[15].toLong(), p[16].toLongOrNull(), p[17],
                 ),
             )
-            if (!ok) log("artpick skipped line ${l.take(80)}")
+            if (!ok) {
+                skipped++
+                log("artpick skipped line ${l.take(80)}")
+            }
         }
     }
 

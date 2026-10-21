@@ -19,6 +19,8 @@ class ArtistArt(
     val blocks: ArtBlocks = ArtBlocks(),
     val picks: ArtPicks = ArtPicks(),
     private val placeholders: Set<String> = Deezer.PLACEHOLDERS,
+    val gallery: GalleryStore? = null,
+    private val log: (String) -> Unit = {},
 ) {
     private val ua = "funecomp/$version (github@seilent.net)"
     private fun api(limiter: RateLimiter) = Api(http, ua, limiter, sleep)
@@ -47,6 +49,8 @@ class ArtistArt(
     class Mark(val sources: String, val until: Long)
 
     @Volatile private var missDue = Long.MAX_VALUE
+    private val pruneSafe = picks.skipped == 0 && (picks.read || gallery?.any() != true)
+    private val missingLogged = HashSet<String>()
 
     private class Found(val c: Candidate, val src: ByteArray, val jpeg: ByteArray, val mbid: String?, val by: String)
 
@@ -124,6 +128,7 @@ class ArtistArt(
                 return Art(jpeg, w, h, name.trim(), tag, e.source, e.credit)
             }
         }
+        if (p.source == Sources.GALLERY) return gallery(p, name, tag, w, h)
         val now = clock()
         p.failedAt?.let { at ->
             if (now - at < TTL_MS) {
@@ -150,6 +155,38 @@ class ArtistArt(
         }
         return Art(jpeg, w, h, name.trim(), tag, p.source, p.credit)
     }
+
+    private fun gallery(p: ArtPicks.Pick, name: String, tag: String?, w: Int, h: Int): Art? {
+        val src = gallery?.get(p.sha)
+        val jpeg = src?.let { Backdrop.render(codec, it, w, h) }
+        if (src == null || jpeg == null) {
+            if (synchronized(missingLogged) { missingLogged.add(p.sha) }) log("art pick gallery missing ${p.name}")
+            return null
+        }
+        picks.ifCurrent(p) {
+            store(p, src)
+            cache.putRendered(p.cacheKey, w, h, jpeg)
+        } ?: return null
+        return Art(jpeg, w, h, name.trim(), tag, p.source, p.credit)
+    }
+
+    fun galleryOffer(src: ByteArray, title: String): Offered {
+        check(src)?.let { return Offered.Refused(it) }
+        return Offered.Ok(Offer(ArtPicks.IMAGE, Sources.GALLERY, "", GalleryStore.ID_PREFIX + ArtCache.sha256(src), null, null, title, src))
+    }
+
+    fun pruneGallery(): Int? {
+        val g = gallery ?: return 0
+        if (!pruneSafe) {
+            log("art pick prune skipped")
+            return null
+        }
+        return g.prune(GalleryStore.shas(picks.list()))
+    }
+
+    fun galleryMissing(): Set<String> = picks.list()
+        .filter { it.source == Sources.GALLERY && it.kind == ArtPicks.IMAGE && gallery?.has(it.sha) != true && !cache.hasSource(it.cacheKey) }
+        .map { it.sha }.toSet()
 
     fun store(p: ArtPicks.Pick, src: ByteArray) = picks.ifCurrent(p) {
         cache.putHit(ArtCache.Entry(p.cacheKey, p.name, p.mbid, p.source, p.credit, p.url, clock(), p.id, ArtCache.sha256(src)), src)
