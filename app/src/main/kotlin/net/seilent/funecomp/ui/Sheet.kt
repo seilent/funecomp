@@ -133,9 +133,12 @@ class SheetState {
     fun accept(i: Int) {
         focus = i
         dismiss = {}
+        val p = pick
         close()
-        pick(i)
+        p(i)
     }
+
+    fun owns(owner: Any): Boolean = shown && this.owner == owner
 
     fun closeIf(owner: Any) {
         if (shown && this.owner == owner) close(dismissed = false)
@@ -146,6 +149,7 @@ class SheetState {
         shown = false
         owner = null
         keep = null
+        pick = {}
         val d = dismiss
         dismiss = {}
         if (dismissed) d()

@@ -170,6 +170,18 @@ class ArtistArt(
         return Art(jpeg, w, h, name.trim(), tag, p.source, p.credit)
     }
 
+    @Throws(IOException::class)
+    fun previewArtist(name: String, mbid: String, w: Int, h: Int): ByteArray? {
+        val on = sources().enabled
+        val hit = cache.hit(mbid)?.takeIf { it.source in on && !blocked(it) }
+        if (hit != null) cache.source(mbid)?.let { return it }
+        cache.miss(mbid)?.let { m ->
+            if (clock() - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash(on) && m.cleaned) return null
+        }
+        if (!online()) throw IOException("offline")
+        return lookup(name, name, mbid, w, h, on, mbid, AtomicBoolean())?.second
+    }
+
     fun galleryOffer(src: ByteArray, title: String): Offered {
         check(src)?.let { return Offered.Refused(it) }
         return Offered.Ok(Offer(ArtPicks.IMAGE, Sources.GALLERY, "", GalleryStore.ID_PREFIX + ArtCache.sha256(src), null, null, title, src))

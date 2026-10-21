@@ -3,6 +3,7 @@ package net.seilent.funecomp
 import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.res.Resources
 import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.net.Network
@@ -21,6 +22,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import net.seilent.funecomp.art.ArtWorker
 import net.seilent.funecomp.art.BitmapCodec
 import net.seilent.funecomp.art.Forward
+import net.seilent.funecomp.art.Gallery
 import net.seilent.funecomp.art.Memo
 import net.seilent.funecomp.art.ThumbWorker
 import net.seilent.funecomp.artist.ArtBlocks
@@ -28,6 +30,7 @@ import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
+import net.seilent.funecomp.artist.Backdrop
 import net.seilent.funecomp.artist.GalleryStore
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.HttpRun
@@ -72,6 +75,8 @@ import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LIB_PAGE
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickFor
+import net.seilent.funecomp.ui.Preview
+import net.seilent.funecomp.ui.Previewed
 import java.io.File
 import java.io.IOException
 import java.time.ZoneId
@@ -108,6 +113,8 @@ object Remote : Control {
     internal var forgetting: () -> Unit = {}
     internal var queuedAsk: () -> Unit = {}
     @Volatile var pickAsk: ((PickFor) -> Boolean)? = null
+    private val pickLock = Any()
+    private var resolving: HttpRun? = null
     @Volatile private var app: Context? = null
 
     internal var faced: (ByteArray, (() -> Pair<Double, Double>?) -> Pair<Double, Double>?) -> Pair<Bitmap, Pair<Double, Double>?>? =
@@ -499,22 +506,78 @@ object Remote : Control {
         app?.let { PickNotice.done(it, name) }
     }
 
-    override fun pickLink(text: String, done: (Offered) -> Unit) = offered(done) { it.offer(text) }
+    override fun pickLink(text: String, name: String, done: (Previewed) -> Unit) = resolve(done, PickLink.UNREACHABLE, name) { it.offer(text) }
 
-    override fun takeTile(t: Tile, done: (Offered) -> Unit) = offered(done) { it.take(t) }
+    override fun takeTile(t: Tile, done: (Previewed) -> Unit) = resolve(done, PickLink.UNREACHABLE) { it.take(t) }
 
-    private fun offered(done: (Offered) -> Unit, get: (ArtistArt) -> Offered) {
-        val a = artist ?: return done(Offered.Refused(PickLink.UNREACHABLE))
+    fun galleryPicked(read: () -> Gallery?, done: (Previewed) -> Unit) = resolve(done, PickLink.NOT_IMAGE) { a ->
+        read()?.let { g -> g.jpeg?.let { a.galleryOffer(it, g.name) } ?: Offered.Refused(PickLink.NOT_IMAGE) }
+    }
+
+    fun cancelPick() = synchronized(pickLock) { resolving?.cancel() }
+
+    private fun resolve(done: (Previewed) -> Unit, failed: String, name: String = "", get: (ArtistArt) -> Offered?): () -> Unit {
+        val run = HttpRun { Log.i(TAG, "art pick http ${it.replace(SECRET, "$1=x")}") }
+        synchronized(pickLock) {
+            resolving?.cancel()
+            resolving = run
+        }
+        val a = artist
         Thread({
-            val o = try {
-                get(a)
+            val p = try {
+                if (a == null) Previewed.Refused(failed) else run.on { previewed(a, name, get(a), run) }
+            } catch (e: IOException) {
+                Previewed.Refused(failed)
             } catch (e: RuntimeException) {
                 Log.w(TAG, "art pick: $e")
-                Offered.Refused(PickLink.UNREACHABLE)
+                Previewed.Refused(failed)
             }
-            Log.i(TAG, "art pick offer -> ${if (o is Offered.Refused) o.reason else "ok"}")
-            main.post { done(o) }
+            if (run.cancelled) {
+                Log.i(TAG, "art pick cancelled")
+                return@Thread
+            }
+            Log.i(TAG, "art pick offer -> ${(p as? Previewed.Refused)?.reason ?: (p as? Previewed.Ok)?.previews?.size?.let { "ok $it" } ?: "closed"}")
+            main.post { if (!run.cancelled) done(p) }
         }, "art-pick").apply { isDaemon = true }.start()
+        return { run.cancel() }
+    }
+
+    private fun previewed(a: ArtistArt, name: String, o: Offered?, run: HttpRun): Previewed {
+        if (o == null) return Previewed.Closed
+        if (o is Offered.Refused) return Previewed.Refused(o.reason)
+        val h = device.hello
+        val w = h?.backdropW ?: FETCH_W
+        val hh = h?.backdropH ?: FETCH_H
+        val shown = (o as Offered.Ok).offers.mapNotNull { offer ->
+            if (run.cancelled) return Previewed.Closed
+            if (offer.kind == ArtPicks.ARTIST) {
+                val src = offer.mbid?.let { m ->
+                    try {
+                        a.previewArtist(name.ifBlank { offer.title }, m, w, hh)
+                    } catch (e: IOException) {
+                        if (run.cancelled) return Previewed.Closed
+                        null
+                    }
+                }
+                Preview(offer, src?.let { preview(it, w, hh) })
+            } else {
+                offer.src?.let { preview(it, w, hh) }?.let { Preview(offer, it) }
+            }
+        }
+        return if (shown.isEmpty()) Previewed.Refused(PickLink.TOO_SMALL) else Previewed.Ok(shown)
+    }
+
+    internal fun preview(src: ByteArray, w: Int, h: Int, decode: (ByteArray, (() -> Pair<Double, Double>?) -> Pair<Double, Double>?) -> Pair<Bitmap, Pair<Double, Double>?>? = faced): ImageBitmap? {
+        val (bmp, face) = decode(src) { it() } ?: return null
+        val r = Backdrop.crop(bmp.width, bmp.height, w, h, face) ?: return null
+        val crop = Bitmap.createBitmap(bmp, r.x, r.y, r.w, r.h)
+        if (crop !== bmp) bmp.recycle()
+        val side = maxOf(Resources.getSystem().displayMetrics.run { maxOf(widthPixels, heightPixels) }, maxOf(w, h) * 4)
+        val long = maxOf(r.w, r.h)
+        if (long <= side) return crop.asImageBitmap()
+        val out = Bitmap.createScaledBitmap(crop, maxOf(1, r.w * side / long), maxOf(1, r.h * side / long), true)
+        if (out !== crop) crop.recycle()
+        return out.asImageBitmap()
     }
 
     override fun browse(name: String, mbid: String?, px: Int, tile: (BrowseTile) -> Unit, done: (Boolean) -> Unit): () -> Unit {

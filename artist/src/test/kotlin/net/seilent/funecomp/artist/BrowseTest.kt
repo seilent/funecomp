@@ -105,7 +105,7 @@ class BrowseTest {
     fun aTapFetchesTheFullImage() {
         val (tiles, _) = browse()
         val a = art()
-        val o = (a.take(tiles.first { it.caption == "月-Tsuki-" }) as Offered.Ok).offer
+        val o = (a.take(tiles.first { it.caption == "月-Tsuki-" }) as Offered.Ok).offers.single()
         assertEquals(Sources.YOUTUBE, o.source)
         assertTrue(o.url.contains("=s900"))
         assertNotNull(o.src)

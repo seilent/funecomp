@@ -131,7 +131,7 @@ class ArtPickAskTest {
         assertEquals("ok shown=true", ask(s, "TSUKI"))
         waitFor { a.get().shell.sheet.shown }
         assertEquals("TSUKI", a.get().shell.sheet.title)
-        assertEquals(listOf("paste link", "browse"), a.get().shell.sheet.items)
+        assertEquals(listOf("paste link", "browse", "from gallery"), a.get().shell.sheet.items)
         assertNull(notice())
         a.pause().stop().destroy()
     }

@@ -10,7 +10,6 @@ import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Offer
-import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.artist.Tile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -41,6 +40,14 @@ data class LinkView(
 data class PickFor(val name: String, val mbid: String? = null, val library: Boolean = false, val origin: Int? = null)
 
 class BrowseTile(val tile: Tile, val image: ImageBitmap)
+
+class Preview(val offer: Offer, val image: ImageBitmap?)
+
+sealed interface Previewed {
+    class Ok(val previews: List<Preview>) : Previewed
+    class Refused(val reason: String) : Previewed
+    data object Closed : Previewed
+}
 
 @Immutable
 data class Bonded(val name: String, val address: String, val companion: Boolean = false)
@@ -92,9 +99,10 @@ interface Control {
     fun blockArt(e: ArtCache.Entry) {}
     fun wrongArtist(e: ArtCache.Entry) {}
     fun unblock(r: ArtBlocks.Record) {}
-    fun pickLink(text: String, done: (Offered) -> Unit) {}
+    fun pickLink(text: String, name: String, done: (Previewed) -> Unit): () -> Unit = {}
+    fun pickGallery(done: (Previewed) -> Unit): () -> Unit = {}
     fun browse(name: String, mbid: String?, px: Int, tile: (BrowseTile) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}
-    fun takeTile(t: Tile, done: (Offered) -> Unit) {}
+    fun takeTile(t: Tile, done: (Previewed) -> Unit): () -> Unit = {}
     fun pick(target: PickFor, offer: Offer) {}
     fun undoPick(p: ArtPicks.Pick) {}
     fun tryAgain(p: ArtPicks.Pick) {}

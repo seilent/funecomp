@@ -21,8 +21,6 @@ class Tile(val source: String, val caption: String, val preview: ByteArray, val 
 sealed interface Offered {
     class Ok(val offers: List<Offer>) : Offered {
         constructor(offer: Offer) : this(listOf(offer))
-
-        val offer: Offer get() = offers.first()
     }
     class Refused(val reason: String) : Offered
 }

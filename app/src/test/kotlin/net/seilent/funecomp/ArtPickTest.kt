@@ -6,13 +6,22 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import androidx.compose.ui.graphics.asAndroidBitmap
+import net.seilent.funecomp.art.BitmapCodec
+import net.seilent.funecomp.art.Gallery
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
+import net.seilent.funecomp.artist.Backdrop
+import net.seilent.funecomp.artist.Codec
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.Offer
+import net.seilent.funecomp.artist.Picture
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
@@ -22,9 +31,11 @@ import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.sim.Track
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickFor
+import net.seilent.funecomp.ui.Previewed
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -38,8 +49,12 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.zip.CRC32
+import kotlin.math.abs
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -53,8 +68,14 @@ class ArtPickTest {
     private val thumb = "https://r2.theaudiodb.com/images/media/artist/thumb/p.jpg"
     private val avatar = "https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ=s900-c-k-c0x00ffffff-no-rj"
     private val picked = jpeg(java.awt.Color(30, 160, 60))
+    private val slow = "https://example.org/slow.jpg"
+    private val gate = CountDownLatch(1)
     private val http = Http { url, _ ->
         when {
+            url == slow -> {
+                gate.await(10, TimeUnit.SECONDS)
+                Response(200, picked)
+            }
             url.contains("/ws/2/artist/?query=") -> Response(200, "{\"artists\":[]}".toByteArray())
             url.contains("/ws/2/artist/$pinned") -> Response(200, "{\"id\":\"$pinned\",\"name\":\"tsuki\",\"relations\":[]}".toByteArray())
             url.contains("api.deezer.com/search/artist") -> Response(200, "{\"data\":[{\"name\":\"TSUKI\",\"nb_fan\":1,\"picture_xl\":\"$dz\"}]}".toByteArray())
@@ -78,6 +99,7 @@ class ArtPickTest {
 
     @After
     fun tearDown() {
+        gate.countDown()
         Remote.stop()
         Remote.shown(false)
         sims.forEach { it.stop() }
@@ -253,12 +275,154 @@ class ArtPickTest {
     @Test
     fun withNoArtistStoreTheCallsStillAnswer() {
         Remote.resetArtist()
-        var offered: net.seilent.funecomp.artist.Offered? = null
+        var offered: Previewed? = null
         var ended: Boolean? = null
-        Remote.pickLink("https://example.org/a.jpg") { offered = it }
+        Remote.pickLink("https://example.org/a.jpg", "TSUKI") { offered = it }
         Remote.browse("TSUKI", null, 53, {}) { ended = it }
-        assertEquals("link not reachable", (offered as net.seilent.funecomp.artist.Offered.Refused).reason)
+        assertNull(offered)
+        waitFor { offered != null }
+        assertEquals("link not reachable", (offered as Previewed.Refused).reason)
         assertEquals(false, ended)
         assertNull(Remote.backdrop)
+    }
+
+    private fun previewed(start: ((Previewed) -> Unit) -> Unit): Previewed {
+        var out: Previewed? = null
+        start { out = it }
+        waitFor { out != null }
+        return out!!
+    }
+
+    private fun files(): Map<String, String> = listOf("artpick.tsv", "artblock.tsv", "art", "pickimg").flatMap { n ->
+        File(app.filesDir, n).walkTopDown().filter { it.isFile }.map { it.relativeTo(app.filesDir).path to crc(it.readBytes()) }.toList()
+    }.toMap()
+
+    private fun structured(): ByteArray {
+        val img = java.awt.image.BufferedImage(1600, 1200, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        val g = img.createGraphics()
+        g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(240, 30, 30), 1600f, 1200f, java.awt.Color(20, 40, 230))
+        g.fillRect(0, 0, 1600, 1200)
+        g.color = java.awt.Color.WHITE
+        for (i in 0 until 16) g.fillRect(i * 100, (i * 73) % 1100, 40, 90)
+        g.dispose()
+        return ByteArrayOutputStream().also { javax.imageio.ImageIO.write(img, "jpg", it) }.toByteArray()
+    }
+
+    @Test
+    fun noResolveWritesAnythingAndOnlyThePickStoresAndPushes() {
+        val s = sim(track(1, "TSUKI"))
+        Remote.shown(true)
+        val c = link(s)
+        waitFor { Remote.phase == Phase.LIVE && stored("TSUKI").isNotEmpty() }
+        Thread.sleep(800)
+        shadowOf(Looper.getMainLooper()).idle()
+        val before = files()
+        val begins = lines.count { " rx IMG_BEGIN " in it }
+        val picks = Remote.picks
+        val direct = previewed { Remote.pickLink(avatar, "TSUKI", it) } as Previewed.Ok
+        assertEquals(Sources.LINK, direct.previews.single().offer.source)
+        assertNotNull(direct.previews.single().image)
+        val mb = previewed { Remote.pickLink("https://musicbrainz.org/artist/$pinned", "TSUKI", it) } as Previewed.Ok
+        assertEquals(ArtPicks.ARTIST, mb.previews.single().offer.kind)
+        assertNotNull(mb.previews.single().image)
+        val tile = previewed { Remote.takeTile(Tile(Sources.DEEZER, "TSUKI", ByteArray(0), dz, "dz", null), it) } as Previewed.Ok
+        assertEquals(Sources.DEEZER, tile.previews.single().offer.source)
+        val g = previewed { Remote.galleryPicked({ Gallery(picked, "IMG_1.jpg") }, it) } as Previewed.Ok
+        val offer = g.previews.single().offer
+        assertEquals(Sources.GALLERY, offer.source)
+        assertEquals("IMG_1.jpg", offer.title)
+        Thread.sleep(300)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(before, files())
+        assertEquals(begins, lines.count { " rx IMG_BEGIN " in it })
+        assertEquals(picks, Remote.picks)
+        Remote.pick(PickFor("TSUKI"), offer)
+        waitFor { stored("TSUKI").size >= 2 }
+        assertEquals(listOf(ArtCache.sha256(picked) + ".jpg"), File(app.filesDir, "pickimg").list()!!.toList())
+        assertTrue(File(app.filesDir, "artpick.tsv").readText().contains("\tgallery\t"))
+        assertEquals("TSUKI" to Enums.ImgOrigin.library, s.device.begins.last())
+        Remote.undoPick(Remote.picks.single())
+        waitFor { stored("TSUKI").size >= 3 && File(app.filesDir, "pickimg").list()!!.isEmpty() }
+        c.destroy()
+    }
+
+    @Test
+    fun aMusicBrainzLinkOffersThePinWhenALookupSourceFails() {
+        Remote.artist(app, Http { url, h ->
+            when {
+                url.contains("artist-mb.php") -> throw IOException("503")
+                url.contains("api.deezer.com/search/artist") -> Response(200, "{\"data\":[]}".toByteArray())
+                else -> http.get(url, h)
+            }
+        })
+        val shown = (previewed { Remote.pickLink("https://musicbrainz.org/artist/$pinned", "TSUKI", it) } as Previewed.Ok).previews.single()
+        assertEquals(ArtPicks.ARTIST, shown.offer.kind)
+        assertEquals(pinned, shown.offer.mbid)
+        assertNull(shown.image)
+    }
+
+    @Test
+    fun thePreviewFramesThePhotoAsTheDeviceDoes() {
+        val src = structured()
+        val at = { w: Int, h: Int -> w * 0.3 to h * 0.45 }
+        val shown = Remote.preview(src, 240, 320) { b, _ -> BitmapCodec().faced(b, 2048) { null }?.let { (bmp, _) -> bmp to at(bmp.width, bmp.height) } }!!.asAndroidBitmap()
+        val faced = Codec { b, side -> BitmapCodec().decode(b, side)?.let { p -> object : Picture by p { override fun face() = at(p.w, p.h) } } }
+        val device = Backdrop.render(faced, src, 240, 320)!!.let { BitmapFactory.decodeByteArray(it, 0, it.size) }
+        assertEquals(3f / 4f, shown.width.toFloat() / shown.height, 0.01f)
+        assertTrue(shown.width >= 240 * 2)
+        val scaled = Bitmap.createScaledBitmap(shown, 240, 320, true)
+        var diff = 0L
+        for (y in 0 until 320) for (x in 0 until 240) {
+            val a = scaled.getPixel(x, y)
+            val b = device.getPixel(x, y)
+            diff += abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) + abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b))
+        }
+        assertTrue("diff ${diff / (240 * 320)}", diff / (240 * 320) < 12)
+        val moved = Bitmap.createScaledBitmap(Remote.preview(src, 240, 320) { b, _ -> BitmapCodec().faced(b, 2048) { null } }!!.asAndroidBitmap(), 240, 320, true)
+        var off = 0L
+        for (y in 0 until 320) for (x in 0 until 240) off += abs(android.graphics.Color.red(moved.getPixel(x, y)) - android.graphics.Color.red(device.getPixel(x, y)))
+        assertTrue(off / (240 * 320) > diff / (240 * 320))
+    }
+
+    @Test
+    fun aLargePreviewIsScaledToTheScreen() {
+        val img = java.awt.image.BufferedImage(2400, 3200, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        val src = ByteArrayOutputStream().also { javax.imageio.ImageIO.write(img, "jpg", it) }.toByteArray()
+        val shown = Remote.preview(src, 240, 320) { b, _ -> BitmapCodec().faced(b, 2048) { null } }!!
+        val side = maxOf(android.content.res.Resources.getSystem().displayMetrics.run { maxOf(widthPixels, heightPixels) }, 320 * 4)
+        assertTrue(side < 2048)
+        assertEquals(side, maxOf(shown.width, shown.height))
+        assertEquals(3f / 4f, shown.width.toFloat() / shown.height, 0.01f)
+    }
+
+    @Test
+    fun aCancelOrANewResolvePostsNothingForTheOldOne() {
+        Remote.artist(app, http)
+        var first: Previewed? = null
+        val cancel = Remote.pickLink(slow, "TSUKI") { first = it }
+        Thread.sleep(200)
+        cancel()
+        gate.countDown()
+        Thread.sleep(500)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(first)
+        var a: Previewed? = null
+        Remote.pickLink(avatar, "TSUKI") { a = it }
+        val b = previewed { Remote.pickLink(avatar, "TSUKI", it) }
+        Thread.sleep(300)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(b is Previewed.Ok)
+        assertNull(a)
+    }
+
+    @Test
+    fun aGalleryReadThatFailsClosesOrRefuses() {
+        Remote.artist(app, http)
+        assertEquals(Previewed.Closed, previewed { Remote.galleryPicked({ null }, it) })
+        assertEquals("not an image", (previewed { Remote.galleryPicked({ Gallery(null, "x.heic") }, it) } as Previewed.Refused).reason)
+        assertEquals("not an image", (previewed { Remote.galleryPicked({ throw IllegalArgumentException("odd uri") }, it) } as Previewed.Refused).reason)
+        val small = ByteArrayOutputStream().also { javax.imageio.ImageIO.write(java.awt.image.BufferedImage(300, 200, java.awt.image.BufferedImage.TYPE_INT_RGB), "jpg", it) }.toByteArray()
+        assertEquals("image too small", (previewed { Remote.galleryPicked({ Gallery(small, "s.jpg") }, it) } as Previewed.Refused).reason)
+        assertTrue(File(app.filesDir, "pickimg").list().isNullOrEmpty())
     }
 }

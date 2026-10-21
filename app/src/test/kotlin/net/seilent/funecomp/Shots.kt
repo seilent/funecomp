@@ -40,7 +40,6 @@ import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Offer
-import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.proto.LyrLine
@@ -64,6 +63,8 @@ import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickFor
+import net.seilent.funecomp.ui.Preview
+import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.ScrobbleView
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.TextEntry
@@ -207,6 +208,49 @@ private val PICKS = listOf(
 
 private val PICK_ENTRY = ArtCache.Entry("pick:name:tsuki", "TSUKI", null, Sources.YOUTUBE, null, PICK_OFFER.url, 0, PICK_OFFER.id, "s")
 
+private fun photo(w: Int, h: Int, hue: Float): ByteArray {
+    val img = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB)
+    val g = img.createGraphics()
+    g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color.getHSBColor(hue, 0.35f, 0.85f), w.toFloat(), h.toFloat(), java.awt.Color.getHSBColor(hue + 0.3f, 0.6f, 0.25f))
+    g.fillRect(0, 0, w, h)
+    val r = minOf(w, h) / 7
+    g.color = java.awt.Color(235, 220, 205)
+    g.fillOval(w / 2 - r, h / 3 - r, 2 * r, 2 * r)
+    g.color = java.awt.Color(40, 30, 35)
+    g.fillRoundRect(w / 2 - 2 * r, h / 3 + r + r / 4, 4 * r, 3 * r, r, r)
+    g.color = java.awt.Color(250, 200, 40)
+    g.fillRect(0, 0, w, maxOf(4, h / 60))
+    g.color = java.awt.Color(40, 200, 250)
+    g.fillRect(0, h - maxOf(4, h / 60), w, maxOf(4, h / 60))
+    g.dispose()
+    val out = java.io.ByteArrayOutputStream()
+    javax.imageio.ImageIO.write(img, "jpg", out)
+    return out.toByteArray()
+}
+
+private fun input(name: String, or: () -> ByteArray): ByteArray = System.getProperty("shots.input")?.let { File(it, name) }?.takeIf { it.isFile }?.readBytes() ?: or()
+
+private fun shown(offer: Offer, src: ByteArray) = Preview(offer, Remote.preview(src, 240, 320) { b, _ -> net.seilent.funecomp.art.BitmapCodec().faced(b, 2048) { null } })
+
+private fun ytOffer(title: String, url: String, label: String) = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, url, url.substringBefore('='), null, null, title, null, label)
+
+private fun one(src: () -> ByteArray, offer: Offer = PICK_OFFER): (SimControl) -> Unit = { c ->
+    tsuki("TSUKI")(c)
+    c.previewed = Previewed.Ok(listOf(shown(offer, src())))
+}
+
+private val ARU_TWO: (SimControl) -> Unit = { c ->
+    tsuki("存流")(c)
+    c.previewed = Previewed.Ok(
+        listOf(
+            shown(ytOffer("存流", "https://yt3.googleusercontent.com/aru-music=s1600-rj", "youtube music"), input("ytmusic.jpg") { photo(1600, 900, 0.08f) }),
+            shown(ytOffer("存流 -ᴀʀᴜ-", "https://yt3.googleusercontent.com/aru-www=s900-c-k-c0x00ffffff-no-rj", "youtube"), input("youtube.jpg") { photo(900, 900, 0.58f) }),
+        ),
+    )
+}
+
+private const val LONG_ARTIST = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
+
 private val WIDE: (Float) -> Int = { w -> ((w - 2 * Tok.hubEdge + Tok.gutter) / (Tok.tileS + Tok.gutter)).toInt() }
 
 private fun Shots.holdBackdrop() {
@@ -219,6 +263,19 @@ private fun Shots.pasteLink(shell: Shell, url: String) {
     shell.sheet.accept(0)
     settle(600)
     if (rule.onAllNodesWithTag("entry").fetchSemanticsNodes().isNotEmpty()) rule.onNodeWithTag("entry").performTextInput(url)
+}
+
+private const val TSUKI_MB = "91352441-9f79-48c2-81ad-ccdd1e46915a"
+
+private fun Shots.sheetItem(shell: Shell, i: Int) {
+    holdBackdrop()
+    settle(600)
+    shell.sheet.accept(i)
+}
+
+private fun Shots.pasted(shell: Shell) {
+    pasteLink(shell, "https://music.youtube.com/@tsukiniterasarete")
+    rule.onNodeWithTag("entry").performImeAction()
 }
 
 private fun longTitle(c: SimControl) {
@@ -737,16 +794,40 @@ val SHOTS = listOf(
     Shot("pick-np-chooser", pages = NP, prep = tsuki("TSUKI", "Kagura Nana")) { holdBackdrop() },
     Shot("pick-np-picked", pages = NP, prep = tsuki("TSUKI"), artEntry = PICK_ENTRY, picks = PICKS) { holdBackdrop() },
     Shot("pick-entry", pages = NP, prep = tsuki("TSUKI"), ime = AEQ_IME) { shell -> pasteLink(shell, "https://www.youtube.com/@tsukiniterasarete") },
-    Shot("pick-confirm", pages = NP, prep = { c -> tsuki("TSUKI")(c); c.offered = Offered.Ok(PICK_OFFER) }) { shell ->
-        pasteLink(shell, "https://www.youtube.com/@tsukiniterasarete")
-        rule.onNodeWithTag("entry").performImeAction()
+    Shot("pick-confirm", pages = NP, prep = one({ photo(1200, 1200, 0.58f) })) { shell -> pasted(shell) },
+    Shot("pick-confirm-wide", pages = NP, prep = one({ photo(1600, 900, 0.08f) })) { shell -> pasted(shell) },
+    Shot("pick-confirm-tall", pages = NP, prep = one({ photo(900, 1200, 0.33f) })) { shell -> pasted(shell) },
+    Shot("pick-confirm-long", pages = NP, prep = { c -> one({ photo(1200, 1200, 0.58f) }, ytOffer("$LONG_ARTIST Official Channel", "https://yt3.googleusercontent.com/long=s1600-rj", "youtube"))(c); tsuki(LONG_ARTIST)(c) }) { shell -> pasted(shell) },
+    Shot("pick-confirm-two", pages = NP, prep = ARU_TWO) { shell -> pasted(shell) },
+    Shot("pick-confirm-two-next", pages = NP, prep = ARU_TWO) { shell ->
+        pasted(shell)
+        settle(1000)
+        rule.onNodeWithTag("pick.next").performClick()
     },
+    Shot("pick-confirm-two-back", pages = NP, prep = ARU_TWO) { shell ->
+        pasted(shell)
+        settle(1000)
+        rule.onNodeWithTag("pick.next").performClick()
+        settle(300)
+        rule.onNodeWithTag("pick.next").performClick()
+    },
+    Shot("pick-confirm-mb", pages = NP, prep = { c ->
+        tsuki("TSUKI")(c)
+        c.previewed = Previewed.Ok(listOf(Preview(Offer(ArtPicks.ARTIST, Sources.MUSICBRAINZ, "https://musicbrainz.org/artist/$TSUKI_MB", TSUKI_MB, null, TSUKI_MB, "Tsuki", null), null)))
+    }) { shell -> pasted(shell) },
+    Shot("pick-confirm-gallery", pages = NP, prep = { c ->
+        tsuki("TSUKI")(c)
+        c.gallery = Previewed.Ok(listOf(shown(Offer(ArtPicks.IMAGE, Sources.GALLERY, "", "gallery:0", null, null, "IMG_20261021_183012.jpg", null), photo(900, 1200, 0.33f))))
+    }) { shell -> sheetItem(shell, 2) },
+    Shot("pick-loading", pages = NP, prep = tsuki("TSUKI")) { shell -> pasted(shell) },
+    Shot("pick-refused", pages = NP, prep = { c -> tsuki("TSUKI")(c); c.previewed = Previewed.Refused("image too small") }, after = 400) { shell -> pasted(shell) },
     Shot("pick-artists-sheet", pages = HOME + Page.Music) { rule.onNodeWithTag("row.0").performTouchInput { longClick() } },
     Shot("pick-browse-loading", pages = NP + Page.Browse(PickFor("TSUKI"))),
     Shot("pick-browse-more", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(5, null)),
     Shot("pick-browse", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)),
     Shot("pick-browse-wide", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true), cols = WIDE),
     Shot("pick-browse-focus", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)) { rule.onNodeWithTag("pick.tile.4").performClick() },
+    Shot("pick-confirm-browse", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.taken = Previewed.Ok(listOf(shown(PICK_OFFER, photo(1200, 1200, 0.58f)))) }) { rule.onNodeWithTag("pick.tile.4").performClick() },
     Shot("pick-browse-empty", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, true)),
     Shot("pick-browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, false)),
     Shot("pick-browse-unavailable-tiles", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(11, false)),

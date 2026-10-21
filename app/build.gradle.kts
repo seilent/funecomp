@@ -58,6 +58,7 @@ android {
                 it.systemProperty("shots.run", providers.gradleProperty("shots").getOrElse("false"))
                 it.systemProperty("shots.only", providers.gradleProperty("shotsOnly").getOrElse(""))
                 it.systemProperty("shots.backdrop", providers.gradleProperty("shotsBackdrop").getOrElse(""))
+                it.systemProperty("shots.input", providers.gradleProperty("shotsInput").getOrElse(""))
                 it.maxHeapSize = "4g"
                 it.maxParallelForks = 3
             }

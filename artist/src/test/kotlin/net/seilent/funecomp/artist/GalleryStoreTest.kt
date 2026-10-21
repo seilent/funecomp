@@ -110,7 +110,7 @@ class GalleryStoreTest {
     @Test
     fun aGalleryOfferIsCheckedAndKeyedByItsBytes() {
         val a = art(ArtPicks(tsv))
-        val o = (a.galleryOffer(photo, "IMG_1.jpg") as Offered.Ok).offer
+        val o = (a.galleryOffer(photo, "IMG_1.jpg") as Offered.Ok).offers.single()
         assertEquals(Sources.GALLERY, o.source)
         assertEquals("gallery", o.label)
         assertEquals("", o.url)

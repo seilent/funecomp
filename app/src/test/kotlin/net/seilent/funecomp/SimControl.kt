@@ -11,7 +11,6 @@ import kotlinx.coroutines.CompletableDeferred
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
-import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.proto.ArtGetReply
 import net.seilent.funecomp.proto.EqPresetReply
 import net.seilent.funecomp.proto.Groups
@@ -32,11 +31,13 @@ import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Out
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
+import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LIB_PAGE
 import net.seilent.funecomp.ui.PickedFile
+import net.seilent.funecomp.ui.Previewed
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -268,7 +269,9 @@ class SimControl(
 
     var tiles: List<BrowseTile> = emptyList()
     var browsed: Boolean? = null
-    var offered: Offered? = null
+    var previewed: Previewed? = null
+    var gallery: Previewed? = null
+    var taken: Previewed? = null
 
     override fun browse(name: String, mbid: String?, px: Int, tile: (BrowseTile) -> Unit, done: (Boolean) -> Unit): () -> Unit {
         tiles.forEach(tile)
@@ -276,8 +279,19 @@ class SimControl(
         return {}
     }
 
-    override fun pickLink(text: String, done: (Offered) -> Unit) {
-        offered?.let(done)
+    override fun pickLink(text: String, name: String, done: (Previewed) -> Unit): () -> Unit {
+        previewed?.let(done)
+        return {}
+    }
+
+    override fun pickGallery(done: (Previewed) -> Unit): () -> Unit {
+        gallery?.let(done)
+        return {}
+    }
+
+    override fun takeTile(t: Tile, done: (Previewed) -> Unit): () -> Unit {
+        taken?.let(done)
+        return {}
     }
 
     override fun firmwareCheck() {

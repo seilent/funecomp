@@ -19,6 +19,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -28,6 +29,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
+import net.seilent.funecomp.art.GalleryRead
 import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
@@ -44,6 +46,7 @@ import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.PickedFile
+import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.debugPages
 import java.util.UUID
@@ -81,6 +84,13 @@ class Main : ComponentActivity() {
         val done = firmwarePicked ?: return@registerForActivityResult
         firmwarePicked = null
         if (uri != null) Firmwares.read(uri, done)
+    }
+
+    private var galleryPicked: ((Previewed) -> Unit)? = null
+    private val galleryPicker = registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        val done = galleryPicked ?: return@registerForActivityResult
+        galleryPicked = null
+        if (uri == null) done(Previewed.Closed) else Remote.galleryPicked({ GalleryRead.read(contentResolver, uri) }, done)
     }
 
     private val control = object : Control by Remote {
@@ -141,6 +151,20 @@ class Main : ComponentActivity() {
                 eqPicker.launch(arrayOf("text/*"))
             } catch (_: ActivityNotFoundException) {
                 picked = null
+            }
+        }
+
+        override fun pickGallery(done: (Previewed) -> Unit): () -> Unit {
+            galleryPicked = done
+            try {
+                galleryPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            } catch (_: ActivityNotFoundException) {
+                galleryPicked = null
+                done(Previewed.Closed)
+            }
+            return {
+                galleryPicked = null
+                Remote.cancelPick()
             }
         }
 
@@ -226,6 +250,7 @@ class Main : ComponentActivity() {
         Log.i(Remote.TAG, "onNewIntent action=${intent.action} open=$open")
         if (!open) return
         if (!shell.gated && !paged) {
+            Remote.cancelPick()
             shell.sheet.close(dismissed = false)
             shell.nav.reset(listOf(Page.Home, Page.NowPlaying))
         }
@@ -302,6 +327,7 @@ class Main : ComponentActivity() {
         if (!Remote.debuggable(this)) return false
         intent?.getStringExtra(EXTRA_LINK)?.let { store(it) }
         val pages = intent?.getStringExtra(EXTRA_PAGE)?.let { debugPages(it) } ?: return false
+        Remote.cancelPick()
         shell = Shell(Nav(pages))
         return true
     }

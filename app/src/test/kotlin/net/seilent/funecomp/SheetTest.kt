@@ -21,6 +21,7 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.BrowseSessions
 import net.seilent.funecomp.ui.Ctx
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -110,7 +111,7 @@ class SheetTest {
     fun onOffSheetListsOffThenOnAndSendsOnlyAChange() {
         val (c, shell) = start(411, 960)
         val sets = ArrayList<Boolean>()
-        val ctx = Ctx(c.device, c, shell.nav, shell.sheet, shell.toast)
+        val ctx = Ctx(c.device, c, shell.nav, shell.sheet, shell.toast, BrowseSessions())
         onOffSheet(ctx, "phone media controls", true) { sets += it }
         settle(600)
         assertEquals("phone media controls", shell.sheet.title)

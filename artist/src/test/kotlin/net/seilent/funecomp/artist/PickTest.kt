@@ -271,7 +271,7 @@ class PickTest {
         for ((text, want) in table) assertEquals(text, want, PickLink.parse(text))
     }
 
-    private fun ok(o: Offered) = (o as? Offered.Ok)?.offer ?: error("refused ${(o as Offered.Refused).reason}")
+    private fun ok(o: Offered) = (o as? Offered.Ok)?.offers?.single() ?: error("refused ${(o as Offered.Refused).reason}")
 
     private fun refused(o: Offered) = (o as Offered.Refused).reason
 

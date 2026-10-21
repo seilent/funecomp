@@ -52,7 +52,7 @@ fun LibList.row(i: Int, control: Control, view: Int, parent: String): LibRow? {
     return r
 }
 
-class Ctx(val device: DeviceState, val control: Control, val nav: Nav, val sheet: SheetState, val toast: ToastState)
+class Ctx(val device: DeviceState, val control: Control, val nav: Nav, val sheet: SheetState, val toast: ToastState, val browse: BrowseSessions)
 
 private val MUSIC_VIEWS = listOf(Enums.View.artists, Enums.View.albums, Enums.View.songs, Enums.View.playlists, Enums.View.folders)
 

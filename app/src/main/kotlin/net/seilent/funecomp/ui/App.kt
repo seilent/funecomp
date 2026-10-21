@@ -107,7 +107,8 @@ fun App(
             LocalSheet provides shell.sheet,
         ) {
             val nav = shell.nav
-            val ctx = Ctx(device, control, nav, shell.sheet, shell.toast)
+            val browse = remember(nav) { BrowseSessions() }
+            val ctx = Ctx(device, control, nav, shell.sheet, shell.toast, browse)
             LaunchedEffect(shell.gated, link.phase, link.askBattery, link.askReconnect, shell.sheet.shown, shell.pick) {
                 if (shell.gated && link.phase == Phase.LIVE) {
                     shell.gated = false
@@ -139,7 +140,7 @@ fun App(
             BackHandler(shell.sheet.shown || nav.stack.size > 1) {
                 if (shell.sheet.shown) shell.sheet.close() else nav.pop()
             }
-            Stack(nav) { page ->
+            Stack(nav, browse) { page ->
                 when (page) {
                     Page.NowPlaying -> NowPlaying(device, control, shell.toast, { nav.pop() }, { nav.push(Page.Queue) }, art, lyrics) { held -> artSheet(ctx, held, picks) }
                     Page.Home -> Home(homeItems(device, link), { control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
@@ -158,6 +159,7 @@ fun App(
                     is Page.Album -> AlbumDetail(ctx, page)
                     is Page.Eq -> EqPage(ctx, page)
                     is Page.Browse -> BrowsePage(ctx, page)
+                    is Page.PickPreview -> PickPreviewPage(ctx, page)
                 }
             }
             VolumeOverlay(shell.overlay, device, control)

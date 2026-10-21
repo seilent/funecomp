@@ -6,6 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
@@ -16,6 +18,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -46,7 +49,10 @@ sealed interface Page {
     data class Album(val key: String, val title: String, val artist: String) : Page
     data class Eq(val output: Int) : Page
     data class Browse(val target: PickFor) : Page
+    data class PickPreview(val target: PickFor, val previews: List<Preview>, val fromBrowse: Boolean = false) : Page
 }
+
+val LocalEntry = staticCompositionLocalOf { "" }
 
 @Stable
 class Nav(start: List<Page> = listOf(Page.Home, Page.NowPlaying)) {
@@ -123,7 +129,7 @@ fun debugPages(name: String): List<Page>? {
 }
 
 @Composable
-fun Stack(nav: Nav, content: @Composable (Page) -> Unit) {
+fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Unit) {
     val ui = LocalUi.current
     val top = nav.top
     var shown by remember { mutableStateOf(top) }
@@ -138,7 +144,9 @@ fun Stack(nav: Nav, content: @Composable (Page) -> Unit) {
         drop.forEach { holder.removeState(it) }
         kept.removeAll(drop)
         kept.addAll(keys)
+        sessions.sync(nav.stack, keys + shownKey)
     }
+    DisposableEffect(nav, sessions) { onDispose { sessions.stopAll() } }
     LaunchedEffect(top) {
         if (top == shown) {
             angle.snapTo(0f)
@@ -167,6 +175,6 @@ fun Stack(nav: Nav, content: @Composable (Page) -> Unit) {
             cameraDistance = camera
         },
     ) {
-        key(shownKey) { holder.SaveableStateProvider(shownKey) { content(shown) } }
+        key(shownKey) { holder.SaveableStateProvider(shownKey) { CompositionLocalProvider(LocalEntry provides shownKey) { content(shown) } } }
     }
 }
