@@ -12,6 +12,7 @@ import android.net.NetworkCapabilities
 import android.os.Looper
 import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.art.Thumbs
+import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
@@ -58,6 +59,7 @@ class BackgroundTest {
     @After
     fun tearDown() {
         Remote.stop()
+        Lyrics.reset()
         Firmwares.reset()
         sims.forEach { it.stop() }
     }
@@ -280,7 +282,8 @@ class BackgroundTest {
             calls += url
             net.seilent.funecomp.artist.Response(200, "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}".toByteArray())
         })
-        Lyrics.set(true)
+        Lyrics.set(LyricSources.NETEASE, false)
+        Lyrics.set(LyricSources.LRCLIB, true)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(lrcDir = dir))).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
         Remote.queuePage(0)
@@ -305,7 +308,7 @@ class BackgroundTest {
         val second = logs.filter { it.startsWith("stored lrc") }
         assertEquals(second.toSet().size, second.size)
         assertTrue(second.none { it in first })
-        Lyrics.set(false)
+        Lyrics.set(LyricSources.LRCLIB, false)
         again.destroy()
     }
 
@@ -314,7 +317,8 @@ class BackgroundTest {
         Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ ->
             net.seilent.funecomp.artist.Response(200, "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}".toByteArray())
         })
-        Lyrics.set(true)
+        Lyrics.set(LyricSources.NETEASE, false)
+        Lyrics.set(LyricSources.LRCLIB, true)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("refuse=LRC_PUT")))).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
         Remote.queuePage(0)
@@ -334,7 +338,7 @@ class BackgroundTest {
             Thread.sleep(300)
         }
         assertEquals(first, logs.count { it.contains("rx LRC_PUT") })
-        Lyrics.set(false)
+        Lyrics.set(LyricSources.LRCLIB, false)
         c.destroy()
     }
 
@@ -349,7 +353,8 @@ class BackgroundTest {
             calls += url
             net.seilent.funecomp.artist.Response(200, body.toByteArray())
         })
-        Lyrics.set(true)
+        Lyrics.set(LyricSources.NETEASE, false)
+        Lyrics.set(LyricSources.LRCLIB, true)
         return calls
     }
 
@@ -363,6 +368,82 @@ class BackgroundTest {
 
     private fun stored() = logs.filter { it.startsWith("stored lrc") }
 
+    private fun neteaseFor(lrclib: (String) -> net.seilent.funecomp.artist.Response, gets: MutableList<String>, posts: MutableList<String>) {
+        java.io.File(app.filesDir, "lyrics").deleteRecursively()
+        val tracks = net.seilent.funecomp.sim.Library.synthetic().tracks
+        Lyrics.init(app, object : net.seilent.funecomp.artist.Http {
+            override fun get(url: String, headers: Map<String, String>): net.seilent.funecomp.artist.Response {
+                gets += url
+                return lrclib(url)
+            }
+
+            override fun post(url: String, headers: Map<String, String>, body: ByteArray): net.seilent.funecomp.artist.Response {
+                val form = String(body, Charsets.UTF_8)
+                posts += "$url $form"
+                val json = if (url == net.seilent.funecomp.artist.NetEase.SEARCH) {
+                    val q = java.net.URLDecoder.decode(form.substringAfter("s=").substringBefore('&'), "UTF-8")
+                    val i = tracks.indexOfFirst { q == it.title || q.startsWith(it.title + " ") }
+                    val t = tracks.getOrNull(i)
+                    "{\"result\":{\"songs\":[${if (t == null) "" else "{\"id\":${i + 1},\"name\":\"${t.title.replace("\"", "")}\",\"alia\":[],\"tns\":[],\"dt\":${t.durationMs}}"}]},\"code\":200}"
+                } else {
+                    "{\"lrc\":{\"lyric\":\"${(1..5).joinToString("\\n") { "[00:0$it.00]ne$it" }}\"},\"code\":200}"
+                }
+                return net.seilent.funecomp.artist.Response(200, json.toByteArray())
+            }
+        })
+        org.robolectric.shadows.ShadowLog.clear()
+    }
+
+    private fun puts(source: String) = org.robolectric.shadows.ShadowLog.getLogsForTag(Remote.TAG).count { Regex("lrc put [0-9]+ [0-9]+ synced $source -> ok").matches(it.msg) }
+
+    @Test
+    fun aNeteaseSyncedIsPutWhenLrclibMisses() {
+        val gets = java.util.Collections.synchronizedList(ArrayList<String>())
+        val posts = java.util.Collections.synchronizedList(ArrayList<String>())
+        neteaseFor({ net.seilent.funecomp.artist.Response(404, ByteArray(0)) }, gets, posts)
+        val c = live(sim())
+        waitFor(30_000) { stored().size >= 3 }
+        Thread.sleep(1500)
+        assertTrue(stored().all { it.endsWith("kind=synced") })
+        assertEquals(stored().size, puts("netease"))
+        assertTrue(posts.any { it.startsWith(net.seilent.funecomp.artist.NetEase.LYRIC) })
+        Lyrics.set(LyricSources.NETEASE, false)
+        c.destroy()
+    }
+
+    @Test
+    fun turningASourceOnAsksItForTracksAlreadyDone() {
+        val gets = java.util.Collections.synchronizedList(ArrayList<String>())
+        val posts = java.util.Collections.synchronizedList(ArrayList<String>())
+        neteaseFor({ net.seilent.funecomp.artist.Response(404, ByteArray(0)) }, gets, posts)
+        Lyrics.set(LyricSources.NETEASE, false)
+        val c = live(sim())
+        waitFor(30_000) { gets.size >= 1 + LyricsPlan.AHEAD }
+        Thread.sleep(1000)
+        assertTrue(posts.isEmpty())
+        assertTrue(stored().isEmpty())
+        Lyrics.set(LyricSources.NETEASE, true)
+        waitFor(60_000) { stored().size >= 1 + LyricsPlan.AHEAD }
+        assertEquals(stored().size, puts("netease"))
+        Lyrics.set(LyricSources.NETEASE, false)
+        c.destroy()
+    }
+
+    @Test
+    fun aFailingLrclibTripsOnlyItsOwnBreakerAndNeteaseStillPuts() {
+        val gets = java.util.Collections.synchronizedList(ArrayList<String>())
+        val posts = java.util.Collections.synchronizedList(ArrayList<String>())
+        neteaseFor({ net.seilent.funecomp.artist.Response(500, ByteArray(0)) }, gets, posts)
+        val c = live(sim())
+        waitFor(60_000) { stored().size >= 1 + LyricsPlan.AHEAD }
+        Thread.sleep(1000)
+        assertEquals(3, gets.size)
+        assertEquals(stored().size, puts("netease"))
+        assertEquals(0, puts("lrclib"))
+        Lyrics.set(LyricSources.NETEASE, false)
+        c.destroy()
+    }
+
     @Test
     fun aPlainOnlyTrackGetsOnePlainPutOnA14Device() {
         lyricsFrom(syntheticPlainBody)
@@ -374,7 +455,7 @@ class BackgroundTest {
         assertTrue(s.all { it.endsWith("kind=plain") })
         assertEquals(s.map { it.substringBefore(" bytes") }.toSet().size, s.size)
         assertEquals(s.size, logs.count { it.contains("rx LRC_PUT") })
-        Lyrics.set(false)
+        Lyrics.set(LyricSources.LRCLIB, false)
         c.destroy()
     }
 
@@ -388,7 +469,7 @@ class BackgroundTest {
         Thread.sleep(1500)
         assertTrue(stored().none { it.startsWith("stored lrc track=$head ") })
         assertEquals(stored().size, logs.count { it.contains("rx LRC_PUT") })
-        Lyrics.set(false)
+        Lyrics.set(LyricSources.LRCLIB, false)
         c.destroy()
     }
 
@@ -398,7 +479,7 @@ class BackgroundTest {
         val c = live(sim(lrcDir = plainDir()))
         waitFor { stored().any { it.startsWith("stored lrc track=$head ") } }
         assertTrue(stored().single { it.startsWith("stored lrc track=$head ") }.endsWith("kind=synced"))
-        Lyrics.set(false)
+        Lyrics.set(LyricSources.LRCLIB, false)
         c.destroy()
     }
 
@@ -409,7 +490,7 @@ class BackgroundTest {
         waitFor(30_000) { calls.size >= 1 + LyricsPlan.AHEAD }
         Thread.sleep(1500)
         assertEquals(0, logs.count { it.contains("rx LRC_PUT") })
-        Lyrics.set(false)
+        Lyrics.set(LyricSources.LRCLIB, false)
         c.destroy()
     }
 
@@ -432,7 +513,82 @@ class BackgroundTest {
             Thread.sleep(300)
         }
         assertEquals(first, logs.count { it.contains("rx LRC_PUT") })
-        Lyrics.set(false)
+        Lyrics.set(LyricSources.LRCLIB, false)
+        c.destroy()
+    }
+
+    private fun puts() = logs.count { it.contains("rx LRC_PUT") }
+
+    private fun allPut(): Int {
+        waitFor(30_000) { puts() >= 1 + LyricsPlan.AHEAD }
+        Thread.sleep(500)
+        return puts()
+    }
+
+    private fun nextSession(drop: () -> Unit) {
+        val hellos = logs.count { it.contains("rx HELLO") }
+        drop()
+        val end = System.currentTimeMillis() + 30_000
+        while (logs.count { it.contains("rx HELLO") } <= hellos || Remote.phase != Phase.LIVE) {
+            check(System.currentTimeMillis() < end) { "no second session" }
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+            Thread.sleep(100)
+        }
+        settleLyrics()
+    }
+
+    private fun settleLyrics() {
+        Remote.queuePage(0)
+        repeat(8) {
+            Lyrics.poke()
+            Thread.sleep(1000)
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+        }
+    }
+
+    @Test
+    fun aRefusedPutIsNotSentAgainInTheNextSessionToTheSameDevice() {
+        lyricsFrom(syntheticPlainBody)
+        val c = live(sim(faults = listOf("refuse=LRC_PUT")))
+        val first = allPut()
+        nextSession { sims.last().current!!.close("drop") }
+        assertTrue(logs.count { it.contains("rx QUEUE_OP") } > 0)
+        assertEquals(first, puts())
+        Lyrics.set(LyricSources.LRCLIB, true)
+        settleLyrics()
+        assertEquals(2 * first, puts())
+        Lyrics.set(LyricSources.LRCLIB, false)
+        c.destroy()
+    }
+
+    @Test
+    fun aPutErrorThatCanClearIsSentAgainInTheNextSession() {
+        lyricsFrom(syntheticPlainBody)
+        val c = live(sim(faults = listOf("fail=LRC_PUT:${Err.noSpace}")))
+        val first = allPut()
+        nextSession { sims.last().current!!.close("drop") }
+        assertEquals(2 * first, puts())
+        Lyrics.set(LyricSources.LRCLIB, false)
+        c.destroy()
+    }
+
+    @Test
+    fun aRefusedPutIsSentAgainAfterAFirmwareChange() {
+        lyricsFrom(syntheticPlainBody)
+        val old = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(listOf("refuse=LRC_PUT")), log = { logs += it }))
+        sims += old
+        val port = old.listen(0)
+        val c = live("tcp:127.0.0.1:$port")
+        val first = allPut()
+        nextSession {
+            old.stop()
+            val updated = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(listOf("refuse=LRC_PUT")), log = { logs += it }, version = "sim.v1.next"))
+            sims += updated
+            updated.listen(port)
+        }
+        assertEquals("sim.v1.next", Remote.device.hello?.version)
+        assertEquals(2 * first, puts())
+        Lyrics.set(LyricSources.LRCLIB, false)
         c.destroy()
     }
 
@@ -450,7 +606,7 @@ class BackgroundTest {
         Thread.sleep(1500)
         assertEquals(calls.toSet().size, calls.size)
         assertEquals(0, logs.count { it.contains("rx LRC_PUT") })
-        Lyrics.set(false)
+        Lyrics.set(LyricSources.LRCLIB, false)
         blocked.delete()
         c.destroy()
     }
@@ -756,10 +912,10 @@ class BackgroundTest {
     @Test
     fun aServiceStartedWithoutMainReadsTheLyricsPref() {
         Lyrics.reset()
-        app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).edit().putBoolean("lrclib", true).commit()
+        app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).edit().putBoolean("netease", false).commit()
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim()).putExtra(LinkService.EXTRA_UPDATED, true)).create().startCommand(0, 1)
-        assertTrue(Lyrics.on)
-        Lyrics.set(false)
+        assertEquals(LyricSources(lrclib = true, netease = false), Lyrics.sources)
+        Lyrics.set(LyricSources.LRCLIB, false)
         c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
         c.destroy()
     }

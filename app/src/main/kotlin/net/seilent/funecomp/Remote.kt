@@ -158,6 +158,7 @@ object Remote : Control {
     @Volatile private var link: Link? = null
     @Volatile private var generation = 0
     private var spec: String? = null
+    internal val linkSpec: String? get() = spec
     private val asked = HashSet<String>()
     private var artist: ArtistArt? = null
     @Volatile private var art: ArtWorker? = null
@@ -780,11 +781,11 @@ object Remote : Control {
     override fun volumePercent(pct: Int, done: () -> Unit) =
         send(Msg.VOLUME, Req.volume(percent = pct), "volume percent $pct", ok = { done() }, fail = done)
 
-    fun lrcPut(track: Long, libRev: Long?, snapRev: Long?, text: ByteArray, crc: Long, synced: Boolean, done: (Int?) -> Unit) {
+    fun lrcPut(track: Long, libRev: Long?, snapRev: Long?, text: ByteArray, crc: Long, synced: Boolean, source: String, done: (Int?) -> Unit) {
         val s = link?.session ?: return done(-1)
         s.request(Msg.LRC_PUT, Req.lrcPut(track, libRev, text, crc, snapRev)) { r ->
             if (r is Session.Result.Ok) dapLyrics.dropped(track)
-            Log.i(TAG, "lrc put ${java.lang.Long.toUnsignedString(track)} ${text.size} ${if (synced) "synced" else "plain"} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
+            Log.i(TAG, "lrc put ${java.lang.Long.toUnsignedString(track)} ${text.size} ${if (synced) "synced" else "plain"} $source -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
             done(
                 when (r) {
                     is Session.Result.Ok -> null

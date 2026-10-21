@@ -273,7 +273,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     fun helloReply() = HelloReply(
-        faults.major, opts.minor, board.name, "sim.${board.name}", board.screenW, board.screenH,
+        faults.major, opts.minor, board.name, opts.version ?: "sim.${board.name}", board.screenW, board.screenH,
         board.backdropW, board.backdropH, Proto.maxPayload, opts.idleMs, opts.busyMs, faults.features, lib.rev, settingsRev,
         if (v13) lib.snapRev else null,
     )

@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.testTag
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
+import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.gen.Tok
@@ -86,7 +87,7 @@ fun OnlinePage(
     blocked: List<ArtBlocks.Record> = emptyList(),
     picks: List<ArtPicks.Pick> = emptyList(),
     scrobble: ScrobbleView = ScrobbleView(),
-    lyrics: Boolean = false,
+    lyrics: LyricSources = LyricSources(),
     labels: Boolean = true,
 ) {
     var pivot by rememberSaveable { mutableIntStateOf(page.pivot) }
@@ -144,15 +145,20 @@ private fun ArtRows(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, cr
 }
 
 @Composable
-fun LyricsRows(ctx: Ctx, on: Boolean) {
+fun LyricsRows(ctx: Ctx, sources: LyricSources) {
     val ui = LocalUi.current
+    val ids = sources.order
+    var focus by rememberSaveable { mutableStateOf(ids.first()) }
+    val at = ids.indexOf(focus).coerceAtLeast(0)
     val list = rememberLazyListState()
-    Rows(ui.contentTop, list, focus = 0) {
-        item(key = "lrclib") {
-            SettingsRow("lrclib", if (on) ON else OFF, Modifier.enter { 0 }.testTag("lyr.src.lrclib"), focused = true) {
-                sourceSheet(ctx, "lrclib", on, 0, 1, null, Keep(list, 0, ui.px(ui.contentTop)), { ctx.control.lyrics(it) }, {})
+    Rows(ui.contentTop, list, focus = at) {
+        itemsIndexed(ids, key = { _, id -> "lyr $id" }) { i, id ->
+            val on = sources.on(id)
+            SettingsRow(id, if (on) ON else OFF, Modifier.enter { i }.testTag("lyr.src.$id"), focused = at == i) {
+                focus = id
+                sourceSheet(ctx, id, on, i, ids.size, null, Keep(list, i, ui.px(ui.contentTop)), { ctx.control.lyricSource(id, it) }, { ctx.control.lyricMove(id, it) })
             }
         }
-        item(key = COPYRIGHT) { SettingsRow(COPYRIGHT, "", Modifier.enter { 1 }.testTag("lyrics.copyright"), info = true) }
+        item(key = COPYRIGHT) { SettingsRow(COPYRIGHT, "", Modifier.enter { ids.size }.testTag("lyrics.copyright"), info = true) }
     }
 }

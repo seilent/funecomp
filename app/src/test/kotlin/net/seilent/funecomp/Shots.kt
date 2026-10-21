@@ -38,6 +38,7 @@ import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.Credit
+import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.artist.Sources
@@ -770,7 +771,9 @@ val SHOTS = listOf(
     Shot("online-art-lists-blocked-1", pages = ONLINE, blocked = BLOCKED.take(1), credits = CREDITS) { scrollTo("art.credits") },
     Shot("online-art-lists-creditsonly", pages = ONLINE, credits = CREDITS) { scrollTo("art.credits") },
     Shot("online-lyrics", pages = HOME + Page.Online(ONLINE_LYRICS)),
-    Shot("online-lyrics-sheet", pages = HOME + Page.Online(ONLINE_LYRICS), link = LinkView(Phase.LIVE, "AP80", everLive = true, lyrics = true)) { tapRow("lyr.src.lrclib") },
+    Shot("online-lyrics-sheet", pages = HOME + Page.Online(ONLINE_LYRICS)) { tapRow("lyr.src.lrclib") },
+    Shot("online-lyrics-sheet-netease", pages = HOME + Page.Online(ONLINE_LYRICS)) { tapRow("lyr.src.netease") },
+    Shot("online-lyrics-off", pages = HOME + Page.Online(ONLINE_LYRICS), link = LinkView(Phase.LIVE, "AP80", everLive = true, lyrics = LyricSources(lrclib = false, order = listOf(LyricSources.NETEASE, LyricSources.LRCLIB)))),
     Shot("online-scrobbling", pages = HOME + Page.Online(ONLINE_SCROBBLING)),
     Shot("online-scrobbling-set", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE),
     Shot("online-scrobbling-failed", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE.copy(accounts = SCROBBLE.accounts.copy(lastFmSession = ""), lastFm = "sign in failed", listenBrainz = "invalid")),

@@ -218,6 +218,7 @@ class Conn(
             return error(f, Err.unknown, "unknown")
         }
         if (f.type in faults.refuse) return error(f, Err.refused, "refused")
+        faults.fail[f.type]?.let { return error(f, it, "fault $it") }
         if ((faults.busy[f.type]?.getAndDecrement() ?: 0) > 0) return error(f, Err.busy, "busy")
         val at = clock()
         if (faults.stallMs > 0) Thread.sleep(faults.stallMs)

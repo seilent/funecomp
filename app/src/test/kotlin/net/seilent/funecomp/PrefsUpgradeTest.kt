@@ -2,6 +2,7 @@ package net.seilent.funecomp
 
 import android.content.Context
 import net.seilent.funecomp.artist.Accounts
+import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Sources
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -70,6 +71,15 @@ class PrefsUpgradeTest {
     }
 
     @Test
+    fun aLyricsStoreWithOnlyTheLrclibKeyReadsNeteaseOnInTheDefaultOrder() {
+        app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).edit().clear().putBoolean("lrclib", false).commit()
+        Lyrics.reset()
+        Lyrics.init(app)
+        assertEquals(LyricSources(lrclib = false, netease = true, order = LyricSources.ORDER), Lyrics.sources)
+        assertTrue(Lyrics.on)
+    }
+
+    @Test
     fun aToggleOnAFreshInstallWritesOnlyThatKey() {
         val fresh = Main.sources(app)
         assertEquals(Sources(), fresh)
@@ -94,7 +104,8 @@ class PrefsUpgradeTest {
         assertFalse(MediaLink.controls(app))
         Lyrics.reset()
         Lyrics.init(app)
-        assertTrue(Lyrics.on)
+        assertEquals(LyricSources(false, false, listOf("netease", "lrclib")), Lyrics.sources)
+        assertFalse(Lyrics.on)
         Firmwares.reset()
         Firmwares.init(app)
         assertTrue(Firmwares.view.checkDaily)

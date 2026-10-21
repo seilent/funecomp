@@ -8,7 +8,7 @@ import kotlin.system.exitProcess
 private const val USAGE = "usage: sim --board ap80|v1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
-    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--quiet]"
+    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -32,6 +32,7 @@ fun main(args: Array<String>) {
     val cardEq = ArrayList<String>()
     var source: String? = null
     var rescanLib: String? = null
+    var version: String? = null
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -59,6 +60,7 @@ fun main(args: Array<String>) {
             "--card-eq" -> cardEq += value().split(',').filter { it.isNotEmpty() }
             "--source" -> source = value()
             "--rescan-lib" -> rescanLib = value()
+            "--version" -> version = value()
             "--quiet" -> quiet = true
             else -> {
                 System.err.println(USAGE)
@@ -94,6 +96,7 @@ fun main(args: Array<String>) {
         cardEq,
         source?.let { v -> Enums.Source.names.entries.firstOrNull { it.value == v }?.key ?: throw IllegalArgumentException("source must be local or phone, not $v") } ?: base.source,
         rescanLib?.let { Library.load(File(it)) },
+        version,
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {

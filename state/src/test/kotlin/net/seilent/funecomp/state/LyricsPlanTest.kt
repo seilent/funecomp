@@ -9,7 +9,7 @@ class LyricsPlanTest {
     private fun item(t: Long, lyrics: Boolean?, plain: Boolean? = null) = QueueItem(t, "T$t", listOf("A$t"), album = "Al", durationMs = 1000L * t, lyrics = lyrics, lyricsPlain = plain)
 
     private fun device(lyrics: Boolean?, items: Map<Long, QueueItem>, plain: Boolean? = null) = DeviceState(
-        playback = Playback(State(track = 1, title = "One", artist = "Utada Hikaru", album = "Bad Mode", durationMs = 261_000, slot = 0, lyrics = lyrics, lyricsPlain = plain)),
+        playback = Playback(State(track = 1, title = "One", artist = "Utada Hikaru", artists = listOf("Utada Hikaru"), album = "Bad Mode", durationMs = 261_000, slot = 0, lyrics = lyrics, lyricsPlain = plain)),
         queue = QueueMirror(1, 10, items),
     )
 
@@ -18,8 +18,8 @@ class LyricsPlanTest {
         val items = (1L..8L).associate { it to item(it + 1, if (it == 3L) true else if (it == 4L) null else false) }
         val w = LyricsPlan.wants(device(false, items), emptySet())
         assertEquals(listOf(1L, 2L, 3L, 6L), w.map { it.track })
-        assertEquals(LyricsPlan.Want(1, "One", "Utada Hikaru", "Bad Mode", 261_000, false), w[0])
-        assertEquals(LyricsPlan.Want(2, "T2", "A2", "Al", 2000, false), w[1])
+        assertEquals(LyricsPlan.Want(1, "One", "Utada Hikaru", "Bad Mode", 261_000, false, listOf("Utada Hikaru")), w[0])
+        assertEquals(LyricsPlan.Want(2, "T2", "A2", "Al", 2000, false, listOf("A2")), w[1])
     }
 
     @Test

@@ -34,6 +34,7 @@ class Faults(specs: List<String>) {
     var major = Proto.major
     var slowBps: Long? = null
     val refuse = HashSet<Int>()
+    val fail = HashMap<Int, Int>()
     val busy = HashMap<Int, AtomicInteger>()
     var bye: Int? = null
     var restart = false
@@ -59,6 +60,11 @@ class Faults(specs: List<String>) {
                 "major" -> major = v.toInt()
                 "slow-bps" -> slowBps = v.toLong()
                 "refuse" -> refuse += Msg.byName[v] ?: throw IllegalArgumentException("refuse: unknown msg $v")
+                "fail" -> {
+                    val msg = v.substringBefore(':')
+                    val code = v.substringAfter(':', "").toIntOrNull() ?: throw IllegalArgumentException("fail: code missing in $v")
+                    fail[Msg.byName[msg] ?: throw IllegalArgumentException("fail: unknown msg $msg")] = code
+                }
                 "busy" -> {
                     val msg = v.substringBefore(':')
                     val n = v.substringAfter(':', "").toIntOrNull() ?: throw IllegalArgumentException("busy: count missing in $v")
@@ -121,6 +127,7 @@ class Options(
     val cardEq: List<String> = emptyList(),
     val source: Int = Enums.Source.local,
     val rescanLib: Library? = null,
+    val version: String? = null,
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()

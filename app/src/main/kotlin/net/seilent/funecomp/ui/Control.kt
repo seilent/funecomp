@@ -8,6 +8,7 @@ import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
+import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.artist.Tile
@@ -31,7 +32,7 @@ data class LinkView(
     val battery: Battery? = null,
     val askBattery: Boolean = false,
     val mediaControls: Boolean = true,
-    val lyrics: Boolean = false,
+    val lyrics: LyricSources = LyricSources(),
     val reconnect: Boolean = false,
     val askReconnect: Boolean = false,
 )
@@ -74,7 +75,8 @@ interface Control {
     suspend fun autoEqView(list: AutoEqList, query: String): AutoEqList.View = withContext(Dispatchers.Default) { list.view(query) }
     fun autoEqProfile(entry: AutoEqIndex.Entry, done: (String?) -> Unit) {}
     fun mediaControls(on: Boolean) {}
-    fun lyrics(on: Boolean) {}
+    fun lyricSource(id: String, on: Boolean) {}
+    fun lyricMove(id: String, by: Int) {}
     fun nowPlayingShown(on: Boolean) {}
     fun reconnect(on: Boolean) {}
     fun wantArt(slot: Int, track: Long, px: Int, album: String?) {}

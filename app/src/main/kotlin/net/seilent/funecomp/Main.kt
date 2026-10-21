@@ -154,7 +154,9 @@ class Main : ComponentActivity() {
             if (Remote.phase != Phase.NONE) startService(Intent(this@Main, LinkService::class.java).setAction(LinkService.ACTION_MEDIA))
         }
 
-        override fun lyrics(on: Boolean) = Lyrics.set(on)
+        override fun lyricSource(id: String, on: Boolean) = Lyrics.set(id, on)
+
+        override fun lyricMove(id: String, by: Int) = Lyrics.move(id, by)
 
         override fun reconnect(on: Boolean) {
             prefs().edit().putBoolean(RECONNECT, on).remove(RECONNECT_ASK).apply()
@@ -206,7 +208,7 @@ class Main : ComponentActivity() {
         setContent {
             Box(Modifier.fillMaxSize().background(Black)) {
                 val b = battery
-                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, askBattery(), mediaControls, Lyrics.on, reconnect, reconnectAsk)
+                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, askBattery(), mediaControls, Lyrics.sources, reconnect, reconnectAsk)
                 App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits, { e ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))

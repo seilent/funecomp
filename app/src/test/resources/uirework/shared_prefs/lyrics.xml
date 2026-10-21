@@ -1,5 +1,7 @@
 <?xml version='1.0' encoding='utf-8' standalone='yes' ?>
 <map>
-    <boolean name="lrclib" value="true" />
+    <boolean name="lrclib" value="false" />
+    <boolean name="netease" value="false" />
+    <string name="order">netease,lrclib</string>
     <string name="uireworkSentinel">fixture lyrics</string>
 </map>

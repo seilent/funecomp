@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.ArtBlocks
+import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.ui.App
@@ -64,14 +65,20 @@ class OnlineTest {
     private var sources by mutableStateOf(Sources.NONE)
     private var link by mutableStateOf(LinkView(Phase.LIVE, "AP80", everLive = true))
     private val saved = ArrayList<Sources>()
-    private val lyrics = ArrayList<Boolean>()
+    private val lyrics = ArrayList<Pair<String, Boolean>>()
+    private val moves = ArrayList<Pair<String, Int>>()
     private val scrobbles = ArrayList<Accounts>()
 
     private fun start(pages: List<Page>, gated: Boolean = false, scrobble: ScrobbleView = ScrobbleView(), w: Int = 411, h: Int = 960): Pair<SimControl, Shell> {
         val c = SimControl("ap80")
         val control = object : Control by c {
-            override fun lyrics(on: Boolean) {
-                lyrics += on
+            override fun lyricSource(id: String, on: Boolean) {
+                lyrics += id to on
+            }
+
+            override fun lyricMove(id: String, by: Int) {
+                moves += id to by
+                link = link.copy(lyrics = link.lyrics.moved(id, by))
             }
 
             override fun scrobble(accounts: Accounts) {
@@ -206,17 +213,50 @@ class OnlineTest {
     }
 
     @Test
-    fun lrclibSheetIsOffOnWithNoMoves() {
+    fun theLyricsRowsFollowTheSourceOrderWithTheirValues() {
+        link = link.copy(lyrics = LyricSources(netease = false))
+        start(listOf(Page.Home, Page.Online(ONLINE_LYRICS)))
+        assertTrue(bounds("lyr.src.lrclib").top < bounds("lyr.src.netease").top)
+        assertTrue(bounds("lyr.src.netease").top < bounds("lyrics.copyright").top)
+        shows("lyr.src.lrclib", "ON")
+        shows("lyr.src.netease", "OFF")
+    }
+
+    @Test
+    fun eachLyricsSheetHasOnlyTheMovesThatApply() {
         val (_, shell) = start(listOf(Page.Home, Page.Online(ONLINE_LYRICS)))
         tap("lyr.src.lrclib")
         assertEquals("lrclib", shell.sheet.title)
-        assertEquals(listOf("off", "on"), shell.sheet.items)
-        assertEquals(0, shell.sheet.focus)
-        pick(0)
-        assertEquals(emptyList<Boolean>(), lyrics)
-        tap("lyr.src.lrclib")
+        assertEquals(listOf("off", "on", "move down"), shell.sheet.items)
+        assertEquals(1, shell.sheet.focus)
+        shell.sheet.close()
+        settle(600)
+        tap("lyr.src.netease")
+        assertEquals("netease", shell.sheet.title)
+        assertEquals(listOf("off", "on", "move up"), shell.sheet.items)
+        assertEquals(emptyList<Pair<String, Boolean>>(), lyrics)
+    }
+
+    @Test
+    fun lyricsOnAndOffSendOnlyAChange() {
+        start(listOf(Page.Home, Page.Online(ONLINE_LYRICS)))
+        tap("lyr.src.netease")
         pick(1)
-        assertEquals(listOf(true), lyrics)
+        assertEquals(emptyList<Pair<String, Boolean>>(), lyrics)
+        tap("lyr.src.netease")
+        pick(0)
+        assertEquals(listOf("netease" to false), lyrics)
+    }
+
+    @Test
+    fun aLyricsMoveKeepsTheFocusOnTheMovedSource() {
+        val (_, shell) = start(listOf(Page.Home, Page.Online(ONLINE_LYRICS)))
+        tap("lyr.src.netease")
+        pick(2)
+        assertEquals(listOf("netease" to -1), moves)
+        assertTrue(bounds("lyr.src.netease").top < bounds("lyr.src.lrclib").top)
+        tap("lyr.src.netease")
+        assertEquals(listOf("off", "on", "move down"), shell.sheet.items)
     }
 
     @Test
