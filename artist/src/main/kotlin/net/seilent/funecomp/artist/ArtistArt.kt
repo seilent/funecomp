@@ -165,7 +165,7 @@ class ArtistArt(
             PickLink.Unsupported -> Offered.Refused(PickLink.UNSUPPORTED)
             is PickLink.MusicBrainz -> mb.artist(l.mbid)?.let { a -> Offered.Ok(Offer(ArtPicks.ARTIST, Sources.MUSICBRAINZ, "https://musicbrainz.org/artist/${a.id}", a.id, null, a.id, a.name, null)) }
                 ?: Offered.Refused(PickLink.NOT_FOUND)
-            is PickLink.YouTube -> otherImages.get(l.url)?.text?.let { html ->
+            is PickLink.YouTube -> YouTube.page(otherImages, l.url)?.let { html ->
                 val img = YouTube.ogImage(html) ?: return Offered.Refused(PickLink.NOT_IMAGE)
                 image(Sources.YOUTUBE, img, ImageIds.of(Sources.YOUTUBE, img), null, YouTube.ogTitle(html) ?: "")
             } ?: Offered.Refused(PickLink.UNREACHABLE)

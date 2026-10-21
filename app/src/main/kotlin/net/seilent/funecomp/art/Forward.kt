@@ -281,7 +281,7 @@ class Forward(
         var gated = false
         var cut = false
         var count = 0
-        fun report(stop: ArtPusher.Stop) = ArtPusher.Report(stop, pushed, stored, missing, failed).also { say("sweep", it) }
+        fun report(stop: ArtPusher.Stop, complete: Boolean = false) = ArtPusher.Report(stop, pushed, stored, missing, failed, complete).also { say("sweep", it) }
         for (row in Sweep.order(rows.filter { real(it.name) })) {
             if (!keep()) return report(ArtPusher.Stop.PREEMPTED)
             if (device().lib.dataRev != rev) return null
@@ -307,8 +307,9 @@ class Forward(
             }
             if (++count % CREDITS_EVERY == 0) progress()
         }
-        if (!cut && !gated && failed.isEmpty() && known === k && (k.tagged || s.hello?.has("imgOrigin") != true)) k.swept = marks?.mark()
-        return report(if (gated) ArtPusher.Stop.GATE else ArtPusher.Stop.DONE)
+        val complete = !cut && !gated && failed.isEmpty() && known === k
+        if (complete && (k.tagged || s.hello?.has("imgOrigin") != true)) k.swept = marks?.mark()
+        return report(if (gated) ArtPusher.Stop.GATE else ArtPusher.Stop.DONE, complete)
     }
 
     private fun rows(s: Session, rev: Long?, keep: () -> Boolean): Rows {

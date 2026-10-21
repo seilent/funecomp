@@ -131,6 +131,7 @@ class Firmware(
                     o.write(buf, 0, n)
                     have += n
                     progress(have, size)
+                    true
                 }
                 if (r.code == 416) part.delete()
                 if (r.code != 200 && r.code != 206) throw IOException("http ${r.code}: ${rel.asset.url}")

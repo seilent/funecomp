@@ -25,6 +25,7 @@ class ArtPusher(
         val stored: List<String> = emptyList(),
         val missing: List<String> = emptyList(),
         val failed: List<String> = emptyList(),
+        val complete: Boolean = false,
     ) {
         fun counts(): String {
             val names = (pushed.keys + failed + missing).take(NAMES)

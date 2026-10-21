@@ -115,7 +115,7 @@ class YouTube(private val api: Api) {
     fun candidates(a: MbArtist): Sequence<Candidate> =
         a.rels("youtube").map { it.url }.filter { CHANNEL.containsMatchIn(it) }.sortedBy { if (it.contains("/channel/")) 0 else 1 }
             .asSequence()
-            .mapNotNull { url -> api.get(url)?.text?.let { ogImage(it) } }
+            .mapNotNull { url -> page(api, url)?.let { ogImage(it) } }
             .map { Candidate(it, Sources.YOUTUBE) }
 
     fun search(name: String): List<Channel>? =
@@ -128,6 +128,26 @@ class YouTube(private val api: Api) {
         private val OG = Regex("<meta\\s+property=\"og:image\"\\s+content=\"([^\"]+)\"")
         private val TITLE = Regex("<meta\\s+property=\"og:title\"\\s+content=\"([^\"]*)\"")
         private val SIDE = Regex("=s\\d+")
+
+        const val MAX_PAGE = 16 shl 20
+        private val OG_MARK = "property=\"og:image\"".toByteArray()
+        private val GT = '>'.code.toByte()
+
+        fun page(api: Api, url: String): String? {
+            var at = -1
+            var scanned = 0
+            return api.download(url, MAX_PAGE) { b, n ->
+                if (at < 0) at = find(b, n, maxOf(0, scanned - OG_MARK.size + 1))
+                val end = at >= 0 && (maxOf(at, scanned) until n).any { b[it] == GT }
+                scanned = n
+                end
+            }?.text
+        }
+
+        private fun find(b: ByteArray, n: Int, from: Int): Int {
+            for (i in from..n - OG_MARK.size) if (OG_MARK.indices.all { b[i + it] == OG_MARK[it] }) return i
+            return -1
+        }
 
         fun ogImage(html: String): String? = OG.find(html)?.groupValues?.get(1)?.replace("&amp;", "&")
 

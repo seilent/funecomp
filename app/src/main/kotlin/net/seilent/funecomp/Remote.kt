@@ -6,6 +6,8 @@ import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.os.Handler
 import android.os.Looper
 import android.os.PowerManager
@@ -86,6 +88,8 @@ object Remote : Control {
     private const val ATTEMPT = "attempt"
     private const val ART = "art"
     private const val ART_WAKE_MS = 60_000L
+    private const val SWEEP = "sweep"
+    private const val SWEPT = 2
     private const val TRANSITION_PAD_MS = 1_000L
     private const val OPEN_APP = "open the phone app"
     private val SECRET = Regex("(api_key|key|token|secret)=[^&]*")
@@ -163,6 +167,8 @@ object Remote : Control {
     @Volatile private var shown = false
     private val trigger = AtomicInteger()
     @Volatile private var online = true
+    @Volatile private var unmetered = false
+    private val tracked = HashMap<Network, Boolean>()
     private val breaker = Sweep.Breaker(SystemClock::elapsedRealtime)
     private var wake: Wake? = null
     private var exitLogged = false
@@ -268,6 +274,8 @@ object Remote : Control {
     private fun network(context: Context) {
         val cm = context.getSystemService(ConnectivityManager::class.java) ?: return
         online = cm.activeNetwork != null
+        synchronized(tracked) { tracked.clear() }
+        unmetered = false
         cm.registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
             override fun onAvailable(network: Network) {
                 online = true
@@ -281,7 +289,28 @@ object Remote : Control {
                 online = cm.activeNetwork != null
             }
         })
+        cm.registerNetworkCallback(NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET).build(), object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) {
+                track(network, caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) && caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED))
+            }
+
+            override fun onLost(network: Network) = track(network, null)
+        })
     }
+
+    private fun track(network: Network, free: Boolean?) {
+        val was = unmetered
+        val now = synchronized(tracked) {
+            if (free == null) tracked.remove(network) else tracked[network] = free
+            tracked.values.any { it }
+        }
+        unmetered = now
+        if (now == was) return
+        Log.i(TAG, "art unmetered $now")
+        if (now) art?.want()
+    }
+
+    private fun swept(context: Context) = context.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE).getInt(SWEEP, 0) >= SWEPT
 
     private fun wake(context: Context) {
         if (wake != null) return
@@ -642,7 +671,7 @@ object Remote : Control {
                 }
             },
             ::gate,
-            { !shown && online && !breaker.open },
+            { !shown && online && !breaker.open && (unmetered || swept(context)) },
             { !shown && !Firmwares.sending },
             ::libPage,
             breaker,
@@ -669,6 +698,7 @@ object Remote : Control {
         ) { r, e ->
             try {
                 if (r != null) Log.i(TAG, "art ${r.stop} ${r.counts()}")
+                if (r?.complete == true && !swept(context)) context.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE).edit().putInt(SWEEP, SWEPT).apply()
                 if (e != null) Log.w(TAG, "art: $e")
                 credits = a.credits()
             } catch (t: Throwable) {

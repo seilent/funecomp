@@ -7,7 +7,10 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Looper
+import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
@@ -35,6 +38,8 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowNetwork
+import org.robolectric.shadows.ShadowNetworkCapabilities
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -81,6 +86,84 @@ class BackgroundTest {
     }
 
     private fun startIntent(spec: String) = Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, spec)
+
+    private val swept = listOf("Swa", "Swb", "Swc")
+    private val wire = ShadowNetwork.newInstance(7)
+
+    private fun artPrefs() = app.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE)
+
+    private fun network(free: Boolean) {
+        val caps = ShadowNetworkCapabilities.newInstance()
+        shadowOf(caps).addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        shadowOf(caps).addCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        if (free) shadowOf(caps).addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+        for (cb in shadowOf(app.getSystemService(ConnectivityManager::class.java)).networkCallbacks) cb.onCapabilitiesChanged(wire, caps)
+    }
+
+    private fun sweepLink(urls: MutableList<String>, sweep: Int?, onUrl: (String) -> Unit = {}): org.robolectric.android.controller.ServiceController<LinkService> {
+        val e = artPrefs().edit().putInt("defaults", 2)
+        for (k in listOf("theaudiodb", "discogs", "fanarttv", "deezer", "youtube")) e.putBoolean(k, false)
+        if (sweep != null) e.putInt("sweep", sweep)
+        e.commit()
+        Remote.resetArtist()
+        Remote.artist(app, net.seilent.funecomp.artist.Http { u, _ ->
+            urls += u
+            onUrl(u)
+            net.seilent.funecomp.artist.Response(404, ByteArray(0))
+        })
+        val names = listOf("Now") + List(Forward.QUEUE_AHEAD.toInt()) { "Q" } + swept
+        val lib = net.seilent.funecomp.sim.Library(names.mapIndexed { i, n -> net.seilent.funecomp.sim.Track(i + 1L, n, listOf(n), "A$i", n, "T$i", 200_000, "a", "t$i.flac") })
+        val s = Sim(Options(Board.of("v1"), log = { logs += it }), lib)
+        sims += s
+        return Robolectric.buildService(LinkService::class.java, startIntent("tcp:127.0.0.1:${s.listen(0)}")).create().startCommand(0, 1)
+    }
+
+    private fun looked(urls: List<String>, name: String) = urls.any { "query=$name&" in it }
+
+    @Test
+    fun theFirstSweepWaitsForAnUnmeteredNetworkAndThenMarksItsPass() {
+        val urls = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val c = sweepLink(urls, null)
+        waitFor { Remote.phase == Phase.LIVE }
+        network(false)
+        waitFor(15_000) { looked(urls, "Q") }
+        Thread.sleep(2500)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(swept.none { looked(urls, it) })
+        assertEquals(0, artPrefs().getInt("sweep", 0))
+        network(true)
+        waitFor(20_000) { artPrefs().getInt("sweep", 0) == 2 }
+        assertTrue(swept.all { looked(urls, it) })
+        c.destroy()
+    }
+
+    @Test
+    fun aSweptInstallSweepsOnAMeteredNetwork() {
+        val urls = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val c = sweepLink(urls, 2)
+        waitFor { Remote.phase == Phase.LIVE }
+        network(false)
+        waitFor(20_000) { swept.all { looked(urls, it) } }
+        c.destroy()
+    }
+
+    @Test
+    fun aSweepCutByAMeteredNetworkLeavesThePassOpenAndGoesOnLater() {
+        val urls = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val cut = java.util.concurrent.atomic.AtomicBoolean(false)
+        val c = sweepLink(urls, null) { u -> if (swept.any { "query=$it&" in u } && cut.compareAndSet(false, true)) network(false) }
+        waitFor { Remote.phase == Phase.LIVE }
+        network(true)
+        waitFor(20_000) { cut.get() }
+        Thread.sleep(2500)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(1, swept.count { looked(urls, it) })
+        assertEquals(0, artPrefs().getInt("sweep", 0))
+        network(true)
+        waitFor(20_000) { artPrefs().getInt("sweep", 0) == 2 }
+        assertTrue(swept.all { looked(urls, it) })
+        c.destroy()
+    }
 
     @Test
     fun serviceStaysUpAcrossADropAndStopClearsThePhase() {

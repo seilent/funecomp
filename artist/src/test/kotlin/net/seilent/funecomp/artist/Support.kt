@@ -25,6 +25,23 @@ class Fixtures : Http {
 
     override fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = serve("POST $url ${String(body, Charsets.UTF_8)}", headers)
 
+    val read = HashMap<String, Int>()
+    var chunk = 4096
+
+    override fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Boolean): Response {
+        val r = serve(url, headers)
+        if (r.code !in 200..299) return r
+        var at = 0
+        while (at < r.body.size) {
+            val n = minOf(chunk, r.body.size - at)
+            val buf = r.body.copyOfRange(at, at + n)
+            at += n
+            read[url] = at
+            if (!sink(r.code, buf, n)) break
+        }
+        return Response(r.code, ByteArray(0), r.headers)
+    }
+
     private fun serve(url: String, headers: Map<String, String>): Response {
         calls += url
         agents += headers["User-Agent"]

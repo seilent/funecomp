@@ -15,7 +15,12 @@ fun interface Http {
 
     fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = throw IOException("no post: $url")
 
-    fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Unit): Response = throw IOException("no download: $url")
+    fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Boolean): Response {
+        val r = get(url, headers)
+        if (r.code !in 200..299) return r
+        sink(r.code, r.body, r.body.size)
+        return Response(r.code, ByteArray(0), r.headers)
+    }
 }
 
 class HttpRun(private val onCall: (String) -> Unit = {}) {
@@ -63,9 +68,9 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
 
     override fun post(url: String, headers: Map<String, String>, body: ByteArray): Response = send(url, headers, body)
 
-    override fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Unit): Response = send(url, headers, null, sink)
+    override fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Boolean): Response = send(url, headers, null, sink)
 
-    private fun send(url: String, headers: Map<String, String>, body: ByteArray?, sink: ((Int, ByteArray, Int) -> Unit)? = null): Response {
+    private fun send(url: String, headers: Map<String, String>, body: ByteArray?, sink: ((Int, ByteArray, Int) -> Boolean)? = null): Response {
         val run = HttpRun.current.get()
         val c = URI(url).toURL().openConnection() as HttpURLConnection
         run?.add(c)
@@ -89,7 +94,7 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
                     if (n < 0) break
                     if (sink != null && code in 200..299) {
                         if (run?.cancelled == true) throw IOException("cancelled")
-                        sink(code, buf, n)
+                        if (!sink(code, buf, n)) break
                         continue
                     }
                     if (out.size() + n > maxBytes) throw IOException("body over $maxBytes bytes: $url")
@@ -120,6 +125,20 @@ class Api(
     fun post(url: String, form: Map<String, String>, headers: Map<String, String>): Response? {
         val body = form.entries.joinToString("&") { (k, v) -> formEnc(k) + "=" + formEnc(v) }.toByteArray()
         return send(url) { http.post(it, mapOf("User-Agent" to userAgent) + headers, body) }
+    }
+
+    fun download(url: String, maxBytes: Int, stop: (ByteArray, Int) -> Boolean): Response? = send(url) { u ->
+        val out = Body()
+        val r = http.download(u, mapOf("User-Agent" to userAgent)) { _, buf, n ->
+            if (out.size() + n > maxBytes) throw IOException("body over $maxBytes bytes: $u")
+            out.write(buf, 0, n)
+            !stop(out.bytes, out.size())
+        }
+        if (r.code in 200..299) Response(r.code, out.toByteArray(), r.headers) else r
+    }
+
+    private class Body : ByteArrayOutputStream() {
+        val bytes: ByteArray get() = buf
     }
 
     private fun send(url: String, call: (String) -> Response): Response? {

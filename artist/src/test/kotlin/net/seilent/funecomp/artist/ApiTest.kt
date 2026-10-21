@@ -65,4 +65,70 @@ class ApiTest {
         val e = assertThrows(IOException::class.java) { post() }
         assertTrue(e.message!!.startsWith("busy after 4 tries"))
     }
+
+    private val page = "https://example.org/page"
+
+    private fun download(maxBytes: Int = 1 shl 20, stop: (ByteArray, Int) -> Boolean = { _, _ -> false }) = api.download(page, maxBytes, stop)
+
+    private fun body(n: Int) = ByteArray(n) { (it % 251).toByte() }
+
+    @Test
+    fun downloadAccumulatesTheBody() {
+        f.queued[page] = ArrayDeque(listOf(Response(200, body(10_000))))
+        assertTrue(body(10_000).contentEquals(download()!!.body))
+        assertEquals(listOf<String?>("ua"), f.agents)
+        assertEquals(10_000, f.read[page])
+    }
+
+    @Test
+    fun downloadStopsReadingOnceStopAnswersTrue() {
+        f.queued[page] = ArrayDeque(listOf(Response(200, body(20_000))))
+        val seen = ArrayList<Int>()
+        val r = download { _, n -> seen += n; n >= 5000 }!!
+        assertEquals(listOf(4096, 8192), seen)
+        assertEquals(8192, f.read[page])
+        assertEquals(8192, r.body.size)
+    }
+
+    @Test
+    fun downloadPastTheCapThrows() {
+        f.queued[page] = ArrayDeque(listOf(Response(200, body(20_000))))
+        val e = assertThrows(IOException::class.java) { download(maxBytes = 10_000) }
+        assertEquals("body over 10000 bytes: $page", e.message)
+        assertEquals(12_288, f.read[page])
+    }
+
+    @Test
+    fun downloadKeepsTheGetRules() {
+        f.queued[page] = ArrayDeque(listOf(Response(429, ByteArray(0), mapOf("retry-after" to "2")), Response(503, ByteArray(0), mapOf("retry-after" to "1")), Response(200, body(10))))
+        assertEquals(10, download()!!.body.size)
+        assertEquals(listOf(2500L, 1250L), time.sleeps)
+        for (code in listOf(403, 500)) {
+            f.queued[page] = ArrayDeque(listOf(Response(code, ByteArray(0))))
+            assertThrows("$code", IOException::class.java) { download() }
+        }
+        f.queued[page] = ArrayDeque(listOf(Response(404, ByteArray(0))))
+        assertNull(download())
+    }
+
+    @Test
+    fun downloadWaitsForTheLimiter() {
+        val t = FakeTime()
+        val g = Fixtures()
+        val a = Api(g, "ua", RateLimiter(1000) { t.now }, t.sleep)
+        g.queued[page] = ArrayDeque(listOf(Response(200, body(10)), Response(200, body(10))))
+        a.download(page, 100) { _, _ -> false }
+        a.download(page, 100) { _, _ -> false }
+        assertEquals(listOf(1000L), t.sleeps)
+        assertEquals(emptyList<String>(), g.missing)
+    }
+
+    @Test
+    fun anHttpGetIsServedAsOneDownloadChunk() {
+        val h = Http { _, _ -> Response(200, body(300)) }
+        val chunks = ArrayList<Int>()
+        val r = h.download(page, emptyMap()) { _, _, n -> chunks += n; true }
+        assertEquals(listOf(300), chunks)
+        assertEquals(200, r.code)
+    }
 }

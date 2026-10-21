@@ -44,7 +44,7 @@ class FirmwareTest {
             return texts[url]?.let { Response(200, it.toByteArray()) } ?: Response(404, ByteArray(0))
         }
 
-        override fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Unit): Response {
+        override fun download(url: String, headers: Map<String, String>, sink: (Int, ByteArray, Int) -> Boolean): Response {
             calls += Call(url, headers)
             val b = blobs[url] ?: return Response(404, ByteArray(0))
             val from = if (ignoreRange) 0 else headers["Range"]?.removePrefix("bytes=")?.removeSuffix("-")?.toInt() ?: 0
