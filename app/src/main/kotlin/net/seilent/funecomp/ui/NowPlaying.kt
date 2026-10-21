@@ -28,6 +28,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
@@ -50,6 +51,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -67,6 +69,7 @@ import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LyricsFetch
 
+internal const val PIN_LEAD_MS = 200L
 private const val MIC_INK_LEFT = 8f
 private const val MIC_INK_RIGHT = 24f
 private const val MIC_INK_TOP = 3f
@@ -262,7 +265,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack:
         Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
         if (lyricMode) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = layer.value }) {
-                LyricsColumn(device, lyrics, upcoming.firstOrNull(), lifecycle, ::toggleLyrics, forward)
+                LyricsColumn(device, lyrics, upcoming.firstOrNull(), lifecycle, lyricTarget, ::toggleLyrics, forward)
             }
         } else {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = layer.value }) {
@@ -412,7 +415,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, onBack:
 }
 
 @Composable
-private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: String?, lifecycle: Lifecycle, onTap: () -> Unit, onLong: () -> Unit) {
+private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: String?, lifecycle: Lifecycle, active: Boolean, onTap: () -> Unit, onLong: () -> Unit) {
     val ui = LocalUi.current
     val s = device.playback.state
     val x = ui.px(Tok.edge)
@@ -454,17 +457,46 @@ private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: St
     val lines = copy?.lines
     var at by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     val playing = s.playing == true
-    LaunchedEffect(lines, playing, device.playback.receivedAt) {
+    val held = s.positionHeld == true
+    var leadFor by remember(lines) { mutableStateOf<Int?>(null) }
+    val live by rememberUpdatedState(device)
+    LaunchedEffect(lines, playing, device.playback.receivedAt, held) {
         at = SystemClock.elapsedRealtime()
-        if (lines == null || !playing) return@LaunchedEffect
+        if (lines == null || !playing || held) {
+            leadFor = null
+            return@LaunchedEffect
+        }
+        val first = live.positionMs(at)
+        val i0 = LyricsFetch.index(lines, first)
+        val lead = leadFor
+        val near = (LyricsFetch.dueMs(lines, i0, first) ?: Long.MAX_VALUE) <= PIN_LEAD_MS
+        if (lead != i0 && !(lead == i0 + 1 && near)) leadFor = null
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            while (true) {
-                at = SystemClock.elapsedRealtime()
-                val pos = device.positionMs(at)
-                delay(LyricsFetch.dueMs(lines, LyricsFetch.index(lines, pos), pos) ?: break)
+            try {
+                while (true) {
+                    at = SystemClock.elapsedRealtime()
+                    val pos = live.positionMs(at)
+                    val i = LyricsFetch.index(lines, pos)
+                    val due = LyricsFetch.dueMs(lines, i, pos) ?: break
+                    val st = live.playback.state
+                    if (st.positionMs == null || pos >= (st.durationMs?.takeIf { it > 0 } ?: Long.MAX_VALUE)) {
+                        leadFor = null
+                        delay(due)
+                    } else if (due > PIN_LEAD_MS) {
+                        delay(due - PIN_LEAD_MS)
+                        leadFor = i + 1
+                        delay(PIN_LEAD_MS)
+                    } else {
+                        leadFor = i + 1
+                        delay(due)
+                    }
+                }
+            } finally {
+                if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) leadFor = null
             }
         }
     }
+    val view = LocalView.current
     val index = lines?.let { LyricsFetch.index(it, device.positionMs(maxOf(at, device.playback.receivedAt))) } ?: -1
     Box(surface.press({ onTap() }, onLong).testTag("np.lyrics")) {
         if (copy == null && lyrics != LyricsFetch.Show.None) return@Box
@@ -477,11 +509,19 @@ private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: St
                     slide = lines?.let { LyricSlide.start(shown, index, it.map { l -> l.ms ?: 0 }, device.positionMs(SystemClock.elapsedRealtime()), ms) }
                     frame = ms
                     shown = index
+                    if (leadFor?.let { index >= it } == true) leadFor = null
                 }
                 val run = slide ?: return@LaunchedEffect
                 while (!LyricSlide.done(run, frame)) withFrameMillis { frame = it }
                 slide = null
             }
+            val pinned = active && (leadFor != null || slide != null)
+            DisposableEffect(view, pinned) {
+                val handle = if (pinned) RefreshPin.of(view).hold() else null
+                onDispose { handle?.release() }
+            }
+            val config = LocalConfiguration.current
+            if (pinned) LaunchedEffect(view, config) { RefreshPin.of(view).repick() }
             val texts = lines?.map { it.text }
             val title = s.title ?: ""
             val wrapRow = { t: String, big: Boolean -> wrap(t, if (big) 0 else 1) }

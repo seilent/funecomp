@@ -1,15 +1,22 @@
 package net.seilent.funecomp
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import android.content.res.Configuration
 import android.os.SystemClock
 import android.view.View
+import android.view.Window
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
@@ -42,6 +49,9 @@ import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
+import net.seilent.funecomp.ui.PIN_LEAD_MS
+import net.seilent.funecomp.ui.RefreshPin
+import net.seilent.funecomp.ui.RefreshPin.ModeInfo
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.state.LyricsFetch
@@ -55,6 +65,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.shadows.ShadowDisplayManager
 import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
 import kotlin.math.abs
@@ -76,6 +87,10 @@ class NowPlayingLyricsTest {
     private var lyrics by mutableStateOf<LyricsFetch.Show>(LyricsFetch.Show.Off)
     private lateinit var c: SimControl
     private lateinit var view: View
+    private lateinit var window: Window
+    private val flip7 = listOf(1 to 120.00001f, 2 to 80f, 3 to 60f, 4 to 48f, 5 to 30f, 6 to 24f, 7 to 10f).map { (id, hz) -> ModeInfo(id, 1080, 2520, hz) }
+    private var modes = flip7 to flip7[2]
+    private var config by mutableStateOf<Configuration?>(null)
     private val owner = Owner()
 
     private val synced = (0 until 12).map { LyrLine(it * 10_000L, "line $it") }
@@ -101,7 +116,11 @@ class NowPlayingLyricsTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             view = LocalView.current
-            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+            remember(view) {
+                window = activity(view.context).window
+                RefreshPin(window) { modes }.also { view.rootView.setTag(R.id.refresh_pin, it) }
+            }
+            CompositionLocalProvider(LocalLifecycleOwner provides owner, LocalConfiguration provides (config ?: LocalConfiguration.current)) {
                 Box(Modifier.requiredSize(411.dp, 960.dp)) {
                     App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, art = if (art) BackdropArt(ImageBitmap(8, 8), null, entry) else null, lyrics = lyrics)
                 }
@@ -494,5 +513,357 @@ class NowPlayingLyricsTest {
         assertTrue(exists("np.title"))
         assertFalse(exists("np.lyrics"))
         assertFalse(view.keepScreenOn)
+    }
+
+    private tailrec fun activity(c: Context): Activity = if (c is Activity) c else activity((c as ContextWrapper).baseContext)
+
+    private val f = 32L
+    private val end = Tok.motion_lyricSlide.toLong()
+
+    private fun pin() = window.attributes.preferredDisplayModeId
+
+    private fun pos() = c.device.positionMs(SystemClock.elapsedRealtime())
+
+    private fun to(p: Long) = advance(p - pos())
+
+    private fun at(p: Long, id: Int) {
+        to(p)
+        assertEquals("pin at ${pos()}", id, pin())
+    }
+
+    private fun stays(id: Int, until: Long) {
+        while (pos() < until) {
+            assertEquals("pin at ${pos()}", id, pin())
+            advance(16)
+        }
+    }
+
+    private fun current() = tagged("np.lyric.current.").mapNotNull { it.config.getOrNull(SemanticsProperties.Text)?.firstOrNull()?.text }
+
+    private fun every(gap: Long, n: Int = 12) = (0 until n).map { LyrLine(it * gap, "lyric $it") }
+
+    private fun begin(copy: List<LyrLine>, from: Long) {
+        start(copy = copy)
+        enterBy("np.art")
+        playAt(from)
+        advance(16)
+    }
+
+    @Test
+    fun aDueLinePinsFromTheLeadAndClearsAtTheSlideEnd() {
+        begin(every(1000), 1300)
+        at(2000 - PIN_LEAD_MS - f, 0)
+        at(2000 - PIN_LEAD_MS + f, 1)
+        at(2200, 1)
+        at(2000 + end + f, 0)
+    }
+
+    @Test
+    fun closeLinesKeepThePinAcross() {
+        begin(every(400, 8), 1300)
+        at(1400 - f, 0)
+        to(1400 + f)
+        stays(1, 2800 + end - f)
+        at(2800 + end + f, 0)
+    }
+
+    @Test
+    fun linesFiveHundredTwentyApartKeepThePin() {
+        begin(every(520, 6), 300)
+        to(320 + f)
+        stays(1, 2600 + end - f)
+        at(2600 + end + f, 0)
+    }
+
+    @Test
+    fun aLineShorterThanTheLeadKeepsTheNextLead() {
+        begin(listOf(0L, 1000L, 1150L, 2150L).mapIndexed { i, ms -> LyrLine(ms, "lyric $i") }, 500)
+        to(800 + f)
+        stays(1, 1150 + end - f)
+        at(1150 + end + f, 0)
+    }
+
+    @Test
+    fun aShortLineSnapKeepsTheNextLead() {
+        begin(listOf(0L, 1000L, 1080L, 2080L).mapIndexed { i, ms -> LyrLine(ms, "lyric $i") }, 500)
+        at(800 - f, 0)
+        to(800 + f)
+        stays(1, 1080 + end - f)
+        at(1080 + end + f, 0)
+    }
+
+    @Test
+    fun aLateChangeSnapsAndClears() {
+        begin(every(1000), 1300)
+        at(1850, 1)
+        playAt(2260)
+        advance(f)
+        assertEquals(listOf("lyric 2"), current())
+        assertEquals(0, pin())
+        at(2800 - f, 0)
+        at(2800 + f, 1)
+    }
+
+    @Test
+    fun aPauseBeforeTheDueLineClears() {
+        begin(every(1000), 1300)
+        at(1850, 1)
+        playAt(1850, playing = false)
+        advance(f)
+        assertEquals(0, pin())
+        advance(1000)
+        assertEquals(0, pin())
+    }
+
+    @Test
+    fun aSeekForwardAwayClears() {
+        begin(every(1000), 1300)
+        at(1850, 1)
+        playAt(5300)
+        advance(f)
+        assertEquals(listOf("lyric 5"), current())
+        assertEquals(0, pin())
+        at(5800 - f, 0)
+        at(5800 + f, 1)
+    }
+
+    @Test
+    fun aSeekBackAwayClears() {
+        begin(every(1000), 4300)
+        at(4850, 1)
+        playAt(1300)
+        advance(f)
+        assertEquals(listOf("lyric 1"), current())
+        assertEquals(0, pin())
+        at(1800 - f, 0)
+        at(1800 + f, 1)
+    }
+
+    @Test
+    fun aSeekBackInsideTheLineDropsTheLead() {
+        begin(every(1000), 2300)
+        at(2850, 1)
+        playAt(2250)
+        advance(f)
+        assertEquals(0, pin())
+        at(2800 - f, 0)
+        at(2800 + f, 1)
+    }
+
+    @Test
+    fun aNewCopyStartsUnpinned() {
+        begin(listOf(1000L, 2000L, 3000L).mapIndexed { i, ms -> LyrLine(ms, "lyric $i") }, 500)
+        at(850, 1)
+        val next = c.device.playback.state.track!! + 1
+        lyrics = LyricsFetch.Show.Lines(next, LyricsFetch.Copy(1, Enums.LyricsKind.synced, listOf(5000L, 6000L).mapIndexed { i, ms -> LyrLine(ms, "new $i") }))
+        c.device = c.device.withState(c.device.playback.state.copy(track = next, positionMs = 0), SystemClock.elapsedRealtime())
+        anchor = SystemClock.elapsedRealtime() to 0L
+        advance(f)
+        assertEquals(0, pin())
+        stays(0, 4800 - f)
+        at(4800 + f, 1)
+    }
+
+    @Test
+    fun aSeekForwardOneLineSlidesWithThePin() {
+        begin(every(1000), 1300)
+        at(1500, 0)
+        playAt(2020)
+        advance(f)
+        assertEquals(1, pin())
+        at(2000 + end + f, 0)
+        at(2800 - f, 0)
+    }
+
+    @Test
+    fun aResumeAcrossAStampSlidesWithThePin() {
+        begin(every(1000), 1300)
+        to(1950)
+        playAt(1950, playing = false)
+        advance(f)
+        assertEquals(0, pin())
+        advance(500)
+        assertEquals(0, pin())
+        playAt(2030)
+        advance(f)
+        assertEquals(1, pin())
+        at(2000 + end + f, 0)
+        at(2800 - f, 0)
+    }
+
+    @Test
+    fun aHeldPositionNeverArms() {
+        start(copy = every(1000))
+        enterBy("np.art")
+        val s = c.device.playback.state
+        c.device = c.device.copy(rttMs = null).withState(s.copy(positionMs = 1900, playing = true, positionHeld = true, sentMs = null, sampleMs = null), SystemClock.elapsedRealtime())
+        repeat(125) {
+            advance(16)
+            assertEquals(0, pin())
+        }
+    }
+
+    @Test
+    fun anRttDropMidLineStillSlidesOnTime() {
+        start(copy = every(1000))
+        enterBy("np.art")
+        playAt(1100)
+        c.device = c.device.withRtt(200)
+        advance(16)
+        to(2500)
+        c.device = c.device.withRtt(40)
+        at(2800 + f, 1)
+        to(3000 - f)
+        assertEquals(listOf("lyric 2"), current())
+        to(3000 + 2 * f)
+        assertEquals(listOf("lyric 3"), current())
+        at(3000 + end + f, 0)
+    }
+
+    @Test
+    fun theLastLinePinsNothing() {
+        begin(every(1000, 3), 2100)
+        stays(0, 4100)
+    }
+
+    @Test
+    fun plainLyricsNeverPin() {
+        start(copy = plain, kind = Enums.LyricsKind.plain)
+        enterBy("np.art")
+        playAt(1000)
+        rule.onNodeWithTag("np.lyrics").performTouchInput { swipeUp() }
+        repeat(125) {
+            advance(16)
+            assertEquals(0, pin())
+        }
+    }
+
+    @Test
+    fun leavingNowPlayingMidSlideClears() {
+        val shell = start(copy = every(1000))
+        enterBy("np.art")
+        playAt(1300)
+        at(2100, 1)
+        shell.nav.pop()
+        while (exists("np.lyrics")) advance(16)
+        advance(f)
+        assertEquals(0, pin())
+        advance(1500)
+        assertEquals(0, pin())
+    }
+
+    @Test
+    fun closingTheViewMidSlideClears() {
+        begin(every(1000), 1300)
+        at(2100, 1)
+        rule.onNodeWithTag("np.lyrics").performClick()
+        advance(f)
+        assertEquals(0, pin())
+        while (exists("np.lyrics")) {
+            assertEquals(0, pin())
+            advance(16)
+        }
+        advance(1500)
+        assertEquals(0, pin())
+    }
+
+    @Test
+    fun closingTheViewBeforeALeadNeverArms() {
+        begin(every(1000), 1300)
+        at(1700, 0)
+        rule.onNodeWithTag("np.lyrics").performClick()
+        while (exists("np.lyrics")) {
+            assertEquals(0, pin())
+            advance(16)
+        }
+        assertEquals(0, pin())
+    }
+
+    private fun frozenAt(positionMs: Long?, durationMs: Long?) {
+        start(copy = every(1000))
+        enterBy("np.art")
+        val s = c.device.playback.state
+        c.device = c.device.copy(rttMs = null).withState(s.copy(positionMs = positionMs, durationMs = durationMs, playing = true, positionHeld = null, sentMs = null, sampleMs = null), SystemClock.elapsedRealtime())
+        repeat(125) {
+            advance(16)
+            assertEquals(0, pin())
+        }
+    }
+
+    @Test
+    fun anEstimateClampedAtTheDurationNeverArms() = frozenAt(2100, 2100)
+
+    @Test
+    fun aMissingPositionNeverArms() = frozenAt(null, 60_000)
+
+    @Test
+    fun aNewCopyOfTheSameTrackStartsUnpinned() {
+        begin(every(1000), 1300)
+        at(1850, 1)
+        val track = c.device.playback.state.track!!
+        lyrics = LyricsFetch.Show.Lines(track, LyricsFetch.Copy(1, Enums.LyricsKind.synced, listOf(0L, 500L, 1500L, 5000L, 6000L).mapIndexed { i, ms -> LyrLine(ms, "new $i") }))
+        advance(f)
+        assertEquals(0, pin())
+        stays(0, 4800 - f)
+        at(4800 + f, 1)
+    }
+
+    @Test
+    fun stopStopsArmingAndStartRearms() {
+        begin(every(1000), 1300)
+        at(1850, 1)
+        owner.registry.currentState = Lifecycle.State.CREATED
+        advance(f)
+        assertEquals(0, pin())
+        stays(0, 2300)
+        assertEquals(listOf("lyric 1"), current())
+        owner.registry.currentState = Lifecycle.State.RESUMED
+        advance(f)
+        assertEquals(listOf("lyric 2"), current())
+        assertEquals(0, pin())
+        at(2800 - f, 0)
+        at(2800 + f, 1)
+    }
+
+    @Test
+    fun aStopMidSlideClearsAtTheSlideEnd() {
+        begin(every(1000), 1300)
+        at(2100, 1)
+        owner.registry.currentState = Lifecycle.State.CREATED
+        at(2000 + end - f, 1)
+        at(2000 + end + f, 0)
+        stays(0, 3200)
+    }
+
+    @Test
+    fun aDisplayChangeRepicksFromASyntheticCoverList() {
+        begin(every(400, 30), 1300)
+        at(1500, 1)
+        val cover = listOf(ModeInfo(8, 948, 1048, 120.00001f), ModeInfo(9, 948, 1048, 60f))
+        modes = cover to cover[1]
+        ShadowDisplayManager.changeDisplay(0, "w361dp-h399dp-420dpi")
+        advance(f)
+        assertEquals(8, pin())
+        modes = flip7 to flip7[2]
+        ShadowDisplayManager.changeDisplay(0, "w411dp-h960dp-420dpi")
+        advance(f)
+        assertEquals(1, pin())
+        modes = cover.take(1) to cover[0]
+        ShadowDisplayManager.changeDisplay(0, "w361dp-h399dp-420dpi")
+        advance(f)
+        assertEquals(0, pin())
+    }
+
+    @Test
+    fun aConfigurationChangeRepicksFromASyntheticCoverList() {
+        begin(every(400, 30), 1300)
+        at(1500, 1)
+        val cover = listOf(ModeInfo(8, 948, 1048, 120.00001f), ModeInfo(9, 948, 1048, 60f))
+        modes = cover to cover[1]
+        advance(f)
+        assertEquals(1, pin())
+        config = Configuration(view.resources.configuration).apply { keyboard = if (keyboard == Configuration.KEYBOARD_QWERTY) Configuration.KEYBOARD_12KEY else Configuration.KEYBOARD_QWERTY }
+        advance(f)
+        assertEquals(8, pin())
     }
 }
