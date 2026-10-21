@@ -302,9 +302,9 @@ class OnlineTest {
         tap("scrobble.listenbrainz")
         assertTrue(shell.sheet.shown)
         val d = rule.density.density
-        val gutter = Ui.of(361 * d, 399 * d).px(Tok.gutter)
+        val gutter = Ui.of((361 * d).roundToInt().toFloat(), (399 * d).roundToInt().toFloat()).px(Tok.gutter)
         val row = bounds("scrobble.listenbrainz")
-        assertTrue("${row.bottom} ${bounds("sheet.panel").top}", row.bottom <= bounds("sheet.panel").top - gutter + 1.5f)
+        assertTrue("${row.bottom} ${bounds("sheet.panel").top}", row.bottom <= bounds("sheet.panel").top - gutter)
     }
 
     @Test

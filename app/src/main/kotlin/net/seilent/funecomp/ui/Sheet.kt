@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import kotlinx.coroutines.delay
 import net.seilent.funecomp.proto.gen.Tok
+import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.roundToInt
 
@@ -162,9 +163,10 @@ private suspend fun SheetState.keepRow(k: Keep, panelTop: Float, gutter: Float) 
     pastList = null
     val info = k.list.layoutInfo
     val row = info.visibleItemsInfo.firstOrNull { it.index == k.index } ?: return
-    val rowTop = k.top + row.offset
-    val d = rowTop + row.size - (panelTop - gutter)
-    if (d <= 0f || rowTop - d < k.top) return
+    val top = k.top.roundToInt().toFloat()
+    val rowTop = top + row.offset
+    val d = ceil(rowTop + row.size - (panelTop.roundToInt() - gutter))
+    if (d <= 0f || rowTop - d < top) return
     val last = info.visibleItemsInfo.last()
     val left = if (last.index == info.totalItemsCount - 1) (last.offset + last.size - info.viewportEndOffset).toFloat() else 0f
     if (d > left) {

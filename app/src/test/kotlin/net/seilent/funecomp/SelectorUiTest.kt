@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import net.seilent.funecomp.proto.gen.Enums
@@ -34,6 +35,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -46,11 +48,13 @@ class SelectorUiTest {
 
     private fun start(board: String = "ap80", vararg pivots: String): SimControl = startAt(411, 960, board, *pivots)
 
-    private fun startAt(w: Int, h: Int, board: String = "ap80", vararg pivots: String): SimControl {
+    private fun startAt(w: Int, h: Int, board: String = "ap80", vararg pivots: String): SimControl = startAt(w.dp, h.dp, board, *pivots)
+
+    private fun startAt(w: Dp, h: Dp, board: String = "ap80", vararg pivots: String): SimControl {
         val c = SimControl(board)
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(w.dp, h.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
+            Box(Modifier.requiredSize(w, h)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
         }
         settle(1000)
         for (p in pivots) {
@@ -112,10 +116,14 @@ class SelectorUiTest {
 
     private fun clearsThePanel(key: String, w: Int, h: Int) {
         val d = rule.density.density
-        val gutter = Ui.of(w * d, h * d).px(Tok.gutter)
+        clearsThePanelPx(key, (w * d).roundToInt().toFloat(), (h * d).roundToInt().toFloat())
+    }
+
+    private fun clearsThePanelPx(key: String, w: Float, h: Float) {
+        val gutter = Ui.of(w, h).px(Tok.gutter)
         val row = rule.onNodeWithTag("set.$key").fetchSemanticsNode().boundsInRoot
         val panel = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot
-        assertTrue("${row.bottom} ${panel.top} $gutter", row.bottom <= panel.top - gutter + 1.5f)
+        assertTrue("${row.bottom} ${panel.top} $gutter", row.bottom <= panel.top - gutter)
     }
 
     private fun top(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
@@ -140,6 +148,17 @@ class SelectorUiTest {
         settle(1000)
         assertEquals(before, top("set.resume"), 1.5f)
         assertEquals(emptyList<String>(), writes(c))
+    }
+
+    @Test
+    @Config(qualifiers = "w362dp-h400dp-420dpi")
+    fun theCoverScreenRowClearsTheGutterInWholePixels() {
+        startAt((948 / 2.625f).dp, (1048 / 2.625f).dp)
+        scrolledTo("resume")
+        rule.onNodeWithTag("set.resume").performClick()
+        settle(600)
+        assertTrue(shell.sheet.shown)
+        clearsThePanelPx("resume", 948f, 1048f)
     }
 
     @Test

@@ -60,6 +60,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -806,10 +807,10 @@ class BehaviorTest {
         settle(600)
         assertTrue(shell.sheet.shown)
         val d = rule.density.density
-        val gutter = Ui.of(361 * d, 399 * d).px(Tok.gutter)
+        val gutter = Ui.of((361 * d).roundToInt().toFloat(), (399 * d).roundToInt().toFloat()).px(Tok.gutter)
         val row = rule.onNodeWithTag("fw.pre").fetchSemanticsNode().boundsInRoot
         val panel = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot
-        assertTrue("${row.bottom} ${panel.top} $gutter", row.bottom <= panel.top - gutter + 1.5f)
+        assertTrue("${row.bottom} ${panel.top} $gutter", row.bottom <= panel.top - gutter)
     }
 
     @Test
