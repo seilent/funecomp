@@ -53,16 +53,18 @@ class Fixtures : Http {
             return Response(404, ByteArray(0))
         }
         if (f.startsWith("code:")) return Response(f.removePrefix("code:").toInt(), ByteArray(0))
-        if (f.startsWith("gen:")) {
-            val (w, h) = f.removePrefix("gen:").split('x').map { it.toInt() }
-            return Response(200, Images.jpeg(Images.photo(w, h), 92))
-        }
+        if (f.startsWith("gen:")) return Response(200, gen(f.removePrefix("gen:")))
         return Response(200, load(f))
     }
 
     fun hosts() = calls.map { it.substringAfter("://").substringBefore('/') }.toSet()
 
     companion object {
+        fun gen(spec: String): ByteArray {
+            val (w, h) = spec.substringBefore('@').split('x').map { it.toInt() }
+            return Images.jpeg(Images.photo(w, h, spec.substringAfter('@', "7").toLong()), 92)
+        }
+
         fun load(name: String): ByteArray =
             Fixtures::class.java.getResourceAsStream("/fixtures/$name")?.use { it.readBytes() } ?: error("no fixture $name")
 

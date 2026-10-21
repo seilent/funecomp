@@ -183,7 +183,9 @@ class YouTube(private val api: Api) {
     }
 }
 
-class Deezer(private val api: Api, private val base: String = "https://api.deezer.com") {
+class Deezer(private val api: Api, val placeholders: Set<String> = PLACEHOLDERS, private val base: String = "https://api.deezer.com") {
+    fun placeholder(src: ByteArray): Boolean = ArtCache.sha256(src) in placeholders
+
     fun search(name: String): List<J> = api.json("$base/search/artist?q=${Api.enc(name.trim())}")?.get("data")?.list ?: emptyList()
 
     fun candidates(name: String): List<Candidate> {
@@ -195,6 +197,13 @@ class Deezer(private val api: Api, private val base: String = "https://api.deeze
     }
 
     companion object {
-        fun picture(a: J, size: String): String? = a[size].str?.takeIf { u -> u.startsWith("http") && !u.contains("/artist//") }
+        val PLACEHOLDERS = setOf(
+            "0d659e802c2d9c13e8cf4e0fab3f85b176173a649b60d9ddc03af2397fb43275",
+            "bd8dae144dc585a7eb090e2071fe386bbe0df6ebcc47ee0d96d5ec5c23274530",
+            "5caf39f825879e7982065e4402d7dde41be7ffcee984a0e1d273a7efb2b78f00",
+        )
+        private const val EMPTY = "d41d8cd98f00b204e9800998ecf8427e"
+
+        fun picture(a: J, size: String): String? = a[size].str?.takeIf { u -> u.startsWith("http") && !u.contains("/artist//") && !u.contains("/artist/$EMPTY/") }
     }
 }

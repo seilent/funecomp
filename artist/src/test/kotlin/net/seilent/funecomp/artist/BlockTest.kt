@@ -404,4 +404,20 @@ class BlockTest {
         assertNotNull(blocks.covering(false, "C", emptySet(), null, 123, "other"))
         assertNull(blocks.covering(false, "C", emptySet(), null, 123, null))
     }
+
+    @Test
+    fun heldLinesRoundTripPerDevice() {
+        val f = tmp.root.resolve("held.tsv")
+        val mb = "b539e453-c4fe-47e3-8a07-8517eac74429"
+        ArtBlocks(f).apply {
+            hold("A\tb", null, "rfcomm:X")
+            hold("C", mb, "rfcomm:Y")
+            save()
+        }
+        val again = ArtBlocks(f)
+        assertEquals(listOf(ArtBlocks.Held("A\tb", null, "rfcomm:X")), again.held("rfcomm:X"))
+        assertEquals(listOf(ArtBlocks.Held("C", mb, "rfcomm:Y")), again.held("rfcomm:Y"))
+        assertTrue(again.records().isEmpty())
+    }
 }
+

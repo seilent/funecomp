@@ -113,6 +113,8 @@ class ForwardTest {
         blocks: Forward.Blocks? = null,
         log: (String) -> Unit = {},
         onLibGet: (Session) -> Unit = {},
+        known: (String, String?) -> Boolean = { _, _ -> true },
+        gate: () -> Boolean = { true },
     ) = Forward(
         { device },
         { n, m, w, h ->
@@ -122,7 +124,7 @@ class ForwardTest {
         },
         {
             looked.gates++
-            true
+            gate()
         },
         { sweeping() && !breaker.open },
         retagging,
@@ -134,6 +136,7 @@ class ForwardTest {
         breaker,
         marks = marks,
         blocks = blocks,
+        cached = known,
         log = log,
     )
 
@@ -722,4 +725,217 @@ class ForwardTest {
         assertTrue(listOf("gemma", "hal").all { it in sim.device.stored.keys })
         assertFalse("gemma, hal" in sim.device.stored.keys)
     }
+
+    private fun dropSim(vararg extra: String): Pair<Sim, Session> {
+        val s0 = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = tmp.newFolder()), Library(
+            (1..7).map { Library.track("Artist %03d".format(it), "Album $it", "Song $it", 1, 200_000) } +
+                extra.mapIndexed { i, n -> Library.track(n, "Other $i", "Tune $i", 1, 200_000) },
+        ))
+        sims += s0
+        return s0 to session(s0.listen(0))
+    }
+
+    @Test
+    fun aDropDeletesLibraryPhoneAndUntaggedCopiesAlike() {
+        val (sim, s) = dropSim()
+        seed(s, "Lib", library)
+        seed(s, "Ph", phone)
+        seed(s, "Bare")
+        val records = ArtBlocks()
+        for (n in listOf("Lib", "Ph", "Bare")) records.drop("name:$n", null, n, 1)
+        forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertEquals(setOf("Lib", "Ph", "Bare"), deleted().toSet())
+        assertTrue(listOf("lib", "ph", "bare").none { it in sim.device.stored.keys })
+        assertTrue(records.pending("tcp:A").isEmpty())
+        assertTrue(records.records().isEmpty())
+    }
+
+    @Test
+    fun aDropWithNoListedMatchIsAppliedAndAFailedDeleteStaysPending() {
+        val (_, port) = sim(10, 1, Options.IMG_CAP, "busy=IMG_DEL:1")
+        val s = session(port)
+        seed(s, "Gone")
+        val records = ArtBlocks()
+        records.drop("name:Nobody", null, "Nobody", 1)
+        records.drop("name:Gone", null, "Gone", 1)
+        forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertEquals(listOf("name:Gone"), records.pending("tcp:A").map { it.key })
+        assertTrue(deleted().isEmpty())
+        forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertEquals(listOf("Gone"), deleted())
+        assertTrue(records.pending("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun aDropOnAKeyThePhoneHoldsIsAppliedWithNoDelete() {
+        val (sim, s) = dropSim()
+        seed(s, "Held")
+        val records = ArtBlocks()
+        records.drop("name:Held", null, "Held", 1)
+        val b = Forward.Blocks(records, { "tcp:A" }, { n, m -> m ?: "name:$n" }, { it == "name:Held" })
+        forward(Lookups(), sweeping = { false }, blocks = b).run(s) { true }
+        assertTrue(deleted().isEmpty())
+        assertTrue("held" in sim.device.stored.keys)
+        assertTrue(records.pending("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun aDropDeletesBeforeTheSameRunPushes() {
+        val (_, s) = dropSim()
+        forward(Lookups()).run(s) { true }
+        val now = device.playback.state.artists.first()
+        val records = ArtBlocks()
+        records.drop("name:$now", null, now, 1)
+        val before = synchronized(lines) { lines.size }
+        forward(Lookups(), blocks = blocks(records, "tcp:A")).run(s) { true }
+        val after = synchronized(lines) { lines.drop(before) }
+        val del = after.indexOfFirst { it == "deleted name=$now" }
+        val put = after.indexOfLast { it.startsWith("stored name=$now ") }
+        assertTrue("$del $put", del >= 0 && put > del)
+    }
+
+    @Test
+    fun anOrphanIsLookedUpOnceAndAHitReplacesTheCopy() {
+        val (sim, s) = dropSim("Orphan", "Kept")
+        assertTrue(ImagePush(s, "Orphan", null, jpeg(240, 320, 3000), 240, 320).run() is ImagePush.Outcome.Done)
+        assertTrue(ImagePush(s, "Kept", null, jpeg(240, 320, 3000), 240, 320).run() is ImagePush.Outcome.Done)
+        val looked = Lookups()
+        val known: (String, String?) -> Boolean = { n, _ -> n != "Orphan" || "Orphan" in looked.names }
+        forward(looked, known = known).run(s) { true }
+        assertEquals(1, looked.names.count { it == "Orphan" })
+        assertFalse("Kept" in looked.names)
+        assertEquals(2, stores().count { it == "Orphan" })
+        assertEquals(1, stores().count { it == "Kept" })
+        assertTrue("orphan" in sim.device.stored.keys)
+        forward(looked, known = known).run(s) { true }
+        assertEquals(1, looked.names.count { it == "Orphan" })
+    }
+
+    @Test
+    fun anOrphanMissWithAPlaceholderDropsTheCopyAndAPlainMissKeepsIt() {
+        val (sim, s) = dropSim("Silhouette", "Plain")
+        seed(s, "Silhouette")
+        seed(s, "Plain")
+        val records = ArtBlocks()
+        val looked = Lookups()
+        val f = Forward(
+            { device },
+            { n, m, w, h ->
+                looked.names += n
+                when (n) {
+                    "Silhouette" -> null.also { records.drop("name:$n", null, n, 1) }
+                    "Plain" -> null
+                    else -> Art(jpeg(w, h), w, h, n, m, "test", null)
+                }
+            },
+            { true },
+            { true },
+            { true },
+            { s2, offset, rev ->
+                val snap = device.lib.keyed(Enums.View.artists)
+                s2.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", offset, LIB_PAGE, rev.takeUnless { snap }, rev.takeIf { snap }))
+            },
+            Sweep.Breaker({ 0L }),
+            blocks = blocks(records, "tcp:A"),
+            cached = { n, _ -> n !in setOf("Silhouette", "Plain") || n in looked.names },
+        )
+        f.run(s) { true }
+        assertTrue(listOf("silhouette", "plain").all { it in sim.device.stored.keys })
+        f.run(s) { true }
+        assertEquals(listOf("Silhouette"), deleted())
+        assertTrue("plain" in sim.device.stored.keys)
+        assertTrue(records.pending("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun aGatedOrphanHitIsPushedOverTheCopyOnceTheGateOpens() {
+        val (sim, s) = dropSim("Orphan")
+        assertTrue(ImagePush(s, "Orphan", null, jpeg(240, 320, 3000), 240, 320).run() is ImagePush.Outcome.Done)
+        val records = ArtBlocks()
+        val looked = Lookups()
+        val known: (String, String?) -> Boolean = { n, _ -> n != "Orphan" || "Orphan" in looked.names }
+        forward(looked, blocks = blocks(records, "tcp:A"), known = known, gate = { looked.names.lastOrNull() != "Orphan" }).run(s) { true }
+        assertEquals(1, looked.names.count { it == "Orphan" })
+        assertEquals(1, stores().count { it == "Orphan" })
+        assertEquals(listOf("Orphan"), records.held("tcp:A").map { it.name })
+        assertTrue(records.pushes("tcp:A").isEmpty())
+        forward(looked, blocks = blocks(records, "tcp:A"), known = known).run(s) { true }
+        assertEquals(2, stores().count { it == "Orphan" })
+        assertTrue("orphan" in sim.device.stored.keys)
+        assertTrue(records.held("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun anOrphanReplaceDoesNotGrowTheBudget() {
+        val orphans = listOf("Oa", "Ob", "Oc", "Od")
+        val s0 = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = tmp.newFolder(), imgCap = 20_000), Library(
+            (1..7).map { Library.track("Artist %03d".format(it), "Album $it", "Song $it", 1, 200_000) } +
+                orphans.flatMap { n -> (1..2).map { i -> Library.track(n, "Two $n", "Tune $i", i, 200_000) } } +
+                Library.track("Fresh", "Last", "Once", 1, 200_000),
+        ))
+        sims += s0
+        val s = session(s0.listen(0))
+        for (n in orphans) assertTrue(ImagePush(s, n, null, jpeg(240, 320, 3000), 240, 320).run() is ImagePush.Outcome.Done)
+        val looked = Lookups()
+        forward(looked, missing = { it.startsWith("Artist") }, known = { n, _ -> n !in orphans || n in looked.names }).run(s) { true }
+        assertTrue(orphans.all { n -> looked.names.count { it == n } == 1 })
+        assertEquals(1, stores().count { it == "Fresh" })
+    }
+
+    @Test
+    fun heldOrphanPushesWaitBehindTheCurrentArtist() {
+        val held = listOf("Ha", "Hb", "Hc")
+        val (_, s) = dropSim(*held.toTypedArray())
+        for (n in held) assertTrue(ImagePush(s, n, null, jpeg(240, 320, 3000), 240, 320).run() is ImagePush.Outcome.Done)
+        val records = ArtBlocks()
+        for (n in held) records.hold(n, null, "tcp:A")
+        val now = device.playback.state.artists.first()
+        val before = synchronized(lines) { lines.size }
+        forward(Lookups(), blocks = blocks(records, "tcp:A")).run(s) { true }
+        val after = synchronized(lines) { lines.drop(before) }
+        val current = after.indexOfFirst { it.startsWith("stored name=$now ") }
+        val first = after.indexOfFirst { l -> held.any { l.startsWith("stored name=$it ") } }
+        assertTrue("$current $first", current >= 0 && first > current)
+        assertTrue(held.all { n -> after.any { it.startsWith("stored name=$n ") } })
+        assertTrue(records.held("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun anotherDeviceGetsNoneOfTheHeldPushes() {
+        val (_, s) = dropSim("Ha")
+        seed(s, "Ha")
+        val records = ArtBlocks()
+        records.hold("Ha", null, "tcp:A")
+        forward(Lookups(), blocks = blocks(records, "tcp:B")).run(s) { true }
+        assertEquals(1, stores().count { it == "Ha" })
+        assertEquals(listOf("Ha"), records.held("tcp:A").map { it.name })
+    }
+
+    @Test
+    fun aListedNameCachedUnderItsLibraryMbidIsNoOrphan() {
+        val s0 = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = tmp.newFolder()), Library(
+            (1..7).map { Library.track("Artist %03d".format(it), "Album $it", "Song $it", 1, 200_000) } +
+                Library.track("Tagged", "Tags", "One", 1, 200_000, mbids = listOf("mb-t")),
+        ))
+        sims += s0
+        val s = session(s0.listen(0))
+        seed(s, "Tagged")
+        val looked = Lookups()
+        forward(looked, known = { n, m -> n != "Tagged" || m == "mb-t" }).run(s) { true }
+        assertFalse("Tagged" in looked.names)
+    }
+
+    @Test
+    fun aHeldPushGoesOutWithTheSweepOff() {
+        val (sim, s) = dropSim("Ha")
+        assertTrue(ImagePush(s, "Ha", null, jpeg(240, 320, 3000), 240, 320).run() is ImagePush.Outcome.Done)
+        val records = ArtBlocks()
+        records.hold("Ha", null, "tcp:A")
+        val looked = Lookups()
+        forward(looked, sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertEquals(2, stores().count { it == "Ha" })
+        assertTrue("ha" in sim.device.stored.keys)
+        assertTrue(records.held("tcp:A").isEmpty())
+    }
 }
+

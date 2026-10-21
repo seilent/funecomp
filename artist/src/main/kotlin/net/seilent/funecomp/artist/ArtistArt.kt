@@ -1,6 +1,7 @@
 package net.seilent.funecomp.artist
 
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.CRC32
 
 class Art(val jpeg: ByteArray, val w: Int, val h: Int, val name: String, val mbid: String?, val source: String, val credit: Credit?, val wrongArtist: Boolean = false)
@@ -17,6 +18,7 @@ class ArtistArt(
     private val online: () -> Boolean = { true },
     val blocks: ArtBlocks = ArtBlocks(),
     val picks: ArtPicks = ArtPicks(),
+    private val placeholders: Set<String> = Deezer.PLACEHOLDERS,
 ) {
     private val ua = "funecomp/$version (github@seilent.net)"
     private fun api(limiter: RateLimiter) = Api(http, ua, limiter, sleep)
@@ -33,7 +35,8 @@ class ArtistArt(
     private val fanartTv = FanartTv(api(otherLimiter), { sources().fanartTvKey.trim() })
     private val discogs = Discogs(api(discogsLimiter))
     private val youtube = YouTube(api(otherLimiter))
-    private val deezer = Deezer(api(otherLimiter))
+    private val deezer = Deezer(api(otherLimiter), placeholders)
+    private var scanned = false
     private val images = mapOf(
         Wikimedia.SOURCE to api(wikimediaLimiter),
         Sources.THE_AUDIO_DB to api(audioDbLimiter),
@@ -79,9 +82,11 @@ class ArtistArt(
             }
         }
         if (!online()) throw IOException("offline")
-        val found = find(name, tag, id, key, w, h, on, now)
+        val skipped = AtomicBoolean(false)
+        val found = find(name, tag, id, key, w, h, on, now, skipped)
         if (found == null) {
             cache.putMiss(key, now, on, keyHash)
+            if (skipped.get() && blocks.drop(key, id, name.trim(), now)) blocks.save()
             due(now)
             return null
         }
@@ -98,7 +103,7 @@ class ArtistArt(
         val id = tag ?: resolve(name, now)
         val key = id ?: "name:${Names.fold(name)}"
         val found = try {
-            if (online()) find(name, tag, id, key, w, h, on, now) else null
+            if (online()) find(name, tag, id, key, w, h, on, now, AtomicBoolean(false)) else null
         } catch (e: IOException) {
             null
         }
@@ -189,6 +194,7 @@ class ArtistArt(
 
     private fun image(source: String, url: String, id: String, credit: Credit?, title: String): Offered {
         val src = (images[source] ?: otherImages).get(url)?.body ?: return Offered.Refused(PickLink.UNREACHABLE)
+        if (source == Sources.DEEZER && deezer.placeholder(src)) return Offered.Refused(PickLink.NOT_IMAGE)
         check(src)?.let { return Offered.Refused(it) }
         return Offered.Ok(Offer(ArtPicks.IMAGE, source, url, id, credit, null, title, src))
     }
@@ -231,12 +237,12 @@ class ArtistArt(
         return true
     }
 
-    private fun find(name: String, tag: String?, id: String?, key: String, w: Int, h: Int, on: Set<String>, now: Long): Found? {
-        lookup(name, name, id, w, h, on, key)?.let { (c, src, jpeg) -> return Found(c, src, jpeg, id, if (tag == null && id != null) name.trim() else "") }
+    private fun find(name: String, tag: String?, id: String?, key: String, w: Int, h: Int, on: Set<String>, now: Long, skipped: AtomicBoolean): Found? {
+        lookup(name, name, id, w, h, on, key, skipped)?.let { (c, src, jpeg) -> return Found(c, src, jpeg, id, if (tag == null && id != null) name.trim() else "") }
         if (tag != null) return null
         for (v in Names.variants(name)) {
             val vid = resolve(v, now)
-            val (c, src, jpeg) = lookup(v, name, vid, w, h, on, key) ?: continue
+            val (c, src, jpeg) = lookup(v, name, vid, w, h, on, key, skipped) ?: continue
             return Found(c, src, jpeg, vid, if (vid != null) v else "")
         }
         return null
@@ -249,7 +255,31 @@ class ArtistArt(
         return Art(f.jpeg, w, h, name.trim(), f.mbid, f.c.source, f.c.credit, tag == null && wrongArtistOffered(e, name))
     }
 
-    fun blocked(e: ArtCache.Entry): Boolean = !picked(e) && blocks.blocked(e.key, e.source, ImageIds.of(e), cache.sha(e), e.name)
+    fun blocked(e: ArtCache.Entry): Boolean = !picked(e) && (blocks.blocked(e.key, e.source, ImageIds.of(e), cache.sha(e), e.name) || placeholder(e))
+
+    private fun placeholder(e: ArtCache.Entry) = e.source == Sources.DEEZER && cache.sha(e) in placeholders
+
+    @Synchronized
+    fun scanPlaceholders(): Int {
+        if (scanned) return 0
+        var n = 0
+        for (e in cache.entries()) {
+            try {
+                if (!placeholder(e)) continue
+                cache.drop(e.key)
+                blocks.drop(e.key, e.mbid, e.name, clock())
+                n++
+            } catch (_: IOException) {
+            }
+        }
+        if (n > 0) blocks.save()
+        scanned = true
+        return n
+    }
+
+    fun hasHit(key: String): Boolean = cache.hit(key) != null
+
+    fun known(name: String, mbid: String?): Boolean = keyOf(name, mbid).let { cache.hit(it) != null || cache.miss(it) != null }
 
     fun forget(key: String) = cache.drop(key)
 
@@ -340,7 +370,7 @@ class ArtistArt(
         return id
     }
 
-    private fun lookup(name: String, display: String, id: String?, w: Int, h: Int, on: Set<String>, key: String): Triple<Candidate, ByteArray, ByteArray>? {
+    private fun lookup(name: String, display: String, id: String?, w: Int, h: Int, on: Set<String>, key: String, skipped: AtomicBoolean): Triple<Candidate, ByteArray, ByteArray>? {
         var error: IOException? = null
         fun <T> attempt(block: () -> T): T? = try {
             block()
@@ -362,6 +392,10 @@ class ArtistArt(
             while (attempt { candidates.hasNext() } == true) {
                 val c = candidates.next()
                 val src = attempt { (images[c.source] ?: otherImages).get(c.url) }?.body ?: continue
+                if (c.source == Sources.DEEZER && deezer.placeholder(src)) {
+                    skipped.set(true)
+                    continue
+                }
                 if (blocks.blocked(key, c.source, "", ArtCache.sha256(src), display)) continue
                 val jpeg = Backdrop.render(codec, src, w, h) ?: continue
                 return Triple(c, src, jpeg)

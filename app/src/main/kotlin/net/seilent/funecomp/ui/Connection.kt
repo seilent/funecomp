@@ -187,6 +187,7 @@ fun ArtBlockedPage(ctx: Ctx, blocked: List<ArtBlocks.Record>) {
         val lines = when (r) {
             is ArtBlocks.Block -> listOf(Sources.label(r.source))
             is ArtBlocks.Reject -> listOf("wrong artist")
+            is ArtBlocks.Drop -> emptyList()
         }
         CreditRow(r.name, lines, m.testTag("art.blocked.$j"), focused = focused) {
             take()

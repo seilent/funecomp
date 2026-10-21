@@ -682,11 +682,16 @@ object Remote : Control {
                 override fun mark(): Any = a.mark()
                 override fun holds(mark: Any) = mark is ArtistArt.Mark && a.holds(mark)
             },
-            Forward.Blocks(a.blocks, { spec }, a::keyOf) { !Firmwares.sending },
+            Forward.Blocks(a.blocks, { spec }, a::keyOf, a::hasHit) { !Firmwares.sending },
+            a::known,
+            { !shown },
         ) { Log.i(TAG, it) }
         return ArtWorker(
             { l.session },
-            { s, run -> forward.run(s, run::live) },
+            { s, run ->
+                a.scanPlaceholders().takeIf { it > 0 }?.let { Log.i(TAG, "art placeholders dropped $it") }
+                forward.run(s, run::live)
+            },
             { final -> !shown || showBackdrop(a, final) },
             { if (shown) fetch(a) },
             trigger = { trigger.get() },

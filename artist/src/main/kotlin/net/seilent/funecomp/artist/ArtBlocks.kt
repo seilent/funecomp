@@ -33,11 +33,23 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         val crc: Long? = null,
     ) : Record
 
+    data class Drop(
+        override val key: String,
+        override val mbid: String?,
+        override val name: String,
+        override val at: Long,
+        val applied: Set<String> = emptySet(),
+    ) : Record
+
+    data class Held(val name: String, val mbid: String?, val device: String)
+
     data class Push(val name: String, val mbid: String?, val done: Set<String> = emptySet(), val origin: Int? = null)
 
     private val blocks = ArrayList<Block>()
     private val rejects = ArrayList<Reject>()
     private val pushes = ArrayList<Push>()
+    private val drops = ArrayList<Drop>()
+    private val held = ArrayList<Held>()
 
     init {
         load()
@@ -48,8 +60,37 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         when (r) {
             is Block -> blocks += r
             is Reject -> rejects += r
+            is Drop -> {
+                drop(r.key, r.mbid, r.name, r.at)
+                return
+            }
         }
         pushes.removeAll { Names.fold(it.name) == Names.fold(r.name) }
+        held.removeAll { Names.fold(it.name) == Names.fold(r.name) }
+    }
+
+    @Synchronized
+    fun drop(key: String, mbid: String?, name: String, at: Long): Boolean {
+        if (drops.any { it.key == key }) return false
+        drops += Drop(key, Names.mbid(mbid), name, at)
+        return true
+    }
+
+    @Synchronized
+    fun drops(): List<Drop> = drops.toList()
+
+    @Synchronized
+    fun hold(name: String, mbid: String?, device: String) {
+        held.removeAll { it.device == device && Names.fold(it.name) == Names.fold(name) }
+        held += Held(name, Names.mbid(mbid), device)
+    }
+
+    @Synchronized
+    fun held(device: String): List<Held> = held.filter { it.device == device }
+
+    @Synchronized
+    fun released(h: Held) {
+        held.remove(h)
     }
 
     @Synchronized
@@ -57,6 +98,10 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         when (r) {
             is Block -> blocks.removeAll { it.key == r.key && it.source == r.source && it.id == r.id && it.at == r.at }
             is Reject -> rejects.removeAll { it.resolvedBy == r.resolvedBy && it.mbid == r.mbid && it.at == r.at }
+            is Drop -> {
+                drops.removeAll { it.key == r.key }
+                return
+            }
         }
         pushes.removeAll { Names.fold(it.name) == Names.fold(r.name) }
         pushes += Push(r.name, if (r is Block) Names.mbid(r.key) else null)
@@ -84,10 +129,11 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
     fun records(): List<Record> = (blocks + rejects).sortedByDescending { it.at }
 
     @Synchronized
-    fun pending(device: String): List<Record> = records().filter {
+    fun pending(device: String): List<Record> = (records() + drops).filter {
         device !in when (it) {
             is Block -> it.applied
             is Reject -> it.applied
+            is Drop -> it.applied
         }
     }
 
@@ -99,6 +145,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
             val (rc, applied) = when (r) {
                 is Block -> r.crc to r.applied
                 is Reject -> r.crc to r.applied
+                is Drop -> null to r.applied
             }
             (r is Reject) == wrongArtist && (r.key in keys || Names.fold(r.name) == f || (m != null && r.mbid == m)) &&
                 (rc == crc || (rc == null && device != null && device !in applied))
@@ -113,6 +160,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         when (r) {
             is Block -> blocks.replaceAll { if (it == r || (it.key == r.key && it.at == r.at && it.id == r.id)) it.copy(applied = it.applied + device) else it }
             is Reject -> rejects.replaceAll { if (it == r || (it.resolvedBy == r.resolvedBy && it.at == r.at)) it.copy(applied = it.applied + device) else it }
+            is Drop -> drops.replaceAll { if (it.key == r.key) it.copy(applied = it.applied + device) else it }
         }
     }
 
@@ -124,7 +172,9 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
     @Synchronized
     fun encode(): String = buildString {
         for (b in blocks) line("block", b.key, b.mbid ?: "", b.source, b.id, b.sha, b.name, b.at.toString(), b.applied.joinToString(","), *listOfNotNull(b.crc?.toString()).toTypedArray())
+        for (d in drops) line("drop", d.key, d.mbid ?: "", d.name, d.at.toString(), d.applied.joinToString(","))
         for (r in rejects) line("reject", r.key, r.mbid ?: "", r.resolvedBy, r.name, r.at.toString(), r.applied.joinToString(","), *listOfNotNull(r.crc?.toString()).toTypedArray())
+        for (h in held) line("held", h.name, h.mbid ?: "", h.device)
         for (p in pushes) {
             line("push", p.name, p.mbid ?: "", p.done.joinToString(","))
             p.origin?.let { o -> Enums.ImgOrigin.names[o]?.let { line("origin", p.name, p.mbid ?: "", it) } }
@@ -154,6 +204,8 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
             val ok = when (p[0]) {
                 "block" -> (p.size == 9 || p.size == 10) && p[7].toLongOrNull() != null && blocks.add(Block(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5], p[6], p[7].toLong(), set(p[8]), p.getOrNull(9)?.toLongOrNull()))
                 "reject" -> (p.size == 7 || p.size == 8) && p[5].toLongOrNull() != null && rejects.add(Reject(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5].toLong(), set(p[6]), p.getOrNull(7)?.toLongOrNull()))
+                "drop" -> p.size == 6 && p[4].toLongOrNull() != null && drops.none { it.key == p[1] } && drops.add(Drop(p[1], p[2].ifEmpty { null }, p[3], p[4].toLong(), set(p[5])))
+                "held" -> p.size == 4 && held.add(Held(p[1], p[2].ifEmpty { null }, p[3]))
                 "push" -> p.size == 4 && pushes.add(Push(p[1], p[2].ifEmpty { null }, set(p[3])))
                 "origin" -> p.size == 4 && origin(p[1], p[2].ifEmpty { null }, p[3])
                 else -> false

@@ -29,12 +29,15 @@ class Forward(
     private val progress: () -> Unit = {},
     private val marks: Marks? = null,
     private val blocks: Blocks? = null,
+    private val cached: (String, String?) -> Boolean = { _, _ -> true },
+    private val holding: () -> Boolean = { true },
     private val log: (String) -> Unit = {},
 ) {
     class Blocks(
         val records: ArtBlocks,
         val device: () -> String?,
         val keyOf: (String, String?) -> String,
+        val hit: (String) -> Boolean = { false },
         val open: () -> Boolean = { true },
     )
 
@@ -44,7 +47,7 @@ class Forward(
         fun holds(mark: Any): Boolean
     }
 
-    private class Known(val session: Session, val rev: Long?, val names: MutableSet<String>, val budget: Sweep.Budget, val untagged: MutableSet<String>) {
+    private class Known(val session: Session, val rev: Long?, val names: MutableSet<String>, val budget: Sweep.Budget, val untagged: MutableSet<String>, val orphans: MutableSet<String>) {
         var swept: Any? = null
         var tagged = false
     }
@@ -69,6 +72,7 @@ class Forward(
             if (q.stop != ArtPusher.Stop.DONE) return q
         }
         if (retagging() && s.hello?.has("imgOrigin") == true) retag(s, pusher, keep)?.let { return it }
+        if (holding()) held(s, pusher, keep)?.let { return it }
         if (!sweeping()) return now
         return sweep(s, pusher, keep)
     }
@@ -79,7 +83,7 @@ class Forward(
         val l = if (todo.isEmpty()) null else listed?.takeIf { it.session === s && it.records.containsAll(ids) }?.listing ?: pusher.listing()?.also { l ->
             listed = Listed(s, l, ids)
             val cap = l.cap
-            if (cap != null && known?.session !== s) known = Known(s, device().lib.dataRev, HashSet(l.names), Sweep.Budget(l.bytes ?: 0, cap), untagged(l))
+            if (cap != null && known?.session !== s) known = Known(s, device().lib.dataRev, HashSet(l.names), Sweep.Budget(l.bytes ?: 0, cap), untagged(l), orphans(l))
         }
         if (todo.isNotEmpty() && l == null) {
             if (s.closedReason != null) return ArtPusher.Report(ArtPusher.Stop.CLOSED)
@@ -88,6 +92,10 @@ class Forward(
         if (l != null) {
             val k = known?.takeIf { it.session === s }
             for (r in todo) {
+                if (r is ArtBlocks.Drop && b.hit(r.key)) {
+                    b.records.applied(r, dev)
+                    continue
+                }
                 val names = l.entries.filter { e -> matches(r, e, b) }.map { it.name }.filter { it in l.names }
                 var ok = true
                 for (n in names) {
@@ -97,6 +105,7 @@ class Forward(
                     log("art del $n -> ${if (res is Session.Result.Failed) "error ${res.error.code}" else res.javaClass.simpleName.lowercase()}")
                     if (res is Session.Result.Ok) {
                         k?.names?.remove(n)
+                        k?.orphans?.remove(n)
                         k?.untagged?.remove(n)
                         l.names.remove(n)
                     } else {
@@ -137,6 +146,62 @@ class Forward(
         return null
     }
 
+    private fun orphans(l: ArtPusher.Listing): MutableSet<String> =
+        l.entries.filter { it.name in l.names && !cached(it.name, it.mbid) }.mapTo(HashSet()) { it.name }
+
+    private fun held(s: Session, pusher: ArtPusher, keep: () -> Boolean): ArtPusher.Report? {
+        val b = blocks ?: return null
+        val dev = b.device() ?: return null
+        val list = b.records.held(dev)
+        if (list.isEmpty()) return null
+        val rev = device().lib.dataRev
+        val k = known?.takeIf { it.session === s && it.rev == rev } ?: run {
+            val l = pusher.listing() ?: return if (s.closedReason != null || !keep()) stopped(s) else null
+            log("art list names=${l.names.size} bytes=${l.bytes} cap=${l.cap}")
+            val cap = l.cap ?: return null
+            Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l), orphans(l)).also { known = it }
+        }
+        val pushed = LinkedHashMap<String, Long>()
+        val stored = ArrayList<String>()
+        val missing = ArrayList<String>()
+        val failed = ArrayList<String>()
+        var dirty = false
+        var count = 0
+        fun report(stop: ArtPusher.Stop) = ArtPusher.Report(stop, pushed, stored, missing, failed).also {
+            if (dirty) b.records.save()
+            say("held", it)
+        }
+        for (h in list) {
+            if (!keep()) return report(ArtPusher.Stop.PREEMPTED)
+            if (!holding()) break
+            if (device().lib.dataRev != rev) {
+                if (dirty) b.records.save()
+                return null
+            }
+            if (!k.budget.room) break
+            if (h.name !in k.names) {
+                b.records.released(h)
+                dirty = true
+                continue
+            }
+            val r = pusher.run(listOf(h.name to h.mbid), origin = Enums.ImgOrigin.library)
+            pushed += r.pushed
+            stored += r.stored
+            missing += r.missing
+            failed += r.failed
+            k.names += r.stored + r.pushed.keys
+            if (h.name in r.pushed || h.name in r.stored || h.name in r.missing) {
+                b.records.released(h)
+                dirty = true
+            }
+            if (++count % CREDITS_EVERY == 0) progress()
+            if (r.stop == ArtPusher.Stop.GATE) break
+            if (r.stop != ArtPusher.Stop.DONE) return report(r.stop)
+        }
+        report(ArtPusher.Stop.DONE)
+        return null
+    }
+
     private fun untagged(l: ArtPusher.Listing): MutableSet<String> =
         l.entries.filter { it.origins.isEmpty() && it.name.isNotBlank() }.mapTo(LinkedHashSet()) { it.name }
 
@@ -148,7 +213,7 @@ class Forward(
             val l = pusher.listing() ?: return if (s.closedReason != null || !keep()) stopped(s) else null
             log("art list names=${l.names.size} bytes=${l.bytes} cap=${l.cap}")
             val cap = l.cap ?: return null
-            Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l)).also { known = it }
+            Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l), orphans(l)).also { known = it }
         }
         if (k.tagged) return null
         val lib = when (val got = rows(s, rev, keep)) {
@@ -220,6 +285,8 @@ class Forward(
     }
 
     private fun account(k: Known, r: ArtPusher.Report) {
+        k.orphans -= r.stored.toSet()
+        k.orphans -= r.pushed.keys
         k.names += r.stored
         for (name in r.pushed.keys) {
             k.names += name
@@ -258,7 +325,7 @@ class Forward(
                 val l = pusher.listing() ?: return ArtPusher.Report(if (s.closedReason != null) ArtPusher.Stop.CLOSED else ArtPusher.Stop.PREEMPTED)
                 log("art list names=${l.names.size} bytes=${l.bytes} cap=${l.cap}")
                 val cap = l.cap ?: return ArtPusher.Report(ArtPusher.Stop.DONE)
-                Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l)).also { known = it }
+                Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l), orphans(l)).also { known = it }
             }
             if (k.swept?.let { marks?.holds(it) } == true) {
                 log("art sweep kept")
@@ -281,10 +348,22 @@ class Forward(
         var gated = false
         var cut = false
         var count = 0
-        fun report(stop: ArtPusher.Stop, complete: Boolean = false) = ArtPusher.Report(stop, pushed, stored, missing, failed, complete).also { say("sweep", it) }
+        val dev = blocks?.device()
+        var dirty = false
+        fun saved() {
+            if (dirty) blocks?.records?.save()
+            dirty = false
+        }
+        fun report(stop: ArtPusher.Stop, complete: Boolean = false) = ArtPusher.Report(stop, pushed, stored, missing, failed, complete).also {
+            saved()
+            say("sweep", it)
+        }
         for (row in Sweep.order(rows.filter { real(it.name) })) {
             if (!keep()) return report(ArtPusher.Stop.PREEMPTED)
-            if (device().lib.dataRev != rev) return null
+            if (device().lib.dataRev != rev) {
+                saved()
+                return null
+            }
             if (!sweeping() || known !== k) {
                 cut = true
                 break
@@ -293,13 +372,26 @@ class Forward(
                 log("art sweep budget ${k.budget.used} of ${k.budget.cap}")
                 break
             }
-            if (row.name in k.names) continue
-            val r = pusher.run(listOf(row.name to row.mbid), k.names, Enums.ImgOrigin.library)
+            if (row.name in k.orphans && cached(row.name, row.mbid)) k.orphans -= row.name
+            val orphan = row.name in k.orphans
+            if (row.name in k.names && !orphan) continue
+            val r = pusher.run(listOf(row.name to row.mbid), if (orphan) emptySet() else k.names, Enums.ImgOrigin.library)
             pushed += r.pushed
             stored += r.stored
             missing += r.missing
             failed += r.failed
-            account(k, r)
+            if (orphan) {
+                k.names += r.stored + r.pushed.keys
+                val done = row.name in r.pushed || row.name in r.stored || row.name in r.missing
+                val held = if (done || dev == null) null else blocks?.records?.takeIf { cached(row.name, row.mbid) }
+                if (held != null && dev != null) {
+                    held.hold(row.name, row.mbid, dev)
+                    dirty = true
+                }
+                if (done || held != null) k.orphans -= row.name
+            } else {
+                account(k, r)
+            }
             when (r.stop) {
                 ArtPusher.Stop.GATE -> gated = true
                 ArtPusher.Stop.DONE -> {}
