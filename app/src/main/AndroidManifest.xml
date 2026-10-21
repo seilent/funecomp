@@ -20,7 +20,7 @@
         <activity
             android:name=".Main"
             android:exported="true"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboard|keyboardHidden|navigation|uiMode"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|density|keyboard|keyboardHidden|navigation|uiMode|fontScale|locale|layoutDirection"
             android:launchMode="singleTask"
             android:windowSoftInputMode="adjustNothing"
             android:theme="@android:style/Theme.Material.NoActionBar">
