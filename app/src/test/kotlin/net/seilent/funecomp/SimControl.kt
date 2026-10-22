@@ -19,6 +19,7 @@ import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.LyrOffsetReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
+import net.seilent.funecomp.proto.QueueOpReply
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
@@ -188,6 +189,23 @@ class SimControl(
 
     override fun queueOp(cmd: Int, slot: Long?, to: Long?, tracks: List<Long>) {
         req(Msg.QUEUE_OP, Req.queueOp(cmd, device.queue.rev ?: device.playback.state.queueRev, slot = slot, to = to, tracks = tracks))
+    }
+
+    val adds = ArrayList<ByteArray>()
+
+    override fun queueAdd(cmd: Int, view: Int?, parent: String?, tracks: List<Long>, done: (Long?, Int?) -> Unit) {
+        val lib = device.lib.takeIf { tracks.isEmpty() }
+        val rev = if (cmd == Enums.QueueCmd.add) null else device.queue.rev ?: device.playback.state.queueRev
+        val payload = Req.queueOp(cmd, rev, tracks = tracks, view = view.takeIf { lib != null }, parent = parent.takeIf { lib != null }, libRev = lib?.libRev(view), snapRev = lib?.snapRev(view))
+        adds += payload
+        when (val a = req(Msg.QUEUE_OP, payload)) {
+            is Answer.Ok -> {
+                val r = QueueOpReply.from(Node.decode("QUEUE_OP.reply", a.payload))
+                r.rev?.let { device = device.withQueueRev(it) }
+                done(r.added, null)
+            }
+            is Answer.Fail -> done(null, a.code)
+        }
     }
 
     override fun set(key: String, value: String) {

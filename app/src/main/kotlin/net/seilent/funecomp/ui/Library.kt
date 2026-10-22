@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -25,8 +26,10 @@ import kotlin.random.Random
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.proto.LibRow
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.LibList
 
@@ -54,24 +57,33 @@ fun LibList.row(i: Int, control: Control, view: Int, parent: String): LibRow? {
 
 class Ctx(val device: DeviceState, val control: Control, val nav: Nav, val sheet: SheetState, val toast: ToastState, val browse: BrowseSessions)
 
-private val MUSIC_VIEWS = listOf(Enums.View.artists, Enums.View.albums, Enums.View.songs, Enums.View.playlists, Enums.View.folders)
+const val ADD_TO_QUEUE = "add to queue"
+private const val PLAY_NEXT = "play next"
+
+fun musicViews(device: DeviceState) = listOf(Enums.View.artists, Enums.View.albums, Enums.View.songs) +
+    listOfNotNull(Enums.View.genres.takeIf { device.has("genres") }) + listOf(Enums.View.playlists, Enums.View.folders)
 
 @Composable
 fun Music(ctx: Ctx) {
-    var pivot by rememberSaveable { mutableIntStateOf(0) }
+    val views = musicViews(ctx.device)
+    var saved by rememberSaveable { mutableIntStateOf(Enums.View.artists) }
+    val pivot = views.indexOf(saved).coerceAtLeast(0)
     var folder by rememberSaveable { mutableStateOf("") }
-    val inFolder = MUSIC_VIEWS[pivot] == Enums.View.folders && folder.isNotEmpty()
+    val inFolder = views[pivot] == Enums.View.folders && folder.isNotEmpty()
     val up = { folder = folder.substringBeforeLast('/', "") }
     BackHandler(inFolder) { up() }
     val back = {
         if (inFolder) up() else ctx.nav.pop()
         Unit
     }
-    HubPage("music", back, MUSIC_VIEWS.map { Enums.View.names.getValue(it) }, pivot, { pivot = it }) { shown ->
-        when (val view = MUSIC_VIEWS[shown]) {
-            Enums.View.playlists -> PlaylistRows(ctx)
-            Enums.View.folders -> Pane(ctx, view, folder) { i, r, list -> folderRow(ctx, folder, i, r, list) { folder = it } }
-            else -> Pane(ctx, view, "") { i, r, _ -> musicRow(ctx, view, i, r) }
+    key(views) {
+        HubPage("music", back, views.map { Enums.View.names.getValue(it) }, pivot, { saved = views[it] }) { shown ->
+            when (val view = views.getOrNull(shown) ?: return@HubPage) {
+                Enums.View.playlists -> PlaylistRows(ctx)
+                Enums.View.genres -> Pane(ctx, view, "") { _, r, _ -> genreRow(ctx, r) }
+                Enums.View.folders -> Pane(ctx, view, folder) { i, r, list -> folderRow(ctx, folder, i, r, list) { folder = it } }
+                else -> Pane(ctx, view, "") { i, r, _ -> musicRow(ctx, view, i, r) }
+            }
         }
     }
 }
@@ -138,22 +150,54 @@ private fun playSource(ctx: Ctx, view: Int, parent: String, count: Long?, shuffl
     playAndShow(ctx, view, parent, start ?: 0L, shuffle)
 }
 
+private fun queued(ctx: Ctx, title: String, added: Long?, code: Int?) {
+    when {
+        code == null && added != null -> ctx.toast.show("added ${songs(added)}", title)
+        code == null -> ctx.control.log("queue add reply with no count")
+        code == Err.busy -> ctx.toast.show(Heart.CARD, "")
+        code != null -> ctx.control.log("queue add error $code")
+    }
+}
+
+private fun queueAdd(ctx: Ctx, cmd: Int, title: String, view: Int?, parent: String?, tracks: List<Long> = emptyList()) =
+    ctx.control.queueAdd(cmd, view, parent, tracks) { added, code -> queued(ctx, title, added, code) }
+
 private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
-    ctx.sheet.open(r.name ?: "", listOf("play", "play next")) {
+    val items = listOf("play", PLAY_NEXT) + if (ctx.device.has("queueAdd")) listOf(ADD_TO_QUEUE) else emptyList()
+    ctx.sheet.open(r.name ?: "", items) {
         when (it) {
             0 -> play()
             1 -> r.first?.let { id ->
                 ctx.control.queueOp(Enums.QueueCmd.playNext, tracks = listOf(id))
                 ctx.toast.show("added 1 song", r.name ?: "")
             }
+            2 -> r.first?.let { id -> queueAdd(ctx, Enums.QueueCmd.add, r.name ?: "", null, null, listOf(id)) }
         }
     }
 }
 
 private fun groupSheet(ctx: Ctx, title: String, view: Int, parent: String, count: Long?, artist: LibRow? = null) {
-    val items = listOf("play", "shuffle") + if (artist != null) listOf(PICK_IMAGE) else emptyList()
-    ctx.sheet.open(title, items) {
-        if (it == 2) pickSheet(ctx, PickFor(title, artist?.mbid, library = true)) else playSource(ctx, view, parent, count, shuffle = it == 1)
+    val add = ctx.device.has("queueAdd")
+    val items = buildList<Pair<String, () -> Unit>> {
+        add("play" to { playSource(ctx, view, parent, count) })
+        if (add) {
+            add(PLAY_NEXT to { queueAdd(ctx, Enums.QueueCmd.playNext, title, view, parent) })
+            add(ADD_TO_QUEUE to { queueAdd(ctx, Enums.QueueCmd.add, title, view, parent) })
+        }
+        add("shuffle" to { playSource(ctx, view, parent, count, shuffle = true) })
+        if (artist != null) add(PICK_IMAGE to { pickSheet(ctx, PickFor(title, artist.mbid, library = true)) })
+    }
+    ctx.sheet.open(title, items.map { it.first }) { items[it].second() }
+}
+
+private fun genreRow(ctx: Ctx, r: LibRow): RowSpec {
+    val name = r.name ?: ""
+    val key = r.key ?: name
+    return RowSpec(name, songs(r.count ?: 0), bold = true, tap = { playSource(ctx, Enums.View.genres, key, r.count) }) {
+        val items = listOf("play") + if (ctx.device.has("queueAdd")) listOf(ADD_TO_QUEUE) else emptyList()
+        ctx.sheet.open(name, items) {
+            if (it == 0) playSource(ctx, Enums.View.genres, key, r.count) else queueAdd(ctx, Enums.QueueCmd.add, name, Enums.View.genres, key)
+        }
     }
 }
 

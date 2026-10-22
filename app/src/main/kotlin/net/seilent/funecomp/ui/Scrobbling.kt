@@ -4,9 +4,12 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -17,6 +20,7 @@ import net.seilent.funecomp.artist.AppPair
 private const val SIGN_OUT = "sign out"
 private const val KEEP_SIGNED_IN = "keep signed in"
 private const val REVOKE_INFO = "revoke access on last.fm"
+const val SCROBBLE_KEY = "scrobble"
 
 @Immutable
 data class ScrobbleView(
@@ -46,7 +50,8 @@ private class Item(val title: String, val value: String, val tag: String, val in
 @Composable
 fun ScrobbleRows(ctx: Ctx, view: ScrobbleView, labels: Boolean = true) {
     val ui = LocalUi.current
-    var focus by rememberSaveable { mutableStateOf("lastfm") }
+    val row = ctx.device.schema.rows.firstOrNull { it.key == SCROBBLE_KEY }.takeIf { ctx.device.hello != null }
+    var focus by rememberSaveable { mutableStateOf(if (row != null) "dap" else "lastfm") }
     val a = view.accounts
     fun signOut(service: String) = ctx.sheet.open("$SIGN_OUT?", listOf(SIGN_OUT, KEEP_SIGNED_IN), 1) { if (it == 0) ctx.control.signOut(service) }
     fun entry(title: String, start: String, secret: Boolean, done: (String) -> Unit) = ctx.sheet.openEntry(title) {
@@ -59,7 +64,22 @@ fun ScrobbleRows(ctx: Ctx, view: ScrobbleView, labels: Boolean = true) {
     }
     val list = rememberLazyListState()
     fun keep(i: Int) = Keep(list, i, ui.px(ui.contentTop))
+    val live by rememberUpdatedState(ctx.device)
+    val sheet = remember { Any() }
+    LaunchedEffect(row) { if (row == null) ctx.sheet.closeIf(sheet) }
     val items = buildList {
+        if (row != null) {
+            if (labels) add(Item("dap", "", "label.dap", label = true))
+            add(
+                Item(row.label ?: SCROBBLE_KEY, row.display(ctx.device.settings.values[SCROBBLE_KEY]), "dap") { i ->
+                    val sel = row.selector(live.settings.values[SCROBBLE_KEY], 0)
+                    ctx.sheet.open((row.label ?: SCROBBLE_KEY).lowercase(), sel.items, sel.focus, sel.info, owner = sheet, keep = keep(i)) { k ->
+                        val r = live.schema.rows.firstOrNull { it.key == SCROBBLE_KEY }.takeIf { live.hello != null } ?: return@open
+                        (r.picked(k, live.settings.values[SCROBBLE_KEY], 0) as? Send.Set)?.let { ctx.control.set(it.key, it.value) }
+                    }
+                },
+            )
+        }
         if (labels) add(Item("last.fm", "", "label.lastfm", label = true))
         add(Item("last.fm", if (a.lastFm) ON else OFF, "lastfm") { i -> onOffSheet(ctx, "last.fm", a.lastFm, keep(i)) { ctx.control.scrobble(a.copy(lastFm = it)) } })
         add(

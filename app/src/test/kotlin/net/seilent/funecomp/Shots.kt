@@ -128,6 +128,7 @@ class Shot(
     val gated: Boolean = false,
     val labels: Boolean = true,
     val white: Boolean = false,
+    val lib: net.seilent.funecomp.sim.Library? = null,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -580,6 +581,24 @@ private fun Shots.insertAbove(shell: Shell) {
     c.device = c.device.copy(schema = c.device.schema.copy(rev = (c.device.schema.rev ?: 0) + 1, rows = rows.subList(0, at) + nav + rows.subList(at, rows.size)))
 }
 
+private fun Shots.pivotTo(name: String) {
+    for (p in listOf("albums", "songs", "genres", "playlists", "folders")) {
+        rule.onNodeWithTag("pivot.$p").performClick()
+        settle(1000)
+        if (p == name) return
+    }
+}
+
+private fun Shots.holdRow(pivot: String?, tag: String) {
+    if (pivot != null) pivotTo(pivot)
+    rule.onNodeWithTag(tag).performTouchInput { longClick() }
+    settle(600)
+}
+
+private val NO_ADD = "features=${net.seilent.funecomp.proto.Groups.all and net.seilent.funecomp.proto.Groups.mask("queueAdd").inv()}"
+
+private val ONE_GENRE = net.seilent.funecomp.sim.Library(net.seilent.funecomp.sim.Library.synthetic().tracks.map { t -> net.seilent.funecomp.sim.Track(t.id, t.artist, t.artists, t.album, t.albumArtist, t.title, t.durationMs, t.folder, t.file, t.mbids, if (t.album == "First Love") "J-Pop" else "", t.no) })
+
 private fun Shots.about() {
     for (p in listOf("library", "display", "power", "system")) {
         rule.onNodeWithTag("pivot.$p").performClick()
@@ -648,7 +667,7 @@ val SHOTS = listOf(
     Shot("music-albums", pages = HOME + Page.Music) { rule.onNodeWithTag("pivot.albums").performClick() },
     Shot("music-songs", pages = HOME + Page.Music, prep = ::playing) { rule.onNodeWithTag("pivot.songs").performClick() },
     Shot("music-folders", pages = HOME + Page.Music) {
-        for (p in listOf("albums", "songs", "playlists", "folders")) {
+        for (p in listOf("albums", "songs", "genres", "playlists", "folders")) {
             rule.onNodeWithTag("pivot.$p").performClick()
             settle(1000)
         }
@@ -660,7 +679,7 @@ val SHOTS = listOf(
         scrollTo("row.13")
     },
     Shot("music-folders-play", pages = HOME + Page.Music, prep = ::playing) {
-        for (p in listOf("albums", "songs", "playlists", "folders")) {
+        for (p in listOf("albums", "songs", "genres", "playlists", "folders")) {
             rule.onNodeWithTag("pivot.$p").performClick()
             settle(1000)
         }
@@ -669,6 +688,28 @@ val SHOTS = listOf(
         rule.onNodeWithTag("row.1").performClick()
     },
     Shot("playlists", pages = HOME + Page.Playlists, prep = ::playing),
+    Shot("music-genres", pages = HOME + Page.Music) { pivotTo("genres") },
+    Shot("music-genres-one", pages = HOME + Page.Music, lib = ONE_GENRE) { pivotTo("genres") },
+    Shot("music-genres-14", pages = HOME + Page.Music, minor = 14) { pivotTo("songs") },
+    Shot("sheet-genre", pages = HOME + Page.Music) { holdRow("genres", "row.3") },
+    Shot("sheet-genre-noadd", pages = HOME + Page.Music, faults = listOf(NO_ADD)) { holdRow("genres", "row.3") },
+    Shot("sheet-genre-added", pages = HOME + Page.Music, after = 600) { shell ->
+        holdRow("genres", "row.3")
+        shell.sheet.accept(1)
+    },
+    Shot("sheet-artist", pages = HOME + Page.Music) { holdRow(null, "row.0") },
+    Shot("sheet-artist-noadd", pages = HOME + Page.Music, faults = listOf(NO_ADD)) { holdRow(null, "row.0") },
+    Shot("sheet-album", pages = HOME + Page.Music) { holdRow("albums", "row.0") },
+    Shot("sheet-song", pages = HOME + Page.Music) { holdRow("songs", "row.0") },
+    Shot("sheet-folder", pages = HOME + Page.Music) { holdRow("folders", "row.0") },
+    Shot("sheet-favorites", pages = HOME + Page.Playlists) {
+        rule.onNodeWithTag("row.favorites").performTouchInput { longClick() }
+        settle(600)
+    },
+    Shot("sheet-album-added", pages = HOME + Page.Music, after = 600) { shell ->
+        holdRow("albums", "row.0")
+        shell.sheet.accept(2)
+    },
     Shot("artist", pages = HOME + Page.Music + Page.Artist("Utada Hikaru")),
     Shot("album-noartist", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "")),
     Shot("album", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru"), prep = ::playing),
@@ -1072,6 +1113,11 @@ val SHOTS = listOf(
     },
     Shot("online-scrobbling-plain", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, labels = false),
     Shot("settings-insert-above", pages = HOME + Page.Settings) { insertAbove(it) },
+    Shot("online-scrobbling-card", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, prep = { it.set("scrobble", "card") }),
+    Shot("online-scrobbling-off", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, prep = { it.set("scrobble", "off") }),
+    Shot("online-scrobbling-dapsheet", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { tapRow("scrobble.dap") },
+    Shot("online-scrobbling-unlinked", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, link = LinkView(Phase.DOWN, "AP80", everLive = true), prep = { it.device = it.device.copy(hello = null) }),
+    Shot("online-scrobbling-14", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, minor = 14, prep = { c -> c.device = c.device.copy(schema = c.device.schema.copy(rows = c.device.schema.rows.filter { it.key != "scrobble" })) }),
     Shot("settings-about", pages = HOME + Page.Settings) { about() },
     Shot("settings-about-v1", board = "v1", pages = HOME + Page.Settings) { about() },
     Shot("settings-about-sending", board = "v1", pages = HOME + Page.Settings, firmware = FOUND.copy(ready = true, send = "firmware 42%")) { about() },
@@ -1190,7 +1236,7 @@ class Shots {
                 val name = if (tall) "${shot.name}-tallime" else shot.name
                 if (only.isNotEmpty() && only.split(',').none { "$name-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue
-                val c = SimControl(shot.board, artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
+                val c = SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
                 c.device = c.device.copy(schema = c.device.schema.copy(rows = c.device.schema.rows.map { if (it.key == "dateTime") it.copy(words = listOf(CLOCK)) else it }))
                 shot.prep(c)
                 if (shot.gated) c.device = DeviceState()

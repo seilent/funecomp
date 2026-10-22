@@ -128,6 +128,17 @@ class StateTest {
     }
 
     @Test
+    fun aQueueOpReplyRevDropsItemsOnlyWhenItIsNewer() {
+        var d = DeviceState().withState(State(queueRev = 4), 0)
+        d = d.withQueue(Queue(4, PageInfo(0, 2, false), listOf(QueueItem(1, "a"), QueueItem(2, "b"))))
+        assertEquals(2, d.withQueueRev(4).queue.items.size)
+        assertEquals(2, d.withQueueRev(3).queue.items.size)
+        d = d.withQueueRev(6)
+        assertEquals(0, d.queue.items.size)
+        assertEquals(6L, d.queue.rev)
+    }
+
+    @Test
     fun libRevChangeDropsPages() {
         var d = DeviceState().withState(State(libRev = 7), 0)
         d = d.withLib(Lib(7, Enums.View.artists, "", PageInfo(0, 1, false), listOf(LibRow("x", 1, 1, "x"))))

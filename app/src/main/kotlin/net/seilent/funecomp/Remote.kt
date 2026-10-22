@@ -63,6 +63,7 @@ import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.LyrOffsetReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
+import net.seilent.funecomp.proto.QueueOpReply
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.SetReply
 import net.seilent.funecomp.proto.State
@@ -1065,6 +1066,23 @@ object Remote : Control {
     override fun queueOp(cmd: Int, slot: Long?, to: Long?, tracks: List<Long>) {
         val rev = device.queue.rev ?: device.playback.state.queueRev
         send(Msg.QUEUE_OP, Req.queueOp(cmd, rev, slot = slot, to = to, tracks = tracks), "queue ${Enums.QueueCmd.names[cmd]} slot=$slot to=$to")
+    }
+
+    override fun queueAdd(cmd: Int, view: Int?, parent: String?, tracks: List<Long>, done: (Long?, Int?) -> Unit) {
+        val lib = device.lib.takeIf { tracks.isEmpty() }
+        val rev = if (cmd == Enums.QueueCmd.add) null else device.queue.rev ?: device.playback.state.queueRev
+        var added: Long? = null
+        send(
+            Msg.QUEUE_OP,
+            Req.queueOp(cmd, rev, tracks = tracks, view = view.takeIf { lib != null }, parent = parent.takeIf { lib != null }, libRev = lib?.libRev(view), snapRev = lib?.snapRev(view)),
+            "queue ${Enums.QueueCmd.names[cmd]} view=$view parent=$parent tracks=${tracks.size}",
+            ok = { body ->
+                val r = QueueOpReply.from(body)
+                added = r.added
+                r.rev?.let { rev -> update { it.withQueueRev(rev) } }
+            },
+            done = { code, _ -> main.post { done(added, code) } },
+        )
     }
 
     override fun set(key: String, value: String) = send(Msg.SET, Req.set("$key=$value\n"), "set $key=$value", ok = { body ->

@@ -131,6 +131,8 @@ data class DeviceState(
 
     fun withSetReply(rev: Long) = copy(settings = settings.copy(floor = maxOf(settings.floor, rev)))
 
+    fun withQueueRev(rev: Long) = if (rev <= (queue.rev ?: -1)) this else copy(queue = QueueMirror(rev))
+
     fun withEq(e: Eq): DeviceState {
         val output = e.output ?: -1
         val old = eq[output] ?: EqMirror()
