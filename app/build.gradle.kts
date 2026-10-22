@@ -188,4 +188,19 @@ val checkScrobblesOff = tasks.register("checkScrobblesOff") {
 
 tasks.withType<Test>().configureEach { dependsOn(checkScrobblesOff) }
 
-tasks.named("check") { dependsOn(checkNoGms, checkNoKeyLeak) }
+val checkNoCapture = tasks.register("checkNoCapture") {
+    val manifests = files(tasks.named("processReleaseMainManifest"))
+    val classes = files(tasks.named("compileReleaseKotlin"))
+    inputs.files(manifests, classes)
+    doLast {
+        val m = manifests.asFileTree.filter { it.name == "AndroidManifest.xml" }.joinToString("\n") { it.readText() }
+        check(m.isNotEmpty()) { "no merged release manifest" }
+        check("networkSecurityConfig" !in m && "usesCleartextTraffic" !in m && "ScrobbleCapture" !in m) { "release manifest permits cleartext or names the scrobble capture" }
+        val leaked = classes.asFileTree.filter { it.name.startsWith("ScrobbleCapture") }.map { it.name }
+        check(leaked.isEmpty()) { "release classes hold the scrobble capture: $leaked" }
+        val setters = classes.asFileTree.filter { it.name.endsWith(".class") && it.name != "Scrobbles.class" && "setCapture" in it.readText(Charsets.ISO_8859_1) }.map { it.name }
+        check(setters.isEmpty()) { "release classes set the scrobble capture: $setters" }
+    }
+}
+
+tasks.named("check") { dependsOn(checkNoGms, checkNoKeyLeak, checkNoCapture) }

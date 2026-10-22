@@ -68,7 +68,7 @@ class LastFm(
     private val userAgent: String,
     private val limiter: RateLimiter,
     private val sleep: (Long) -> Unit,
-    private val base: String = "https://ws.audioscrobbler.com/2.0/",
+    private val base: String = BASE,
 ) {
     class Failed(val code: Int?, message: String) : IOException(message)
 
@@ -148,6 +148,8 @@ class LastFm(
     }
 
     companion object {
+        const val BASE = "https://ws.audioscrobbler.com/2.0/"
+
         fun sign(params: Map<String, String>, secret: String): String {
             val s = params.filterKeys { it != "format" && it != "callback" }.toSortedMap().entries.joinToString("") { it.key + it.value } + secret
             return md5(s.toByteArray(Charsets.UTF_8))
@@ -173,7 +175,7 @@ class ListenBrainz(
     private val userAgent: String,
     private val limiter: RateLimiter,
     private val sleep: (Long) -> Unit,
-    private val base: String = "https://api.listenbrainz.org",
+    private val base: String = BASE,
     private val version: String = "",
 ) {
     fun validate(token: String): String? {
@@ -233,6 +235,8 @@ class ListenBrainz(
     private fun headers(token: String) = mapOf("User-Agent" to userAgent, "Authorization" to "Token ${token.trim()}")
 
     companion object {
+        const val BASE = "https://api.listenbrainz.org"
+
         fun quote(s: String) = buildString {
             append('"')
             for (c in s) when {
@@ -257,12 +261,14 @@ class Scrobbler(
     mono: () -> Long = { System.nanoTime() / 1_000_000 },
     private val reauth: (String) -> Unit = {},
     dirSync: (File) -> Unit = {},
+    lastFmBase: String = LastFm.BASE,
+    listenBrainzBase: String = ListenBrainz.BASE,
     private val log: (String) -> Unit = {},
 ) {
     val queue = ScrobbleQueue(dir, dirSync)
     private val ua = "funecomp/$version (https://github.com/seilent/funecomp)"
-    private val lastFm = LastFm(http, ua, RateLimiter(LAST_FM_INTERVAL_MS, mono), sleep)
-    private val listenBrainz = ListenBrainz(http, ua, RateLimiter(LISTEN_BRAINZ_INTERVAL_MS, mono), sleep, version = version)
+    private val lastFm = LastFm(http, ua, RateLimiter(LAST_FM_INTERVAL_MS, mono), sleep, lastFmBase)
+    private val listenBrainz = ListenBrainz(http, ua, RateLimiter(LISTEN_BRAINZ_INTERVAL_MS, mono), sleep, listenBrainzBase, version)
 
     fun pending() = queue.pending(accounts().enabled)
 

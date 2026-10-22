@@ -16,6 +16,7 @@ import net.seilent.funecomp.artist.AppPair
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.LastFm
 import net.seilent.funecomp.artist.Listen
+import net.seilent.funecomp.artist.ListenBrainz
 import net.seilent.funecomp.artist.Scrobbler
 import net.seilent.funecomp.artist.Sent
 import net.seilent.funecomp.artist.SignIn
@@ -34,6 +35,8 @@ import java.io.IOException
 import java.time.ZoneId
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+
+class Capture(val base: String, val wrap: (Http) -> Http)
 
 object Scrobbles {
     private const val PREFS = "scrobble"
@@ -67,6 +70,8 @@ object Scrobbles {
 
     @Volatile var opener: ((String) -> Boolean)? = null
 
+    @Volatile var capture: Capture? = null
+
     var view by mutableStateOf(ScrobbleView())
         private set
 
@@ -79,9 +84,13 @@ object Scrobbles {
         val d = File(app.filesDir, "scrobble")
         dir = d
         view = ScrobbleView(accounts(app), app = pair, pending = pending(app) != null)
-        val net = http ?: UrlHttp()
+        val cap = capture
+        val net = (http ?: UrlHttp()).let { cap?.wrap?.invoke(it) ?: it }
         exec.execute {
-            val s = Scrobbler(d, net, { accounts(app) }, pair, version, reauth = ::expired, dirSync = sync) { Log.i(Remote.TAG, it) }
+            val s = Scrobbler(
+                d, net, { accounts(app) }, pair, version, reauth = ::expired, dirSync = sync,
+                lastFmBase = cap?.let { "${it.base}/2.0/" } ?: LastFm.BASE, listenBrainzBase = cap?.base ?: ListenBrainz.BASE,
+            ) { Log.i(Remote.TAG, it) }
             scrobbler = s
             plays = Plays(File(d, OPEN).takeIf { it.isFile }?.readText()?.let { Play.parse(it) })
             refresh()
@@ -109,6 +118,7 @@ object Scrobbles {
         pendingError = null
         tokenPage = ""
         opener = null
+        capture = null
         now = { System.currentTimeMillis() }
         zone = { ZoneId.systemDefault() }
         link = null
