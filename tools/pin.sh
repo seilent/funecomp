@@ -17,6 +17,29 @@ tokens=$(old tokens)
 
 show() { git -C "$funeos" show "$1:$2" > "$dst/$3"; }
 
+lrc=$root/state/src/test/resources/lrc/SOURCE
+
+lrc_check() {
+    local bad=0 path want got
+    while read -r path want; do
+        [ "$path" = commit ] && continue
+        if ! git -C "$funeos" cat-file -e "$1:$path" 2>/dev/null; then
+            echo "pin.sh: $path is missing at $1, the Lrc port source ($(sed -n 's/^commit //p' "$lrc")) has it" >&2
+            bad=1
+            continue
+        fi
+        got=$(git -C "$funeos" show "$1:$path" | sha256sum | cut -d' ' -f1)
+        if [ "$got" != "$want" ]; then
+            echo "pin.sh: $path at $1 differs from the Lrc port source ($(sed -n 's/^commit //p' "$lrc"))" >&2
+            bad=1
+        fi
+    done < "$lrc"
+    if [ $bad -ne 0 ]; then
+        echo "pin.sh: review state/src/main/kotlin/net/seilent/funecomp/state/Lrc.kt against it, then update $lrc" >&2
+        exit 1
+    fi
+}
+
 case "${1:-}" in
     draft)
         [ $# -eq 1 ] || usage
@@ -25,6 +48,7 @@ case "${1:-}" in
     --spec)
         [ $# -eq 2 ] || usage
         spec=$(git -C "$funeos" rev-parse --verify "$2^{commit}")
+        lrc_check "$spec"
         show "$spec" player/link/proto.txt proto.txt
         show "$spec" player/link/vectors.txt vectors.txt
         ;;
@@ -34,6 +58,7 @@ case "${1:-}" in
     *)
         [ $# -eq 1 ] || usage
         spec=$(git -C "$funeos" rev-parse --verify "$1^{commit}")
+        lrc_check "$spec"
         tokens=$spec
         show "$spec" player/link/proto.txt proto.txt
         show "$spec" player/link/vectors.txt vectors.txt

@@ -22,19 +22,20 @@ class Lrclib(
         val key: String get() = hash("$track\n$artist\n${album ?: ""}\n${durationMs?.let { seconds(it) } ?: ""}")
     }
 
+    private val files = FileStore(dir)
+
     private val api = Api(http, "funecomp/$version (https://github.com/seilent/funecomp)", RateLimiter(INTERVAL_MS, mono), sleep, tries = TRIES, jitter = { random.nextDouble() * JITTER })
 
     @Synchronized
-    fun get(q: Query): Found? {
+    fun get(q: Query, store: LyricStore = files): Found? {
         if (!enabled()) return null
-        val hit = File(dir, "${q.key}.lrc")
-        if (hit.isFile) return Found(LyricFiles.read(hit), true)
-        val txt = File(dir, "${q.key}.txt")
-        val miss = File(dir, "${q.key}.miss")
-        if (miss.isFile) {
-            val lines = LyricFiles.read(miss).lines()
+        store.read("${q.key}.lrc")?.let { return Found(it, true) }
+        val txt = "${q.key}.txt"
+        val miss = "${q.key}.miss"
+        store.read(miss)?.let { m ->
+            val lines = m.lines()
             if (lines.getOrNull(1) == CLEANED && clock() - (lines[0].trim().toLongOrNull() ?: 0) in 0 until MISS_MS) {
-                return if (txt.isFile) Found(LyricFiles.read(txt), false) else null
+                return store.read(txt)?.let { Found(it, false) }
             }
         }
         val j = api.json(url(q.track, q.artist, q.durationMs))
@@ -43,20 +44,19 @@ class Lrclib(
         val second = ask?.let { split(q, it) }
         val third = ask?.takeIf { second?.synced != true }?.let { cleaned(q, it) }
         val found = first ?: second?.takeIf { it.synced } ?: third?.takeIf { it.synced } ?: plain(j) ?: second ?: third
-        dir.mkdirs()
         when {
             found == null -> {
-                LyricFiles.delete(txt)
-                LyricFiles.save(miss, "${clock()}\n$CLEANED")
+                store.delete(txt)
+                store.save(miss, "${clock()}\n$CLEANED")
             }
             found.synced -> {
-                LyricFiles.save(hit, found.text)
-                LyricFiles.delete(txt)
-                LyricFiles.delete(miss)
+                store.save("${q.key}.lrc", found.text)
+                store.delete(txt)
+                store.delete(miss)
             }
             else -> {
-                LyricFiles.save(txt, found.text)
-                LyricFiles.save(miss, "${clock()}\n$CLEANED")
+                store.save(txt, found.text)
+                store.save(miss, "${clock()}\n$CLEANED")
             }
         }
         return found

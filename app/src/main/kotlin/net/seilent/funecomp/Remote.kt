@@ -208,7 +208,8 @@ object Remote : Control {
     private var transition: ScheduledFuture<*>? = null
     @Volatile private var thumbs: ThumbWorker? = null
     private val heart = Heart()
-    val dapLyrics = DapLyrics({ link?.session }, { device }) { Log.i(TAG, it) }
+    val phoneLyrics: PhoneLyrics = PhoneLyrics(Lyrics::phone, Lyrics::phoneChain, { dapLyrics.poke() }) { Log.i(TAG, it) }
+    val dapLyrics: DapLyrics = DapLyrics({ link?.session }, { device }, phone = phoneLyrics) { Log.i(TAG, it) }
     @Volatile private var offset: OffsetEdit? = null
     @Volatile private var heartToast: ((String, String) -> Unit)? = null
     private val main = Handler(Looper.getMainLooper())
@@ -1225,6 +1226,7 @@ object Remote : Control {
             dapLyrics.session()
             if (synchronized(clock) { clock.hello(hello) }) sendClock("hello")
             phase(Phase.LIVE)
+            phoneLyrics.retry()
             wake?.drop(ATTEMPT)
             Log.i(TAG, "hello board=${hello.board} version=${hello.version} idle=${hello.idleMs} busy=${hello.busyMs}")
         }

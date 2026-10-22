@@ -19,48 +19,49 @@ class NetEase(
 ) {
     private class Song(val id: Long, val names: List<String>, val dt: Long)
 
+    private val files = FileStore(dir)
+
     private val api = Api(http, "funecomp/$version (https://github.com/seilent/funecomp)", RateLimiter(INTERVAL_MS, mono), sleep, tries = TRIES, jitter = { random.nextDouble() * JITTER })
 
     @Synchronized
-    fun get(q: Lrclib.Query): Lrclib.Found? {
+    fun get(q: Lrclib.Query, store: LyricStore = files): Lrclib.Found? {
         if (!enabled()) return null
         val d = q.durationMs ?: return null
-        val hit = File(dir, "${q.key}.ne.lrc")
-        val txt = File(dir, "${q.key}.ne.txt")
-        val miss = File(dir, "${q.key}.ne.miss")
-        if (hit.isFile) {
-            val t = cached(hit)
+        val hit = "${q.key}.ne.lrc"
+        val txt = "${q.key}.ne.txt"
+        val miss = "${q.key}.ne.miss"
+        store.read(hit)?.let { h ->
+            val t = cached(h)
             if (t != null) return Lrclib.Found(t, true, LyricSources.NETEASE)
-            LyricFiles.delete(hit)
+            store.delete(hit)
         }
-        if (miss.isFile) {
-            val lines = LyricFiles.read(miss).lines()
+        store.read(miss)?.let { m ->
+            val lines = m.lines()
             if (lines.getOrNull(1) == RULE && clock() - (lines[0].trim().toLongOrNull() ?: 0) in 0 until Lrclib.MISS_MS) {
-                if (!txt.isFile) return null
-                cached(txt)?.let { return Lrclib.Found(it, false, LyricSources.NETEASE) }
+                val t = store.read(txt) ?: return null
+                cached(t)?.let { return Lrclib.Found(it, false, LyricSources.NETEASE) }
             }
         }
         val found = lookup(q, d)
-        dir.mkdirs()
         when {
             found == null -> {
-                LyricFiles.delete(txt)
-                LyricFiles.save(miss, "${clock()}\n$RULE")
+                store.delete(txt)
+                store.save(miss, "${clock()}\n$RULE")
             }
             found.synced -> {
-                LyricFiles.save(hit, "$RULE\n${found.text}")
-                LyricFiles.delete(txt)
-                LyricFiles.delete(miss)
+                store.save(hit, "$RULE\n${found.text}")
+                store.delete(txt)
+                store.delete(miss)
             }
             else -> {
-                LyricFiles.save(txt, "$RULE\n${found.text}")
-                LyricFiles.save(miss, "${clock()}\n$RULE")
+                store.save(txt, "$RULE\n${found.text}")
+                store.save(miss, "${clock()}\n$RULE")
             }
         }
         return found
     }
 
-    private fun cached(f: File): String? = LyricFiles.read(f).let { if (it.startsWith("$RULE\n")) it.substring(RULE.length + 1) else null }
+    private fun cached(text: String): String? = if (text.startsWith("$RULE\n")) text.substring(RULE.length + 1) else null
 
     private fun lookup(q: Lrclib.Query, durationMs: Long): Lrclib.Found? {
         val pair = LyricNames.split(q.track, q.artist)

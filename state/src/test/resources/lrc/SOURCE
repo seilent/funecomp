@@ -1,0 +1,4 @@
+commit 01e3b9b9ca1051396a7e98aa28fec12710fa1438
+player/lib/lrc.cpp c4b6f241ff2fcb3bff4395221713f1dc4f38a4ebc0e092c29f77f127c49a24c4
+player/lib/lrc.h 8627dca8de559cad9eedb28e64e7c5b4dd94c9d6b506179995e93b76601308ab
+player/lib/util.cpp e084cce0461ecfc50f2a54c0003d767506a0ba642f6c7a4aef8cc1251cf2d38b

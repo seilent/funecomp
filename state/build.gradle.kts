@@ -17,3 +17,7 @@ dependencies {
     api(project(":proto"))
     testImplementation(libs.junit)
 }
+
+tasks.test {
+    inputs.file(rootProject.file("app/src/androidTest/resources/lrc-cases.tsv")).withPropertyName("lrcCases").withPathSensitivity(PathSensitivity.RELATIVE)
+}

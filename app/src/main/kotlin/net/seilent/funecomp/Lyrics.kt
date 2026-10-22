@@ -11,6 +11,7 @@ import net.seilent.funecomp.artist.Lrclib
 import net.seilent.funecomp.artist.LyricChain
 import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.LyricsFileException
+import net.seilent.funecomp.artist.MemoryStore
 import net.seilent.funecomp.artist.NetEase
 import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.artist.UrlHttp
@@ -78,6 +79,7 @@ object Lyrics {
         lrclib = null
         netease = null
         sources = LyricSources()
+        Remote.phoneLyrics.clear()
         network()
     }
 
@@ -86,6 +88,7 @@ object Lyrics {
         if (id !in LyricSources.ORDER) return
         prefs(c).edit().putBoolean(id, on).apply()
         sources = if (id == LyricSources.LRCLIB) sources.copy(lrclib = on) else sources.copy(netease = on)
+        Remote.phoneLyrics.sources(if (on) null else id)
         if (!on) return
         try {
             exec.execute {
@@ -104,6 +107,7 @@ object Lyrics {
         if (moved == sources) return
         sources = moved
         prefs(c).edit().putString(ORDER, moved.order.joinToString(",")).apply()
+        Remote.phoneLyrics.sources(null)
     }
 
     fun session() {
@@ -186,7 +190,31 @@ object Lyrics {
         }
     }
 
-    fun network() = breakers.values.forEach { it.network() }
+    fun network() {
+        breakers.values.forEach { it.network() }
+        Remote.phoneLyrics.retry()
+    }
+
+    fun phone(task: () -> Unit): Boolean = try {
+        exec.execute {
+            try {
+                task()
+            } catch (t: Throwable) {
+                Log.w(Remote.TAG, "phone lyrics: $t", t)
+            }
+        }
+        true
+    } catch (_: RejectedExecutionException) {
+        false
+    }
+
+    fun phoneChain(a: PhoneLyrics.Ask): PhoneLyrics.Found {
+        val l = lrclib ?: return PhoneLyrics.Found.Unavailable
+        val n = netease ?: return PhoneLyrics.Found.Unavailable
+        if (Remote.phase != Phase.LIVE) return PhoneLyrics.Found.Unavailable
+        val store = MemoryStore()
+        return PhoneLyrics.ask(a, sources, { l.get(it, store) }, { n.get(it, store) }, { breakers.getValue(it).open }, { id, failed -> breakers.getValue(id).result(failed) }) { Log.w(Remote.TAG, it) }
+    }
 
     private fun put(track: Long, libRev: Long?, snapRev: Long?, bytes: ByteArray, synced: Boolean, source: String): Int? {
         val latch = CountDownLatch(1)

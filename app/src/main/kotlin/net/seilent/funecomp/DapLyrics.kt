@@ -9,18 +9,22 @@ import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LyricsFetch
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 
 class DapLyrics(
     private val link: () -> Session?,
     private val device: () -> DeviceState,
     private val clock: () -> Long = SystemClock::elapsedRealtime,
+    private val phone: PhoneLyrics? = null,
+    private val exec: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor { Thread(it, "daplyrics").apply { isDaemon = true } },
     private val log: (String) -> Unit = {},
 ) {
     private val fetch = LyricsFetch()
-    private val exec = Executors.newSingleThreadScheduledExecutor { Thread(it, "daplyrics").apply { isDaemon = true } }
     @Volatile private var shown = false
     @Volatile private var generation = 0
+    private var settle: ScheduledFuture<*>? = null
 
     var show by mutableStateOf<LyricsFetch.Show>(LyricsFetch.Show.Off)
         private set
@@ -58,7 +62,15 @@ class DapLyrics(
 
     fun poke() = exec.execute { pump() }
 
+    internal fun idle() {
+        exec.submit {}.get()
+    }
+
     private fun pump() {
+        phone?.see(device().playback.state, clock(), shown)?.let { wait ->
+            settle?.cancel(false)
+            settle = exec.schedule({ pump() }, wait, TimeUnit.MILLISECONDS)
+        }
         val (d, gen) = synchronized(fetch) { fetch.decide(device(), clock()) to generation }
         show = d.show
         val w = d.want ?: return
