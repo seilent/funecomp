@@ -92,9 +92,12 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.atomic.AtomicReference
 
 object Remote : Control {
     const val TAG = "Funecomp"
+    const val RECEIVER = "bluetooth receiver"
+    private val REFUSALS = setOf(RECEIVER)
     private const val BACKDROP_SIDE = 2048
     private const val BACKDROP_MAX = 4096
     private const val FETCH_W = 360
@@ -212,6 +215,7 @@ object Remote : Control {
     val dapLyrics: DapLyrics = DapLyrics({ link?.session }, { device }, phone = phoneLyrics) { Log.i(TAG, it) }
     @Volatile private var offset: OffsetEdit? = null
     @Volatile private var heartToast: ((String, String) -> Unit)? = null
+    private val refusalToast = AtomicReference<((String, String) -> Unit)?>()
     private val main = Handler(Looper.getMainLooper())
 
     fun debuggable(context: Context) = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
@@ -1017,7 +1021,7 @@ object Remote : Control {
     }
 
     override fun transport(cmd: Int, seekMs: Long?, on: Boolean?, repeat: Int?) =
-        send(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat), "transport ${Enums.TransportCmd.names[cmd]}")
+        send(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat), "transport ${Enums.TransportCmd.names[cmd]}", done = ::refused)
 
     override fun volume(detents: Int) = send(Msg.VOLUME, Req.volume(step = detents), "volume step $detents")
 
@@ -1056,7 +1060,7 @@ object Remote : Control {
         val lib = device.lib.takeIf { tracks.isEmpty() }
         send(Msg.PLAY, Req.play(view, parent, lib?.libRev(view), start, shuffle, tracks, lib?.snapRev(view)), "play view=$view parent=$parent start=$start", failed = { code ->
             if (code == Err.badValue && start > 0 && tracks.isEmpty()) play(view, parent, 0, shuffle, tracks)
-        })
+        }, done = ::refused)
     }
 
     override fun queuePage(offset: Long) {
@@ -1067,7 +1071,7 @@ object Remote : Control {
 
     override fun queueOp(cmd: Int, slot: Long?, to: Long?, tracks: List<Long>) {
         val rev = device.queue.rev ?: device.playback.state.queueRev
-        send(Msg.QUEUE_OP, Req.queueOp(cmd, rev, slot = slot, to = to, tracks = tracks), "queue ${Enums.QueueCmd.names[cmd]} slot=$slot to=$to")
+        send(Msg.QUEUE_OP, Req.queueOp(cmd, rev, slot = slot, to = to, tracks = tracks), "queue ${Enums.QueueCmd.names[cmd]} slot=$slot to=$to", done = ::refused)
     }
 
     override fun queueAdd(cmd: Int, view: Int?, parent: String?, tracks: List<Long>, done: (Long?, Int?) -> Unit) {
@@ -1109,7 +1113,19 @@ object Remote : Control {
     }
 
     override fun action(cmd: Int, track: Long?, done: (Int?, String?) -> Unit) =
-        send(Msg.ACTION, Req.action(cmd, track), "action ${Enums.ActionCmd.names[cmd]}", done = done)
+        send(Msg.ACTION, Req.action(cmd, track), "action ${Enums.ActionCmd.names[cmd]}", done = { code, text ->
+            refused(code, text)
+            done(code, text)
+        })
+
+    override fun refusals(show: ((String, String) -> Unit)?, owner: ((String, String) -> Unit)?) {
+        if (owner == null) refusalToast.set(show) else refusalToast.compareAndSet(owner, show)
+    }
+
+    private fun refused(code: Int?, text: String?) {
+        val line = text?.takeIf { code == Err.refused && it in REFUSALS } ?: return
+        main.post { refusalToast.get()?.invoke(line, "") }
+    }
 
     override fun favorite(s: State, toast: (String, String) -> Unit) {
         if (device.hello?.snapRev == null) return

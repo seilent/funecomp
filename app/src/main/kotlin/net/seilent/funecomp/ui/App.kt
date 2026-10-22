@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +25,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.platform.ViewConfiguration
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
@@ -111,6 +115,19 @@ fun App(
             val nav = shell.nav
             val browse = remember(nav) { BrowseSessions() }
             val ctx = Ctx(device, control, nav, shell.sheet, shell.toast, browse)
+            val lifecycle = LocalLifecycleOwner.current.lifecycle
+            DisposableEffect(control, shell.toast, lifecycle) {
+                val sink: (String, String) -> Unit = { line, title -> shell.toast.show(line, title) }
+                val started = LifecycleEventObserver { _, e ->
+                    if (e == Lifecycle.Event.ON_START) control.refusals(sink)
+                    if (e == Lifecycle.Event.ON_STOP) control.refusals(null, sink)
+                }
+                lifecycle.addObserver(started)
+                onDispose {
+                    lifecycle.removeObserver(started)
+                    control.refusals(null, sink)
+                }
+            }
             LaunchedEffect(shell.gated, link.phase, link.askBattery, link.askReconnect, shell.sheet.shown, shell.pick) {
                 if (shell.gated && link.phase == Phase.LIVE) {
                     shell.gated = false

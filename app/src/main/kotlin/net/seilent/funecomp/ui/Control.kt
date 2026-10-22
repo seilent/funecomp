@@ -68,6 +68,7 @@ interface Control {
     fun eqPreset(op: Int, output: Int?, key: String?, name: String?, ints: Profile?, replace: Boolean, done: (Int?, String?) -> Unit) {}
     fun action(cmd: Int, track: Long? = null, done: (Int?, String?) -> Unit = { _, _ -> })
     fun favorite(s: State, toast: (String, String) -> Unit) {}
+    fun refusals(show: ((String, String) -> Unit)?, owner: ((String, String) -> Unit)? = null) {}
     fun bonded(): List<Bonded> = emptyList()
     fun choose(address: String) {}
     fun askPermission() {}
