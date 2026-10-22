@@ -289,6 +289,7 @@ class PushTest {
         assertEquals(listOf("Ado" to null), origin(8, Enums.ImgOrigin.phone))
         assertEquals(null, ArtPusher.origin(Enums.Source.local))
         assertEquals(Enums.ImgOrigin.phone, ArtPusher.origin(Enums.Source.phone))
+        assertEquals(Enums.ImgOrigin.phone, ArtPusher.origin(Enums.Source.phoneFile))
         assertEquals(null, ArtPusher.origin(null))
         assertEquals(null, ArtPusher.origin(7))
     }

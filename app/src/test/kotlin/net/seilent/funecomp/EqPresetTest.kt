@@ -53,7 +53,7 @@ class EqPresetTest {
 
     private val wired = Enums.EqOutput.wired
     private val bt = Enums.EqOutput.bt
-    private val hd650 = "/data/flatdap/eq/Sennheiser HD 650.txt"
+    private val hd650 = "/data/funeos/eq/Sennheiser HD 650.txt"
     private fun eqPage(output: Int = wired) = listOf(Page.Home, Page.Settings, Page.Eq(output))
 
     private fun start(
@@ -216,7 +216,7 @@ class EqPresetTest {
         assertEquals(2, c.presets.size)
         assertEquals("HD 650 mine", c.presets.last().str(Tags.EqPreset.name))
         assertNull(c.presets.last().bool(Tags.EqPreset.replace))
-        assertEquals("/data/flatdap/eq/HD 650 mine.txt", c.device.eq.getValue(wired).key)
+        assertEquals("/data/funeos/eq/HD 650 mine.txt", c.device.eq.getValue(wired).key)
         assertFalse(shell.sheet.shown)
     }
 
@@ -232,7 +232,7 @@ class EqPresetTest {
         enter("Sennheiser HD 650 mine")
         settle(1500)
         assertEquals(Page.Eq(wired), shell.nav.top)
-        assertEquals("/data/flatdap/eq/Sennheiser HD 650 mine.txt", c.device.eq.getValue(wired).key)
+        assertEquals("/data/funeos/eq/Sennheiser HD 650 mine.txt", c.device.eq.getValue(wired).key)
     }
 
     @Test
@@ -247,7 +247,7 @@ class EqPresetTest {
         assertEquals("replace preset?", shell.sheet.title)
         item(0)
         assertEquals(listOf(null, null, true), replaces(c))
-        assertEquals("/data/flatdap/eq/sennheiser HD 650.txt", c.device.eq.getValue(wired).key)
+        assertEquals("/data/funeos/eq/sennheiser HD 650.txt", c.device.eq.getValue(wired).key)
     }
 
     @Test
@@ -341,7 +341,7 @@ class EqPresetTest {
         val (c, _) = start(prep = { saved(it, "HD 650") })
         rule.onNode(hasText("-6.1 db", ignoreCase = true) and hasAnyAncestor(hasTestTag("eq.preamp"))).assertExists()
         rule.onNode(hasText("ls 105 hz +6.4 db q 0.70", ignoreCase = true) and hasAnyAncestor(hasTestTag("eq.band.0"))).assertExists()
-        editGain(c, "/data/flatdap/eq/HD 650.txt")
+        editGain(c, "/data/funeos/eq/HD 650.txt")
     }
 
     @Test
@@ -367,7 +367,7 @@ class EqPresetTest {
         assertEquals(wired, f.int(Tags.EqPreset.output))
         assertNull(f.str(Tags.EqPreset.name))
         assertNull(f.node(Tags.EqPreset.ints))
-        assertEquals("/data/flatdap/eq/Preset 1.txt", c.device.eq.getValue(wired).key)
+        assertEquals("/data/funeos/eq/Preset 1.txt", c.device.eq.getValue(wired).key)
         settle()
         assertEquals(listOf("eq.profile", "eq.delete", "eq.rename", "eq.import", "eq.preamp"), rows().take(5))
     }
@@ -376,7 +376,7 @@ class EqPresetTest {
     fun deleteKeepsOrRemovesTheKeyCapturedAtOpen() {
         val (c, shell) = start(prep = {
             saved(it, "HD 650")
-            it.eqSet(bt, key = "/data/flatdap/eq/HD 650.txt")
+            it.eqSet(bt, key = "/data/funeos/eq/HD 650.txt")
         })
         tap("eq.delete")
         assertEquals("delete preset?", shell.sheet.title)
@@ -390,7 +390,7 @@ class EqPresetTest {
         item(0)
         val f = c.presets.last()
         assertEquals(Enums.EqPresetOp.remove, f.int(Tags.EqPreset.op))
-        assertEquals("/data/flatdap/eq/HD 650.txt", f.str(Tags.EqPreset.key))
+        assertEquals("/data/funeos/eq/HD 650.txt", f.str(Tags.EqPreset.key))
         assertEquals("off", c.device.eq.getValue(bt).key)
         assertTrue(c.device.eq.getValue(wired).names.none { it.preset == true })
     }
@@ -400,7 +400,7 @@ class EqPresetTest {
         val (c, shell) = start(prep = {
             saved(it, "HD 650")
             saved(it, "Warm", bt)
-            it.eqSet(bt, key = "/data/flatdap/eq/HD 650.txt")
+            it.eqSet(bt, key = "/data/funeos/eq/HD 650.txt")
         })
         tap("eq.rename")
         assertEquals("rename preset", shell.sheet.title)
@@ -418,15 +418,15 @@ class EqPresetTest {
         assertEquals("rename preset", shell.sheet.title)
         rule.onNodeWithTag("entry").assert(hasText("WARM"))
         enter("hd 650")
-        assertEquals("/data/flatdap/eq/hd 650.txt", c.device.eq.getValue(wired).key)
+        assertEquals("/data/funeos/eq/hd 650.txt", c.device.eq.getValue(wired).key)
         tap("eq.rename")
         enter("Sennheiser")
         val r = c.presets.last()
         assertEquals(Enums.EqPresetOp.rename, r.int(Tags.EqPreset.op))
-        assertEquals("/data/flatdap/eq/hd 650.txt", r.str(Tags.EqPreset.key))
+        assertEquals("/data/funeos/eq/hd 650.txt", r.str(Tags.EqPreset.key))
         assertNull(r.bool(Tags.EqPreset.replace))
-        assertEquals("/data/flatdap/eq/Sennheiser.txt", c.device.eq.getValue(wired).key)
-        assertEquals("/data/flatdap/eq/Sennheiser.txt", c.device.eq.getValue(bt).key)
+        assertEquals("/data/funeos/eq/Sennheiser.txt", c.device.eq.getValue(wired).key)
+        assertEquals("/data/funeos/eq/Sennheiser.txt", c.device.eq.getValue(bt).key)
         profileText("Sennheiser")
     }
 

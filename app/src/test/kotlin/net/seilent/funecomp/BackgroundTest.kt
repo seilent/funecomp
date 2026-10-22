@@ -296,8 +296,8 @@ class BackgroundTest {
         waitFor { got.isNotEmpty() }
         Thread.sleep(200)
         shadowOf(Looper.getMainLooper()).idle()
-        assertEquals(listOf<Pair<Int?, String?>>(null to "/data/flatdap/eq/HD 650.txt"), got.toList())
-        assertTrue(logs.any { it == "eq preset 0 key=null -> ok /data/flatdap/eq/HD 650.txt" })
+        assertEquals(listOf<Pair<Int?, String?>>(null to "/data/funeos/eq/HD 650.txt"), got.toList())
+        assertTrue(logs.any { it == "eq preset 0 key=null -> ok /data/funeos/eq/HD 650.txt" })
         c.destroy()
     }
 

@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "d094e1923d1642e557072a8fa5126a2be1ac27fc"
-    const val PROTO_SHA256 = "5681213a13b84998987a21bf4e15b94a6e917be9bc9e203b7c09e4a4baff3cc1"
-    const val VECTORS_SHA256 = "c5443a10909e8b1d9a186bffce22815281263200e26940217aaabdc88990398a"
+    const val COMMIT = "b75bae10d79708eae3dfa1dc5f4c03572fb17c2b"
+    const val PROTO_SHA256 = "852272ac80c4219155162e0460a888135c1881848d722b0482c0a23469621ebf"
+    const val VECTORS_SHA256 = "e472f9b5238c827033463e3f4a133120dbf4223ef806dbfb39222cff5edcf48f"
     const val TOKENS_SHA256 = "8e5139fd329bc087d3acad8adade94bf6be643218cb1bd614c151dc524318d97"
     const val TOKENSV1_SHA256 = "4d1e0faa1738981ea062534988859dcc18ba9eaf8d09412831e301de0fb47e14"
 }
@@ -18,7 +18,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 10
+    const val minor = 15
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -39,6 +39,11 @@ object Proto {
     const val imgMaxBytes = 262144
     const val imgDataReserve = 16
     const val imgEndReplyMs = 5000
+    const val imgSrcMaxBytes = 4194304
+    const val imgSrcMaxSide = 8192
+    const val imgRefetchGapMs = 2000
+    const val imgRefetchIdleMs = 10000
+    const val imgRefetchTries = 3
     const val refuseCount = 5
     const val refuseWindowMs = 10000
     val backoffMs: List<Long> = listOf(1000L, 2000L, 4000L, 8000L, 16000L, 30000L)
@@ -48,6 +53,13 @@ object Proto {
     const val lrcMaxBytes = 15360
     const val updChunk = 16320
     const val lyrLineMax = 4096
+    const val searchMaxBytes = 256
+    const val lyrOffsetMaxMs = 60000
+    const val streamChunk = 16320
+    const val streamWindowMax = 32
+    const val streamStallMs = 60000
+    const val phoneItemMaxBytes = 1024
+    const val phoneListMs = 30000
 }
 
 object Msg {
@@ -60,6 +72,7 @@ object Msg {
     const val EQ = 0x13
     const val QUEUE = 0x14
     const val LIB = 0x15
+    const val LIVE = 0x16
     const val TRANSPORT = 0x20
     const val VOLUME = 0x21
     const val SET = 0x22
@@ -87,6 +100,13 @@ object Msg {
     const val LYR_GET = 0x39
     const val ART_PICK = 0x3a
     const val IMG_TAG = 0x3b
+    const val LYR_OFFSET = 0x3c
+    const val PLAYLOG_GET = 0x3d
+    const val PLAYLOG_ACK = 0x3e
+    const val STREAM_READ = 0x3f
+    const val STREAM_CANCEL = 0x40
+    const val PHONE_LIST = 0x41
+    const val PHONE_ART = 0x42
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -97,6 +117,7 @@ object Msg {
         EQ to MsgInfo(EQ, "EQ", "dev", true),
         QUEUE to MsgInfo(QUEUE, "QUEUE", "dev", true),
         LIB to MsgInfo(LIB, "LIB", "dev", true),
+        LIVE to MsgInfo(LIVE, "LIVE", "dev", true),
         TRANSPORT to MsgInfo(TRANSPORT, "TRANSPORT", "app", false),
         VOLUME to MsgInfo(VOLUME, "VOLUME", "app", false),
         SET to MsgInfo(SET, "SET", "app", false),
@@ -124,6 +145,13 @@ object Msg {
         LYR_GET to MsgInfo(LYR_GET, "LYR_GET", "app", false),
         ART_PICK to MsgInfo(ART_PICK, "ART_PICK", "dev", false),
         IMG_TAG to MsgInfo(IMG_TAG, "IMG_TAG", "app", false),
+        LYR_OFFSET to MsgInfo(LYR_OFFSET, "LYR_OFFSET", "app", false),
+        PLAYLOG_GET to MsgInfo(PLAYLOG_GET, "PLAYLOG_GET", "app", false),
+        PLAYLOG_ACK to MsgInfo(PLAYLOG_ACK, "PLAYLOG_ACK", "app", false),
+        STREAM_READ to MsgInfo(STREAM_READ, "STREAM_READ", "dev", false),
+        STREAM_CANCEL to MsgInfo(STREAM_CANCEL, "STREAM_CANCEL", "dev", true),
+        PHONE_LIST to MsgInfo(PHONE_LIST, "PHONE_LIST", "app", false),
+        PHONE_ART to MsgInfo(PHONE_ART, "PHONE_ART", "dev", false),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -141,7 +169,10 @@ object Err {
     const val notFound = 10
     const val readOnly = 11
     const val exists = 12
-    val names: Map<Int, String> = mapOf(1 to "unknown", 2 to "badValue", 3 to "busy", 4 to "refused", 5 to "tooBig", 6 to "crc", 7 to "staleRev", 8 to "noLibrary", 9 to "noSpace", 10 to "notFound", 11 to "readOnly", 12 to "exists")
+    const val cancelled = 13
+    const val noCard = 14
+    const val badSignature = 15
+    val names: Map<Int, String> = mapOf(1 to "unknown", 2 to "badValue", 3 to "busy", 4 to "refused", 5 to "tooBig", 6 to "crc", 7 to "staleRev", 8 to "noLibrary", 9 to "noSpace", 10 to "notFound", 11 to "readOnly", 12 to "exists", 13 to "cancelled", 14 to "noCard", 15 to "badSignature")
 }
 
 object Feature {
@@ -160,20 +191,39 @@ object Feature {
     const val artPick = 12
     const val imgOrigin = 13
     const val stateClock = 14
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock")
+    const val eqSlots = 15
+    const val eqGraphic = 16
+    const val eqPass = 17
+    const val outputKinds = 18
+    const val rowConfirm = 19
+    const val search = 20
+    const val lyricsOffset = 21
+    const val receiver = 22
+    const val playLog = 23
+    const val genres = 24
+    const val queueAdd = 25
+    const val phoneFiles = 26
+    const val updSig = 27
+    const val imgSource = 28
+    const val eqStages = 29
+    const val liveRows = 30
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows")
 }
 
 object Enums {
     object Source {
         const val local = 0
         const val phone = 1
-        val names: Map<Int, String> = mapOf(0 to "local", 1 to "phone")
+        const val phoneFile = 2
+        val names: Map<Int, String> = mapOf(0 to "local", 1 to "phone", 2 to "phoneFile")
     }
     object Output {
         const val wired = 0
         const val btHeadset = 1
         const val phoneReceiver = 2
-        val names: Map<Int, String> = mapOf(0 to "wired", 1 to "btHeadset", 2 to "phoneReceiver")
+        const val speaker = 3
+        const val usbDac = 4
+        val names: Map<Int, String> = mapOf(0 to "wired", 1 to "btHeadset", 2 to "phoneReceiver", 3 to "speaker", 4 to "usbDac")
     }
     object Repeat {
         const val off = 0
@@ -181,13 +231,21 @@ object Enums {
         const val one = 2
         val names: Map<Int, String> = mapOf(0 to "off", 1 to "all", 2 to "one")
     }
+    object Card {
+        const val out = 0
+        const val error = 1
+        const val busy = 2
+        const val ready = 3
+        val names: Map<Int, String> = mapOf(0 to "out", 1 to "error", 2 to "busy", 3 to "ready")
+    }
     object ByeReason {
         const val version = 0
         const val replaced = 1
         const val refused = 2
         const val companionOff = 3
         const val shutdown = 4
-        val names: Map<Int, String> = mapOf(0 to "version", 1 to "replaced", 2 to "refused", 3 to "companionOff", 4 to "shutdown")
+        const val streaming = 5
+        val names: Map<Int, String> = mapOf(0 to "version", 1 to "replaced", 2 to "refused", 3 to "companionOff", 4 to "shutdown", 5 to "streaming")
     }
     object RowKind {
         const val choice = 0
@@ -203,7 +261,8 @@ object Enums {
         const val readOnly = 0
         const val restart = 1
         const val boardOnly = 2
-        val names: Map<Int, String> = mapOf(0 to "readOnly", 1 to "restart", 2 to "boardOnly")
+        const val confirm = 3
+        val names: Map<Int, String> = mapOf(0 to "readOnly", 1 to "restart", 2 to "boardOnly", 3 to "confirm")
     }
     object EqOutput {
         const val wired = 0
@@ -215,7 +274,16 @@ object Enums {
         const val peak = 1
         const val lowShelf = 2
         const val highShelf = 3
-        val names: Map<Int, String> = mapOf(0 to "off", 1 to "peak", 2 to "lowShelf", 3 to "highShelf")
+        const val bandPass = 4
+        const val lowPass = 5
+        const val highPass = 6
+        const val allPass = 7
+        val names: Map<Int, String> = mapOf(0 to "off", 1 to "peak", 2 to "lowShelf", 3 to "highShelf", 4 to "bandPass", 5 to "lowPass", 6 to "highPass", 7 to "allPass")
+    }
+    object EqMode {
+        const val parametric = 0
+        const val graphic = 1
+        val names: Map<Int, String> = mapOf(0 to "parametric", 1 to "graphic")
     }
     object View {
         const val artists = 0
@@ -226,7 +294,11 @@ object Enums {
         const val playlists = 5
         const val folders = 6
         const val favorites = 7
-        val names: Map<Int, String> = mapOf(0 to "artists", 1 to "albums", 2 to "songs", 3 to "artistAlbums", 4 to "albumTracks", 5 to "playlists", 6 to "folders", 7 to "favorites")
+        const val searchArtists = 8
+        const val searchAlbums = 9
+        const val searchSongs = 10
+        const val genres = 11
+        val names: Map<Int, String> = mapOf(0 to "artists", 1 to "albums", 2 to "songs", 3 to "artistAlbums", 4 to "albumTracks", 5 to "playlists", 6 to "folders", 7 to "favorites", 8 to "searchArtists", 9 to "searchAlbums", 10 to "searchSongs", 11 to "genres")
     }
     object TransportCmd {
         const val toggle = 0
@@ -263,7 +335,8 @@ object Enums {
         const val move = 3
         const val playNext = 4
         const val clear = 5
-        val names: Map<Int, String> = mapOf(0 to "page", 1 to "playAt", 2 to "remove", 3 to "move", 4 to "playNext", 5 to "clear")
+        const val add = 6
+        val names: Map<Int, String> = mapOf(0 to "page", 1 to "playAt", 2 to "remove", 3 to "move", 4 to "playNext", 5 to "clear", 6 to "add")
     }
     object ActionCmd {
         const val rescan = 0
@@ -283,7 +356,8 @@ object Enums {
         const val offsetMismatch = 4
         const val superseded = 5
         const val writeError = 6
-        val names: Map<Int, String> = mapOf(0 to "crc", 1 to "badValue", 2 to "noSpace", 3 to "busy", 4 to "offsetMismatch", 5 to "superseded", 6 to "writeError")
+        const val noCard = 7
+        val names: Map<Int, String> = mapOf(0 to "crc", 1 to "badValue", 2 to "noSpace", 3 to "busy", 4 to "offsetMismatch", 5 to "superseded", 6 to "writeError", 7 to "noCard")
     }
     object EqPresetOp {
         const val save = 0
@@ -310,11 +384,13 @@ object Enums {
         "SOURCE" to Source.names,
         "OUTPUT" to Output.names,
         "REPEAT" to Repeat.names,
+        "CARD" to Card.names,
         "BYE_REASON" to ByeReason.names,
         "ROW_KIND" to RowKind.names,
         "ROW_FLAG" to RowFlag.names,
         "EQ_OUTPUT" to EqOutput.names,
         "BAND_TYPE" to BandType.names,
+        "EQ_MODE" to EqMode.names,
         "VIEW" to View.names,
         "TRANSPORT_CMD" to TransportCmd.names,
         "DRAFT_KIND" to DraftKind.names,
@@ -356,6 +432,11 @@ object Tags {
         const val libRev = 14
         const val settingsRev = 15
         const val snapRev = 16
+        const val eqSlot = 17
+        const val bandTypes = 18
+        const val phoneMime = 19
+        const val phoneMaxRate = 20
+        const val phoneMaxBits = 21
     }
     object Bye {
         const val reason = 1
@@ -398,6 +479,21 @@ object Tags {
         const val lyricsPlain = 33
         const val lyricsCrc = 34
         const val positionHeld = 35
+        const val eqSlot = 36
+        const val card = 37
+        const val lyricsOffsetMs = 38
+        const val receiver = 39
+        const val playLogSeq = 40
+        const val phoneName = 41
+        const val phoneArtCrc = 42
+        const val phoneTrackNo = 43
+        const val phoneTracks = 44
+        const val phoneFile = 45
+        const val buffering = 46
+        const val aheadMs = 47
+        const val imgHold = 48
+        const val updHold = 49
+        const val eqEarSlot = 50
     }
     object Schema {
         const val pivot = 1
@@ -421,6 +517,16 @@ object Tags {
         const val offset = 5
         const val total = 6
         const val more = 7
+        const val slot = 8
+        const val mode = 9
+        const val graphicKey = 10
+        const val graphicName = 11
+        const val gains = 12
+        const val graphicOffset = 13
+        const val graphicTotal = 14
+        const val on = 15
+        const val target = 16
+        const val headset = 17
     }
     object Queue {
         const val rev = 1
@@ -438,6 +544,10 @@ object Tags {
         const val more = 6
         const val row = 7
         const val snapRev = 8
+    }
+    object Live {
+        const val rev = 1
+        const val text = 2
     }
     object Transport {
         const val cmd = 1
@@ -474,6 +584,12 @@ object Tags {
         const val output = 1
         const val key = 2
         const val ints = 3
+        const val slot = 4
+        const val mode = 5
+        const val graphicKey = 6
+        const val gains = 7
+        const val on = 8
+        const val target = 9
     }
     object Play {
         const val view = 1
@@ -483,6 +599,7 @@ object Tags {
         const val shuffle = 5
         const val track = 6
         const val snapRev = 7
+        const val phoneList = 8
     }
     object QueueOp {
         const val cmd = 1
@@ -492,6 +609,15 @@ object Tags {
         const val slot = 5
         const val to = 6
         const val track = 7
+        const val view = 8
+        const val parent = 9
+        const val libRev = 10
+        const val snapRev = 11
+        const val phoneList = 12
+    }
+    object QueueOpReply {
+        const val added = 1
+        const val rev = 2
     }
     object LibGet {
         const val view = 1
@@ -525,14 +651,25 @@ object Tags {
         const val text = 3
         const val crc = 4
         const val snapRev = 5
+        const val phoneFile = 6
+    }
+    object LrcPutReply {
+        const val lyrics = 1
+        const val lyricsPlain = 2
     }
     object LrcDel {
         const val track = 1
+        const val phoneFile = 2
+    }
+    object LrcDelReply {
+        const val lyrics = 1
+        const val lyricsPlain = 2
     }
     object UpdBegin {
         const val board = 1
         const val size = 2
         const val md5 = 3
+        const val sig = 4
     }
     object UpdBeginReply {
         const val offset = 1
@@ -560,6 +697,9 @@ object Tags {
         const val source = 9
         const val credit = 10
         const val origin = 11
+        const val focusX = 12
+        const val focusY = 13
+        const val full = 14
     }
     object ImgBeginReply {
         const val offset = 1
@@ -583,6 +723,7 @@ object Tags {
         const val entry = 4
         const val bytes = 5
         const val cap = 6
+        const val srcRoom = 7
     }
     object ImgDel {
         const val name = 1
@@ -599,6 +740,10 @@ object Tags {
         const val name = 4
         const val ints = 5
         const val replace = 6
+        const val slot = 7
+        const val mode = 8
+        const val gains = 9
+        const val target = 10
     }
     object EqPresetReply {
         const val key = 1
@@ -613,6 +758,7 @@ object Tags {
         const val track = 1
         const val offset = 2
         const val have = 3
+        const val phoneFile = 4
     }
     object LyrGetReply {
         const val crc = 1
@@ -621,6 +767,7 @@ object Tags {
         const val offset = 4
         const val more = 5
         const val line = 6
+        const val offsetMs = 7
     }
     object ArtPick {
         const val name = 1
@@ -632,6 +779,63 @@ object Tags {
     object ImgTag {
         const val name = 1
         const val origin = 2
+    }
+    object LyrOffset {
+        const val track = 1
+        const val ms = 2
+    }
+    object LyrOffsetReply {
+        const val ms = 1
+    }
+    object PlaylogGet {
+        const val after = 1
+        const val count = 2
+    }
+    object PlaylogGetReply {
+        const val log = 1
+        const val newest = 2
+        const val more = 3
+        const val entry = 4
+        const val first = 5
+    }
+    object PlaylogAck {
+        const val log = 1
+        const val upTo = 2
+    }
+    object StreamRead {
+        const val file = 1
+        const val rev = 2
+        const val offset = 3
+        const val len = 4
+        const val landed = 5
+    }
+    object StreamReadReply {
+        const val offset = 1
+        const val size = 2
+        const val `data` = 3
+    }
+    object StreamCancel {
+        const val seq = 1
+    }
+    object PhoneList {
+        const val list = 1
+        const val offset = 2
+        const val total = 3
+        const val item = 4
+    }
+    object PhoneArt {
+        const val art = 1
+        const val px = 2
+        const val offset = 3
+        const val have = 4
+    }
+    object PhoneArtReply {
+        const val crc = 1
+        const val total = 2
+        const val w = 3
+        const val h = 4
+        const val offset = 5
+        const val `data` = 6
     }
     object Error {
         const val code = 1
@@ -675,6 +879,7 @@ object Tags {
         const val durationMs = 6
         const val lyrics = 7
         const val lyricsPlain = 8
+        const val phoneFile = 9
     }
     object LibRow {
         const val name = 1
@@ -682,15 +887,65 @@ object Tags {
         const val first = 3
         const val key = 4
         const val mbid = 5
+        const val artist = 6
     }
     object ImgEntry {
         const val name = 1
         const val mbid = 2
         const val origin = 3
+        const val full = 4
+        const val shownS = 5
+        const val crc = 6
+        const val srcCrc = 7
     }
     object LyrLine {
         const val ms = 1
         const val text = 2
+    }
+    object EqSlot {
+        const val key = 1
+        const val label = 2
+    }
+    object Graphic {
+        const val preamp10 = 1
+        const val band = 2
+    }
+    object GraphicBand {
+        const val grid = 1
+        const val gain10 = 2
+    }
+    object PlayEntry {
+        const val seq = 1
+        const val startLocalS = 2
+        const val playedMs = 3
+        const val durationMs = 4
+        const val track = 5
+        const val title = 6
+        const val artist = 7
+        const val artists = 8
+        const val mbids = 9
+        const val album = 10
+        const val albumArtist = 11
+        const val trackNo = 12
+        const val zoneS = 13
+        const val liveSeen = 14
+        const val phoneFile = 15
+    }
+    object PhoneItem {
+        const val file = 1
+        const val rev = 2
+        const val size = 3
+        const val mime = 4
+        const val durationMs = 5
+        const val title = 6
+        const val artists = 7
+        const val album = 8
+        const val albumArtist = 9
+        const val trackNo = 10
+        const val discNo = 11
+        const val art = 12
+        const val rate = 19
+        const val bits = 20
     }
     val scopes: Map<String, Map<Int, Field>> = mapOf(
         "HELLO" to mapOf(
@@ -717,6 +972,11 @@ object Tags {
             14 to Field(14, "libRev", Base.U32, null, false),
             15 to Field(15, "settingsRev", Base.U32, null, false),
             16 to Field(16, "snapRev", Base.U32, null, false),
+            17 to Field(17, "eqSlot", Base.RECORD, "EqSlot", true),
+            18 to Field(18, "bandTypes", Base.ENUM, "BAND_TYPE", true),
+            19 to Field(19, "phoneMime", Base.STR, null, true),
+            20 to Field(20, "phoneMaxRate", Base.U32, null, false),
+            21 to Field(21, "phoneMaxBits", Base.U8, null, false),
         ),
         "BYE" to mapOf(
             1 to Field(1, "reason", Base.ENUM, "BYE_REASON", false),
@@ -759,6 +1019,21 @@ object Tags {
             33 to Field(33, "lyricsPlain", Base.BOOL, null, false),
             34 to Field(34, "lyricsCrc", Base.U32, null, false),
             35 to Field(35, "positionHeld", Base.BOOL, null, false),
+            36 to Field(36, "eqSlot", Base.STR, null, false),
+            37 to Field(37, "card", Base.ENUM, "CARD", false),
+            38 to Field(38, "lyricsOffsetMs", Base.I32, null, false),
+            39 to Field(39, "receiver", Base.BOOL, null, false),
+            40 to Field(40, "playLogSeq", Base.U32, null, false),
+            41 to Field(41, "phoneName", Base.STR, null, false),
+            42 to Field(42, "phoneArtCrc", Base.U32, null, false),
+            43 to Field(43, "phoneTrackNo", Base.U32, null, false),
+            44 to Field(44, "phoneTracks", Base.U32, null, false),
+            45 to Field(45, "phoneFile", Base.U64, null, false),
+            46 to Field(46, "buffering", Base.BOOL, null, false),
+            47 to Field(47, "aheadMs", Base.U32, null, false),
+            48 to Field(48, "imgHold", Base.BOOL, null, false),
+            49 to Field(49, "updHold", Base.BOOL, null, false),
+            50 to Field(50, "eqEarSlot", Base.STR, null, false),
         ),
         "SCHEMA" to mapOf(
             1 to Field(1, "pivot", Base.STR, null, false),
@@ -782,6 +1057,16 @@ object Tags {
             5 to Field(5, "offset", Base.U32, null, false),
             6 to Field(6, "total", Base.U32, null, false),
             7 to Field(7, "more", Base.BOOL, null, false),
+            8 to Field(8, "slot", Base.STR, null, false),
+            9 to Field(9, "mode", Base.ENUM, "EQ_MODE", false),
+            10 to Field(10, "graphicKey", Base.STR, null, false),
+            11 to Field(11, "graphicName", Base.RECORD, "EqName", true),
+            12 to Field(12, "gains", Base.RECORD, "Graphic", false),
+            13 to Field(13, "graphicOffset", Base.U32, null, false),
+            14 to Field(14, "graphicTotal", Base.U32, null, false),
+            15 to Field(15, "on", Base.BOOL, null, false),
+            16 to Field(16, "target", Base.U32, null, false),
+            17 to Field(17, "headset", Base.STR, null, false),
         ),
         "QUEUE" to mapOf(
             1 to Field(1, "rev", Base.U32, null, false),
@@ -799,6 +1084,10 @@ object Tags {
             6 to Field(6, "more", Base.BOOL, null, false),
             7 to Field(7, "row", Base.RECORD, "LibRow", true),
             8 to Field(8, "snapRev", Base.U32, null, false),
+        ),
+        "LIVE" to mapOf(
+            1 to Field(1, "rev", Base.U32, null, false),
+            2 to Field(2, "text", Base.STR, null, false),
         ),
         "TRANSPORT" to mapOf(
             1 to Field(1, "cmd", Base.ENUM, "TRANSPORT_CMD", false),
@@ -835,6 +1124,12 @@ object Tags {
             1 to Field(1, "output", Base.ENUM, "EQ_OUTPUT", false),
             2 to Field(2, "key", Base.STR, null, false),
             3 to Field(3, "ints", Base.RECORD, "Profile", false),
+            4 to Field(4, "slot", Base.STR, null, false),
+            5 to Field(5, "mode", Base.ENUM, "EQ_MODE", false),
+            6 to Field(6, "graphicKey", Base.STR, null, false),
+            7 to Field(7, "gains", Base.RECORD, "Graphic", false),
+            8 to Field(8, "on", Base.BOOL, null, false),
+            9 to Field(9, "target", Base.U32, null, false),
         ),
         "PLAY" to mapOf(
             1 to Field(1, "view", Base.ENUM, "VIEW", false),
@@ -844,6 +1139,7 @@ object Tags {
             5 to Field(5, "shuffle", Base.BOOL, null, false),
             6 to Field(6, "track", Base.U64, null, true),
             7 to Field(7, "snapRev", Base.U32, null, false),
+            8 to Field(8, "phoneList", Base.U32, null, false),
         ),
         "QUEUE_OP" to mapOf(
             1 to Field(1, "cmd", Base.ENUM, "QUEUE_CMD", false),
@@ -853,6 +1149,15 @@ object Tags {
             5 to Field(5, "slot", Base.U32, null, false),
             6 to Field(6, "to", Base.U32, null, false),
             7 to Field(7, "track", Base.U64, null, true),
+            8 to Field(8, "view", Base.ENUM, "VIEW", false),
+            9 to Field(9, "parent", Base.STR, null, false),
+            10 to Field(10, "libRev", Base.U32, null, false),
+            11 to Field(11, "snapRev", Base.U32, null, false),
+            12 to Field(12, "phoneList", Base.U32, null, false),
+        ),
+        "QUEUE_OP.reply" to mapOf(
+            1 to Field(1, "added", Base.U32, null, false),
+            2 to Field(2, "rev", Base.U32, null, false),
         ),
         "LIB_GET" to mapOf(
             1 to Field(1, "view", Base.ENUM, "VIEW", false),
@@ -886,14 +1191,25 @@ object Tags {
             3 to Field(3, "text", Base.BYTES, null, false),
             4 to Field(4, "crc", Base.U32, null, false),
             5 to Field(5, "snapRev", Base.U32, null, false),
+            6 to Field(6, "phoneFile", Base.U64, null, false),
+        ),
+        "LRC_PUT.reply" to mapOf(
+            1 to Field(1, "lyrics", Base.BOOL, null, false),
+            2 to Field(2, "lyricsPlain", Base.BOOL, null, false),
         ),
         "LRC_DEL" to mapOf(
             1 to Field(1, "track", Base.U64, null, false),
+            2 to Field(2, "phoneFile", Base.U64, null, false),
+        ),
+        "LRC_DEL.reply" to mapOf(
+            1 to Field(1, "lyrics", Base.BOOL, null, false),
+            2 to Field(2, "lyricsPlain", Base.BOOL, null, false),
         ),
         "UPD_BEGIN" to mapOf(
             1 to Field(1, "board", Base.STR, null, false),
             2 to Field(2, "size", Base.U32, null, false),
             3 to Field(3, "md5", Base.STR, null, false),
+            4 to Field(4, "sig", Base.BYTES, null, false),
         ),
         "UPD_BEGIN.reply" to mapOf(
             1 to Field(1, "offset", Base.U32, null, false),
@@ -921,6 +1237,9 @@ object Tags {
             9 to Field(9, "source", Base.STR, null, false),
             10 to Field(10, "credit", Base.STR, null, false),
             11 to Field(11, "origin", Base.ENUM, "IMG_ORIGIN", false),
+            12 to Field(12, "focusX", Base.U16, null, false),
+            13 to Field(13, "focusY", Base.U16, null, false),
+            14 to Field(14, "full", Base.BOOL, null, false),
         ),
         "IMG_BEGIN.reply" to mapOf(
             1 to Field(1, "offset", Base.U32, null, false),
@@ -944,6 +1263,7 @@ object Tags {
             4 to Field(4, "entry", Base.RECORD, "ImgEntry", true),
             5 to Field(5, "bytes", Base.U64, null, false),
             6 to Field(6, "cap", Base.U64, null, false),
+            7 to Field(7, "srcRoom", Base.U64, null, false),
         ),
         "IMG_DEL" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
@@ -960,6 +1280,10 @@ object Tags {
             4 to Field(4, "name", Base.STR, null, false),
             5 to Field(5, "ints", Base.RECORD, "Profile", false),
             6 to Field(6, "replace", Base.BOOL, null, false),
+            7 to Field(7, "slot", Base.STR, null, false),
+            8 to Field(8, "mode", Base.ENUM, "EQ_MODE", false),
+            9 to Field(9, "gains", Base.RECORD, "Graphic", false),
+            10 to Field(10, "target", Base.U32, null, false),
         ),
         "EQ_PRESET.reply" to mapOf(
             1 to Field(1, "key", Base.STR, null, false),
@@ -974,6 +1298,7 @@ object Tags {
             1 to Field(1, "track", Base.U64, null, false),
             2 to Field(2, "offset", Base.U32, null, false),
             3 to Field(3, "have", Base.U32, null, false),
+            4 to Field(4, "phoneFile", Base.U64, null, false),
         ),
         "LYR_GET.reply" to mapOf(
             1 to Field(1, "crc", Base.U32, null, false),
@@ -982,6 +1307,7 @@ object Tags {
             4 to Field(4, "offset", Base.U32, null, false),
             5 to Field(5, "more", Base.BOOL, null, false),
             6 to Field(6, "line", Base.RECORD, "LyrLine", true),
+            7 to Field(7, "offsetMs", Base.I32, null, false),
         ),
         "ART_PICK" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
@@ -993,6 +1319,63 @@ object Tags {
         "IMG_TAG" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
             2 to Field(2, "origin", Base.ENUM, "IMG_ORIGIN", false),
+        ),
+        "LYR_OFFSET" to mapOf(
+            1 to Field(1, "track", Base.U64, null, false),
+            2 to Field(2, "ms", Base.I32, null, false),
+        ),
+        "LYR_OFFSET.reply" to mapOf(
+            1 to Field(1, "ms", Base.I32, null, false),
+        ),
+        "PLAYLOG_GET" to mapOf(
+            1 to Field(1, "after", Base.U32, null, false),
+            2 to Field(2, "count", Base.U32, null, false),
+        ),
+        "PLAYLOG_GET.reply" to mapOf(
+            1 to Field(1, "log", Base.U64, null, false),
+            2 to Field(2, "newest", Base.U32, null, false),
+            3 to Field(3, "more", Base.BOOL, null, false),
+            4 to Field(4, "entry", Base.RECORD, "PlayEntry", true),
+            5 to Field(5, "first", Base.U32, null, false),
+        ),
+        "PLAYLOG_ACK" to mapOf(
+            1 to Field(1, "log", Base.U64, null, false),
+            2 to Field(2, "upTo", Base.U32, null, false),
+        ),
+        "STREAM_READ" to mapOf(
+            1 to Field(1, "file", Base.U64, null, false),
+            2 to Field(2, "rev", Base.U64, null, false),
+            3 to Field(3, "offset", Base.U64, null, false),
+            4 to Field(4, "len", Base.U32, null, false),
+            5 to Field(5, "landed", Base.U64, null, false),
+        ),
+        "STREAM_READ.reply" to mapOf(
+            1 to Field(1, "offset", Base.U64, null, false),
+            2 to Field(2, "size", Base.U64, null, false),
+            3 to Field(3, "data", Base.BYTES, null, false),
+        ),
+        "STREAM_CANCEL" to mapOf(
+            1 to Field(1, "seq", Base.U16, null, true),
+        ),
+        "PHONE_LIST" to mapOf(
+            1 to Field(1, "list", Base.U32, null, false),
+            2 to Field(2, "offset", Base.U32, null, false),
+            3 to Field(3, "total", Base.U32, null, false),
+            4 to Field(4, "item", Base.RECORD, "PhoneItem", true),
+        ),
+        "PHONE_ART" to mapOf(
+            1 to Field(1, "art", Base.STR, null, false),
+            2 to Field(2, "px", Base.U16, null, false),
+            3 to Field(3, "offset", Base.U32, null, false),
+            4 to Field(4, "have", Base.U32, null, false),
+        ),
+        "PHONE_ART.reply" to mapOf(
+            1 to Field(1, "crc", Base.U32, null, false),
+            2 to Field(2, "total", Base.U32, null, false),
+            3 to Field(3, "w", Base.U16, null, false),
+            4 to Field(4, "h", Base.U16, null, false),
+            5 to Field(5, "offset", Base.U32, null, false),
+            6 to Field(6, "data", Base.BYTES, null, false),
         ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),
@@ -1036,6 +1419,7 @@ object Tags {
             6 to Field(6, "durationMs", Base.U32, null, false),
             7 to Field(7, "lyrics", Base.BOOL, null, false),
             8 to Field(8, "lyricsPlain", Base.BOOL, null, false),
+            9 to Field(9, "phoneFile", Base.U64, null, false),
         ),
         "LibRow" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
@@ -1043,15 +1427,65 @@ object Tags {
             3 to Field(3, "first", Base.U64, null, false),
             4 to Field(4, "key", Base.STR, null, false),
             5 to Field(5, "mbid", Base.STR, null, false),
+            6 to Field(6, "artist", Base.STR, null, false),
         ),
         "ImgEntry" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
             2 to Field(2, "mbid", Base.STR, null, false),
             3 to Field(3, "origin", Base.ENUM, "IMG_ORIGIN", true),
+            4 to Field(4, "full", Base.BOOL, null, false),
+            5 to Field(5, "shownS", Base.U32, null, false),
+            6 to Field(6, "crc", Base.U32, null, false),
+            7 to Field(7, "srcCrc", Base.U32, null, false),
         ),
         "LyrLine" to mapOf(
             1 to Field(1, "ms", Base.U32, null, false),
             2 to Field(2, "text", Base.STR, null, false),
+        ),
+        "EqSlot" to mapOf(
+            1 to Field(1, "key", Base.STR, null, false),
+            2 to Field(2, "label", Base.STR, null, false),
+        ),
+        "Graphic" to mapOf(
+            1 to Field(1, "preamp10", Base.I32, null, false),
+            2 to Field(2, "band", Base.RECORD, "GraphicBand", true),
+        ),
+        "GraphicBand" to mapOf(
+            1 to Field(1, "grid", Base.I32, null, false),
+            2 to Field(2, "gain10", Base.I32, null, false),
+        ),
+        "PlayEntry" to mapOf(
+            1 to Field(1, "seq", Base.U32, null, false),
+            2 to Field(2, "startLocalS", Base.I64, null, false),
+            3 to Field(3, "playedMs", Base.U32, null, false),
+            4 to Field(4, "durationMs", Base.U32, null, false),
+            5 to Field(5, "track", Base.U64, null, false),
+            6 to Field(6, "title", Base.STR, null, false),
+            7 to Field(7, "artist", Base.STR, null, false),
+            8 to Field(8, "artists", Base.STR, null, true),
+            9 to Field(9, "mbids", Base.STR, null, true),
+            10 to Field(10, "album", Base.STR, null, false),
+            11 to Field(11, "albumArtist", Base.STR, null, false),
+            12 to Field(12, "trackNo", Base.U16, null, false),
+            13 to Field(13, "zoneS", Base.I32, null, false),
+            14 to Field(14, "liveSeen", Base.BOOL, null, false),
+            15 to Field(15, "phoneFile", Base.U64, null, false),
+        ),
+        "PhoneItem" to mapOf(
+            1 to Field(1, "file", Base.U64, null, false),
+            2 to Field(2, "rev", Base.U64, null, false),
+            3 to Field(3, "size", Base.U64, null, false),
+            4 to Field(4, "mime", Base.STR, null, false),
+            5 to Field(5, "durationMs", Base.U32, null, false),
+            6 to Field(6, "title", Base.STR, null, false),
+            7 to Field(7, "artists", Base.STR, null, true),
+            8 to Field(8, "album", Base.STR, null, false),
+            9 to Field(9, "albumArtist", Base.STR, null, false),
+            10 to Field(10, "trackNo", Base.U16, null, false),
+            11 to Field(11, "discNo", Base.U16, null, false),
+            12 to Field(12, "art", Base.STR, null, false),
+            19 to Field(19, "rate", Base.U32, null, false),
+            20 to Field(20, "bits", Base.U8, null, false),
         ),
     )
 }

@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 10
+const minor 15
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -22,6 +22,11 @@ const playMaxTracks 500
 const imgMaxBytes 262144
 const imgDataReserve 16
 const imgEndReplyMs 5000
+const imgSrcMaxBytes 4194304
+const imgSrcMaxSide 8192
+const imgRefetchGapMs 2000
+const imgRefetchIdleMs 10000
+const imgRefetchTries 3
 const refuseCount 5
 const refuseWindowMs 10000
 const backoffMs 1000,2000,4000,8000,16000,30000
@@ -31,6 +36,13 @@ const artMinPx 64
 const lrcMaxBytes 15360
 const updChunk 16320
 const lyrLineMax 4096
+const searchMaxBytes 256
+const lyrOffsetMaxMs 60000
+const streamChunk 16320
+const streamWindowMax 32
+const streamStallMs 60000
+const phoneItemMaxBytes 1024
+const phoneListMs 30000
 err unknown 1
 err badValue 2
 err busy 3
@@ -43,6 +55,9 @@ err noSpace 9
 err notFound 10
 err readOnly 11
 err exists 12
+err cancelled 13
+err noCard 14
+err badSignature 15
 feature settings 0
 feature eq 1
 feature library 2
@@ -58,19 +73,43 @@ feature lyricsGet 11
 feature artPick 12
 feature imgOrigin 13
 feature stateClock 14
+feature eqSlots 15
+feature eqGraphic 16
+feature eqPass 17
+feature outputKinds 18
+feature rowConfirm 19
+feature search 20
+feature lyricsOffset 21
+feature receiver 22
+feature playLog 23
+feature genres 24
+feature queueAdd 25
+feature phoneFiles 26
+feature updSig 27
+feature imgSource 28
+feature eqStages 29
+feature liveRows 30
 enum SOURCE 0 local
 enum SOURCE 1 phone
+enum SOURCE 2 phoneFile
 enum OUTPUT 0 wired
 enum OUTPUT 1 btHeadset
 enum OUTPUT 2 phoneReceiver
+enum OUTPUT 3 speaker
+enum OUTPUT 4 usbDac
 enum REPEAT 0 off
 enum REPEAT 1 all
 enum REPEAT 2 one
+enum CARD 0 out
+enum CARD 1 error
+enum CARD 2 busy
+enum CARD 3 ready
 enum BYE_REASON 0 version
 enum BYE_REASON 1 replaced
 enum BYE_REASON 2 refused
 enum BYE_REASON 3 companionOff
 enum BYE_REASON 4 shutdown
+enum BYE_REASON 5 streaming
 enum ROW_KIND 0 choice
 enum ROW_KIND 1 steps
 enum ROW_KIND 2 range
@@ -81,12 +120,19 @@ enum ROW_KIND 6 info
 enum ROW_FLAG 0 readOnly
 enum ROW_FLAG 1 restart
 enum ROW_FLAG 2 boardOnly
+enum ROW_FLAG 3 confirm
 enum EQ_OUTPUT 0 wired
 enum EQ_OUTPUT 1 bt
 enum BAND_TYPE 0 off
 enum BAND_TYPE 1 peak
 enum BAND_TYPE 2 lowShelf
 enum BAND_TYPE 3 highShelf
+enum BAND_TYPE 4 bandPass
+enum BAND_TYPE 5 lowPass
+enum BAND_TYPE 6 highPass
+enum BAND_TYPE 7 allPass
+enum EQ_MODE 0 parametric
+enum EQ_MODE 1 graphic
 enum VIEW 0 artists
 enum VIEW 1 albums
 enum VIEW 2 songs
@@ -95,6 +141,10 @@ enum VIEW 4 albumTracks
 enum VIEW 5 playlists
 enum VIEW 6 folders
 enum VIEW 7 favorites
+enum VIEW 8 searchArtists
+enum VIEW 9 searchAlbums
+enum VIEW 10 searchSongs
+enum VIEW 11 genres
 enum TRANSPORT_CMD 0 toggle
 enum TRANSPORT_CMD 1 play
 enum TRANSPORT_CMD 2 pause
@@ -117,6 +167,7 @@ enum QUEUE_CMD 2 remove
 enum QUEUE_CMD 3 move
 enum QUEUE_CMD 4 playNext
 enum QUEUE_CMD 5 clear
+enum QUEUE_CMD 6 add
 enum ACTION_CMD 0 rescan
 enum ACTION_CMD 1 shuffleLibrary
 enum ACTION_CMD 2 favorite
@@ -128,6 +179,7 @@ enum ABORT_CODE 3 busy
 enum ABORT_CODE 4 offsetMismatch
 enum ABORT_CODE 5 superseded
 enum ABORT_CODE 6 writeError
+enum ABORT_CODE 7 noCard
 enum EQ_PRESET_OP 0 save
 enum EQ_PRESET_OP 1 remove
 enum EQ_PRESET_OP 2 rename
@@ -159,6 +211,11 @@ tag HELLO.reply 13 features u64 one
 tag HELLO.reply 14 libRev u32 one
 tag HELLO.reply 15 settingsRev u32 one
 tag HELLO.reply 16 snapRev u32 one
+tag HELLO.reply 17 eqSlot EqSlot list
+tag HELLO.reply 18 bandTypes BAND_TYPE list
+tag HELLO.reply 19 phoneMime str list
+tag HELLO.reply 20 phoneMaxRate u32 one
+tag HELLO.reply 21 phoneMaxBits u8 one
 msg PING 0x02 both req
 msg BYE 0x03 dev push
 tag BYE 1 reason BYE_REASON one
@@ -200,6 +257,21 @@ tag STATE 32 snapRev u32 one
 tag STATE 33 lyricsPlain bool one
 tag STATE 34 lyricsCrc u32 one
 tag STATE 35 positionHeld bool one
+tag STATE 36 eqSlot str one
+tag STATE 37 card CARD one
+tag STATE 38 lyricsOffsetMs i32 one
+tag STATE 39 receiver bool one
+tag STATE 40 playLogSeq u32 one
+tag STATE 41 phoneName str one
+tag STATE 42 phoneArtCrc u32 one
+tag STATE 43 phoneTrackNo u32 one
+tag STATE 44 phoneTracks u32 one
+tag STATE 45 phoneFile u64 one
+tag STATE 46 buffering bool one
+tag STATE 47 aheadMs u32 one
+tag STATE 48 imgHold bool one
+tag STATE 49 updHold bool one
+tag STATE 50 eqEarSlot str one
 msg SCHEMA 0x11 dev push
 tag SCHEMA 1 pivot str one
 tag SCHEMA 2 offset u32 one
@@ -220,6 +292,16 @@ tag EQ 4 ints Profile one
 tag EQ 5 offset u32 one
 tag EQ 6 total u32 one
 tag EQ 7 more bool one
+tag EQ 8 slot str one
+tag EQ 9 mode EQ_MODE one
+tag EQ 10 graphicKey str one
+tag EQ 11 graphicName EqName list
+tag EQ 12 gains Graphic one
+tag EQ 13 graphicOffset u32 one
+tag EQ 14 graphicTotal u32 one
+tag EQ 15 on bool one
+tag EQ 16 target u32 one
+tag EQ 17 headset str one
 msg QUEUE 0x14 dev push
 tag QUEUE 1 rev u32 one
 tag QUEUE 2 offset u32 one
@@ -235,6 +317,9 @@ tag LIB 5 total u32 one
 tag LIB 6 more bool one
 tag LIB 7 row LibRow list
 tag LIB 8 snapRev u32 one
+msg LIVE 0x16 dev push
+tag LIVE 1 rev u32 one
+tag LIVE 2 text str one
 msg TRANSPORT 0x20 app req
 tag TRANSPORT 1 cmd TRANSPORT_CMD one
 tag TRANSPORT 2 seekMs u32 one
@@ -262,6 +347,12 @@ msg EQ_SET 0x24 app req
 tag EQ_SET 1 output EQ_OUTPUT one
 tag EQ_SET 2 key str one
 tag EQ_SET 3 ints Profile one
+tag EQ_SET 4 slot str one
+tag EQ_SET 5 mode EQ_MODE one
+tag EQ_SET 6 graphicKey str one
+tag EQ_SET 7 gains Graphic one
+tag EQ_SET 8 on bool one
+tag EQ_SET 9 target u32 one
 msg PLAY 0x25 app req
 tag PLAY 1 view VIEW one
 tag PLAY 2 parent str one
@@ -270,6 +361,7 @@ tag PLAY 4 start u32 one
 tag PLAY 5 shuffle bool one
 tag PLAY 6 track u64 list
 tag PLAY 7 snapRev u32 one
+tag PLAY 8 phoneList u32 one
 msg QUEUE_OP 0x26 app req
 tag QUEUE_OP 1 cmd QUEUE_CMD one
 tag QUEUE_OP 2 rev u32 one
@@ -278,6 +370,13 @@ tag QUEUE_OP 4 count u32 one
 tag QUEUE_OP 5 slot u32 one
 tag QUEUE_OP 6 to u32 one
 tag QUEUE_OP 7 track u64 list
+tag QUEUE_OP 8 view VIEW one
+tag QUEUE_OP 9 parent str one
+tag QUEUE_OP 10 libRev u32 one
+tag QUEUE_OP 11 snapRev u32 one
+tag QUEUE_OP 12 phoneList u32 one
+tag QUEUE_OP.reply 1 added u32 one
+tag QUEUE_OP.reply 2 rev u32 one
 msg LIB_GET 0x27 app req
 tag LIB_GET 1 view VIEW one
 tag LIB_GET 2 parent str one
@@ -305,12 +404,19 @@ tag LRC_PUT 2 libRev u32 one
 tag LRC_PUT 3 text bytes one
 tag LRC_PUT 4 crc u32 one
 tag LRC_PUT 5 snapRev u32 one
+tag LRC_PUT 6 phoneFile u64 one
+tag LRC_PUT.reply 1 lyrics bool one
+tag LRC_PUT.reply 2 lyricsPlain bool one
 msg LRC_DEL 0x2b app req
 tag LRC_DEL 1 track u64 one
+tag LRC_DEL 2 phoneFile u64 one
+tag LRC_DEL.reply 1 lyrics bool one
+tag LRC_DEL.reply 2 lyricsPlain bool one
 msg UPD_BEGIN 0x2c app req
 tag UPD_BEGIN 1 board str one
 tag UPD_BEGIN 2 size u32 one
 tag UPD_BEGIN 3 md5 str one
+tag UPD_BEGIN 4 sig bytes one
 tag UPD_BEGIN.reply 1 offset u32 one
 msg UPD_DATA 0x2d app push
 tag UPD_DATA 1 offset u32 one
@@ -332,6 +438,9 @@ tag IMG_BEGIN 8 wrongArtist bool one
 tag IMG_BEGIN 9 source str one
 tag IMG_BEGIN 10 credit str one
 tag IMG_BEGIN 11 origin IMG_ORIGIN one
+tag IMG_BEGIN 12 focusX u16 one
+tag IMG_BEGIN 13 focusY u16 one
+tag IMG_BEGIN 14 full bool one
 tag IMG_BEGIN.reply 1 offset u32 one
 tag IMG_BEGIN.reply 2 crc u32 one
 msg IMG_DATA 0x32 app push
@@ -348,6 +457,7 @@ tag IMG_LIST.reply 3 more bool one
 tag IMG_LIST.reply 4 entry ImgEntry list
 tag IMG_LIST.reply 5 bytes u64 one
 tag IMG_LIST.reply 6 cap u64 one
+tag IMG_LIST.reply 7 srcRoom u64 one
 msg IMG_DEL 0x35 app req
 tag IMG_DEL 1 name str one
 msg IMG_ABORT 0x36 dev push
@@ -361,6 +471,10 @@ tag EQ_PRESET 3 key str one
 tag EQ_PRESET 4 name str one
 tag EQ_PRESET 5 ints Profile one
 tag EQ_PRESET 6 replace bool one
+tag EQ_PRESET 7 slot str one
+tag EQ_PRESET 8 mode EQ_MODE one
+tag EQ_PRESET 9 gains Graphic one
+tag EQ_PRESET 10 target u32 one
 tag EQ_PRESET.reply 1 key str one
 msg ART_BLOCK 0x38 dev req
 tag ART_BLOCK 1 cmd BLOCK_CMD one
@@ -371,12 +485,14 @@ msg LYR_GET 0x39 app req
 tag LYR_GET 1 track u64 one
 tag LYR_GET 2 offset u32 one
 tag LYR_GET 3 have u32 one
+tag LYR_GET 4 phoneFile u64 one
 tag LYR_GET.reply 1 crc u32 one
 tag LYR_GET.reply 2 kind LYRICS_KIND one
 tag LYR_GET.reply 3 total u32 one
 tag LYR_GET.reply 4 offset u32 one
 tag LYR_GET.reply 5 more bool one
 tag LYR_GET.reply 6 line LyrLine list
+tag LYR_GET.reply 7 offsetMs i32 one
 msg ART_PICK 0x3a dev req
 tag ART_PICK 1 name str one
 tag ART_PICK 2 mbid str one
@@ -384,6 +500,48 @@ tag ART_PICK.reply 1 shown bool one
 msg IMG_TAG 0x3b app req
 tag IMG_TAG 1 name str one
 tag IMG_TAG 2 origin IMG_ORIGIN one
+msg LYR_OFFSET 0x3c app req
+tag LYR_OFFSET 1 track u64 one
+tag LYR_OFFSET 2 ms i32 one
+tag LYR_OFFSET.reply 1 ms i32 one
+msg PLAYLOG_GET 0x3d app req
+tag PLAYLOG_GET 1 after u32 one
+tag PLAYLOG_GET 2 count u32 one
+tag PLAYLOG_GET.reply 1 log u64 one
+tag PLAYLOG_GET.reply 2 newest u32 one
+tag PLAYLOG_GET.reply 3 more bool one
+tag PLAYLOG_GET.reply 4 entry PlayEntry list
+tag PLAYLOG_GET.reply 5 first u32 one
+msg PLAYLOG_ACK 0x3e app req
+tag PLAYLOG_ACK 1 log u64 one
+tag PLAYLOG_ACK 2 upTo u32 one
+msg STREAM_READ 0x3f dev req
+tag STREAM_READ 1 file u64 one
+tag STREAM_READ 2 rev u64 one
+tag STREAM_READ 3 offset u64 one
+tag STREAM_READ 4 len u32 one
+tag STREAM_READ 5 landed u64 one
+tag STREAM_READ.reply 1 offset u64 one
+tag STREAM_READ.reply 2 size u64 one
+tag STREAM_READ.reply 3 data bytes one
+msg STREAM_CANCEL 0x40 dev push
+tag STREAM_CANCEL 1 seq u16 list
+msg PHONE_LIST 0x41 app req
+tag PHONE_LIST 1 list u32 one
+tag PHONE_LIST 2 offset u32 one
+tag PHONE_LIST 3 total u32 one
+tag PHONE_LIST 4 item PhoneItem list
+msg PHONE_ART 0x42 dev req
+tag PHONE_ART 1 art str one
+tag PHONE_ART 2 px u16 one
+tag PHONE_ART 3 offset u32 one
+tag PHONE_ART 4 have u32 one
+tag PHONE_ART.reply 1 crc u32 one
+tag PHONE_ART.reply 2 total u32 one
+tag PHONE_ART.reply 3 w u16 one
+tag PHONE_ART.reply 4 h u16 one
+tag PHONE_ART.reply 5 offset u32 one
+tag PHONE_ART.reply 6 data bytes one
 tag error 1 code u8 one
 tag error 2 text str one
 tag error 3 refused str list
@@ -415,13 +573,54 @@ tag QueueItem 5 album str one
 tag QueueItem 6 durationMs u32 one
 tag QueueItem 7 lyrics bool one
 tag QueueItem 8 lyricsPlain bool one
+tag QueueItem 9 phoneFile u64 one
 tag LibRow 1 name str one
 tag LibRow 2 count u32 one
 tag LibRow 3 first u64 one
 tag LibRow 4 key str one
 tag LibRow 5 mbid str one
+tag LibRow 6 artist str one
 tag ImgEntry 1 name str one
 tag ImgEntry 2 mbid str one
 tag ImgEntry 3 origin IMG_ORIGIN list
+tag ImgEntry 4 full bool one
+tag ImgEntry 5 shownS u32 one
+tag ImgEntry 6 crc u32 one
+tag ImgEntry 7 srcCrc u32 one
 tag LyrLine 1 ms u32 one
 tag LyrLine 2 text str one
+tag EqSlot 1 key str one
+tag EqSlot 2 label str one
+tag Graphic 1 preamp10 i32 one
+tag Graphic 2 band GraphicBand list
+tag GraphicBand 1 grid i32 one
+tag GraphicBand 2 gain10 i32 one
+tag PlayEntry 1 seq u32 one
+tag PlayEntry 2 startLocalS i64 one
+tag PlayEntry 3 playedMs u32 one
+tag PlayEntry 4 durationMs u32 one
+tag PlayEntry 5 track u64 one
+tag PlayEntry 6 title str one
+tag PlayEntry 7 artist str one
+tag PlayEntry 8 artists str list
+tag PlayEntry 9 mbids str list
+tag PlayEntry 10 album str one
+tag PlayEntry 11 albumArtist str one
+tag PlayEntry 12 trackNo u16 one
+tag PlayEntry 13 zoneS i32 one
+tag PlayEntry 14 liveSeen bool one
+tag PlayEntry 15 phoneFile u64 one
+tag PhoneItem 1 file u64 one
+tag PhoneItem 2 rev u64 one
+tag PhoneItem 3 size u64 one
+tag PhoneItem 4 mime str one
+tag PhoneItem 5 durationMs u32 one
+tag PhoneItem 6 title str one
+tag PhoneItem 7 artists str list
+tag PhoneItem 8 album str one
+tag PhoneItem 9 albumArtist str one
+tag PhoneItem 10 trackNo u16 one
+tag PhoneItem 11 discNo u16 one
+tag PhoneItem 12 art str one
+tag PhoneItem 19 rate u32 one
+tag PhoneItem 20 bits u8 one

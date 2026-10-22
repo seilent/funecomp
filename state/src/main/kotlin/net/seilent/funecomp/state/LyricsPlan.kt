@@ -17,8 +17,9 @@ object LyricsPlan {
             val q = d.queue.items[i] ?: continue
             val a = q.artists.joinToString(", ").ifEmpty { null } ?: continue
             val t = q.title ?: continue
-            if (q.lyrics != false || q.track in done || out.any { it.track == q.track }) continue
-            out += Want(q.track, t, a, q.album, q.durationMs, q.lyricsPlain == false, q.artists)
+            val id = q.track ?: continue
+            if (q.lyrics != false || id in done || out.any { it.track == id }) continue
+            out += Want(id, t, a, q.album, q.durationMs, q.lyricsPlain == false, q.artists)
         }
         return out
     }

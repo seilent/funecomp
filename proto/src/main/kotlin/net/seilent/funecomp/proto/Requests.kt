@@ -53,7 +53,7 @@ object Req {
         bool(Tags.EqPreset.replace, replace)
     }
 
-    fun play(view: Int? = null, parent: String? = null, libRev: Long? = null, start: Long? = null, shuffle: Boolean? = null, tracks: List<Long> = emptyList(), snapRev: Long? = null) = tlv {
+    fun play(view: Int? = null, parent: String? = null, libRev: Long? = null, start: Long? = null, shuffle: Boolean? = null, tracks: List<Long> = emptyList(), snapRev: Long? = null, phoneList: Long? = null) = tlv {
         enum(Tags.Play.view, view)
         str(Tags.Play.parent, parent)
         u32(Tags.Play.libRev, libRev)
@@ -61,9 +61,23 @@ object Req {
         u32(Tags.Play.start, start)
         bool(Tags.Play.shuffle, shuffle)
         tracks.forEach { u64(Tags.Play.track, it) }
+        u32(Tags.Play.phoneList, phoneList)
     }
 
-    fun queueOp(cmd: Int, rev: Long? = null, offset: Long? = null, count: Long? = null, slot: Long? = null, to: Long? = null, tracks: List<Long> = emptyList()) = tlv {
+    fun queueOp(
+        cmd: Int,
+        rev: Long? = null,
+        offset: Long? = null,
+        count: Long? = null,
+        slot: Long? = null,
+        to: Long? = null,
+        tracks: List<Long> = emptyList(),
+        view: Int? = null,
+        parent: String? = null,
+        libRev: Long? = null,
+        snapRev: Long? = null,
+        phoneList: Long? = null,
+    ) = tlv {
         enum(Tags.QueueOp.cmd, cmd)
         u32(Tags.QueueOp.rev, rev)
         u32(Tags.QueueOp.offset, offset)
@@ -71,6 +85,11 @@ object Req {
         u32(Tags.QueueOp.slot, slot)
         u32(Tags.QueueOp.to, to)
         tracks.forEach { u64(Tags.QueueOp.track, it) }
+        enum(Tags.QueueOp.view, view)
+        str(Tags.QueueOp.parent, parent)
+        u32(Tags.QueueOp.libRev, libRev)
+        u32(Tags.QueueOp.snapRev, snapRev)
+        u32(Tags.QueueOp.phoneList, phoneList)
     }
 
     fun libGet(view: Int, parent: String?, offset: Long, count: Long, libRev: Long?, snapRev: Long? = null) = tlv {
@@ -87,7 +106,7 @@ object Req {
         u64(Tags.Action.track, track)
     }
 
-    fun imgBegin(kind: Int, name: String, mbid: String?, total: Long, crc: Long, w: Int, h: Int, wrongArtist: Boolean? = null, source: String? = null, credit: String? = null, origin: Int? = null) = tlv {
+    fun imgBegin(kind: Int, name: String, mbid: String?, total: Long, crc: Long, w: Int, h: Int, wrongArtist: Boolean? = null, source: String? = null, credit: String? = null, origin: Int? = null, focus: Pair<Int, Int>? = null, full: Boolean? = null) = tlv {
         enum(Tags.ImgBegin.kind, kind)
         str(Tags.ImgBegin.name, name)
         str(Tags.ImgBegin.mbid, mbid)
@@ -99,6 +118,9 @@ object Req {
         str(Tags.ImgBegin.source, cap(source))
         str(Tags.ImgBegin.credit, cap(credit))
         enum(Tags.ImgBegin.origin, origin)
+        u16(Tags.ImgBegin.focusX, focus?.first)
+        u16(Tags.ImgBegin.focusY, focus?.second)
+        bool(Tags.ImgBegin.full, full)
     }
 
     fun imgData(offset: Long, data: ByteArray) = tlv {
@@ -127,26 +149,47 @@ object Req {
         u32(Tags.ArtGet.have, have)
     }
 
-    fun lyrGet(track: Long, offset: Long, have: Long?) = tlv {
+    fun lyrGet(track: Long?, offset: Long, have: Long?, phoneFile: Long? = null) = tlv {
         u64(Tags.LyrGet.track, track)
         u32(Tags.LyrGet.offset, offset)
         u32(Tags.LyrGet.have, have)
+        u64(Tags.LyrGet.phoneFile, phoneFile)
     }
 
-    fun lrcPut(track: Long, libRev: Long?, text: ByteArray, crc: Long, snapRev: Long? = null) = tlv {
+    fun lrcPut(track: Long?, libRev: Long?, text: ByteArray, crc: Long, snapRev: Long? = null, phoneFile: Long? = null) = tlv {
         u64(Tags.LrcPut.track, track)
         u32(Tags.LrcPut.libRev, libRev)
         u32(Tags.LrcPut.snapRev, snapRev)
         bytes(Tags.LrcPut.text, text)
         u32(Tags.LrcPut.crc, crc)
+        u64(Tags.LrcPut.phoneFile, phoneFile)
     }
 
-    fun lrcDel(track: Long) = tlv { u64(Tags.LrcDel.track, track) }
+    fun lrcDel(track: Long?, phoneFile: Long? = null) = tlv {
+        u64(Tags.LrcDel.track, track)
+        u64(Tags.LrcDel.phoneFile, phoneFile)
+    }
 
-    fun updBegin(board: String, size: Long, md5: String) = tlv {
+    fun lyrOffset(track: Long, ms: Int? = null) = tlv {
+        u64(Tags.LyrOffset.track, track)
+        i32(Tags.LyrOffset.ms, ms)
+    }
+
+    fun playLogGet(after: Long, count: Long) = tlv {
+        u32(Tags.PlaylogGet.after, after)
+        u32(Tags.PlaylogGet.count, count)
+    }
+
+    fun playLogAck(log: Long, upTo: Long) = tlv {
+        u64(Tags.PlaylogAck.log, log)
+        u32(Tags.PlaylogAck.upTo, upTo)
+    }
+
+    fun updBegin(board: String, size: Long, md5: String, sig: ByteArray? = null) = tlv {
         str(Tags.UpdBegin.board, board)
         u32(Tags.UpdBegin.size, size)
         str(Tags.UpdBegin.md5, md5)
+        bytes(Tags.UpdBegin.sig, sig)
     }
 
     fun updData(offset: Long, data: ByteArray) = tlv {

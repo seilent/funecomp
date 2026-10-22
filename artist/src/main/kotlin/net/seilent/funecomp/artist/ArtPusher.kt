@@ -128,7 +128,7 @@ class ArtPusher(
         private val finalAborts = setOf(Enums.AbortCode.busy, Enums.AbortCode.noSpace, Enums.AbortCode.superseded)
         private val finalErrors = setOf(Err.busy, Err.noSpace)
 
-        fun origin(source: Int?): Int? = if (source == Enums.Source.phone) Enums.ImgOrigin.phone else null
+        fun origin(source: Int?): Int? = if (source == Enums.Source.phone || source == Enums.Source.phoneFile) Enums.ImgOrigin.phone else null
 
         fun order(state: State, upcoming: List<Pair<String, String?>> = emptyList()): List<Pair<String, String?>> =
             state.artists.mapIndexed { i, n -> n to state.mbids.getOrNull(i)?.takeIf { it.isNotBlank() } } + upcoming

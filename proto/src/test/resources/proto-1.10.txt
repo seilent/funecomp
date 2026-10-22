@@ -1,0 +1,427 @@
+const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
+const magic 0x50434446
+const major 1
+const minor 10
+const headerBytes 6
+const tlvHeaderBytes 3
+const maxPayload 16384
+const flagReply 0x01
+const flagError 0x02
+const flagWant 0x04
+const flagReserved 0xf8
+const helloTimeoutMs 5000
+const requestTimeoutMs 10000
+const keepaliveIdleMs 30000
+const keepaliveBusyMs 5000
+const busyCapMs 60000
+const deadIntervals 3
+const pageFillPct 75
+const stateIntervalMs 10000
+const pushGateMs 1000
+const playMaxTracks 500
+const imgMaxBytes 262144
+const imgDataReserve 16
+const imgEndReplyMs 5000
+const refuseCount 5
+const refuseWindowMs 10000
+const backoffMs 1000,2000,4000,8000,16000,30000
+const artChunk 16320
+const artMaxPx 512
+const artMinPx 64
+const lrcMaxBytes 15360
+const updChunk 16320
+const lyrLineMax 4096
+err unknown 1
+err badValue 2
+err busy 3
+err refused 4
+err tooBig 5
+err crc 6
+err staleRev 7
+err noLibrary 8
+err noSpace 9
+err notFound 10
+err readOnly 11
+err exists 12
+feature settings 0
+feature eq 1
+feature library 2
+feature queue 3
+feature image 4
+feature art 5
+feature lyrics 6
+feature update 7
+feature clockAuto 8
+feature eqPresets 9
+feature artBlock 10
+feature lyricsGet 11
+feature artPick 12
+feature imgOrigin 13
+feature stateClock 14
+enum SOURCE 0 local
+enum SOURCE 1 phone
+enum OUTPUT 0 wired
+enum OUTPUT 1 btHeadset
+enum OUTPUT 2 phoneReceiver
+enum REPEAT 0 off
+enum REPEAT 1 all
+enum REPEAT 2 one
+enum BYE_REASON 0 version
+enum BYE_REASON 1 replaced
+enum BYE_REASON 2 refused
+enum BYE_REASON 3 companionOff
+enum BYE_REASON 4 shutdown
+enum ROW_KIND 0 choice
+enum ROW_KIND 1 steps
+enum ROW_KIND 2 range
+enum ROW_KIND 3 toggle
+enum ROW_KIND 4 action
+enum ROW_KIND 5 draft
+enum ROW_KIND 6 info
+enum ROW_FLAG 0 readOnly
+enum ROW_FLAG 1 restart
+enum ROW_FLAG 2 boardOnly
+enum EQ_OUTPUT 0 wired
+enum EQ_OUTPUT 1 bt
+enum BAND_TYPE 0 off
+enum BAND_TYPE 1 peak
+enum BAND_TYPE 2 lowShelf
+enum BAND_TYPE 3 highShelf
+enum VIEW 0 artists
+enum VIEW 1 albums
+enum VIEW 2 songs
+enum VIEW 3 artistAlbums
+enum VIEW 4 albumTracks
+enum VIEW 5 playlists
+enum VIEW 6 folders
+enum VIEW 7 favorites
+enum TRANSPORT_CMD 0 toggle
+enum TRANSPORT_CMD 1 play
+enum TRANSPORT_CMD 2 pause
+enum TRANSPORT_CMD 3 next
+enum TRANSPORT_CMD 4 prev
+enum TRANSPORT_CMD 5 seek
+enum TRANSPORT_CMD 6 shuffle
+enum TRANSPORT_CMD 7 repeat
+enum DRAFT_KIND 0 usbMode
+enum DRAFT_KIND 1 btCodec
+enum DRAFT_KIND 2 sleep
+enum DRAFT_KIND 3 clock
+enum BT_ROLE 0 receiver
+enum BT_ROLE 1 headphones
+enum DRAFT_STATUS 0 done
+enum DRAFT_STATUS 1 pending
+enum QUEUE_CMD 0 page
+enum QUEUE_CMD 1 playAt
+enum QUEUE_CMD 2 remove
+enum QUEUE_CMD 3 move
+enum QUEUE_CMD 4 playNext
+enum QUEUE_CMD 5 clear
+enum ACTION_CMD 0 rescan
+enum ACTION_CMD 1 shuffleLibrary
+enum ACTION_CMD 2 favorite
+enum IMG_KIND 0 artist
+enum ABORT_CODE 0 crc
+enum ABORT_CODE 1 badValue
+enum ABORT_CODE 2 noSpace
+enum ABORT_CODE 3 busy
+enum ABORT_CODE 4 offsetMismatch
+enum ABORT_CODE 5 superseded
+enum ABORT_CODE 6 writeError
+enum EQ_PRESET_OP 0 save
+enum EQ_PRESET_OP 1 remove
+enum EQ_PRESET_OP 2 rename
+enum BLOCK_CMD 0 blockImage
+enum BLOCK_CMD 1 wrongArtist
+enum LYRICS_KIND 0 synced
+enum LYRICS_KIND 1 plain
+enum IMG_ORIGIN 0 library
+enum IMG_ORIGIN 1 phone
+msg HELLO 0x01 app req
+tag HELLO 1 magic u32 one
+tag HELLO 2 major u16 one
+tag HELLO 3 minor u16 one
+tag HELLO 4 appVersion str one
+tag HELLO 5 features u64 one
+tag HELLO.reply 1 magic u32 one
+tag HELLO.reply 2 major u16 one
+tag HELLO.reply 3 minor u16 one
+tag HELLO.reply 4 board str one
+tag HELLO.reply 5 version str one
+tag HELLO.reply 6 screenW u16 one
+tag HELLO.reply 7 screenH u16 one
+tag HELLO.reply 8 backdropW u16 one
+tag HELLO.reply 9 backdropH u16 one
+tag HELLO.reply 10 maxPayload u32 one
+tag HELLO.reply 11 idleMs u32 one
+tag HELLO.reply 12 busyMs u32 one
+tag HELLO.reply 13 features u64 one
+tag HELLO.reply 14 libRev u32 one
+tag HELLO.reply 15 settingsRev u32 one
+tag HELLO.reply 16 snapRev u32 one
+msg PING 0x02 both req
+msg BYE 0x03 dev push
+tag BYE 1 reason BYE_REASON one
+tag BYE 2 major u16 one
+tag BYE 3 minor u16 one
+msg STATE 0x10 dev push
+tag STATE 1 source SOURCE one
+tag STATE 2 output OUTPUT one
+tag STATE 3 track u64 one
+tag STATE 4 title str one
+tag STATE 5 artist str one
+tag STATE 6 artists str list
+tag STATE 7 mbids str list
+tag STATE 8 durationMs u32 one
+tag STATE 9 positionMs u32 one
+tag STATE 10 sampleMs u64 one
+tag STATE 11 sentMs u64 one
+tag STATE 12 playing bool one
+tag STATE 13 shuffle bool one
+tag STATE 14 repeat REPEAT one
+tag STATE 15 volume u16 one
+tag STATE 16 maxVolume u16 one
+tag STATE 17 battery u8 one
+tag STATE 18 queueRev u32 one
+tag STATE 19 slot u32 one
+tag STATE 20 slots u32 one
+tag STATE 21 libRev u32 one
+tag STATE 22 album str one
+tag STATE 23 sleepLeftS u32 one
+tag STATE 24 charging bool one
+tag STATE 25 cardFreeMiB u32 one
+tag STATE 26 cardTotalMiB u32 one
+tag STATE 27 volumePct u8 one
+tag STATE 28 volumeStepPct u8 one
+tag STATE 29 lyrics bool one
+tag STATE 30 maxVolumePct u8 one
+tag STATE 31 favorite bool one
+tag STATE 32 snapRev u32 one
+tag STATE 33 lyricsPlain bool one
+tag STATE 34 lyricsCrc u32 one
+tag STATE 35 positionHeld bool one
+msg SCHEMA 0x11 dev push
+tag SCHEMA 1 pivot str one
+tag SCHEMA 2 offset u32 one
+tag SCHEMA 3 total u32 one
+tag SCHEMA 4 more bool one
+tag SCHEMA 5 row Row list
+tag SCHEMA 6 rev u32 one
+tag SCHEMA 7 pivotIndex u8 one
+tag SCHEMA 8 pivotCount u8 one
+msg SETTINGS 0x12 dev push
+tag SETTINGS 1 rev u32 one
+tag SETTINGS 2 text str one
+msg EQ 0x13 dev push
+tag EQ 1 output EQ_OUTPUT one
+tag EQ 2 key str one
+tag EQ 3 profile EqName list
+tag EQ 4 ints Profile one
+tag EQ 5 offset u32 one
+tag EQ 6 total u32 one
+tag EQ 7 more bool one
+msg QUEUE 0x14 dev push
+tag QUEUE 1 rev u32 one
+tag QUEUE 2 offset u32 one
+tag QUEUE 3 total u32 one
+tag QUEUE 4 more bool one
+tag QUEUE 5 item QueueItem list
+msg LIB 0x15 dev push
+tag LIB 1 libRev u32 one
+tag LIB 2 view VIEW one
+tag LIB 3 parent str one
+tag LIB 4 offset u32 one
+tag LIB 5 total u32 one
+tag LIB 6 more bool one
+tag LIB 7 row LibRow list
+tag LIB 8 snapRev u32 one
+msg TRANSPORT 0x20 app req
+tag TRANSPORT 1 cmd TRANSPORT_CMD one
+tag TRANSPORT 2 seekMs u32 one
+tag TRANSPORT 3 on bool one
+tag TRANSPORT 4 repeat REPEAT one
+msg VOLUME 0x21 app req
+tag VOLUME 1 set u16 one
+tag VOLUME 2 step i32 one
+tag VOLUME 3 percent u8 one
+msg SET 0x22 app req
+tag SET 1 text str one
+tag SET.reply 1 rev u32 one
+tag SET.reply 2 kept str list
+tag SET.reply 3 refused str list
+msg DRAFT 0x23 app req
+tag DRAFT 1 kind DRAFT_KIND one
+tag DRAFT 2 value str one
+tag DRAFT 3 role BT_ROLE one
+tag DRAFT 4 minutes u32 one
+tag DRAFT 5 unixS i64 one
+tag DRAFT 6 zoneS i32 one
+tag DRAFT 7 automatic bool one
+tag DRAFT.reply 1 status DRAFT_STATUS one
+msg EQ_SET 0x24 app req
+tag EQ_SET 1 output EQ_OUTPUT one
+tag EQ_SET 2 key str one
+tag EQ_SET 3 ints Profile one
+msg PLAY 0x25 app req
+tag PLAY 1 view VIEW one
+tag PLAY 2 parent str one
+tag PLAY 3 libRev u32 one
+tag PLAY 4 start u32 one
+tag PLAY 5 shuffle bool one
+tag PLAY 6 track u64 list
+tag PLAY 7 snapRev u32 one
+msg QUEUE_OP 0x26 app req
+tag QUEUE_OP 1 cmd QUEUE_CMD one
+tag QUEUE_OP 2 rev u32 one
+tag QUEUE_OP 3 offset u32 one
+tag QUEUE_OP 4 count u32 one
+tag QUEUE_OP 5 slot u32 one
+tag QUEUE_OP 6 to u32 one
+tag QUEUE_OP 7 track u64 list
+msg LIB_GET 0x27 app req
+tag LIB_GET 1 view VIEW one
+tag LIB_GET 2 parent str one
+tag LIB_GET 3 offset u32 one
+tag LIB_GET 4 count u32 one
+tag LIB_GET 5 libRev u32 one
+tag LIB_GET 6 snapRev u32 one
+msg ACTION 0x28 app req
+tag ACTION 1 cmd ACTION_CMD one
+tag ACTION 2 track u64 one
+msg ART_GET 0x29 app req
+tag ART_GET 1 track u64 one
+tag ART_GET 2 px u16 one
+tag ART_GET 3 offset u32 one
+tag ART_GET 4 have u32 one
+tag ART_GET.reply 1 crc u32 one
+tag ART_GET.reply 2 total u32 one
+tag ART_GET.reply 3 w u16 one
+tag ART_GET.reply 4 h u16 one
+tag ART_GET.reply 5 offset u32 one
+tag ART_GET.reply 6 data bytes one
+msg LRC_PUT 0x2a app req
+tag LRC_PUT 1 track u64 one
+tag LRC_PUT 2 libRev u32 one
+tag LRC_PUT 3 text bytes one
+tag LRC_PUT 4 crc u32 one
+tag LRC_PUT 5 snapRev u32 one
+msg LRC_DEL 0x2b app req
+tag LRC_DEL 1 track u64 one
+msg UPD_BEGIN 0x2c app req
+tag UPD_BEGIN 1 board str one
+tag UPD_BEGIN 2 size u32 one
+tag UPD_BEGIN 3 md5 str one
+tag UPD_BEGIN.reply 1 offset u32 one
+msg UPD_DATA 0x2d app push
+tag UPD_DATA 1 offset u32 one
+tag UPD_DATA 2 data bytes one
+msg UPD_END 0x2e app req
+tag UPD_END 1 md5 str one
+msg UPD_ABORT 0x2f dev push
+tag UPD_ABORT 1 offset u32 one
+tag UPD_ABORT 2 code ABORT_CODE one
+msg IMG_BEGIN 0x30 app req
+tag IMG_BEGIN 1 kind IMG_KIND one
+tag IMG_BEGIN 2 name str one
+tag IMG_BEGIN 3 mbid str one
+tag IMG_BEGIN 4 total u32 one
+tag IMG_BEGIN 5 crc u32 one
+tag IMG_BEGIN 6 w u16 one
+tag IMG_BEGIN 7 h u16 one
+tag IMG_BEGIN 8 wrongArtist bool one
+tag IMG_BEGIN 9 source str one
+tag IMG_BEGIN 10 credit str one
+tag IMG_BEGIN 11 origin IMG_ORIGIN one
+tag IMG_BEGIN.reply 1 offset u32 one
+tag IMG_BEGIN.reply 2 crc u32 one
+msg IMG_DATA 0x32 app push
+tag IMG_DATA 1 offset u32 one
+tag IMG_DATA 2 data bytes one
+msg IMG_END 0x33 app req
+tag IMG_END 1 crc u32 one
+msg IMG_LIST 0x34 app req
+tag IMG_LIST 1 offset u32 one
+tag IMG_LIST 2 count u32 one
+tag IMG_LIST.reply 1 offset u32 one
+tag IMG_LIST.reply 2 total u32 one
+tag IMG_LIST.reply 3 more bool one
+tag IMG_LIST.reply 4 entry ImgEntry list
+tag IMG_LIST.reply 5 bytes u64 one
+tag IMG_LIST.reply 6 cap u64 one
+msg IMG_DEL 0x35 app req
+tag IMG_DEL 1 name str one
+msg IMG_ABORT 0x36 dev push
+tag IMG_ABORT 1 name str one
+tag IMG_ABORT 2 offset u32 one
+tag IMG_ABORT 3 code ABORT_CODE one
+msg EQ_PRESET 0x37 app req
+tag EQ_PRESET 1 op EQ_PRESET_OP one
+tag EQ_PRESET 2 output EQ_OUTPUT one
+tag EQ_PRESET 3 key str one
+tag EQ_PRESET 4 name str one
+tag EQ_PRESET 5 ints Profile one
+tag EQ_PRESET 6 replace bool one
+tag EQ_PRESET.reply 1 key str one
+msg ART_BLOCK 0x38 dev req
+tag ART_BLOCK 1 cmd BLOCK_CMD one
+tag ART_BLOCK 2 name str one
+tag ART_BLOCK 3 mbid str one
+tag ART_BLOCK 4 crc u32 one
+msg LYR_GET 0x39 app req
+tag LYR_GET 1 track u64 one
+tag LYR_GET 2 offset u32 one
+tag LYR_GET 3 have u32 one
+tag LYR_GET.reply 1 crc u32 one
+tag LYR_GET.reply 2 kind LYRICS_KIND one
+tag LYR_GET.reply 3 total u32 one
+tag LYR_GET.reply 4 offset u32 one
+tag LYR_GET.reply 5 more bool one
+tag LYR_GET.reply 6 line LyrLine list
+msg ART_PICK 0x3a dev req
+tag ART_PICK 1 name str one
+tag ART_PICK 2 mbid str one
+tag ART_PICK.reply 1 shown bool one
+msg IMG_TAG 0x3b app req
+tag IMG_TAG 1 name str one
+tag IMG_TAG 2 origin IMG_ORIGIN one
+tag error 1 code u8 one
+tag error 2 text str one
+tag error 3 refused str list
+tag Row 1 key str one
+tag Row 2 label str one
+tag Row 3 pivot str one
+tag Row 4 kind ROW_KIND one
+tag Row 5 value str list
+tag Row 6 min i32 one
+tag Row 7 max i32 one
+tag Row 8 step i32 one
+tag Row 9 word str list
+tag Row 10 flag ROW_FLAG list
+tag EqName 1 key str one
+tag EqName 2 name str one
+tag EqName 3 preset bool one
+tag Profile 1 preamp10 i32 one
+tag Profile 2 band Band list
+tag Band 1 type BAND_TYPE one
+tag Band 2 grid i32 one
+tag Band 3 milliHz i32 one
+tag Band 4 gain10 i32 one
+tag Band 5 q100 i32 one
+tag QueueItem 1 track u64 one
+tag QueueItem 2 title str one
+tag QueueItem 3 artists str list
+tag QueueItem 4 mbids str list
+tag QueueItem 5 album str one
+tag QueueItem 6 durationMs u32 one
+tag QueueItem 7 lyrics bool one
+tag QueueItem 8 lyricsPlain bool one
+tag LibRow 1 name str one
+tag LibRow 2 count u32 one
+tag LibRow 3 first u64 one
+tag LibRow 4 key str one
+tag LibRow 5 mbid str one
+tag ImgEntry 1 name str one
+tag ImgEntry 2 mbid str one
+tag ImgEntry 3 origin IMG_ORIGIN list
+tag LyrLine 1 ms u32 one
+tag LyrLine 2 text str one

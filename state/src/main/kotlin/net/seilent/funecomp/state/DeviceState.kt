@@ -132,9 +132,10 @@ data class DeviceState(
     fun withSetReply(rev: Long) = copy(settings = settings.copy(floor = maxOf(settings.floor, rev)))
 
     fun withEq(e: Eq): DeviceState {
-        val old = eq[e.output] ?: EqMirror()
+        val output = e.output ?: -1
+        val old = eq[output] ?: EqMirror()
         val names = if (e.page.offset == 0L) e.names else old.names + e.names
-        return copy(eq = eq + (e.output to EqMirror(e.key, e.ints, names, e.page.total, !e.page.more)))
+        return copy(eq = eq + (output to EqMirror(e.key, e.ints, names, e.page.total, !e.page.more)))
     }
 
     fun withQueue(q: Queue): DeviceState {

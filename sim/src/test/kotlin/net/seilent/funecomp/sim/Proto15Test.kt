@@ -70,18 +70,18 @@ class Proto15Test {
         val d = device()
         val out = Sink()
         val a = save(d, "HD 650", out = out)
-        assertEquals("/data/flatdap/eq/HD 650.txt", key(a))
+        assertEquals("/data/funeos/eq/HD 650.txt", key(a))
         val pushed = out.eqs()
         assertEquals(setOf(wired, bt), pushed.map { it.output }.toSet())
-        assertEquals("/data/flatdap/eq/HD 650.txt", pushed.first { it.output == wired }.key)
+        assertEquals("/data/funeos/eq/HD 650.txt", pushed.first { it.output == wired }.key)
         assertEquals("off", pushed.first { it.output == bt }.key)
         val (k, names) = list(d)
-        assertEquals("/data/flatdap/eq/HD 650.txt", k)
-        assertEquals(EqName("/data/flatdap/eq/HD 650.txt", "HD 650", true), names[2])
+        assertEquals("/data/funeos/eq/HD 650.txt", k)
+        assertEquals(EqName("/data/funeos/eq/HD 650.txt", "HD 650", true), names[2])
         assertEquals(EqName("off", "OFF"), names[0])
         assertNull(names[3].preset)
         assertEquals(ints, profileOf(d))
-        assertTrue(logs.any { it == "eq preset 0 key=null -> ok /data/flatdap/eq/HD 650.txt" })
+        assertTrue(logs.any { it == "eq preset 0 key=null -> ok /data/funeos/eq/HD 650.txt" })
     }
 
     @Test
@@ -91,10 +91,10 @@ class Proto15Test {
         assertEquals(Err.exists, code(save(d, "HD 650", output = bt)))
         assertEquals(Err.exists, code(save(d, "hd 650", output = bt)))
         assertEquals("off", list(d, bt).first)
-        assertEquals("/data/flatdap/eq/HD 650.txt", key(save(d, "hd 650", output = bt, p = other, replace = true)))
+        assertEquals("/data/funeos/eq/HD 650.txt", key(save(d, "hd 650", output = bt, p = other, replace = true)))
         val (k, names) = list(d, bt)
-        assertEquals("/data/flatdap/eq/HD 650.txt", k)
-        assertEquals(listOf(EqName("/data/flatdap/eq/HD 650.txt", "HD 650", true)), names.filter { it.preset == true })
+        assertEquals("/data/funeos/eq/HD 650.txt", k)
+        assertEquals(listOf(EqName("/data/funeos/eq/HD 650.txt", "HD 650", true)), names.filter { it.preset == true })
         assertEquals(other, profileOf(d, bt))
     }
 
@@ -111,15 +111,15 @@ class Proto15Test {
         val d = device(faults = listOf("eq-hidden=Old"))
         assertEquals(Err.exists, code(save(d, "Old")))
         assertTrue(list(d).second.none { it.name == "Old" })
-        assertEquals("/data/flatdap/eq/Preset 1.txt", key(save(d, null, p = null)))
+        assertEquals("/data/funeos/eq/Preset 1.txt", key(save(d, null, p = null)))
     }
 
     @Test
     fun theTwoHundredthPresetFitsAndTheNextIsNoSpace() {
         val d = device()
-        for (i in 1..200) assertEquals("/data/flatdap/eq/P$i.txt", key(save(d, "P$i")))
+        for (i in 1..200) assertEquals("/data/funeos/eq/P$i.txt", key(save(d, "P$i")))
         assertEquals(Err.noSpace, code(save(d, "P201")))
-        assertEquals("/data/flatdap/eq/P7.txt", key(save(d, "p7", replace = true)))
+        assertEquals("/data/funeos/eq/P7.txt", key(save(d, "p7", replace = true)))
         val names = list(d).second
         assertEquals(202, names.size)
         assertEquals("P200", names.last().name)
@@ -151,11 +151,11 @@ class Proto15Test {
         val d = device()
         val custom = Profile(-35, listOf(Band(Enums.BandType.peak, -1, 3_150_000, -25, 200)))
         d.request(Msg.EQ_SET, Node.decode("EQ_SET", Req.eqSet(wired, ints = custom)), Sink())
-        assertEquals("/data/flatdap/eq/Preset 1.txt", key(save(d, null, p = null)))
+        assertEquals("/data/funeos/eq/Preset 1.txt", key(save(d, null, p = null)))
         assertEquals(custom, profileOf(d))
-        assertEquals("/data/flatdap/eq/Preset 2.txt", key(save(d, null, output = bt, p = null)))
-        remove(d, "/data/flatdap/eq/Preset 1.txt")
-        assertEquals("/data/flatdap/eq/Preset 1.txt", key(save(d, null, p = null)))
+        assertEquals("/data/funeos/eq/Preset 2.txt", key(save(d, null, output = bt, p = null)))
+        remove(d, "/data/funeos/eq/Preset 1.txt")
+        assertEquals("/data/funeos/eq/Preset 1.txt", key(save(d, null, p = null)))
     }
 
     @Test
@@ -164,13 +164,13 @@ class Proto15Test {
         save(d, "HD 650")
         save(d, "HD 650", output = bt, replace = true)
         val out = Sink()
-        assertNull(key(remove(d, "/data/flatdap/eq/HD 650.txt", out)))
+        assertNull(key(remove(d, "/data/funeos/eq/HD 650.txt", out)))
         assertEquals(listOf("off", "off"), listOf(wired, bt).map { o -> out.eqs().first { it.output == o }.key })
         assertTrue(list(d).second.none { it.preset == true })
         assertEquals(Err.readOnly, code(remove(d, "custom")))
         assertEquals(Err.readOnly, code(remove(d, "off")))
         assertEquals(Err.readOnly, code(remove(d, "autoeq/oratory1990/Headphone Model 007.txt")))
-        assertEquals(Err.notFound, code(remove(d, "/data/flatdap/eq/HD 650.txt")))
+        assertEquals(Err.notFound, code(remove(d, "/data/funeos/eq/HD 650.txt")))
         assertEquals(Err.badValue, code(req(d, Req.eqPreset(Enums.EqPresetOp.remove))))
     }
 
@@ -180,17 +180,17 @@ class Proto15Test {
         save(d, "HD 650")
         save(d, "HD 650", output = bt, replace = true)
         save(d, "Warm")
-        assertEquals(Err.exists, code(rename(d, "/data/flatdap/eq/HD 650.txt", "WARM")))
-        assertEquals(Err.badValue, code(rename(d, "/data/flatdap/eq/HD 650.txt", "a/b")))
-        assertEquals("/data/flatdap/eq/hd 650.txt", key(rename(d, "/data/flatdap/eq/HD 650.txt", "hd 650")))
-        assertEquals("/data/flatdap/eq/hd 650.txt", list(d, bt).first)
+        assertEquals(Err.exists, code(rename(d, "/data/funeos/eq/HD 650.txt", "WARM")))
+        assertEquals(Err.badValue, code(rename(d, "/data/funeos/eq/HD 650.txt", "a/b")))
+        assertEquals("/data/funeos/eq/hd 650.txt", key(rename(d, "/data/funeos/eq/HD 650.txt", "hd 650")))
+        assertEquals("/data/funeos/eq/hd 650.txt", list(d, bt).first)
         val out = Sink()
-        assertEquals("/data/flatdap/eq/Sennheiser.txt", key(rename(d, "/data/flatdap/eq/hd 650.txt", "Sennheiser", out = out)))
-        assertEquals(setOf("/data/flatdap/eq/Sennheiser.txt"), out.eqs().filter { it.output == bt }.map { it.key }.toSet())
-        assertEquals("/data/flatdap/eq/Sennheiser.txt", list(d, bt).first)
+        assertEquals("/data/funeos/eq/Sennheiser.txt", key(rename(d, "/data/funeos/eq/hd 650.txt", "Sennheiser", out = out)))
+        assertEquals(setOf("/data/funeos/eq/Sennheiser.txt"), out.eqs().filter { it.output == bt }.map { it.key }.toSet())
+        assertEquals("/data/funeos/eq/Sennheiser.txt", list(d, bt).first)
         assertEquals(listOf("Sennheiser", "Warm"), list(d).second.filter { it.preset == true }.map { it.name })
         assertEquals(ints, profileOf(d, bt))
-        assertEquals("/data/flatdap/eq/Sennheiser.txt", key(rename(d, "/data/flatdap/eq/Sennheiser.txt", "Sennheiser")))
+        assertEquals("/data/funeos/eq/Sennheiser.txt", key(rename(d, "/data/funeos/eq/Sennheiser.txt", "Sennheiser")))
     }
 
     @Test

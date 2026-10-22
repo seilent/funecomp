@@ -86,6 +86,8 @@ class InboundTest {
             if (g != null) assertTrue("group $g has no feature bit", Groups.bit(g) != null)
         }
         assertEquals(Feature.names.values.toSet(), Groups.members.keys)
+        assertTrue(Groups.members.keys.containsAll(Groups.unserved))
+        for (g in Groups.unserved) assertFalse(g, Groups.allowed(Groups.members.getValue(g).firstOrNull() ?: continue, Groups.all))
     }
 
     @Test

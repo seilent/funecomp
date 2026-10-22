@@ -2,9 +2,11 @@ package net.seilent.funecomp.proto
 
 import net.seilent.funecomp.proto.gen.Base
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.proto.gen.Field
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -25,9 +27,20 @@ class OldPeerTest {
     private val v17 = table("/proto-1.7.txt")
     private val v18 = table("/proto-1.8.txt")
     private val v19 = table("/proto-1.9.txt")
+    private val v1_10 = table("/proto-1.10.txt")
+    private val v1_11 = table("/proto-1.11.txt")
+    private val v1_12 = table("/proto-1.12.txt")
+    private val v1_13 = table("/proto-1.13.txt")
+    private val v1_14 = table("/proto-1.14.txt")
+    private val v1_15 = table("/proto-1.15-ebc0751.txt")
+
+    private fun text(name: String) = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
+
+    private fun enumValues(name: String, enum: String): Set<Int> =
+        text(name).lines().map { it.trim().split(Regex("\\s+")) }.filter { it[0] == "enum" && it[1] == enum }.map { it[2].toInt() }.toSet()
 
     private fun table(name: String): Map<String, Map<Int, Field>> = run {
-        val text = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
+        val text = text(name)
         val out = LinkedHashMap<String, MutableMap<Int, Field>>()
         for (line in text.lines()) {
             val p = line.trim().split(Regex("\\s+"))
@@ -43,12 +56,14 @@ class OldPeerTest {
         out
     }
 
-    private fun body(vec: String): ByteArray {
+    private fun bodies(vec: String): List<ByteArray> {
         val path = System.getProperty("funecomp.vectors") ?: "../third_party/funeos/vectors.txt"
         val hex = File(path).readLines().filter { it.startsWith("hex $vec ") }.joinToString("") { it.substringAfter("hex $vec ") }
         val b = ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
-        return FrameReader().feed(b, 0, b.size).single().payload
+        return FrameReader().feed(b, 0, b.size).map { it.payload }
     }
+
+    private fun body(vec: String): ByteArray = bodies(vec).single()
 
     @Test
     fun protocol11FramesDecodeWithThe10TablesToEmptyFields() {
@@ -134,12 +149,12 @@ class OldPeerTest {
     @Test
     fun protocol15FramesDecodeWithThe14TablesToEmptyFields() {
         val old = Eq.from(Node.decode("EQ", body("eq_presets"), v14))
-        assertEquals(listOf(EqName("off", "OFF"), EqName("/data/flatdap/eq/HD 650.txt", "HD 650")), old.names)
+        assertEquals(listOf(EqName("off", "OFF"), EqName("/data/funeos/eq/HD 650.txt", "HD 650")), old.names)
         val now = Eq.from(Node.decode("EQ", body("eq_presets")))
-        assertEquals(listOf(EqName("off", "OFF", null), EqName("/data/flatdap/eq/HD 650.txt", "HD 650", true)), now.names)
+        assertEquals(listOf(EqName("off", "OFF", null), EqName("/data/funeos/eq/HD 650.txt", "HD 650", true)), now.names)
         assertNull(v14["EQ_PRESET"])
 
-        assertEquals("/data/flatdap/eq/HD 650.txt", EqPresetReply.from(Node.decode("EQ_PRESET.reply", body("eq_preset_save_reply"))).key)
+        assertEquals("/data/funeos/eq/HD 650.txt", EqPresetReply.from(Node.decode("EQ_PRESET.reply", body("eq_preset_save_reply"))).key)
         assertNull(EqPresetReply.from(Node.decode("EQ_PRESET.reply", body("eq_preset_remove_reply"))).key)
     }
 
@@ -206,6 +221,178 @@ class OldPeerTest {
         assertEquals(4000103L, now.sentMs)
         assertEquals(14, Feature.stateClock)
         assertEquals(32767L, Groups.all)
+    }
+
+    @Test
+    fun protocol111FramesDecodeWithThe110TablesToEmptyFields() {
+        val old = Lib.from(Node.decode("LIB", body("lib_album_artist"), v1_10))
+        assertEquals(listOf(listOf(6), listOf(6)), Node.decode("LIB", body("lib_album_artist"), v1_10).nodes(Tags.Lib.row).map { it.unknownTags })
+        assertTrue(old.rows.all { it.artist == null })
+        val now = Lib.from(Node.decode("LIB", body("lib_album_artist")))
+        assertEquals(listOf("Utada Hikaru", "various artists"), now.rows.map { it.artist })
+        assertEquals(now.copy(rows = now.rows.map { it.copy(artist = null) }), old)
+    }
+
+    @Test
+    fun protocol112FramesDecodeWithThe111TablesToEmptyFields() {
+        assertEquals(listOf(17, 17, 17, 18, 18, 18, 18, 18, 18, 18, 18), Node.decode("HELLO.reply", body("hello_reply_slots"), v1_11).unknownTags)
+        val hello = HelloReply.from(Node.decode("HELLO.reply", body("hello_reply_slots")))
+        assertEquals(listOf(EqSlot("headphones", "HEADPHONES"), EqSlot("bluetooth", "BLUETOOTH"), EqSlot("line", "LINE OUT")), hello.eqSlots)
+        assertEquals((0..7).toList(), hello.bandTypes)
+        assertEquals(hello.copy(eqSlots = emptyList(), bandTypes = emptyList()), HelloReply.from(Node.decode("HELLO.reply", body("hello_reply_slots"), v1_11)))
+
+        val pages = bodies("eq_graphic")
+        assertEquals(2, pages.size)
+        for (b in pages) {
+            val now = Eq.from(Node.decode("EQ", b))
+            assertEquals(Enums.EqMode.graphic, now.mode)
+            assertEquals("custom", now.graphicKey)
+            assertEquals(10, now.gains!!.bands.size)
+            val bare = now.copy(mode = null, graphicKey = null, graphicNames = emptyList(), gains = null, graphicOffset = null, graphicTotal = null)
+            assertEquals(bare, Eq.from(Node.decode("EQ", b, v1_11)))
+        }
+        val last = Eq.from(Node.decode("EQ", pages[1]))
+        assertEquals(EqName("/data/funeos/eq/graphic/Rock.ini", "Rock", true), last.graphicNames[2])
+        assertEquals(0L to 4L, last.graphicOffset to last.graphicTotal)
+
+        val slot = Eq.from(Node.decode("EQ", body("eq_slot")))
+        assertNull(slot.output)
+        assertEquals("line", slot.slot)
+        assertEquals(listOf(8), Node.decode("EQ", body("eq_slot"), v1_11).unknownTags)
+
+        assertEquals(listOf(36), Node.decode("STATE", body("state_eq_slot"), v1_11).unknownTags)
+        assertEquals("bluetooth", State.from(Node.decode("STATE", body("state_eq_slot"))).eqSlot)
+        assertNull(State.from(Node.decode("STATE", body("state_eq_slot"), v1_11)).eqSlot)
+
+        val speaker = State.from(Node.decode("STATE", body("state_output_speaker"), v1_11))
+        assertEquals(Enums.Output.speaker, speaker.output)
+        assertFalse(Enums.Output.speaker in enumValues("/proto-1.11.txt", "OUTPUT"))
+        assertFalse(Enums.Output.usbDac in enumValues("/proto-1.11.txt", "OUTPUT"))
+        for (f in listOf(Feature.eqSlots, Feature.eqGraphic, Feature.eqPass, Feature.outputKinds, Feature.rowConfirm)) assertEquals(0L, Groups.all and (1L shl f))
+    }
+
+    @Test
+    fun protocol113FramesDecodeWithThe112TablesToEmptyFields() {
+        val lib = Lib.from(Node.decode("LIB", body("lib_search"), v1_12))
+        assertEquals(Enums.View.searchSongs, lib.view)
+        assertFalse(Enums.View.searchSongs in enumValues("/proto-1.12.txt", "VIEW"))
+        assertEquals("Bohemian Rhapsody", lib.rows.single().name)
+        assertEquals(20, Feature.search)
+        assertEquals(0L, Groups.all and (1L shl Feature.search))
+    }
+
+    @Test
+    fun protocol114FramesDecodeWithThe113TablesToEmptyFields() {
+        val b = State(track = 101, card = Enums.Card.ready).encode()
+        assertEquals(listOf(37), Node.decode("STATE", b, v1_13).unknownTags)
+        assertNull(State.from(Node.decode("STATE", b, v1_13)).card)
+        assertEquals(Enums.Card.ready, State.from(Node.decode("STATE", b)).card)
+    }
+
+    @Test
+    fun updateSignatureFramesDecodeWithThe114TableToEmptyFields() {
+        assertEquals(listOf(4), Node.decode("UPD_BEGIN", body("upd_begin_sig"), v1_14).unknownTags)
+        assertEquals("updSig", Feature.names[27])
+        assertEquals(15, Err.badSignature)
+    }
+
+    @Test
+    fun imageSourceFramesDecodeWithTheEbc0751TableToEmptyFields() {
+        assertEquals(listOf(14), Node.decode("IMG_BEGIN", body("img_begin_full"), v1_15).unknownTags)
+        assertEquals(listOf(14), Node.decode("IMG_BEGIN", body("img_begin_full"), v1_14).unknownTags)
+        assertEquals(true, Node.decode("IMG_BEGIN", body("img_begin_full")).bool(Tags.ImgBegin.full))
+
+        val old = Node.decode("IMG_LIST.reply", body("img_list_reply_src"), v1_15)
+        assertEquals(listOf(7), old.unknownTags)
+        assertEquals(listOf(listOf(4, 5, 6), listOf(4, 5, 6, 7), listOf(4, 5)), old.nodes(Tags.ImgListReply.entry).map { it.unknownTags })
+        val o = ImgListReply.from(old)
+        assertNull(o.srcRoom)
+        assertEquals(listOf("Utada Hikaru", "Gemma", "Hal"), o.entries.map { it.name })
+        assertTrue(o.entries.all { it.full == null && it.shownS == null && it.crc == null && it.srcCrc == null })
+
+        val r = ImgListReply.from(Node.decode("IMG_LIST.reply", body("img_list_reply_src")))
+        assertEquals(6442450944L, r.srcRoom)
+        assertEquals(listOf(true, false, false), r.entries.map { it.full })
+        assertEquals(listOf(1780165693L, 195948557L, null), r.entries.map { it.crc })
+        assertEquals(listOf(null, 305441741L, null), r.entries.map { it.srcCrc })
+        assertEquals(listOf(1792790400L, 1792700000L, 0L), r.entries.map { it.shownS })
+
+        assertFalse("feature imgSource 28" in text("/proto-1.15-ebc0751.txt"))
+        assertEquals("imgSource", Feature.names[28])
+    }
+
+    @Test
+    fun protocol115FramesDecodeWithThe114TablesToEmptyFields() {
+        assertEquals(listOf(7), Node.decode("LYR_GET.reply", body("lyr_get_offset"), v1_14).unknownTags)
+        assertNull(LyrGetReply.from(Node.decode("LYR_GET.reply", body("lyr_get_offset"), v1_14)).offsetMs)
+        assertEquals(-1500, LyrGetReply.from(Node.decode("LYR_GET.reply", body("lyr_get_offset"))).offsetMs)
+
+        assertEquals(listOf(38), Node.decode("STATE", body("state_lyrics_offset"), v1_14).unknownTags)
+        val crc = State.from(Node.decode("STATE", body("state_lyrics_crc")))
+        assertEquals(crc, State.from(Node.decode("STATE", body("state_lyrics_offset"), v1_14)))
+        assertEquals(crc.copy(lyricsOffsetMs = -1500), State.from(Node.decode("STATE", body("state_lyrics_offset"))))
+
+        for (v in listOf("lrc_put_reply_flags", "lrc_del_reply_flags")) {
+            val scope = if (v.startsWith("lrc_put")) "LRC_PUT.reply" else "LRC_DEL.reply"
+            assertEquals(listOf(1, 2), Node.decode(scope, body(v), v1_14).unknownTags)
+        }
+        assertEquals(LrcReply(true, false), LrcReply.from(Node.decode("LRC_PUT.reply", body("lrc_put_reply_flags"))))
+        assertEquals(LrcReply(false, false), LrcReply.from(Node.decode("LRC_DEL.reply", body("lrc_del_reply_flags"))))
+
+        for (scope in listOf("LYR_OFFSET", "LYR_OFFSET.reply", "PLAYLOG_GET", "PLAYLOG_GET.reply", "PLAYLOG_ACK")) assertNull(scope, v1_14[scope])
+        assertEquals(listOf(1, 2), Node.decode("PLAYLOG_GET", body("playlog_get"), v1_14).unknownTags)
+        assertEquals(listOf(1, 2, 3, 4, 4, 5), Node.decode("PLAYLOG_GET.reply", body("playlog_get_reply"), v1_14).unknownTags)
+        assertEquals(listOf(1, 2), Node.decode("PLAYLOG_ACK", body("playlog_ack"), v1_14).unknownTags)
+        assertTrue(body("playlog_ack_reply").isEmpty())
+        assertEquals(listOf(40), Node.decode("STATE", body("state_playlog_seq"), v1_14).unknownTags)
+        assertNull(State.from(Node.decode("STATE", body("state_playlog_seq"), v1_14)).playLogSeq)
+        assertEquals(43L, State.from(Node.decode("STATE", body("state_playlog_seq"))).playLogSeq)
+
+        val genres = Node.decode("LIB_GET", body("lib_get_genres"), v1_14)
+        assertEquals(Enums.View.genres, genres.int(Tags.LibGet.view))
+        assertFalse(Enums.View.genres in enumValues("/proto-1.14.txt", "VIEW"))
+        val add = Node.decode("QUEUE_OP", body("queue_op_add_view"), v1_14)
+        assertEquals(Enums.QueueCmd.add, add.int(Tags.QueueOp.cmd))
+        assertFalse(Enums.QueueCmd.add in enumValues("/proto-1.14.txt", "QUEUE_CMD"))
+        assertEquals(listOf(8, 9, 10, 11), add.unknownTags)
+        assertEquals(listOf(1, 2), Node.decode("QUEUE_OP.reply", body("queue_op_add_view_reply"), v1_14).unknownTags)
+        assertEquals(QueueOpReply(12, 9), QueueOpReply.from(Node.decode("QUEUE_OP.reply", body("queue_op_add_view_reply"))))
+
+        val log = PlayLogReply.from(Node.decode("PLAYLOG_GET.reply", body("playlog_get_reply")))
+        assertEquals(6491872793561715441L, log.log)
+        assertEquals(43L to 42L, log.newest to log.first)
+        assertEquals(false, log.more)
+        assertEquals(
+            PlayEntry(42, null, 120000, 241000, 301, "Bohemian Rhapsody", "Queen", listOf("Queen"), listOf("0383dadf-2a4e-4d10-a46a-e9e041da8eb3"), "A Night at the Opera", trackNo = 11),
+            log.entries[0],
+        )
+        assertEquals(
+            PlayEntry(43, 1792656000, 240000, 512000, 302, "Innuendo", "Queen", listOf("Queen"), emptyList(), "Innuendo", "Queen", 1, 32400, true),
+            log.entries[1],
+        )
+        assertArrayEquals(body("playlog_get_reply"), log.encode())
+
+        for (f in listOf(Feature.lyricsOffset, Feature.playLog, Feature.genres, Feature.queueAdd)) assertEquals(0L, Groups.all and (1L shl f))
+        assertEquals(32767L, Groups.all)
+    }
+
+    @Test
+    fun protocol115BuildersMatchTheVectors() {
+        assertArrayEquals(body("playlog_get"), Req.playLogGet(41, 50))
+        assertArrayEquals(body("playlog_ack"), Req.playLogAck(6491872793561715441, 43))
+        assertArrayEquals(body("lib_get_genres"), Req.libGet(Enums.View.genres, null, 0, 100, 7))
+        assertArrayEquals(body("queue_op_add_view"), Req.queueOp(Enums.QueueCmd.add, view = Enums.View.genres, parent = "Rock", libRev = 7, snapRev = 4))
+        assertArrayEquals(body("lyr_offset_read"), Req.lyrOffset(103))
+        assertArrayEquals(body("lyr_offset_set"), Req.lyrOffset(103, -1500))
+        assertArrayEquals(body("lyr_offset_bad"), Req.lyrOffset(103, 60001))
+        assertArrayEquals(body("lib_get_search"), Req.libGet(Enums.View.searchSongs, "queen bohemian", 0, 100, 7))
+        assertArrayEquals(body("play_search"), Req.play(Enums.View.searchArtists, "queen", 7, start = 0))
+        assertEquals(LyrOffsetReply(0), LyrOffsetReply.from(Node.decode("LYR_OFFSET.reply", body("lyr_offset_read_reply"))))
+        assertEquals(LyrOffsetReply(-1500), LyrOffsetReply.from(Node.decode("LYR_OFFSET.reply", body("lyr_offset_set_reply"))))
+        assertTrue(LyrOffsetReply(0).encode().isEmpty())
+        assertArrayEquals(body("lyr_offset_set_reply"), LyrOffsetReply(-1500).encode())
+        assertEquals(Err.badValue, ErrorReply.from(Node.decode("error", body("lyr_offset_bad_error"))).code)
+        assertEquals(60000, Proto.lyrOffsetMaxMs)
     }
 
     @Test
@@ -294,8 +481,8 @@ class OldPeerTest {
     fun eqPresetBuildersMatchTheVectors() {
         val ints = Profile(-40, listOf(Band(Enums.BandType.peak, 34, 1000000, -30, 141)))
         assertArrayEquals(body("eq_preset_save"), Req.eqPreset(Enums.EqPresetOp.save, Enums.EqOutput.wired, name = "HD 650", ints = ints, replace = true))
-        assertArrayEquals(body("eq_preset_remove"), Req.eqPreset(Enums.EqPresetOp.remove, key = "/data/flatdap/eq/Preset 1.txt"))
-        assertArrayEquals(body("eq_preset_rename"), Req.eqPreset(Enums.EqPresetOp.rename, key = "/data/flatdap/eq/Preset 1.txt", name = "Sennheiser"))
+        assertArrayEquals(body("eq_preset_remove"), Req.eqPreset(Enums.EqPresetOp.remove, key = "/data/funeos/eq/Preset 1.txt"))
+        assertArrayEquals(body("eq_preset_rename"), Req.eqPreset(Enums.EqPresetOp.rename, key = "/data/funeos/eq/Preset 1.txt", name = "Sennheiser"))
         val noReplace = Req.eqPreset(Enums.EqPresetOp.save, Enums.EqOutput.wired, name = "HD 650", ints = ints, replace = false)
         assertArrayEquals(body("eq_preset_save").copyOf(body("eq_preset_save").size - 1) + byteArrayOf(0), noReplace)
     }

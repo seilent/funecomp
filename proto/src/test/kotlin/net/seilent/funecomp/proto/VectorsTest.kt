@@ -1,7 +1,9 @@
 package net.seilent.funecomp.proto
 
+import net.seilent.funecomp.proto.gen.Base
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.proto.gen.Tags
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -149,15 +151,25 @@ class VectorsTest {
             var at = 0
             for (f in r.frames) {
                 val body = Node.decode(Inbound.scope(f), f.payload)
-                val known = Tlv.parse(f.payload).filter { t -> body.entries.any { it.tag == t.tag && it.field != null } }
-                val want = tlv { known.forEach { raw(it.tag, it.value) } }
+                val want = known(Inbound.scope(f), f.payload)
                 assertArrayEquals("${v.name}: node re encode", want, body.encode())
                 val t = typed(f, body) ?: want
-                if (f.type == Msg.STATE) assertEquals("${v.name}: typed re encode", fields(want), fields(t)) else assertArrayEquals("${v.name}: typed re encode", want, t)
+                when {
+                    f.type == Msg.STATE -> assertEquals("${v.name}: typed re encode", fields(want), fields(t))
+                    f.type == Msg.HELLO && f.isReply && !f.isError -> assertTrue("${v.name}: typed re encode", fields(t).containsAll(fields(want)))
+                    else -> assertArrayEquals("${v.name}: typed re encode", want, t)
+                }
                 val whole = Frame(f.type, f.flags, f.seq, f.payload).encode()
                 assertArrayEquals("${v.name}: frame re encode", v.bytes.copyOfRange(at, at + whole.size), whole)
                 at += whole.size
             }
+        }
+    }
+
+    private fun known(scope: String, b: ByteArray): ByteArray = tlv {
+        for (t in Tlv.parse(b)) {
+            val f = Tags.scopes[scope]?.get(t.tag) ?: continue
+            raw(t.tag, if (f.base == Base.RECORD) known(f.ref!!, t.value) else t.value)
         }
     }
 
@@ -175,6 +187,12 @@ class VectorsTest {
             Msg.EQ_PRESET -> EqPresetReply.from(n).encode()
             Msg.LYR_GET -> LyrGetReply.from(n).encode()
             Msg.ART_PICK -> ArtPickReply.from(n).encode()
+            Msg.PLAYLOG_GET -> PlayLogReply.from(n).encode()
+            Msg.QUEUE_OP -> QueueOpReply.from(n).encode()
+            Msg.LYR_OFFSET -> LyrOffsetReply.from(n).encode()
+            Msg.LRC_PUT, Msg.LRC_DEL -> LrcReply.from(n).encode()
+            Msg.STREAM_READ -> StreamReadReply.from(n).encode()
+            Msg.PHONE_ART -> PhoneArtReply.from(n).encode()
             else -> null
         }
         return when (f.type) {
@@ -190,6 +208,10 @@ class VectorsTest {
             Msg.UPD_ABORT -> UpdAbort.from(n).encode()
             Msg.ART_BLOCK -> ArtBlock.from(n).encode()
             Msg.ART_PICK -> ArtPick.from(n).encode()
+            Msg.STREAM_READ -> StreamRead.from(n).encode()
+            Msg.STREAM_CANCEL -> StreamCancel.from(n).encode()
+            Msg.PHONE_LIST -> PhoneList.from(n).encode()
+            Msg.PHONE_ART -> PhoneArt.from(n).encode()
             else -> null
         }
     }

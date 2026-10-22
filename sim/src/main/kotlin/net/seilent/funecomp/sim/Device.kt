@@ -101,7 +101,7 @@ class Lyr(val kind: Int, val lines: List<LyrLine>) {
     }
 }
 private val MD5 = Regex("^[0-9a-f]{32}$")
-private const val EQ_DIR = "/data/flatdap/eq/"
+private const val EQ_DIR = "/data/funeos/eq/"
 private val CARD_PROFILE = Profile(-30, listOf(Band(Enums.BandType.peak, -1, 1_000_000, -20, 141)))
 
 private fun eqNameOrder(x: String, y: String): Int {
@@ -695,7 +695,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private fun valid(p: Profile): Boolean {
-        fun ok(b: Band) = b.type in Enums.BandType.names && b.grid in -1..60 && b.milliHz in 20_000..20_000_000 &&
+        fun ok(b: Band) = b.type in Enums.BandType.off..Enums.BandType.highShelf && b.grid in -1..60 && b.milliHz in 20_000..20_000_000 &&
             b.gain10 in -240..120 && b.q100 in 10..1000
         return p.preamp10 in -240..0 && p.bands.size <= 10 && p.bands.all { ok(it) }
     }
