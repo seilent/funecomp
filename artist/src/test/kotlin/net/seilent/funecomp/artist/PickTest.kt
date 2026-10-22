@@ -28,7 +28,7 @@ class PickTest {
     private val cache get() = ArtCache(File(tmp.root, dir))
     private val picks by lazy { ArtPicks(File(tmp.root, "artpick.tsv")) }
 
-    private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }, picks = picks).also {
+    private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, picks = picks).also {
         http.now = { time.now }
     }
 
@@ -97,7 +97,7 @@ class PickTest {
         val saved = File(tmp.root, "artpick.tsv").also { picks.save() }.readText()
         val restored = ArtPicks(File(tmp.root, "artpick.tsv"))
         assertEquals(saved, restored.encode())
-        val a = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }, picks = restored)
+        val a = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, picks = restored)
         assertNotNull(a.get("TSUKI", null, 240, 320))
         assertNotNull(a.get("TSUKI", null, 360, 480))
         assertNotNull(a.get("TSUKI", null, 240, 320))
@@ -136,7 +136,7 @@ class PickTest {
         } catch (e: IOException) {
         }
         assertNull(picks.of(null, "TSUKI")!!.failedAt)
-        val down = ArtistArt({ _, _ -> throw IOException("timeout") }, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }, picks = picks)
+        val down = ArtistArt({ _, _ -> throw IOException("timeout") }, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, picks = picks)
         try {
             down.get("TSUKI", null, 240, 320)
             fail()
@@ -196,7 +196,7 @@ class PickTest {
         val e = cache.hit(p.cacheKey)!!
         val blocks = ArtBlocks()
         blocks.add(ArtBlocks.Block("name:tsuki", null, e.source, ImageIds.of(e), cache.sha(e), "TSUKI", time.now))
-        val a = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }, blocks = blocks, picks = picks)
+        val a = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, blocks = blocks, picks = picks)
         assertFalse(a.blocked(e))
         assertTrue(a.candidates("TSUKI", null).any { it.key == p.cacheKey })
     }
@@ -314,7 +314,7 @@ class PickTest {
         assertEquals(url, d.id)
         assertEquals("a.jpg", d.title)
         assertEquals(PickLink.UNREACHABLE, refused(art().offer("https://example.org/404.jpg")))
-        assertEquals(PickLink.UNREACHABLE, refused(ArtistArt({ _, _ -> throw IOException("offline") }, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }).offer(url)))
+        assertEquals(PickLink.UNREACHABLE, refused(ArtistArt({ _, _ -> throw IOException("offline") }, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time).offer(url)))
     }
 
     @Test
@@ -363,7 +363,7 @@ class PickTest {
         assertEquals(listOf("https://music.youtube.com/channel/UCzzzzzzzzzzzzzzzzzzzzzz"), http.calls)
         assertEquals(PickLink.UNREACHABLE, refused(art().offer("https://music.youtube.com/@nobody")))
         assertEquals(PickLink.UNSUPPORTED, refused(art().offer("https://music.youtube.com/watch?v=qwYhKlY4Tx0")))
-        val down = ArtistArt({ _, _ -> throw IOException("offline") }, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now })
+        val down = ArtistArt({ _, _ -> throw IOException("offline") }, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time)
         assertEquals(PickLink.UNREACHABLE, refused(down.offer("https://music.youtube.com/@tsukiniterasarete")))
     }
 

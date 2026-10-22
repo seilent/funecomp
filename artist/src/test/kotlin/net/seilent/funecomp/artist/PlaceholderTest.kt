@@ -32,7 +32,7 @@ class PlaceholderTest {
     @After
     fun everyUrlHasAFixture() = assertEquals(emptyList<String>(), http.missing)
 
-    private fun art() = ArtistArt(http, AwtCodec(), cache, { Sources.NONE.copy(deezer = true) }, "0.1.0", { time.now }, time.sleep, { time.now }, blocks = blocks, placeholders = set)
+    private fun art() = ArtistArt(http, AwtCodec(), cache, { Sources.NONE.copy(deezer = true) }, "0.1.0", { time.now }, time, blocks = blocks, placeholders = set)
 
     private fun found(vararg urls: String): Response =
         Response(200, "{\"data\":[${urls.joinToString(",") { "{\"name\":\"$name\",\"nb_fan\":1,\"picture_medium\":\"$it\",\"picture_xl\":\"$it\"}" }}]}".toByteArray())

@@ -21,7 +21,7 @@ class BrowseTest {
     private var sources = Sources.NONE.copy(discogs = true, deezer = true, youtube = true)
     private val cache by lazy { ArtCache(tmp.newFolder("art")) }
 
-    private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }).also {
+    private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time).also {
         http.now = { time.now }
     }
 
@@ -53,7 +53,7 @@ class BrowseTest {
     @Test
     fun timingLinesNameEveryTileAndSection() {
         val lines = ArrayList<String>()
-        val a = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }, browseLog = { lines += it })
+        val a = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, browseLog = { lines += it })
         http.now = { time.now }
         val t0 = time.now
         val tiles = ArrayList<Tile>()
@@ -76,8 +76,8 @@ class BrowseTest {
         browse()
         fun gaps(hosts: Set<String>) = http.times.filter { (_, u) -> u.substringAfter("://").substringBefore('/') in hosts }.map { it.first }.zipWithNext { a, b -> b - a }
         assertTrue(gaps(setOf("musicbrainz.org")).all { it >= 1000 })
-        assertTrue(gaps(setOf("api.discogs.com", "i.discogs.com")).all { it >= 60_000L / 25 })
-        assertTrue(gaps(setOf("www.youtube.com", "api.deezer.com", "cdn-images.dzcdn.net", "yt3.ggpht.com")).all { it >= 1000 })
+        assertTrue(gaps(setOf("api.discogs.com")).all { it >= 60_000L / 25 })
+        for (h in listOf("i.discogs.com", "www.youtube.com", "api.deezer.com", "cdn-images.dzcdn.net", "yt3.ggpht.com")) assertTrue(h, gaps(setOf(h)).all { it >= 1000 })
     }
 
     @Test
@@ -164,7 +164,7 @@ class BrowseTest {
             http.get(url, h)
         }
         val tiles = ArrayList<Tile>()
-        val ok = ArtistArt(bad, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }).browse("TSUKI", null, 53) { tiles += it }
+        val ok = ArtistArt(bad, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time).browse("TSUKI", null, 53) { tiles += it }
         assertTrue(ok)
         assertEquals(9, tiles.count { it.source == Sources.DEEZER })
         assertEquals(10, tiles.count { it.source == Sources.YOUTUBE })

@@ -40,7 +40,7 @@ class PreviewArtistTest {
         }
     }
 
-    private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }, blocks = blocks)
+    private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, blocks = blocks)
 
     private fun files(): Map<String, String> = dir.walkTopDown().filter { it.isFile }.associate { it.relativeTo(dir).path to ArtCache.sha256(it.readBytes()) }
 

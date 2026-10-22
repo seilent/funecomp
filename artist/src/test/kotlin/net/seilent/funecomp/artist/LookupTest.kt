@@ -27,7 +27,7 @@ class LookupTest {
     private val codec = AwtCodec()
     private val cache by lazy { ArtCache(tmp.newFolder("art")) }
 
-    private fun art() = ArtistArt(http, codec, cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }).also {
+    private fun art() = ArtistArt(http, codec, cache, { sources }, "0.1.0", { time.now }, time).also {
         http.now = { time.now }
     }
 

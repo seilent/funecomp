@@ -27,13 +27,37 @@ class HttpRun(private val onCall: (String) -> Unit = {}) {
     @Volatile var cancelled = false
         private set
     private val open = HashSet<HttpURLConnection>()
+    private val hooks = ArrayList<() -> Unit>()
+    private val waits = HashMap<Cond, Int>()
 
     fun cancel() {
-        val drop = synchronized(this) {
+        val drop: List<HttpURLConnection>
+        val run: List<() -> Unit>
+        val wake: List<Cond>
+        synchronized(this) {
             cancelled = true
-            open.toList().also { open.clear() }
+            drop = open.toList().also { open.clear() }
+            run = hooks.toList().also { hooks.clear() }
+            wake = waits.keys.toList()
         }
         drop.forEach { it.disconnect() }
+        run.forEach { it() }
+        wake.forEach { it.signalAll() }
+    }
+
+    fun onCancel(hook: () -> Unit) {
+        val now = synchronized(this) {
+            if (!cancelled) hooks += hook
+            cancelled
+        }
+        if (now) hook()
+    }
+
+    internal fun enter(c: Cond) = synchronized(this) { waits[c] = (waits[c] ?: 0) + 1 }
+
+    internal fun leave(c: Cond) = synchronized(this) {
+        val n = (waits[c] ?: 1) - 1
+        if (n <= 0) waits.remove(c) else waits[c] = n
     }
 
     fun <T> on(block: () -> T): T {
@@ -113,13 +137,23 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
 class Api(
     private val http: Http,
     private val userAgent: String,
-    private val limiter: RateLimiter,
-    private val sleep: (Long) -> Unit,
+    private val gate: Gate,
     private val tries: Int = 4,
     private val backoffMs: Long = 2000,
     private val maxRetryAfterMs: Long = 60_000,
     private val jitter: () -> Double = { 0.0 },
 ) {
+    constructor(
+        http: Http,
+        userAgent: String,
+        limiter: RateLimiter,
+        sleep: (Long) -> Unit,
+        tries: Int = 4,
+        backoffMs: Long = 2000,
+        maxRetryAfterMs: Long = 60_000,
+        jitter: () -> Double = { 0.0 },
+    ) : this(http, userAgent, PlainGate(limiter, sleep), tries, backoffMs, maxRetryAfterMs, jitter)
+
     fun get(url: String): Response? = send(url) { http.get(it, mapOf("User-Agent" to userAgent)) }
 
     fun post(url: String, form: Map<String, String>, headers: Map<String, String>): Response? {
@@ -143,11 +177,12 @@ class Api(
 
     private fun send(url: String, call: (String) -> Response): Response? {
         val u = if (url.startsWith("http://")) "https://" + url.removePrefix("http://") else url
+        val limiter = gate.limiter(u)
         repeat(tries) { attempt ->
             val wait = limiter.reserve()
-            if (wait > 0) sleep(wait)
+            if (wait > 0) gate.pause(wait)
             HttpRun.current.get()?.call(u)
-            val r = call(u)
+            val r = gate.call(u) { call(u) }
             when {
                 r.code in 200..299 -> return r
                 r.code == 503 || r.code == 429 -> {

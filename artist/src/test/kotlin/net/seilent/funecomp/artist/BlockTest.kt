@@ -25,7 +25,7 @@ class BlockTest {
     private val cache by lazy { ArtCache(tmp.newFolder("art")) }
     private val blocks by lazy { ArtBlocks(java.io.File(tmp.root, "artblock.tsv")) }
 
-    private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }, { online }, blocks).also {
+    private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, { online }, blocks).also {
         http.now = { time.now }
     }
 

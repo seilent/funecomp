@@ -13,8 +13,7 @@ class ArtistArt(
     private val sources: () -> Sources,
     version: String,
     private val clock: () -> Long = { System.currentTimeMillis() },
-    private val sleep: (Long) -> Unit = { Thread.sleep(it) },
-    private val mono: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val time: Clock = Clock.SYSTEM,
     private val online: () -> Boolean = { true },
     val blocks: ArtBlocks = ArtBlocks(),
     val picks: ArtPicks = ArtPicks(),
@@ -24,28 +23,17 @@ class ArtistArt(
     private val browseLog: (String) -> Unit = {},
 ) {
     private val ua = "funecomp/$version (github@seilent.net)"
-    private fun api(limiter: RateLimiter) = Api(http, ua, limiter, sleep)
+    private val hosts = Hosts(time)
+    private val api = Api(http, ua, hosts)
 
-    private val musicBrainzLimiter = RateLimiter(1000, mono)
-    private val wikimediaLimiter = RateLimiter.perMinute(200, mono)
-    private val audioDbLimiter = RateLimiter.perMinute(30, mono)
-    private val discogsLimiter = RateLimiter.perMinute(25, mono)
-    private val otherLimiter = RateLimiter(1000, mono)
-
-    private val mb = MusicBrainz(api(musicBrainzLimiter))
-    private val wikimedia = Wikimedia(api(wikimediaLimiter))
-    private val audioDb = TheAudioDb(api(audioDbLimiter))
-    private val fanartTv = FanartTv(api(otherLimiter), { sources().fanartTvKey.trim() })
-    private val discogs = Discogs(api(discogsLimiter))
-    private val youtube = YouTube(api(otherLimiter))
-    private val deezer = Deezer(api(otherLimiter), placeholders)
+    private val mb = MusicBrainz(api)
+    private val wikimedia = Wikimedia(api)
+    private val audioDb = TheAudioDb(api)
+    private val fanartTv = FanartTv(api, { sources().fanartTvKey.trim() })
+    private val discogs = Discogs(api)
+    private val youtube = YouTube(api)
+    private val deezer = Deezer(api, placeholders)
     private var scanned = false
-    private val images = mapOf(
-        Wikimedia.SOURCE to api(wikimediaLimiter),
-        Sources.THE_AUDIO_DB to api(audioDbLimiter),
-        Sources.DISCOGS to api(discogsLimiter),
-    )
-    private val otherImages = api(otherLimiter)
 
     class Mark(val sources: String, val until: Long)
 
@@ -138,7 +126,7 @@ class ArtistArt(
             }
         }
         if (!online()) throw IOException("offline")
-        val src = (images[p.source] ?: otherImages).get(p.url)?.body
+        val src = api.get(p.url)?.body
         val jpeg = src?.takeIf { check(it) == null }?.let { Backdrop.render(codec, it, w, h) }
         if (src == null || jpeg == null) {
             picks.failed(p, now)
@@ -229,14 +217,14 @@ class ArtistArt(
         Offered.Refused(PickLink.UNREACHABLE)
     }
 
-    private fun youTube(url: String): Offered = YouTube.page(otherImages, url)?.let { html ->
+    private fun youTube(url: String): Offered = YouTube.page(api, url)?.let { html ->
         val img = YouTube.ogImage(html) ?: return Offered.Refused(PickLink.NOT_IMAGE)
         image(Sources.YOUTUBE, img, ImageIds.of(Sources.YOUTUBE, img), null, YouTube.ogTitle(html) ?: "")
     } ?: Offered.Refused(PickLink.UNREACHABLE)
 
     private fun youTubeMusic(l: PickLink.YouTubeMusic): Offered {
         val music = reached {
-            YouTube.page(otherImages, l.url)?.let { html ->
+            YouTube.page(api, l.url)?.let { html ->
                 YouTube.ogImage(html)?.let { YouTube.full(it) }?.let { img ->
                     image(Sources.YOUTUBE, img, ImageIds.of(Sources.YOUTUBE, img), null, YouTube.ogTitle(html) ?: "", YouTube.MUSIC_LABEL)
                 } ?: Offered.Refused(PickLink.NOT_FOUND)
@@ -267,7 +255,7 @@ class ArtistArt(
     }
 
     private fun image(source: String, url: String, id: String, credit: Credit?, title: String, label: String = Sources.label(source)): Offered {
-        val src = (images[source] ?: otherImages).get(url)?.body ?: return Offered.Refused(PickLink.UNREACHABLE)
+        val src = api.get(url)?.body ?: return Offered.Refused(PickLink.UNREACHABLE)
         if (source == Sources.DEEZER && deezer.placeholder(src)) return Offered.Refused(PickLink.NOT_IMAGE)
         check(src)?.let { return Offered.Refused(it) }
         return Offered.Ok(Offer(ArtPicks.IMAGE, source, url, id, credit, null, title, src, label))
@@ -276,10 +264,10 @@ class ArtistArt(
     fun browse(name: String, mbid: String?, px: Int, sink: (Tile) -> Unit): Boolean {
         val on = sources().enabled
         val run = HttpRun.current.get()
-        val t0 = mono()
+        val t0 = time.now()
         var section = ""
         var n = 0
-        fun done(s: String) = browseLog("art browse source $s done n=$n +${mono() - t0}")
+        fun done(s: String) = browseLog("art browse source $s done n=$n +${time.now() - t0}")
         fun <T> attempt(block: () -> T): T? = try {
             block()
         } catch (e: IOException) {
@@ -289,10 +277,10 @@ class ArtistArt(
             null
         }
         fun tile(source: String, caption: String, preview: String, full: String, id: String = ImageIds.of(source, full), credit: Credit? = null) {
-            val b = attempt { (images[source] ?: otherImages).get(preview) }?.body ?: return
+            val b = attempt { api.get(preview) }?.body ?: return
             sink(Tile(source, caption, b, full, id, credit))
             n++
-            browseLog("art browse tile $section +${mono() - t0}")
+            browseLog("art browse tile $section +${time.now() - t0}")
         }
         val ids = ((attempt { mb.searchAll(name) } ?: emptyList()).take(BROWSE_MBIDS) + listOfNotNull(Names.mbid(mbid))).distinct()
         val artists = ids.mapNotNull { attempt { mb.artist(it) } }
@@ -477,7 +465,7 @@ class ArtistArt(
             val candidates = attempt { step().filterNot { blocks.blocked(key, it.source, it.id, name = display) }.take(MAX_TRIES).iterator() } ?: continue
             while (attempt { candidates.hasNext() } == true) {
                 val c = candidates.next()
-                val src = attempt { (images[c.source] ?: otherImages).get(c.url) }?.body ?: continue
+                val src = attempt { api.get(c.url) }?.body ?: continue
                 if (c.source == Sources.DEEZER && deezer.placeholder(src)) {
                     skipped.set(true)
                     continue
