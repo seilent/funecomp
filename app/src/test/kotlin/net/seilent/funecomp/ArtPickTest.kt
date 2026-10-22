@@ -89,6 +89,7 @@ class ArtPickTest {
 
     @Before
     fun setUp() {
+        scrobblesOff(app)
         app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
@@ -104,6 +105,7 @@ class ArtPickTest {
         Remote.shown(false)
         sims.forEach { it.stop() }
         Remote.resetArtist()
+        scrobblesReset()
     }
 
     private fun waitFor(ms: Long = 10_000, cond: () -> Boolean) {

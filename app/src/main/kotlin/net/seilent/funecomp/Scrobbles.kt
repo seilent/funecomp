@@ -6,6 +6,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import net.seilent.funecomp.artist.Accounts
+import net.seilent.funecomp.artist.AppPair
+import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.LastFm
 import net.seilent.funecomp.artist.Listen
 import net.seilent.funecomp.artist.Scrobbler
@@ -17,12 +19,15 @@ import net.seilent.funecomp.ui.ScrobbleView
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 object Scrobbles {
     private const val PREFS = "scrobble"
     private const val OPEN = "open.tsv"
-    private val exec = Executors.newSingleThreadExecutor { Thread(it, "scrobble").apply { isDaemon = true } }
+    private const val DRAIN_S = 2L
+    @Volatile private var exec = executor()
     private var context: Context? = null
+    private var pair = AppPair.EMPTY
     private var scrobbler: Scrobbler? = null
     private var plays: Plays? = null
     private var dir: File? = null
@@ -30,21 +35,35 @@ object Scrobbles {
     var view by mutableStateOf(ScrobbleView())
         private set
 
-    fun init(c: Context) {
-        if (context != null) return
+    fun init(c: Context, pair: AppPair, http: Http? = null) {
+        if (context != null && http == null) return
         val app = c.applicationContext
         context = app
+        this.pair = pair
         val version = app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0"
         val d = File(app.filesDir, "scrobble")
         dir = d
         view = ScrobbleView(accounts(app))
+        val net = http ?: UrlHttp()
         exec.execute {
-            val s = Scrobbler(d, UrlHttp(), { accounts(app) }, version, reauth = ::expired) { Log.i(Remote.TAG, it) }
+            val s = Scrobbler(d, net, { accounts(app) }, version, reauth = ::expired) { Log.i(Remote.TAG, it) }
             scrobbler = s
             plays = Plays(File(d, OPEN).takeIf { it.isFile }?.readText()?.let { Play.parse(it) })
             refresh()
             flush()
         }
+    }
+
+    internal fun reset() {
+        exec.shutdownNow()
+        exec.awaitTermination(DRAIN_S, TimeUnit.SECONDS)
+        exec = executor()
+        context = null
+        pair = AppPair.EMPTY
+        scrobbler = null
+        plays = null
+        dir = null
+        view = ScrobbleView()
     }
 
     fun session(clocked: Boolean) = exec.execute { plays?.session(clocked) }
@@ -161,6 +180,8 @@ object Scrobbles {
         val v = view
         view = ScrobbleView(accounts(c), queued, lastFm ?: v.lastFm, listenBrainz ?: v.listenBrainz)
     }
+
+    private fun executor() = Executors.newSingleThreadExecutor { Thread(it, "scrobble").apply { isDaemon = true } }
 
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 

@@ -12,6 +12,7 @@ import androidx.test.core.app.ActivityScenario
 import net.seilent.funecomp.artist.Sources
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -30,6 +31,11 @@ class SourcesLaunchTest {
     private val app get() = RuntimeEnvironment.getApplication()
     private var scenario: ActivityScenario<Main>? = null
 
+    @Before
+    fun setUp() {
+        scrobblesOff(app)
+    }
+
     @After
     fun tearDown() {
         scenario?.close()
@@ -37,6 +43,7 @@ class SourcesLaunchTest {
         Remote.resetArtist()
         Lyrics.reset()
         Firmwares.reset()
+        scrobblesReset()
     }
 
     @Test

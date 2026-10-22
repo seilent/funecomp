@@ -4,6 +4,16 @@ import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
 
+data class AppPair(val key: String, val secret: String) {
+    val empty: Boolean get() = key.isBlank() || secret.isBlank()
+
+    override fun toString() = if (empty) "AppPair(empty)" else "AppPair(set)"
+
+    companion object {
+        val EMPTY = AppPair("", "")
+    }
+}
+
 data class Accounts(
     val lastFm: Boolean = false,
     val apiKey: String = "",

@@ -31,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import net.seilent.funecomp.art.GalleryRead
 import net.seilent.funecomp.artist.Accounts
+import net.seilent.funecomp.artist.AppPair
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.artist.Sources
@@ -404,7 +405,7 @@ class Main : ComponentActivity() {
 
         fun init(c: Context) {
             Remote.artist(c)
-            Scrobbles.init(c)
+            Scrobbles.init(c, AppPair(BuildConfig.LASTFM_KEY, BuildConfig.LASTFM_SECRET))
             Lyrics.init(c)
             AutoEqs.init(c)
             Firmwares.init(c)

@@ -50,6 +50,7 @@ class BackgroundTest {
 
     @Before
     fun setUp() {
+        scrobblesOff(app)
         app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
@@ -62,6 +63,7 @@ class BackgroundTest {
         Lyrics.reset()
         Firmwares.reset()
         sims.forEach { it.stop() }
+        scrobblesReset()
     }
 
     private val logs = java.util.concurrent.CopyOnWriteArrayList<String>()

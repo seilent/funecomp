@@ -59,6 +59,7 @@ class ArtBlockTest {
 
     @Before
     fun setUp() {
+        scrobblesOff(app)
         app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
@@ -75,6 +76,7 @@ class ArtBlockTest {
         Remote.faced = faced
         Remote.forgetting = {}
         Remote.queuedAsk = {}
+        scrobblesReset()
     }
 
     private fun waitFor(ms: Long = 5000, cond: () -> Boolean) {

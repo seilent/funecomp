@@ -59,6 +59,7 @@ class ArtPickAskTest {
 
     @Before
     fun setUp() {
+        scrobblesOff(app)
         debuggable(true)
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
@@ -78,6 +79,7 @@ class ArtPickAskTest {
         val ran = AtomicBoolean(false)
         CoroutineScope(AndroidUiDispatcher.Main).launch { ran.set(true) }
         waitFor { ran.get() }
+        scrobblesReset()
     }
 
     private fun debuggable(on: Boolean) {
