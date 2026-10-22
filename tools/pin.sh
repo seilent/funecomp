@@ -6,7 +6,7 @@ dst=$root/third_party/funeos
 funeos=${FUNEOS:-$HOME/pers/funeos}
 
 usage() {
-    echo "usage: tools/pin.sh <funeos rev> | tools/pin.sh --spec <funeos rev> | tools/pin.sh draft" >&2
+    echo "usage: tools/pin.sh <funeos rev> | tools/pin.sh --spec <funeos rev> | tools/pin.sh --tokens <funeos rev> | tools/pin.sh draft" >&2
     exit 2
 }
 
@@ -51,6 +51,12 @@ case "${1:-}" in
         lrc_check "$spec"
         show "$spec" player/link/proto.txt proto.txt
         show "$spec" player/link/vectors.txt vectors.txt
+        ;;
+    --tokens)
+        [ $# -eq 2 ] || usage
+        tokens=$(git -C "$funeos" rev-parse --verify "$2^{commit}")
+        show "$tokens" player/ui/tokens.txt tokens.txt
+        show "$tokens" player/ui/tokens-v1.txt tokens-v1.txt
         ;;
     "")
         usage
