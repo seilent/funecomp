@@ -896,7 +896,7 @@ val SHOTS = listOf(
     Shot("online-scrobbling", pages = HOME + Page.Online(ONLINE_SCROBBLING)),
     Shot("online-scrobbling-set", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE),
     Shot("online-scrobbling-failed", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE.copy(accounts = SCROBBLE.accounts.copy(lastFmSession = ""), lastFm = "sign in failed", listenBrainz = "invalid")),
-    Shot("online-scrobbling-entry", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { tapRow("scrobble.key") },
+    Shot("online-scrobbling-entry", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE.copy(accounts = SCROBBLE.accounts.copy(token = ""))) { tapRow("scrobble.token") },
     Shot("online-scrobbling-plain", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, labels = false),
     Shot("settings-about", pages = HOME + Page.Settings) { about() },
     Shot("settings-about-v1", board = "v1", pages = HOME + Page.Settings) { about() },

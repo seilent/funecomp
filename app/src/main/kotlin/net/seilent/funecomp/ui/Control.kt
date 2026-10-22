@@ -75,7 +75,6 @@ interface Control {
     fun allowBackground() {}
     fun backgroundLater() {}
     fun scrobble(accounts: Accounts) {}
-    fun lastFmLogin(user: String, password: String) {}
     fun listenBrainzToken(token: String) {}
     fun eqFile(done: (String, String?) -> Unit) {}
     fun autoEqList(done: (AutoEqList?) -> Unit) {}

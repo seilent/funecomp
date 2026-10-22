@@ -143,8 +143,6 @@ class Main : ComponentActivity() {
 
         override fun scrobble(accounts: Accounts) = Scrobbles.set(accounts)
 
-        override fun lastFmLogin(user: String, password: String) = Scrobbles.lastFmLogin(user, password)
-
         override fun listenBrainzToken(token: String) = Scrobbles.listenBrainzToken(token)
 
         override fun eqFile(done: (String, String?) -> Unit) {

@@ -8,7 +8,6 @@ import androidx.compose.runtime.setValue
 import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.AppPair
 import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.LastFm
 import net.seilent.funecomp.artist.Listen
 import net.seilent.funecomp.artist.Scrobbler
 import net.seilent.funecomp.artist.UrlHttp
@@ -46,7 +45,7 @@ object Scrobbles {
         view = ScrobbleView(accounts(app))
         val net = http ?: UrlHttp()
         exec.execute {
-            val s = Scrobbler(d, net, { accounts(app) }, version, reauth = ::expired) { Log.i(Remote.TAG, it) }
+            val s = Scrobbler(d, net, { accounts(app) }, pair, version, reauth = ::expired) { Log.i(Remote.TAG, it) }
             scrobbler = s
             plays = Plays(File(d, OPEN).takeIf { it.isFile }?.readText()?.let { Play.parse(it) })
             refresh()
@@ -97,27 +96,6 @@ object Scrobbles {
             if (a.listenBrainz && !old.listenBrainz) scrobbler?.enable(Accounts.LISTEN_BRAINZ)
             attempt { scrobbler?.flush() }
             refresh()
-        }
-    }
-
-    fun lastFmLogin(user: String, password: String) {
-        val c = context ?: return
-        view = view.copy(lastFm = "signing in")
-        exec.execute {
-            val a = accounts(c)
-            val status = try {
-                val (name, key) = scrobbler?.lastFmSession(a.apiKey, a.secret, user, password) ?: return@execute
-                store(c, accounts(c).copy(lastFmUser = name, lastFmSession = key))
-                attempt { scrobbler?.flush() }
-                ""
-            } catch (e: LastFm.Failed) {
-                Log.w(Remote.TAG, "lastfm session: ${e.code} ${e.message}")
-                "sign in failed"
-            } catch (e: IOException) {
-                Log.w(Remote.TAG, "lastfm session: $e")
-                "offline"
-            }
-            refresh(lastFm = status)
         }
     }
 

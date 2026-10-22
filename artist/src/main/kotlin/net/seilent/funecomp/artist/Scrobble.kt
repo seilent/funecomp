@@ -30,8 +30,14 @@ data class Accounts(
             if (listenBrainz) add(LISTEN_BRAINZ)
         }
 
-    fun ready(service: String) = when (service) {
-        LAST_FM -> lastFm && apiKey.isNotBlank() && secret.isNotBlank() && lastFmSession.isNotBlank()
+    val own: Boolean get() = apiKey.isNotBlank() && secret.isNotBlank()
+
+    override fun toString() = "Accounts(lastFm=$lastFm, lastFmUser=$lastFmUser, session=${lastFmSession.isNotBlank()}, own=$own, listenBrainz=$listenBrainz, listenBrainzUser=$listenBrainzUser, token=${token.isNotBlank()})"
+
+    fun pair(app: AppPair): AppPair? = if (own) AppPair(apiKey.trim(), secret.trim()) else app.takeIf { !it.empty }
+
+    fun ready(service: String, app: AppPair) = when (service) {
+        LAST_FM -> lastFm && lastFmSession.isNotBlank() && pair(app) != null
         LISTEN_BRAINZ -> listenBrainz && token.isNotBlank()
         else -> false
     }
@@ -42,7 +48,18 @@ data class Accounts(
     }
 }
 
-enum class Sent { OK, RETRY, REAUTH, SKIP, HOLD }
+enum class Sent { OK, RETRY, REAUTH, SKIP, HOLD, KEY }
+
+enum class SignIn(val row: String) {
+    OFFLINE("offline"),
+    TRY_AGAIN("try again"),
+    NOT_APPROVED("not approved"),
+    KEY("app key refused"),
+    FAILED("sign in failed"),
+    ;
+
+    val keeps: Boolean get() = this == OFFLINE || this == TRY_AGAIN || this == NOT_APPROVED
+}
 
 class LastFm(
     private val http: Http,
@@ -53,27 +70,37 @@ class LastFm(
 ) {
     class Failed(val code: Int?, message: String) : IOException(message)
 
-    fun session(apiKey: String, secret: String, user: String, password: String): Pair<String, String> {
-        val r = call(mapOf("method" to "auth.getMobileSession", "username" to user, "password" to password, "api_key" to apiKey), secret)
-        val code = r["error"].long?.toInt()
-        if (code != null) throw Failed(code, r["message"].str ?: "error $code")
+    fun token(app: AppPair): String {
+        val r = failed(call(mapOf("method" to "auth.getToken", "api_key" to app.key), app.secret))
+        return r["token"].str?.takeIf { it.isNotBlank() } ?: throw Failed(null, "no token")
+    }
+
+    fun session(app: AppPair, token: String): Pair<String, String> {
+        val r = failed(call(mapOf("method" to "auth.getSession", "token" to token, "api_key" to app.key), app.secret))
         val s = r["session"]
-        val key = s["key"].str ?: throw Failed(null, "no session key")
-        return (s["name"].str ?: user) to key
+        val key = s["key"].str?.takeIf { it.isNotBlank() } ?: throw Failed(null, "no session key")
+        val name = s["name"].str?.takeIf { it.isNotBlank() } ?: throw Failed(null, "no session name")
+        return name to key
     }
 
-    fun nowPlaying(a: Accounts, l: Listen): Sent = outcome {
-        call(auth(a) + track(l, null) + ("method" to "track.updateNowPlaying"), a.secret)
+    fun nowPlaying(a: Accounts, p: AppPair, l: Listen): Sent = outcome {
+        call(auth(a, p) + track(l, null) + ("method" to "track.updateNowPlaying"), p.secret)
     }
 
-    fun scrobble(a: Accounts, batch: List<Listen>): Sent = outcome {
-        val p = HashMap(auth(a))
-        p["method"] = "track.scrobble"
-        batch.forEachIndexed { i, l -> p += track(l, i) }
-        call(p, a.secret)
+    fun scrobble(a: Accounts, p: AppPair, batch: List<Listen>): Sent = outcome {
+        val m = HashMap(auth(a, p))
+        m["method"] = "track.scrobble"
+        batch.forEachIndexed { i, l -> m += track(l, i) }
+        call(m, p.secret)
     }
 
-    private fun auth(a: Accounts) = mapOf("api_key" to a.apiKey.trim(), "sk" to a.lastFmSession)
+    private fun auth(a: Accounts, p: AppPair) = mapOf("api_key" to p.key, "sk" to a.lastFmSession)
+
+    private fun failed(r: J): J {
+        val code = r["error"].long?.toInt()
+        if (code != null) throw Failed(code, "error $code")
+        return r
+    }
 
     private fun track(l: Listen, i: Int?): Map<String, String> {
         fun k(name: String) = if (i == null) name else "$name[$i]"
@@ -97,6 +124,7 @@ class LastFm(
             11, 16, 29, 8 -> Sent.RETRY
             9 -> Sent.REAUTH
             6, 7 -> Sent.SKIP
+            10, 13, 26 -> Sent.KEY
             else -> Sent.HOLD
         }
     }
@@ -122,6 +150,17 @@ class LastFm(
         }
 
         fun md5(b: ByteArray): String = MessageDigest.getInstance("MD5").digest(b).joinToString("") { "%02x".format(it) }
+
+        fun signIn(e: IOException, session: Boolean): SignIn {
+            if (e !is Failed) return SignIn.OFFLINE
+            return when (e.code) {
+                8, 11, 16, 29 -> SignIn.TRY_AGAIN
+                14 -> if (session) SignIn.NOT_APPROVED else SignIn.FAILED
+                4 -> if (session) SignIn.FAILED else SignIn.KEY
+                10, 13, 26 -> SignIn.KEY
+                else -> SignIn.FAILED
+            }
+        }
     }
 }
 
@@ -205,6 +244,7 @@ class Scrobbler(
     dir: File,
     http: Http,
     private val accounts: () -> Accounts,
+    private val app: AppPair,
     version: String,
     private val clock: () -> Long = { System.currentTimeMillis() },
     sleep: (Long) -> Unit = { Thread.sleep(it) },
@@ -221,8 +261,9 @@ class Scrobbler(
 
     fun nowPlaying(l: Listen) {
         val a = accounts()
-        if (a.ready(Accounts.LAST_FM)) log("scrobble now playing lastfm ${lastFm.nowPlaying(a, l)}")
-        if (a.ready(Accounts.LISTEN_BRAINZ)) log("scrobble now playing listenbrainz ${listenBrainz.nowPlaying(a.token, l)}")
+        val p = a.pair(app)
+        if (p != null && a.ready(Accounts.LAST_FM, app)) log("scrobble now playing lastfm ${lastFm.nowPlaying(a, p, l)}")
+        if (a.ready(Accounts.LISTEN_BRAINZ, app)) log("scrobble now playing listenbrainz ${listenBrainz.nowPlaying(a.token, l)}")
     }
 
     fun add(l: Listen): Map<String, Sent> {
@@ -237,18 +278,20 @@ class Scrobbler(
         val a = accounts()
         val out = HashMap<String, Sent>()
         for (service in a.enabled) {
-            if (!a.ready(service)) continue
-            out[service] = send(service, a)
+            if (!a.ready(service, app)) continue
+            send(service, a)?.let { out[service] = it }
         }
         queue.compact(accounts().enabled)
         return out
     }
 
-    private fun send(service: String, a: Accounts): Sent {
+    private fun send(service: String, a: Accounts): Sent? {
         val now = clock() / 1000
+        val p = a.pair(app)
+        var called = false
         while (true) {
             val rest = queue.after(service)
-            if (rest.isEmpty()) return Sent.OK
+            if (rest.isEmpty()) return if (called) Sent.OK else null
             var last = 0L
             val batch = ArrayList<Listen>()
             for (l in rest) {
@@ -257,11 +300,12 @@ class Scrobbler(
                 if (service == Accounts.LAST_FM && now - l.startS > LAST_FM_MAX_AGE_S) continue
                 batch += l
             }
-            val r = when {
-                batch.isEmpty() -> Sent.OK
-                service == Accounts.LAST_FM -> lastFm.scrobble(a, batch)
-                else -> listenBrainz.submit(a.token, batch)
+            if (batch.isEmpty()) {
+                queue.sent(service, last)
+                continue
             }
+            val r = if (service == Accounts.LAST_FM) lastFm.scrobble(a, p ?: return null, batch) else listenBrainz.submit(a.token, batch)
+            called = true
             log("scrobble $service ${batch.size} up to $last $r")
             when (r) {
                 Sent.OK, Sent.SKIP -> queue.sent(service, last)
@@ -276,7 +320,9 @@ class Scrobbler(
 
     private fun batchSize(service: String) = if (service == Accounts.LAST_FM) LAST_FM_BATCH else LISTEN_BRAINZ_BATCH
 
-    fun lastFmSession(apiKey: String, secret: String, user: String, password: String) = lastFm.session(apiKey.trim(), secret.trim(), user.trim(), password)
+    fun lastFmToken() = lastFm.token(app)
+
+    fun lastFmSession(token: String) = lastFm.session(app, token)
 
     fun listenBrainzUser(token: String) = listenBrainz.validate(token)
 

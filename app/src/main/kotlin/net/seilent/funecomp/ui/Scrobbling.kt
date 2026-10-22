@@ -23,7 +23,6 @@ fun ScrobbleRows(ctx: Ctx, view: ScrobbleView, labels: Boolean = true) {
     val ui = LocalUi.current
     var focus by rememberSaveable { mutableStateOf("lastfm") }
     val a = view.accounts
-    fun set(v: String) = if (v.isBlank()) "not set" else "set"
     fun entry(title: String, start: String, secret: Boolean, done: (String) -> Unit) = ctx.sheet.openEntry(title) {
         key(title) {
             TextEntry(start, secret = secret) { t ->
@@ -37,15 +36,7 @@ fun ScrobbleRows(ctx: Ctx, view: ScrobbleView, labels: Boolean = true) {
     val items = buildList {
         if (labels) add(Item("last.fm", "", "label.lastfm", label = true))
         add(Item("last.fm", if (a.lastFm) ON else OFF, "lastfm") { i -> onOffSheet(ctx, "last.fm", a.lastFm, keep(i)) { ctx.control.scrobble(a.copy(lastFm = it)) } })
-        add(Item("api key", set(a.apiKey), "key") { entry("api key", a.apiKey, true) { ctx.control.scrobble(a.copy(apiKey = it)) } })
-        add(Item("secret", set(a.secret), "secret") { entry("secret", a.secret, true) { ctx.control.scrobble(a.copy(secret = it)) } })
-        add(
-            Item("last.fm account", view.lastFm.ifEmpty { a.lastFmUser.takeIf { a.lastFmSession.isNotBlank() } ?: "not set" }, "account") {
-                entry("username", a.lastFmUser, false) { user ->
-                    if (user.isNotEmpty()) entry("password", "", true) { pass -> if (pass.isNotEmpty()) ctx.control.lastFmLogin(user, pass) }
-                }
-            },
-        )
+        add(Item("last.fm account", view.lastFm.ifEmpty { a.lastFmUser.takeIf { a.lastFmSession.isNotBlank() } ?: "not set" }, "account"))
         if (labels) add(Item("listenbrainz", "", "label.listenbrainz", label = true))
         add(Item("listenbrainz", if (a.listenBrainz) ON else OFF, "listenbrainz") { i -> onOffSheet(ctx, "listenbrainz", a.listenBrainz, keep(i)) { ctx.control.scrobble(a.copy(listenBrainz = it)) } })
         add(

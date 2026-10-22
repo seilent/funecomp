@@ -1,6 +1,8 @@
 package net.seilent.funecomp.artist
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -54,10 +56,11 @@ class ScrobbleTest {
     }
 
     private var accounts = Accounts(true, "k".repeat(32), "s3cret", "me", "sk1", true, "tok", "me")
+    private var app = AppPair("a".repeat(32), "appsecret")
     private val net = Net()
     private val time = FakeTime()
 
-    private fun scrobbler(dir: java.io.File = tmp.root) = Scrobbler(dir, net, { accounts }, "0.1.0", { NOW }, time.sleep, { time.now })
+    private fun scrobbler(dir: java.io.File = tmp.root) = Scrobbler(dir, net, { accounts }, app, "0.1.0", { NOW }, time.sleep, { time.now })
 
     private fun listen(i: Int, startS: Long = NOW / 1000 - 3600 + i * 300L) = Listen(startS, "Radiohead", "Track $i", "OK Computer", 240)
 
@@ -69,6 +72,12 @@ class ScrobbleTest {
     fun signatureMatchesTheLastFmDocsExample() {
         val p = mapOf("api_key" to "xxxxxxxx", "method" to "auth.getMobileSession", "password" to "xxxxxxx", "username" to "xxxxxxxx", "format" to "json")
         assertEquals("23243626fa2278a773439d3590e09cf4", LastFm.sign(p, "mysecret"))
+    }
+
+    @Test
+    fun signatureMatchesTheLastFmAuthSpecExample() {
+        val p = mapOf("api_key" to "xxxxxxxxxx", "method" to "auth.getSession", "token" to "yyyyyy", "format" to "json")
+        assertEquals("b87d61da3cda91a8b6746c4aef55d6f8", LastFm.sign(p, "ilovecher"))
     }
 
     @Test
@@ -144,9 +153,9 @@ class ScrobbleTest {
     fun invalidKeyHoldsAndInvalidSessionAsksForSignIn() {
         accounts = accounts.copy(listenBrainz = false)
         var expired: String? = null
-        val s = Scrobbler(tmp.root, net, { accounts }, "0.1.0", { NOW }, time.sleep, { time.now }, reauth = { expired = it })
+        val s = Scrobbler(tmp.root, net, { accounts }, app, "0.1.0", { NOW }, time.sleep, { time.now }, reauth = { expired = it })
         net.on(LFM, file(403, "lfm-scrobble-badkey.json"))
-        assertEquals(Sent.HOLD, s.add(listen(0))[Accounts.LAST_FM])
+        assertEquals(Sent.KEY, s.add(listen(0))[Accounts.LAST_FM])
         net.on(LFM, { Response(403, "{\"error\":9,\"message\":\"Invalid session key - Please re-authenticate\"}".toByteArray()) })
         assertEquals(Sent.REAUTH, s.flush()[Accounts.LAST_FM])
         assertEquals(Accounts.LAST_FM, expired)
@@ -272,7 +281,7 @@ class ScrobbleTest {
     fun listenBrainzBadTokenAsksForANewOne() {
         accounts = accounts.copy(lastFm = false)
         var expired: String? = null
-        val s = Scrobbler(tmp.root, net, { accounts }, "0.1.0", { NOW }, time.sleep, { time.now }, reauth = { expired = it })
+        val s = Scrobbler(tmp.root, net, { accounts }, app, "0.1.0", { NOW }, time.sleep, { time.now }, reauth = { expired = it })
         net.on(LB, file(401, "lb-submit-bad.json"))
         assertEquals(Sent.REAUTH, s.add(listen(0))[Accounts.LISTEN_BRAINZ])
         assertEquals(Accounts.LISTEN_BRAINZ, expired)
@@ -280,22 +289,152 @@ class ScrobbleTest {
     }
 
     @Test
-    fun signInAndTokenCheck() {
+    fun tokenIsSignedWithTheAppPairEvenWithAnOwnPair() {
+        val s = scrobbler()
+        net.on(LFM, file(200, "lfm-token-doc.json"))
+        assertEquals("cf45fe5a3e3cebe168480a086d7fe481", s.lastFmToken())
+        val c = net.calls.last()
+        val f = c.form
+        assertEquals("auth.getToken", f["method"])
+        assertTrue(f["api_key"] == app.key)
+        assertEquals("json", f["format"])
+        assertEquals(listOf("api_key", "method", "api_sig", "format"), c.body.split('&').map { it.substringBefore('=') })
+        assertEquals(LastFm.sign(f - "api_sig", app.secret), f["api_sig"])
+        assertEquals(LastFm.md5(("api_key" + app.key + "methodauth.getToken" + app.secret).toByteArray()), f["api_sig"])
+        assertTrue(c.url.startsWith("https://"))
+    }
+
+    @Test
+    fun sessionIsSignedWithTheAppPairAndGivesNameAndKey() {
         val s = scrobbler()
         net.on(LFM, file(200, "lfm-session-doc.json"))
-        assertEquals("MyLastFMUsername" to "d580d57f32848f5dcf574d1ce18d78b2", s.lastFmSession(" key ", "sec", "me", "pw"))
+        assertEquals("MyLastFMUsername" to "d580d57f32848f5dcf574d1ce18d78b2", s.lastFmSession("cf45fe5a3e3cebe168480a086d7fe481"))
         val f = net.calls.last().form
-        assertEquals("auth.getMobileSession", f["method"])
-        assertEquals("key", f["api_key"])
-        assertTrue(net.calls.last().url.startsWith("https://"))
-        net.on(LFM, file(403, "lfm-session-badkey.json"))
-        val e = try {
-            s.lastFmSession("key", "sec", "me", "pw")
-            null
-        } catch (x: LastFm.Failed) {
-            x
+        assertEquals("auth.getSession", f["method"])
+        assertEquals("cf45fe5a3e3cebe168480a086d7fe481", f["token"])
+        assertTrue(f["api_key"] == app.key)
+        assertEquals(LastFm.md5(("api_key" + app.key + "methodauth.getSessiontokencf45fe5a3e3cebe168480a086d7fe481" + app.secret).toByteArray()), f["api_sig"])
+    }
+
+    private fun failure(block: () -> Unit): java.io.IOException? = try {
+        block()
+        null
+    } catch (e: java.io.IOException) {
+        e
+    }
+
+    private fun answer(code: Int) = { Response(403, "{\"message\":\"x\",\"error\":$code}".toByteArray()) }
+
+    @Test
+    fun tokenErrorsMapToTheirRows() {
+        val s = scrobbler()
+        net.on(LFM, file(403, "lfm-token-badkey.json"))
+        assertEquals(SignIn.KEY, LastFm.signIn(failure { s.lastFmToken() }!!, false))
+        for ((code, row) in listOf(8 to SignIn.TRY_AGAIN, 11 to SignIn.TRY_AGAIN, 16 to SignIn.TRY_AGAIN, 29 to SignIn.TRY_AGAIN, 4 to SignIn.KEY, 10 to SignIn.KEY, 13 to SignIn.KEY, 26 to SignIn.KEY, 6 to SignIn.FAILED, 14 to SignIn.FAILED)) {
+            net.on(LFM, answer(code))
+            val e = failure { s.lastFmToken() }
+            assertEquals(code, (e as LastFm.Failed).code)
+            assertEquals("getToken $code", row, LastFm.signIn(e, false))
         }
-        assertEquals(10, e?.code)
+        net.on(LFM, { Response(200, "{}".toByteArray()) })
+        assertEquals(SignIn.FAILED, LastFm.signIn(failure { s.lastFmToken() }!!, false))
+        net.down += LFM
+        assertEquals(SignIn.OFFLINE, LastFm.signIn(failure { s.lastFmToken() }!!, false))
+        assertEquals("offline", SignIn.OFFLINE.row)
+        assertEquals("try again", SignIn.TRY_AGAIN.row)
+        assertEquals("app key refused", SignIn.KEY.row)
+        assertEquals("sign in failed", SignIn.FAILED.row)
+    }
+
+    @Test
+    fun sessionErrorsMapToTheirRowsAndPendingRule() {
+        val s = scrobbler()
+        net.on(LFM, file(403, "lfm-session-unauth.json"))
+        assertEquals(SignIn.NOT_APPROVED, LastFm.signIn(failure { s.lastFmSession("t") }!!, true))
+        net.on(LFM, file(403, "lfm-session-expired.json"))
+        assertEquals(SignIn.FAILED, LastFm.signIn(failure { s.lastFmSession("t") }!!, true))
+        net.on(LFM, file(403, "lfm-session-badkey.json"))
+        assertEquals(SignIn.KEY, LastFm.signIn(failure { s.lastFmSession("t") }!!, true))
+        for ((code, row) in listOf(14 to SignIn.NOT_APPROVED, 4 to SignIn.FAILED, 15 to SignIn.FAILED, 8 to SignIn.TRY_AGAIN, 11 to SignIn.TRY_AGAIN, 16 to SignIn.TRY_AGAIN, 29 to SignIn.TRY_AGAIN, 10 to SignIn.KEY, 13 to SignIn.KEY, 26 to SignIn.KEY, 6 to SignIn.FAILED, 2 to SignIn.FAILED)) {
+            net.on(LFM, answer(code))
+            assertEquals("getSession $code", row, LastFm.signIn(failure { s.lastFmSession("t") }!!, true))
+        }
+        net.on(LFM, { Response(200, "{\"session\":{\"name\":\"me\"}}".toByteArray()) })
+        assertEquals(SignIn.FAILED, LastFm.signIn(failure { s.lastFmSession("t") }!!, true))
+        net.down += LFM
+        assertEquals(SignIn.OFFLINE, LastFm.signIn(failure { s.lastFmSession("t") }!!, true))
+        assertEquals("not approved", SignIn.NOT_APPROVED.row)
+        assertEquals(setOf(SignIn.OFFLINE, SignIn.TRY_AGAIN, SignIn.NOT_APPROVED), SignIn.entries.filter { it.keeps }.toSet())
+    }
+
+    @Test
+    fun keyCodesOnScrobbleGiveKeyAndHoldTheQueue() {
+        accounts = accounts.copy(listenBrainz = false)
+        val s = scrobbler()
+        net.on(LFM, answer(10))
+        assertEquals(Sent.KEY, s.add(listen(0))[Accounts.LAST_FM])
+        for (code in listOf(13, 26)) {
+            net.on(LFM, answer(code))
+            assertEquals("scrobble $code", Sent.KEY, s.flush()[Accounts.LAST_FM])
+        }
+        assertEquals(1, s.pending())
+        assertEquals(Sent.OK, s.flush()[Accounts.LAST_FM])
+        assertEquals(0, s.pending())
+    }
+
+    @Test
+    fun ownPairBeatsTheAppPairAndTheAppPairSignsWithoutOne() {
+        accounts = accounts.copy(listenBrainz = false)
+        val s = scrobbler()
+        s.add(listen(0))
+        val own = net.sent(LFM).last().form
+        assertTrue(own["api_key"] == "k".repeat(32))
+        assertEquals(LastFm.sign(own - "api_sig", "s3cret"), own["api_sig"])
+        accounts = accounts.copy(apiKey = "", secret = "")
+        s.add(listen(1))
+        val viaApp = net.sent(LFM).last().form
+        assertTrue(viaApp["api_key"] == app.key)
+        assertEquals(LastFm.sign(viaApp - "api_sig", app.secret), viaApp["api_sig"])
+        assertEquals("sk1", viaApp["sk"])
+    }
+
+    @Test
+    fun noPairMeansNotReadyAndNothingSent() {
+        app = AppPair.EMPTY
+        accounts = accounts.copy(apiKey = "", secret = "", listenBrainz = false)
+        assertFalse(accounts.ready(Accounts.LAST_FM, app))
+        assertNull(accounts.pair(app))
+        val s = scrobbler()
+        assertEquals(emptyMap<String, Sent>(), s.add(listen(0)))
+        assertTrue(net.sent(LFM).isEmpty())
+        assertEquals(1, s.pending())
+        assertTrue(accounts.copy(apiKey = "k", secret = "s").ready(Accounts.LAST_FM, app))
+        assertFalse(accounts.copy(apiKey = "k").ready(Accounts.LAST_FM, AppPair("a", "")))
+        assertTrue(accounts.ready(Accounts.LAST_FM, AppPair("a", "b")))
+    }
+
+    @Test
+    fun aFlushWithAnEmptyQueueReportsNoAnswer() {
+        val s = scrobbler()
+        assertEquals(emptyMap<String, Sent>(), s.flush())
+        assertTrue(net.calls.isEmpty())
+    }
+
+    @Test
+    fun printingAPairOrAccountsShowsNoAppValue() {
+        val p = AppPair("f".repeat(32), "e".repeat(32))
+        assertEquals("AppPair(set)", p.toString())
+        assertEquals("AppPair(empty)", AppPair.EMPTY.toString())
+        assertEquals("AppPair(empty)", AppPair("k", "").toString())
+        val secrets = listOf("a".repeat(32), "b".repeat(32), "c".repeat(32), "d".repeat(32))
+        val a = Accounts(true, secrets[0], secrets[1], "me", secrets[2], true, secrets[3], "me").toString()
+        assertEquals("Accounts(lastFm=true, lastFmUser=me, session=true, own=true, listenBrainz=true, listenBrainzUser=me, token=true)", a)
+        for (v in secrets) assertFalse(a.contains(v))
+    }
+
+    @Test
+    fun listenBrainzTokenCheck() {
+        val s = scrobbler()
         assertEquals("iliekcomputers", s.listenBrainzUser("tok"))
         net.on(LB, file(200, "lb-validate-bad.json"))
         assertEquals(null, s.listenBrainzUser("bad"))

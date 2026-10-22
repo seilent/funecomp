@@ -363,7 +363,7 @@ class OnlineTest {
         settle(1000)
         shell.nav.push(Page.Online(ONLINE_SCROBBLING))
         settle(1000)
-        tap("scrobble.key")
+        tap("scrobble.token")
         assertTrue(shell.sheet.shown)
         val root = bounds("frame")
         val panel = bounds("sheet.panel")
