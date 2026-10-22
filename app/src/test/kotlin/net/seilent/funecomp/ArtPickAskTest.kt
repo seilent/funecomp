@@ -186,13 +186,13 @@ class ArtPickAskTest {
         return java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(img, "jpg", it) }.toByteArray()
     }
 
-    private fun pickedOrigin(s: Sim, target: PickFor): Pair<String, Int?> {
+    private fun pickedOrigins(s: Sim, target: PickFor): Set<Pair<String, Int?>> {
         s.source(Enums.Source.phone)
         waitFor { Remote.device.playback.state.source == Enums.Source.phone }
         s.device.begins.clear()
         Remote.pick(target, offer())
-        waitFor { s.device.begins.isNotEmpty() }
-        return s.device.begins.first()
+        waitFor { s.device.begins.size >= 2 }
+        return synchronized(s.device.begins) { s.device.begins.toSet() }
     }
 
     @Test
@@ -207,7 +207,7 @@ class ArtPickAskTest {
         val target = (a.get().shell.nav.top as Page.Browse).target
         assertEquals(PickFor("TSUKI", origin = Enums.ImgOrigin.library), target)
         a.pause().stop().destroy()
-        assertEquals("TSUKI" to Enums.ImgOrigin.library, pickedOrigin(s, target))
+        assertEquals(setOf("TSUKI" to Enums.ImgOrigin.library, "TSUKI" to Enums.ImgOrigin.phone), pickedOrigins(s, target))
         s.source(Enums.Source.local)
         waitFor { Remote.device.playback.state.source == Enums.Source.local }
         assertEquals("ok shown=false", ask(s, "TSUKI"))
@@ -219,7 +219,7 @@ class ArtPickAskTest {
         val tap = (cold.get().shell.nav.top as Page.Browse).target
         assertEquals(PickFor("TSUKI", origin = Enums.ImgOrigin.library), tap)
         cold.pause().stop().destroy()
-        assertEquals("TSUKI" to Enums.ImgOrigin.library, pickedOrigin(s, tap))
+        assertEquals(setOf("TSUKI" to Enums.ImgOrigin.library, "TSUKI" to Enums.ImgOrigin.phone), pickedOrigins(s, tap))
     }
 
     @Test
