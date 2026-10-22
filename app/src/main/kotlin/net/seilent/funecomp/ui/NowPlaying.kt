@@ -187,7 +187,7 @@ fun BackRing(onBack: () -> Unit) {
 }
 
 @Composable
-fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay: Overlay, onBack: () -> Unit, onQueue: () -> Unit, active: Boolean, art: BackdropArt? = null, lyrics: LyricsFetch.Show = LyricsFetch.Show.Off, live: () -> DeviceState = { device }, onBackdrop: ((BackdropArt?) -> Unit)? = null) {
+fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay: Overlay, onBack: () -> Unit, onQueue: () -> Unit, active: Boolean, art: BackdropArt? = null, lyrics: LyricsFetch.Show = LyricsFetch.Show.Off, live: () -> DeviceState = { device }, shell: Shell? = null, onBackdrop: ((BackdropArt?) -> Unit)? = null) {
     val ui = LocalUi.current
     val s = device.playback.state
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -369,6 +369,15 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
         }
     }
     BackHandler(active && sheet?.shown != true) { back() }
+    val edit = shell?.offset
+    val offsets = device.has(OffsetEdit.GROUP)
+    LaunchedEffect(edit, s.track, s.lyricsPlain, lyricTarget, active, offsets, sheet?.shown) {
+        val e = edit ?: return@LaunchedEffect
+        if (!offsets) e.end(false) else if (s.track != e.track || s.lyricsPlain == true || !lyricTarget || !active || sheet?.shown != true) e.end(true)
+    }
+    DisposableEffect(shell) {
+        onDispose { shell?.offset?.end(liveNow().has(OffsetEdit.GROUP)) }
+    }
     var touches by remember { mutableIntStateOf(0) }
     var idle by remember { mutableStateOf(false) }
     LaunchedEffect(touches) {
@@ -423,7 +432,13 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
         Backdrop(art)
         if (art != null && shaded) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).graphicsLayer { alpha = frame().shade }.background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha)).testTag("np.shade"))
         val held = art?.takeIf { it.entry != null }
-        val lyricsTap: () -> Unit = {}
+        val lyricsTap: () -> Unit = {
+            val t = s.track
+            val c = (lyrics as? LyricsFetch.Show.Lines)?.takeIf { it.track == t && (it.held || it.copy.crc == s.lyricsCrc) }?.copy
+            if (shell != null && t != null && offsets && s.source == Enums.Source.local && c?.kind == Enums.LyricsKind.synced && fade == null && !reversing && lyricTarget && sheet?.shown != true) {
+                lyricsSheet(shell, control, t, s.lyricsOffsetMs ?: 0)
+            }
+        }
         val backdrop = onBackdrop?.takeIf { held != null || s.artists.isNotEmpty() }
         val longPress: () -> Unit = { backdrop?.invoke(held) }
         if (backdrop != null) Box(Modifier.fillMaxSize().press({}, longPress).testTag("np.backdrop"))

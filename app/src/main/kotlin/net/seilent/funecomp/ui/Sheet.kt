@@ -77,6 +77,13 @@ class SheetState {
         private set
     private var pick: (Int) -> Unit = {}
     private var dismiss: () -> Unit = {}
+    private var onPress: ((Int, Float) -> Boolean)? = null
+    private var onHold: ((Int) -> Boolean)? = null
+    private var onScrim: (() -> Boolean)? = null
+    private var accent by mutableStateOf<() -> Int>({ -1 })
+    var holds by mutableStateOf(false)
+        private set
+    val accentItem: Int get() = accent()
     private var owner: Any? = null
     var keep: Keep? = null
         private set
@@ -95,9 +102,18 @@ class SheetState {
         infoMixed: () -> List<Boolean> = { emptyList() },
         infoLines: () -> List<String> = { info },
         keep: Keep? = null,
+        accent: () -> Int = { -1 },
+        onPress: ((i: Int, x: Float) -> Boolean)? = null,
+        onHold: ((i: Int) -> Boolean)? = null,
+        onScrim: (() -> Boolean)? = null,
         pick: (Int) -> Unit,
     ) {
         this.owner = owner
+        this.accent = accent
+        this.onPress = onPress
+        this.onHold = onHold
+        this.onScrim = onScrim
+        holds = onHold != null
         this.keep = keep
         this.title = title
         this.lines = infoLines
@@ -114,6 +130,11 @@ class SheetState {
 
     fun openEntry(title: String, owner: Any? = null, entry: @Composable () -> Unit) {
         this.owner = owner
+        this.accent = { -1 }
+        this.onPress = null
+        this.onHold = null
+        this.onScrim = null
+        holds = false
         this.keep = null
         this.title = title
         this.lines = { emptyList() }
@@ -126,6 +147,19 @@ class SheetState {
         this.pick = {}
         this.dismiss = {}
         shown = true
+    }
+
+    fun press(i: Int, x: Float) {
+        if (!shown || entry != null) return
+        if (onPress?.invoke(i, x) != true && i >= 0) accept(i)
+    }
+
+    fun hold(i: Int) {
+        if (shown && entry == null) onHold?.invoke(i)
+    }
+
+    fun scrim() {
+        if (shown && onScrim?.invoke() != true) close()
     }
 
     fun accept(i: Int) {
@@ -148,6 +182,9 @@ class SheetState {
         owner = null
         keep = null
         pick = {}
+        onPress = null
+        onHold = null
+        onScrim = null
         val d = dismiss
         dismiss = {}
         if (dismissed) d()
@@ -216,10 +253,10 @@ private fun SheetLine(text: String, value: String, layout: TextLayoutResult, h: 
 }
 
 @Composable
-private fun SheetValue(value: String, baseline: Float, alpha: Float) {
+private fun SheetValue(value: String, baseline: Float, alpha: Float, editing: Boolean = false) {
     val ui = LocalUi.current
     val measurer = rememberTextMeasurer()
-    val c by animateColorAsState(white(alpha), tween(Tok.motion_focusAlpha.toInt()), label = "value")
+    val c by animateColorAsState(if (editing) Accent else white(alpha), tween(Tok.motion_focusAlpha.toInt()), label = "value")
     val w = measurer.measure(shown(value, Roles.settingsValue.case), textStyle(Roles.settingsValue, c)).size.width
     RoleText(value, Roles.settingsValue, Modifier.atBaseline(ui.px(ui.w) - ui.px(Tok.edge) - w, baseline), color = c)
 }
@@ -286,10 +323,10 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
     val list = remember(state.title, state.items, state.shown) { LazyListState(firstRow(state.focus + scrolled, scrolled + state.items.size, state.items.size, listRows)) }
     Box(Modifier.fillMaxSize().testTag("sheet")) {
         val b = LocalBleed.current
-        Box(Modifier.fillMaxSize().bleed(b).background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha * p)).press({ if (state.shown) state.close() }))
+        Box(Modifier.fillMaxSize().bleed(b).background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha * p)).press({ state.scrim() }))
         Box(
             Modifier.offset { IntOffset(0, panelY.roundToInt()) }.size(w.dp(), panelH.dp()).bleed(Bleed(b.left, 0, b.right, b.bottom))
-                .alpha(p).background(Color(Tok.color_bgElevated)).press({}),
+                .alpha(p).background(Color(Tok.color_bgElevated)).press({ state.press(-1, 0f) }),
         )
         Box(
             Modifier.offset { IntOffset(0, panelY.roundToInt()) }.size(w.dp(), panelH.dp())
@@ -318,7 +355,7 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
                         val on = i == state.focus
                         val value = itemValues.getOrElse(i) { "" }
                         Box(
-                            Modifier.size(w.dp(), pitch.dp()).press({ if (state.shown && state.entry == null) state.accept(i) }).testTag("sheet.item.$i"),
+                            Modifier.size(w.dp(), pitch.dp()).press({ o -> state.press(i, o.x / w) }, if (state.holds) ({ state.hold(i) }) else null).testTag("sheet.item.$i"),
                         ) {
                             val entry = state.entry
                             if (entry != null) {
@@ -328,7 +365,7 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
                                 RoleText(item, Roles.dialogItem, Modifier.at(edge, pitch / 2, ay = 0.5f).width(slot(value).dp()).clipToBounds(), color = c)
                                 if (value.isNotEmpty()) {
                                     val t = measurer.measure(shown(item, Roles.dialogItem.case), itemStyle)
-                                    SheetValue(value, (pitch - t.size.height) / 2 + t.firstBaseline, if (on) Tok.settingsValueFocused else Tok.settingsValueDim)
+                                    SheetValue(value, (pitch - t.size.height) / 2 + t.firstBaseline, if (on) Tok.settingsValueFocused else Tok.settingsValueDim, i == state.accentItem)
                                 }
                             }
                         }

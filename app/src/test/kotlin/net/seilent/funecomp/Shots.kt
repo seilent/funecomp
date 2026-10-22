@@ -90,6 +90,11 @@ import java.io.File
 import kotlin.math.exp
 import kotlin.math.ln
 import kotlin.math.roundToLong
+import net.seilent.funecomp.proto.Node
+import net.seilent.funecomp.proto.Req
+import net.seilent.funecomp.proto.gen.Err
+import net.seilent.funecomp.proto.gen.Msg
+import androidx.compose.ui.test.performTextReplacement
 
 class Size(val name: String, val w: Int, val h: Int, val bars: WindowInsets = if (w > h) FLIP_LAND else FLIP_PORT)
 
@@ -432,6 +437,54 @@ private val HOLDS = STRIPS.filter { it.name.endsWith("-1000") && it.name != "cue
 
 private fun Shots.lyricsMode() {
     rule.onNodeWithTag("np.art").performClick()
+}
+
+private fun lrc(lines: List<LyrLine>) = lines.joinToString("") { l -> "[%02d:%02d.%02d]%s\n".format(l.ms!! / 60_000, l.ms!! / 1000 % 60, l.ms!! / 10 % 100, l.text) }
+
+private fun offsets(ms: Int = 0, fault: Int? = null): (SimControl) -> Unit = { c ->
+    playing(c)
+    c.transport(Enums.TransportCmd.seek, seekMs = 61_950)
+    val s = c.device.playback.state
+    val sink = object : net.seilent.funecomp.sim.Out {
+        override fun push(type: Int, payload: ByteArray) = c.push(type, payload)
+    }
+    val text = lrc(stamped(SUNG)).toByteArray()
+    c.sim.request(Msg.LRC_PUT, Node.decode("LRC_PUT", Req.lrcPut(s.track!!, s.libRev, text, java.util.zip.CRC32().apply { update(text) }.value)), sink)
+    if (ms != 0) c.sim.request(Msg.LYR_OFFSET, Node.decode("LYR_OFFSET", Req.lyrOffset(s.track!!, ms)), sink)
+    c.push(Msg.STATE, c.sim.state())
+    c.device = c.device.withState(c.device.playback.state, SystemClock.elapsedRealtime())
+    c.offsetFault = fault
+    c.offsetFaultAfter = 1
+}
+
+private fun shifted(lines: List<LyrLine>): (DeviceState) -> LyricsFetch.Show = { d ->
+    val s = d.playback.state
+    val off = s.lyricsOffsetMs ?: 0
+    LyricsFetch.Show.Lines(s.track!!, LyricsFetch.Copy(s.lyricsCrc ?: 1, Enums.LyricsKind.synced, lines.map { it.copy(ms = (it.ms!! - off).coerceAtLeast(0)) }))
+}
+
+private fun Shots.offsetSheet() {
+    lyricsMode()
+    settle(1000)
+    rule.onNodeWithTag("np.lyrics").performClick()
+    settle(600)
+}
+
+private fun Shots.offsetEdit() {
+    offsetSheet()
+    rule.onNodeWithTag("sheet.item.0").performClick()
+    settle(300)
+}
+
+private fun Shots.offsetUp() {
+    offsetEdit()
+    rule.onNodeWithTag("sheet.item.0").performTouchInput { click(centerRight.copy(x = width * 0.75f)) }
+}
+
+private fun Shots.offsetTyped() {
+    offsetSheet()
+    rule.onNodeWithTag("sheet.item.0").performTouchInput { longClick() }
+    settle(600)
 }
 
 private fun emptyQueue(c: SimControl) {
@@ -863,6 +916,27 @@ val SHOTS = listOf(
     Shot("lyr-cjk", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG_JA))) { lyricsMode() },
     Shot("lyr-cue", pages = NP, prep = lyricsAt(2_000), artEntry = HELD, lyrics = shown(listOf(LyrLine(0, "Till the last train leaves")) + stamped(SUNG.drop(1), 6_000))) { lyricsMode() },
     Shot("lyr-nobackdrop", pages = NP, prep = lyricsOn(), lyrics = shown(stamped(SUNG))) { lyricsMode() },
+    Shot("lyroff-view", pages = NP, prep = offsets(), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { lyricsMode() },
+    Shot("lyroff-sheet-0", pages = NP, prep = offsets(), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetSheet() },
+    Shot("lyroff-sheet-plus500", pages = NP, prep = offsets(500), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetSheet() },
+    Shot("lyroff-sheet-minus1200", pages = NP, prep = offsets(-1200), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetSheet() },
+    Shot("lyroff-edit", pages = NP, prep = offsets(500), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetEdit() },
+    Shot("lyroff-max", pages = NP, prep = offsets(60_000), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetEdit() },
+    Shot("lyroff-min", pages = NP, prep = offsets(-60_000), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetEdit() },
+    Shot("lyroff-step-before", pages = NP, prep = offsets(), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetEdit() },
+    Shot("lyroff-step-after", pages = NP, prep = offsets(), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetUp() },
+    Shot("lyroff-typed", pages = NP, prep = offsets(500), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetTyped() },
+    Shot("lyroff-refusal", pages = NP, prep = offsets(500), artEntry = HELD, lyrics = shifted(stamped(SUNG)), after = 600) {
+        offsetTyped()
+        rule.onNodeWithTag("entry").performTextReplacement("70000")
+        rule.onNodeWithTag("entry").performImeAction()
+    },
+    Shot("lyroff-err-1", pages = NP, prep = offsets(fault = Err.unknown), artEntry = HELD, lyrics = shifted(stamped(SUNG)), after = 600) { offsetUp() },
+    Shot("lyroff-err-3", pages = NP, prep = offsets(fault = Err.busy), artEntry = HELD, lyrics = shifted(stamped(SUNG)), after = 600) { offsetUp() },
+    Shot("lyroff-err-4", pages = NP, prep = offsets(fault = Err.refused), artEntry = HELD, lyrics = shifted(stamped(SUNG)), after = 600) { offsetUp() },
+    Shot("lyroff-err-7", pages = NP, prep = offsets(fault = Err.staleRev), artEntry = HELD, lyrics = shifted(stamped(SUNG)), after = 600) { offsetUp() },
+    Shot("lyroff-err-8", pages = NP, prep = offsets(fault = Err.noLibrary), artEntry = HELD, lyrics = shifted(stamped(SUNG)), after = 600) { offsetUp() },
+    Shot("lyroff-err-timeout", pages = NP, prep = offsets(fault = -1), artEntry = HELD, lyrics = shifted(stamped(SUNG)), after = 600) { offsetUp() },
     Shot("artblocked-1", pages = ONLINE + Page.ArtBlocked, blocked = BLOCKED.take(1), credits = CREDITS),
     Shot("artblocked-12", pages = ONLINE + Page.ArtBlocked, blocked = BLOCKED, credits = CREDITS),
     Shot("artblocked-12-end", pages = ONLINE + Page.ArtBlocked, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.blocked.11") },

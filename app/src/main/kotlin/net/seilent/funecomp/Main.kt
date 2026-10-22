@@ -46,6 +46,7 @@ import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
+import net.seilent.funecomp.ui.OffsetEdit
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickFor
@@ -305,7 +306,10 @@ class Main : ComponentActivity() {
         super.onStop()
         Remote.pickAsk = null
         Scrobbles.opener = null
-        if (!isChangingConfigurations) Remote.shown(false)
+        if (!isChangingConfigurations) {
+            shell.offset?.end(Remote.device.has(OffsetEdit.GROUP))
+            Remote.shown(false)
+        }
     }
 
     private fun launched() {
@@ -329,6 +333,10 @@ class Main : ComponentActivity() {
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val detents = detents(keyCode) ?: return super.onKeyDown(keyCode, event)
+        shell.offset?.takeIf { it.editing }?.let {
+            it.coarse(detents)
+            return true
+        }
         if (shell.overlay.visible || event.repeatCount > 0) Remote.volume(detents)
         shell.overlay.show()
         return true

@@ -16,6 +16,7 @@ import net.seilent.funecomp.proto.ArtGetReply
 import net.seilent.funecomp.proto.EqPresetReply
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
+import net.seilent.funecomp.proto.LyrOffsetReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Req
@@ -38,6 +39,7 @@ import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LIB_PAGE
+import net.seilent.funecomp.ui.OffsetEdit
 import net.seilent.funecomp.ui.PickedFile
 import net.seilent.funecomp.ui.Previewed
 import java.io.ByteArrayOutputStream
@@ -65,12 +67,66 @@ class SimControl(
     var holdReply = false
     var reply: (() -> Unit)? = null
 
+    var edit: OffsetEdit? = null
+    val offsets = ArrayList<Int?>()
+    val offsetReplies = ArrayList<() -> Unit>()
+    var holdOffsets = false
+    var offsetFault: Int? = null
+    var offsetFaultAfter = 0
+    val holds = ArrayList<Long?>()
+
     private val out = object : Out {
         override fun push(type: Int, payload: ByteArray) {
             val body = Node.decode(Msg.info.getValue(type).name, payload)
+            val e = edit
+            val mark = if (type == Msg.STATE) e?.mark() else null
             device = device.reduce(type, body, now())
-            if (type == Msg.STATE) show(heart.state(State.from(body)))
+            if (type == Msg.STATE) {
+                show(heart.state(State.from(body)))
+                e?.state(State.from(body), mark)
+            }
         }
+    }
+
+    fun push(type: Int, payload: ByteArray) = out.push(type, payload)
+
+    override fun lyricsOffset(track: Long, ms: Int?, done: (Int?, Int?) -> Unit) {
+        offsets += ms
+        val finish = {
+            replying++
+            val f = offsetFault?.takeIf { offsets.size > offsetFaultAfter }
+            if (f != null) {
+                done(f, null)
+            } else {
+                val a = call(Msg.LYR_OFFSET, Req.lyrOffset(track, ms))
+                if (a is Answer.Fail) {
+                    done(a.code, null)
+                } else {
+                    done(null, LyrOffsetReply.from(Node.decode("LYR_OFFSET.reply", (a as Answer.Ok).payload)).ms)
+                    after(a)
+                }
+            }
+            replying--
+            if (replying == 0) while (queued.isNotEmpty()) queued.removeAt(0)()
+        }
+        when {
+            holdOffsets -> offsetReplies += finish
+            replying > 0 -> queued += finish
+            else -> finish()
+        }
+    }
+
+    private var replying = 0
+    private val queued = ArrayList<() -> Unit>()
+
+    fun replyOffset() = offsetReplies.removeAt(0)()
+
+    override fun lyricsOffsetEdit(edit: OffsetEdit?) {
+        this.edit = edit
+    }
+
+    override fun lyricsHold(track: Long?) {
+        holds += track
     }
 
     private fun show(t: Heart.Toast?) {

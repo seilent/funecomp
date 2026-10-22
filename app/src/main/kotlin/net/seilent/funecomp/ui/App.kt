@@ -52,6 +52,7 @@ class Shell(
 ) {
     var gated by mutableStateOf(gated)
     var pick by mutableStateOf<PickFor?>(null)
+    var offset by mutableStateOf<OffsetEdit?>(null)
 }
 
 fun homeItems(device: DeviceState, link: LinkView): List<HomeItem> {
@@ -139,11 +140,15 @@ fun App(
             }
             if (link.phase == Phase.LIVE) libList(device, control, Enums.View.playlists, "")
             BackHandler(shell.sheet.shown || nav.stack.size > 1) {
-                if (shell.sheet.shown) shell.sheet.close() else nav.pop()
+                if (shell.sheet.shown) {
+                    if (shell.offset?.back(shell.sheet) != true) shell.sheet.close()
+                } else {
+                    nav.pop()
+                }
             }
             Stack(nav, browse) { page ->
                 when (page) {
-                    Page.NowPlaying -> NowPlaying(device, control, shell.toast, shell.overlay, { nav.pop() }, { nav.push(Page.Queue) }, nav.top == Page.NowPlaying, art, lyrics, liveDevice) { held -> artSheet(ctx, held, picks) }
+                    Page.NowPlaying -> NowPlaying(device, control, shell.toast, shell.overlay, { nav.pop() }, { nav.push(Page.Queue) }, nav.top == Page.NowPlaying, art, lyrics, liveDevice, shell) { held -> artSheet(ctx, held, picks) }
                     Page.Home -> Home(homeItems(device, link), { control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)
