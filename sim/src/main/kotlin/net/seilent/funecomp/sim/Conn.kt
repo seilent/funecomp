@@ -111,7 +111,7 @@ class Conn(
     private fun reply(f: Frame, payload: ByteArray = ByteArray(0)) = write(Frame(f.type, Proto.flagReply, f.seq, payload))
 
     private fun error(f: Frame, code: Int, text: String, refused: List<String> = emptyList()) =
-        write(Frame(f.type, Proto.flagReply or Proto.flagError, f.seq, ErrorReply(code, text, refused).encode()))
+        write(Frame(f.type, Proto.flagReply or Proto.flagError, f.seq, ErrorReply(code, text.ifEmpty { null }, refused).encode()))
 
     fun bye(reason: Int, major: Int? = null, minor: Int? = null) {
         push(Msg.BYE, Bye(reason, major, minor).encode())

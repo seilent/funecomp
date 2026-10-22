@@ -108,6 +108,12 @@ class Faults(specs: List<String>) {
     var playDrop = false
     var cardCoalesce = false
     var cardPage = false
+    var phoneLateMeta: Long? = null
+    var phoneStaleDuration = false
+    var phoneSeek: Pair<Long, Long>? = null
+    var phoneSuspend: Long? = null
+    var phoneExit: Long? = null
+    var phoneArtLate: Long? = null
 
     init {
         val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
@@ -187,6 +193,13 @@ class Faults(specs: List<String>) {
                 "play-drop" -> playDrop = true
                 "card-coalesce" -> cardCoalesce = true
                 "card-page" -> cardPage = true
+                "phone-late-meta" -> phoneLateMeta = v.toLong()
+                "phone-stale-duration" -> phoneStaleDuration = true
+                "phone-seek" -> phoneSeek = (v.substringBefore(':').toLongOrNull() ?: throw IllegalArgumentException("phone-seek: at missing in $v")) to
+                    (v.substringAfter(':', "").toLongOrNull() ?: throw IllegalArgumentException("phone-seek: to missing in $v"))
+                "phone-suspend" -> phoneSuspend = v.toLong()
+                "phone-exit" -> phoneExit = v.toLong()
+                "phone-art-late" -> phoneArtLate = v.toLong()
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')
@@ -231,6 +244,8 @@ class Options(
     val playLogCap: Int = PlayLog.CAP,
     val wall: () -> Long = { System.currentTimeMillis() },
     val deviceClock: (() -> Long)? = null,
+    val phone: List<PhoneLine> = emptyList(),
+    val receiver: Boolean = false,
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()

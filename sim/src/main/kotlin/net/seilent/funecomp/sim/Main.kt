@@ -9,7 +9,7 @@ private const val USAGE = "usage: sim --board ap80|v1 (--listen <port> | --conne
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
     "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... " +
-    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--quiet]"
+    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -39,6 +39,8 @@ fun main(args: Array<String>) {
     var playLog: String? = null
     var playLogId: String? = null
     var playLogCap: Int? = null
+    var receiver = false
+    var phone: String? = null
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -72,6 +74,8 @@ fun main(args: Array<String>) {
             "--playlog" -> playLog = value()
             "--playlog-id" -> playLogId = value()
             "--playlog-cap" -> playLogCap = value().toInt()
+            "--receiver" -> receiver = true
+            "--phone" -> phone = value()
             "--quiet" -> quiet = true
             else -> {
                 System.err.println(USAGE)
@@ -116,6 +120,8 @@ fun main(args: Array<String>) {
         playLog?.let { PlayLog.parse(File(it)) } ?: base.playLog,
         playLogId?.let { java.lang.Long.parseUnsignedLong(it.removePrefix("0x"), 16) } ?: base.playLogId,
         playLogCap ?: base.playLogCap,
+        phone = phone?.let { PhoneLine.load(File(it)) }.orEmpty(),
+        receiver = receiver,
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {

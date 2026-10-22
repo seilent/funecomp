@@ -262,6 +262,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val cardSent = HashMap<Out, Triple<Int, Boolean, Long?>>()
     private var pushOut: Out? = null
     private var updOut: Out? = null
+    private val stream = Phone(opts, clock)
 
     init {
         opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f ->
@@ -539,7 +540,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
         if (late && now() - flagAt >= (faults.lyricsLate ?: 0)) late = false
         val unread = t != null && (late || t.title in faults.lyricsAbsent)
-        State(
+        stream.over(State(
             source, output, t?.id, t?.title, t?.artist, t?.artists.orEmpty(),
             t?.mbids.orEmpty(), t?.durationMs, position(), sample, sent, playing, shuffle, repeat,
             volume, maxVolume, bat, queueRev, slot.toLong(), queue.size.toLong(), lib.rev, t?.album, sleepLeft(),
@@ -558,7 +559,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             lyricsOffsetMs = if (t != null && !unread && hasSynced(t.id)) offsetTag(t.id) else null,
             playLogSeq = if (allowed(Msg.PLAYLOG_GET)) playLog.newest else null,
             card = if (opts.minor >= 14) stateCard() else null,
-        ).encode()
+        )).encode()
     }
 
     private fun battery() = opts.battery.at(now() - started)
@@ -568,7 +569,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         cardEdge()
         cardPush(out)
         val t = lib.byId[queue.getOrNull(slot)]
-        if (sleepLeftS > 0 && sleepLeft() == 0L) {
+        if (stream.tick(lastStateAt)) {
+            send(out, Msg.STATE, state())
+        } else if (sleepLeftS > 0 && sleepLeft() == 0L) {
             sleepLeftS = 0
             mark()
             playing = false
@@ -772,6 +775,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private fun revFail(code: Int) = Answer.Fail(code, if (code == Err.staleRev) "stale rev" else "bad rev")
 
     private fun transport(b: Node): Answer {
+        stream.transport(b)?.let { return it }
         mark()
         when (b.int(Tags.Transport.cmd)) {
             Enums.TransportCmd.toggle -> playing = !playing
@@ -1010,6 +1014,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private fun play(b: Node): Answer {
+        stream.refuse()?.let { return it }
         val ids = b.longs(Tags.Play.track)
         val list: List<Long> = if (ids.isNotEmpty()) {
             if (ids.size > Proto.playMaxTracks) return Answer.Fail(Err.tooBig, "too many tracks")
@@ -1073,6 +1078,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 return Answer.Ok()
             }
             Enums.QueueCmd.playAt -> {
+                stream.refuse()?.let { return it }
                 if (!inQueue(at)) return Answer.Fail(Err.badValue, "bad slot")
                 slot = at!!
                 positionMs = 0
@@ -1172,6 +1178,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         when (b.int(Tags.Action.cmd)) {
             Enums.ActionCmd.rescan -> rescan(rescanLib.also { rescanLib = null })
             Enums.ActionCmd.shuffleLibrary -> {
+                stream.refuse()?.let { return it }
                 if (lib.tracks.isEmpty()) return Answer.Fail(Err.noLibrary, "no library")
                 queue = lib.tracks.map { it.id }.shuffled().toMutableList()
                 slot = 0
