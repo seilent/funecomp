@@ -77,6 +77,10 @@ data class Sources(
 }
 
 class TheAudioDb(private val api: Api, private val base: String = "https://www.theaudiodb.com/api/v1/json/123") {
+    companion object {
+        fun small(url: String) = if (url.contains("://r2.theaudiodb.com/")) "$url/small" else url
+    }
+
     fun candidates(mbid: String): List<Candidate> {
         val a = api.json("$base/artist-mb.php?i=$mbid")?.get("artists")?.get(0) ?: return emptyList()
         return listOf("strArtistThumb", "strArtistFanart", "strArtistFanart2", "strArtistFanart3")
@@ -115,8 +119,7 @@ class YouTube(private val api: Api) {
     class Channel(val id: String, val title: String, val thumb: String)
 
     fun candidates(a: MbArtist): Sequence<Candidate> =
-        a.rels("youtube").map { it.url }.filter { CHANNEL.containsMatchIn(it) }.sortedBy { if (it.contains("/channel/")) 0 else 1 }
-            .asSequence()
+        channelRels(a).asSequence()
             .mapNotNull { url -> page(api, url)?.let { ogImage(it) } }
             .map { Candidate(it, Sources.YOUTUBE) }
 
@@ -136,6 +139,9 @@ class YouTube(private val api: Api) {
         const val MAX_PAGE = 16 shl 20
         private val OG_MARK = "property=\"og:image\"".toByteArray()
         private val GT = '>'.code.toByte()
+
+        fun channelRels(a: MbArtist): List<String> =
+            a.rels("youtube").map { it.url }.filter { CHANNEL.containsMatchIn(it) }.sortedBy { if (it.contains("/channel/")) 0 else 1 }
 
         fun page(api: Api, url: String): String? {
             var at = -1

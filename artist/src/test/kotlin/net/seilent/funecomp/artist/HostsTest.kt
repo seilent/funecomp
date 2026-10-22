@@ -55,7 +55,7 @@ class HostsTest {
         val art = ArtistArt(http, AwtCodec(), ArtCache(tmp.newFolder()), { sources }, "0.1.0", { 0L }, clock)
         val run = clock.registered {
             listOf(
-                clock.thread("browse") { art.browse("Radiohead", null, 53) {} },
+                clock.thread("browse") { art.browse("Radiohead", null, 53, Collected(), clock.executor(ArtistArt.BROWSE_WORKERS)) },
                 clock.thread("get") { art.get("宇多田ヒカル", null, 360, 480) },
                 clock.thread("sweep") { art.get("TSUKI", null, 360, 480) },
             )

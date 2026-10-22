@@ -31,6 +31,8 @@ import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
 import net.seilent.funecomp.artist.Backdrop
+import net.seilent.funecomp.artist.BrowseFeed
+import net.seilent.funecomp.artist.Clock
 import net.seilent.funecomp.artist.GalleryStore
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.HttpRun
@@ -120,6 +122,8 @@ object Remote : Control {
 
     internal var faced: (ByteArray, (() -> Pair<Double, Double>?) -> Pair<Double, Double>?) -> Pair<Bitmap, Pair<Double, Double>?>? =
         { src, face -> codec.faced(src, BACKDROP_SIDE, face) }
+
+    internal var browseDecode: (ByteArray, Int) -> ImageBitmap? = { b, px -> codec.faced(b, px) { null }?.first?.asImageBitmap() }
 
     var device by mutableStateOf(DeviceState())
         private set
@@ -375,7 +379,7 @@ object Remote : Control {
             network(c)
             val blocks = ArtBlocks(File(c.filesDir, "artblock.tsv")) { Log.w(TAG, it) }
             val picks = ArtPicks(File(c.filesDir, "artpick.tsv")) { Log.w(TAG, it) }
-            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks, gallery = GalleryStore(File(c.filesDir, "pickimg")), log = { Log.w(TAG, it) }, browseLog = { Log.i(TAG, it.replace(SECRET, "$1=x")) }).also {
+            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks, gallery = GalleryStore(File(c.filesDir, "pickimg")), log = { Log.w(TAG, it.replace(SECRET, "$1=x")) }, browseLog = { Log.i(TAG, it.replace(SECRET, "$1=x")) }).also {
                 artist = it
                 showBlocked { blocks.records() }
                 showPicks { picks.list() }
@@ -542,7 +546,7 @@ object Remote : Control {
             } catch (e: IOException) {
                 Previewed.Refused(failed)
             } catch (e: RuntimeException) {
-                Log.w(TAG, "art pick: $e")
+                Log.w(TAG, "art pick: ${e.toString().replace(SECRET, "$1=x")}")
                 Previewed.Refused(failed)
             }
             if (run.cancelled) {
@@ -593,31 +597,44 @@ object Remote : Control {
         return out.asImageBitmap()
     }
 
-    override fun browse(name: String, mbid: String?, px: Int, tile: (BrowseTile) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+    override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
         val a = artist ?: run {
+            sections(emptyList())
             done(false)
             return {}
         }
-        val run = HttpRun { Log.i(TAG, "art browse http ${it.replace(SECRET, "$1=x")}") }
+        val log: (String) -> Unit = { Log.i(TAG, it.replace(SECRET, "$1=x")) }
+        val run = HttpRun { log("art browse http $it") }
+        val n = AtomicInteger()
+        val pool = Executors.newFixedThreadPool(ArtistArt.BROWSE_WORKERS) { r -> Thread(r, "art-browse-${n.incrementAndGet()}").apply { isDaemon = true } }
+        run.onCancel { pool.shutdownNow() }
+        val out = object : BrowseFeed.Out<ImageBitmap> {
+            override fun sections(order: List<String>) = sections(order)
+
+            override fun tile(section: String, t: Tile, image: ImageBitmap) = tile(section, BrowseTile(t, image))
+
+            override fun sectionDone(section: String) = sectionDone(section)
+
+            override fun done(ok: Boolean) = done(ok)
+        }
+        val feed = BrowseFeed({ browseDecode(it, px) }, { main.post(it) }, Clock.SYSTEM, run, { r -> Thread(r, "art-browse-decode").apply { isDaemon = true } }, out, log)
         Thread({
             val t0 = SystemClock.elapsedRealtime()
             Log.i(TAG, "art browse start $name")
-            val ok = try {
-                run.on {
-                    a.browse(name, mbid, px) { t ->
-                        val bmp = codec.faced(t.preview, px) { null }?.first ?: return@browse
-                        val b = BrowseTile(t, bmp.asImageBitmap())
-                        main.post { if (!run.cancelled) tile(b) }
-                    }
-                }
+            var ended = true
+            try {
+                run.on { a.browse(name, mbid, px, feed, pool) }
             } catch (e: IOException) {
-                null
+                ended = false
             } catch (e: RuntimeException) {
-                Log.w(TAG, "art browse: $e")
-                false
+                Log.w(TAG, "art browse: ${e.toString().replace(SECRET, "$1=x")}")
+                feed.youtubeSearch(false)
+            } finally {
+                pool.shutdown()
+                val ok = if (ended && !run.cancelled) feed.result.toString() else "cancelled"
+                Log.i(TAG, "art browse end $name -> $ok +${SystemClock.elapsedRealtime() - t0}")
+                if (ended) feed.finish()
             }
-            Log.i(TAG, "art browse end $name -> ${ok ?: "cancelled"} +${SystemClock.elapsedRealtime() - t0}")
-            if (ok != null) main.post { if (!run.cancelled) done(ok) }
         }, "art-browse").apply { isDaemon = true }.start()
         return { run.cancel() }
     }
@@ -799,7 +816,7 @@ object Remote : Control {
             try {
                 if (r != null) Log.i(TAG, "art ${r.stop} ${r.counts()}")
                 if (r?.complete == true && !swept(context)) context.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE).edit().putInt(SWEEP, SWEPT).apply()
-                if (e != null) Log.w(TAG, "art: $e")
+                if (e != null) Log.w(TAG, "art: ${e.toString().replace(SECRET, "$1=x")}")
                 credits = a.credits()
             } catch (t: Throwable) {
                 Log.w(TAG, "art done: $t")
@@ -815,7 +832,7 @@ object Remote : Control {
             try {
                 if (a.get(name, mbid, w, hh) != null) return
             } catch (e: IOException) {
-                Log.w(TAG, "art fetch $name: $e")
+                Log.w(TAG, "art fetch $name: ${e.toString().replace(SECRET, "$1=x")}")
             }
         }
     }

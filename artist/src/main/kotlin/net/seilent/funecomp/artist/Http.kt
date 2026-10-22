@@ -6,6 +6,8 @@ import java.net.HttpURLConnection
 import java.net.URI
 import java.net.URLEncoder
 
+class HttpDenied(val code: Int, url: String) : IOException("http $code: $url")
+
 class Response(val code: Int, val body: ByteArray, val headers: Map<String, String> = emptyMap()) {
     val text: String get() = String(body, Charsets.UTF_8)
 }
@@ -190,7 +192,7 @@ class Api(
                     if (after != null && after > maxRetryAfterMs) throw IOException("retry after ${after / 1000} s: $u")
                     limiter.backoff(((after ?: (backoffMs shl attempt)) * (1.0 + jitter())).toLong())
                 }
-                r.code == 401 || r.code == 403 -> throw IOException("http ${r.code}: $u")
+                r.code == 401 || r.code == 403 -> throw HttpDenied(r.code, u)
                 r.code in 100..499 -> return null
                 else -> throw IOException("http ${r.code}: $u")
             }

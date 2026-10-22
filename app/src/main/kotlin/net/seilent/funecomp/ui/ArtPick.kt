@@ -194,7 +194,7 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse) {
     val px = ui.px(Tok.tileS).roundToInt()
     DisposableEffect(key, runs, s, s?.live) {
         if (runs && ctx.browse[key]?.live != true) {
-            ctx.browse.start(key) { b -> ctx.control.browse(target.name, target.mbid, px, { if (b.live) b.tiles += it }) { if (b.live) b.ended = it } }
+            ctx.browse.start(key) { b -> ctx.control.browse(target.name, target.mbid, px, {}, { _, t -> if (b.live) b.tiles += t }, {}) { if (b.live) b.ended = it } }
         }
         onDispose {}
     }

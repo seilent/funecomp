@@ -1,6 +1,8 @@
 package net.seilent.funecomp.artist
 
 import java.io.IOException
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.CRC32
 
@@ -261,13 +263,16 @@ class ArtistArt(
         return Offered.Ok(Offer(ArtPicks.IMAGE, source, url, id, credit, null, title, src, label))
     }
 
-    fun browse(name: String, mbid: String?, px: Int, sink: (Tile) -> Unit): Boolean {
-        val on = sources().enabled
+    fun browse(name: String, mbid: String?, px: Int, out: BrowseSink, exec: ExecutorService) {
+        val s = sources()
+        val on = s.enabled
+        val order = s.order.filter { it in on }.flatMap { if (it == Sources.YOUTUBE) listOf(it, YOUTUBE_SEARCH) else listOf(it) }
+        out.sections(order)
         val run = HttpRun.current.get()
-        val t0 = time.now()
-        var section = ""
-        var n = 0
-        fun done(s: String) = browseLog("art browse source $s done n=$n +${time.now() - t0}")
+        val feed = Feed(time.condition())
+        val lock = Any()
+        var left = order.size + 1
+        val ended = time.condition()
         fun <T> attempt(block: () -> T): T? = try {
             block()
         } catch (e: IOException) {
@@ -276,39 +281,115 @@ class ArtistArt(
         } catch (e: RuntimeException) {
             null
         }
-        fun tile(source: String, caption: String, preview: String, full: String, id: String = ImageIds.of(source, full), credit: Credit? = null) {
-            val b = attempt { api.get(preview) }?.body ?: return
-            sink(Tile(source, caption, b, full, id, credit))
-            n++
-            browseLog("art browse tile $section +${time.now() - t0}")
+        fun <T> keyed(block: () -> T): T? = try {
+            block()
+        } catch (e: HttpDenied) {
+            throw e
+        } catch (e: IOException) {
+            if (run?.cancelled == true) throw e
+            null
+        } catch (e: RuntimeException) {
+            null
         }
-        val ids = ((attempt { mb.searchAll(name) } ?: emptyList()).take(BROWSE_MBIDS) + listOfNotNull(Names.mbid(mbid))).distinct()
-        val artists = ids.mapNotNull { attempt { mb.artist(it) } }
-        fun caption(a: MbArtist) = a.disambiguation.ifEmpty { a.name }
-        for (source in sources().order.filter { it in on }) {
-            section = source
-            n = 0
-            when (source) {
-                Wikimedia.SOURCE -> for (a in artists) attempt { wikimedia.candidates(a, PICK_W, PICK_H, px) }?.take(MAX_TRIES)?.forEach { tile(source, caption(a), it.url, it.id, it.id, it.credit) }
-                Sources.THE_AUDIO_DB -> for (a in artists) attempt { audioDb.candidates(a.id) }?.take(MAX_TRIES)?.forEach { tile(source, caption(a), it.url, it.url) }
-                Sources.FANART_TV -> for (a in artists) attempt { fanartTv.candidates(a.id) }?.take(MAX_TRIES)?.forEach { tile(source, caption(a), it.url, it.url) }
-                Sources.DISCOGS -> for (a in artists) attempt { discogs.previews(a) }?.take(MAX_TRIES)?.forEach { (small, full) -> tile(source, caption(a), small, full) }
-                Sources.YOUTUBE -> for (a in artists) attempt { youtube.candidates(a).take(MAX_TRIES).toList() }?.forEach { tile(source, caption(a), YouTube.sized(it.url, YT_PREVIEW), it.url) }
-                Sources.DEEZER -> attempt { deezer.search(name) }?.take(BROWSE_RESULTS)?.forEach { d ->
-                    val small = Deezer.picture(d, "picture_medium") ?: return@forEach
-                    val full = Deezer.picture(d, "picture_xl") ?: return@forEach
-                    tile(source, d["name"].str ?: "", small, full)
+        fun finished(section: String?) {
+            if (section != null) out.sectionDone(section) else feed.close()
+            synchronized(lock) { left-- }
+            ended.signalAll()
+        }
+        fun submit(section: String?, body: () -> Unit) = try {
+            exec.execute {
+                try {
+                    if (run == null) body() else run.on(body)
+                } catch (e: HttpDenied) {
+                    browseLog("art browse denied $section")
+                } catch (e: IOException) {
+                } catch (e: InterruptedException) {
+                } catch (e: Throwable) {
+                    browseLog("art browse bug ${section ?: "musicbrainz"} $e")
+                } finally {
+                    finished(section)
                 }
             }
-            done(source)
+        } catch (e: RejectedExecutionException) {
+            finished(section)
         }
-        if (Sources.YOUTUBE !in on) return true
-        section = YOUTUBE_SEARCH
-        n = 0
-        val found = attempt { youtube.search(name) }?.takeIf { it.isNotEmpty() }
-        found?.take(BROWSE_RESULTS)?.forEach { c -> tile(Sources.YOUTUBE, c.title, YouTube.sized(c.thumb, YT_PREVIEW), YouTube.sized(c.thumb, YT_FULL)) }
-        done(YOUTUBE_SEARCH)
-        return found != null
+        submit(null) {
+            val ids = ((attempt { mb.searchAll(name) } ?: emptyList()).take(BROWSE_MBIDS) + listOfNotNull(Names.mbid(mbid))).distinct()
+            for (id in ids) attempt { mb.artist(id) }?.let { feed.add(it) }
+        }
+        fun caption(a: MbArtist) = a.disambiguation.ifEmpty { a.name }
+        for (section in order) {
+            submit(section) {
+                val seen = HashSet<String>()
+                fun tile(source: String, caption: String, preview: String, full: String, id: String = ImageIds.of(source, full), credit: Credit? = null) {
+                    if (id in seen) return
+                    out.permit()
+                    val b = try {
+                        attempt { api.get(preview) }?.body
+                    } catch (e: Throwable) {
+                        out.drop()
+                        throw e
+                    }
+                    if (b == null) {
+                        out.drop()
+                        return
+                    }
+                    seen += id
+                    out.tile(section, Tile(source, caption, b, full, id, credit))
+                }
+                fun each(f: (MbArtist) -> Unit) {
+                    var i = 0
+                    while (true) f(feed.at(i++, run) ?: return)
+                }
+                when (section) {
+                    Wikimedia.SOURCE -> each { a -> attempt { wikimedia.candidates(a, PICK_W, PICK_H, px) }?.take(MAX_TRIES)?.forEach { tile(section, caption(a), it.url, it.id, it.id, it.credit) } }
+                    Sources.THE_AUDIO_DB -> each { a -> attempt { audioDb.candidates(a.id) }?.take(MAX_TRIES)?.forEach { tile(section, caption(a), TheAudioDb.small(it.url), it.url) } }
+                    Sources.FANART_TV -> each { a -> keyed { fanartTv.candidates(a.id) }?.take(MAX_TRIES)?.forEach { tile(section, caption(a), it.url, it.url) } }
+                    Sources.DISCOGS -> each { a -> attempt { discogs.previews(a) }?.take(MAX_TRIES)?.forEach { (small, full) -> tile(section, caption(a), small, full) } }
+                    Sources.YOUTUBE -> each { a ->
+                        var n = 0
+                        for (u in YouTube.channelRels(a)) {
+                            if (n >= MAX_TRIES) break
+                            val img = attempt { YouTube.page(api, u)?.let { YouTube.ogImage(it) } } ?: continue
+                            n++
+                            tile(Sources.YOUTUBE, caption(a), YouTube.sized(img, YT_PREVIEW), img)
+                        }
+                    }
+                    Sources.DEEZER -> attempt { deezer.search(name) }?.take(BROWSE_RESULTS)?.forEach { d ->
+                        val small = Deezer.picture(d, "picture_medium") ?: return@forEach
+                        val full = Deezer.picture(d, "picture_xl") ?: return@forEach
+                        tile(section, d["name"].str ?: "", small, full)
+                    }
+                    YOUTUBE_SEARCH -> {
+                        val found = attempt { youtube.search(name) }?.takeIf { it.isNotEmpty() }
+                        found?.take(BROWSE_RESULTS)?.forEach { c -> tile(Sources.YOUTUBE, c.title, YouTube.sized(c.thumb, YT_PREVIEW), YouTube.sized(c.thumb, YT_FULL)) }
+                        out.youtubeSearch(found != null)
+                    }
+                }
+            }
+        }
+        ended.await(run, null) { synchronized(lock) { left == 0 } }
+        if (run?.cancelled == true) throw IOException("cancelled")
+    }
+
+    private class Feed(private val cond: Cond) {
+        private val list = ArrayList<MbArtist>()
+        private var closed = false
+
+        fun add(a: MbArtist) {
+            synchronized(this) { list += a }
+            cond.signalAll()
+        }
+
+        fun close() {
+            synchronized(this) { closed = true }
+            cond.signalAll()
+        }
+
+        fun at(i: Int, run: HttpRun?): MbArtist? {
+            cond.await(run, null) { synchronized(this) { list.size > i || closed } }
+            return synchronized(this) { list.getOrNull(i) }
+        }
     }
 
     private fun find(name: String, tag: String?, id: String?, key: String, w: Int, h: Int, on: Set<String>, now: Long, skipped: AtomicBoolean): Found? {
@@ -489,5 +570,6 @@ class ArtistArt(
         const val YT_PREVIEW = 176
         const val YT_FULL = 900
         const val YOUTUBE_SEARCH = "youtube search"
+        val BROWSE_WORKERS = Sources.ORDER.size + 2
     }
 }

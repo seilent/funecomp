@@ -78,10 +78,10 @@ class ArtPickTest {
             }
             url.contains("/ws/2/artist/?query=") -> Response(200, "{\"artists\":[]}".toByteArray())
             url.contains("/ws/2/artist/$pinned") -> Response(200, "{\"id\":\"$pinned\",\"name\":\"tsuki\",\"relations\":[]}".toByteArray())
-            url.contains("api.deezer.com/search/artist") -> Response(200, "{\"data\":[{\"name\":\"TSUKI\",\"nb_fan\":1,\"picture_xl\":\"$dz\"}]}".toByteArray())
+            url.contains("api.deezer.com/search/artist") -> Response(200, "{\"data\":[{\"name\":\"TSUKI\",\"nb_fan\":1,\"picture_medium\":\"$dz\",\"picture_xl\":\"$dz\"}]}".toByteArray())
             url.contains("artist-mb.php?i=$pinned") -> Response(200, "{\"artists\":[{\"strArtistThumb\":\"$thumb\"}]}".toByteArray())
             url == dz -> Response(200, jpeg(java.awt.Color(200, 40, 40)))
-            url == thumb -> Response(200, jpeg(java.awt.Color(40, 40, 200)))
+            url == thumb || url == "$thumb/small" -> Response(200, jpeg(java.awt.Color(40, 40, 200)))
             url == avatar -> Response(200, picked)
             else -> Response(404, ByteArray(0))
         }
@@ -275,12 +275,49 @@ class ArtPickTest {
     }
 
     @Test
+    fun aBrowseReachesTheCallbacksInOrderOnTheMainLooper() {
+        Remote.artist(app, http)
+        val saved = Remote.browseDecode
+        val events = ArrayList<String>()
+        val main = Looper.getMainLooper().thread
+        try {
+            Remote.browseDecode = { b, _ -> androidx.compose.ui.graphics.ImageBitmap(4, 4).takeIf { b.isNotEmpty() } }
+            Remote.browse("TSUKI", pinned, 53, {
+                check(Thread.currentThread() == main)
+                events += "sections $it"
+            }, { s, t ->
+                check(Thread.currentThread() == main)
+                events += "tile $s ${t.tile.preview.size}"
+            }, {
+                events += "done $it"
+            }) {
+                check(Thread.currentThread() == main)
+                events += "end $it"
+            }
+            waitFor { events.lastOrNull()?.startsWith("end") == true }
+        } finally {
+            Remote.browseDecode = saved
+        }
+        assertEquals("sections [commons, theaudiodb, deezer]", events.first())
+        assertEquals(setOf("tile theaudiodb 0", "tile deezer 0"), events.filter { it.startsWith("tile") }.toSet())
+        assertEquals(7, events.size)
+        assertEquals(setOf("done commons", "done theaudiodb", "done deezer"), events.filter { it.startsWith("done") }.toSet())
+        assertTrue(events.indexOf("done theaudiodb") > events.indexOf("tile theaudiodb 0"))
+        assertTrue(events.indexOf("done deezer") > events.indexOf("tile deezer 0"))
+        assertEquals("end true", events.last())
+    }
+
+    @Test
     fun withNoArtistStoreTheCallsStillAnswer() {
         Remote.resetArtist()
         var offered: Previewed? = null
         var ended: Boolean? = null
         Remote.pickLink("https://example.org/a.jpg", "TSUKI") { offered = it }
-        Remote.browse("TSUKI", null, 53, {}) { ended = it }
+        var sections: List<String>? = null
+        Remote.browse("TSUKI", null, 53, { sections = it }, { _, _ -> }, {}) {
+            assertEquals(emptyList<String>(), sections)
+            ended = it
+        }
         assertNull(offered)
         waitFor { offered != null }
         assertEquals("link not reachable", (offered as Previewed.Refused).reason)

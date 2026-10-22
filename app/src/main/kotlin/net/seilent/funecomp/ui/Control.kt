@@ -105,7 +105,7 @@ interface Control {
     fun unblock(r: ArtBlocks.Record) {}
     fun pickLink(text: String, name: String, done: (Previewed) -> Unit): () -> Unit = {}
     fun pickGallery(done: (Previewed) -> Unit): () -> Unit = {}
-    fun browse(name: String, mbid: String?, px: Int, tile: (BrowseTile) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}
+    fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}
     fun takeTile(t: Tile, done: (Previewed) -> Unit): () -> Unit = {}
     fun pick(target: PickFor, offer: Offer) {}
     fun undoPick(p: ArtPicks.Pick) {}

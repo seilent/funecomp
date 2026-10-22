@@ -26,49 +26,31 @@ class BrowseTest {
     }
 
     private fun browse(a: ArtistArt = art()): Pair<List<Tile>, Boolean> {
-        val tiles = ArrayList<Tile>()
-        val ok = a.browse("TSUKI", null, 53) { tiles += it }
-        return tiles to ok
+        val c = Collected()
+        a.browse("TSUKI", null, 53, c, Inline)
+        return c.all() to (c.search ?: true)
     }
 
     @Test
-    fun tilesComeInSourceOrderWithTheYouTubeSearchLast() {
-        val (tiles, ok) = browse()
-        assertTrue(ok)
-        val order = sources.ordered
-        val ranks = tiles.dropLast(10).map { order.indexOf(it.source) }
+    fun tilesComeInSectionOrderWithTheYouTubeSearchAfterYouTube() {
+        val c = Collected()
+        art().browse("TSUKI", null, 53, c, Inline)
+        assertEquals(listOf(Wikimedia.SOURCE, Sources.DISCOGS, Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DEEZER), c.order)
+        assertEquals(c.order, c.done)
+        assertEquals(true, c.search)
+        val ranks = c.tiles.map { c.order.indexOf(it.first) }
         assertEquals(ranks.sorted(), ranks)
-        assertEquals(listOf(Sources.DISCOGS), tiles.filter { it.source == Sources.DISCOGS }.map { it.source })
-        assertEquals("dnb, Jump up", tiles.first { it.source == Sources.DISCOGS }.caption)
-        assertEquals(10, tiles.count { it.source == Sources.DEEZER })
-        val yt = tiles.takeLast(10)
+        assertEquals("dnb, Jump up", c.of(Sources.DISCOGS).single().caption)
+        assertEquals(10, c.of(Sources.DEEZER).size)
+        val yt = c.of(ArtistArt.YOUTUBE_SEARCH)
+        assertEquals(9, yt.size)
+        assertEquals(yt.size, yt.map { it.id }.toSet().size)
         assertTrue(yt.all { it.source == Sources.YOUTUBE })
         val tsuki = yt.first { it.caption == "月-Tsuki-" }
         assertTrue(tsuki.full.endsWith("=s900-c-k-c0x00ffffff-no-rj-mo"))
         assertEquals(tsuki.full.substringBefore('='), tsuki.id)
         assertEquals(4, http.calls.count { it.startsWith("https://musicbrainz.org/ws/2/artist/") && "query=" !in it })
         assertTrue("missing ${http.missing}", http.missing.isEmpty())
-    }
-
-    @Test
-    fun timingLinesNameEveryTileAndSection() {
-        val lines = ArrayList<String>()
-        val a = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, browseLog = { lines += it })
-        http.now = { time.now }
-        val t0 = time.now
-        val tiles = ArrayList<Tile>()
-        assertTrue(a.browse("TSUKI", null, 53) { tiles += it })
-        val sections = sources.ordered + ArtistArt.YOUTUBE_SEARCH
-        val tile = Regex("art browse tile (.+) \\+(\\d+)")
-        val done = Regex("art browse source (.+) done n=(\\d+) \\+(\\d+)")
-        assertEquals(sections, lines.mapNotNull { done.matchEntire(it)?.groupValues?.get(1) })
-        assertEquals(tiles.size, lines.count { tile.matches(it) })
-        assertEquals(lines.size, tiles.size + sections.size)
-        val counts = lines.mapNotNull { done.matchEntire(it) }.associate { it.groupValues[1] to it.groupValues[2].toInt() }
-        assertEquals(mapOf(Wikimedia.SOURCE to 0, Sources.YOUTUBE to 0, Sources.DISCOGS to 1, Sources.DEEZER to 10, ArtistArt.YOUTUBE_SEARCH to 10), counts)
-        val ms = lines.map { it.substringAfterLast('+').toLong() }
-        assertEquals(ms.sorted(), ms)
-        assertEquals(time.now - t0, ms.last())
     }
 
     @Test
@@ -83,34 +65,34 @@ class BrowseTest {
     @Test
     fun disabledSourcesMakeNoCalls() {
         sources = Sources.NONE
-        val (tiles, ok) = browse()
-        assertTrue(ok)
-        assertTrue(tiles.isEmpty())
+        val c = Collected()
+        art().browse("TSUKI", null, 53, c, Inline)
+        assertEquals(listOf(Wikimedia.SOURCE), c.order)
+        assertEquals(listOf(Wikimedia.SOURCE), c.done)
+        assertEquals(null, c.search)
+        assertTrue(c.tiles.isEmpty())
         assertEquals(setOf("musicbrainz.org"), http.hosts())
     }
 
     @Test
     fun aCancelStopsFurtherCalls() {
         val run = HttpRun()
-        val tiles = ArrayList<Tile>()
+        val c = Collected()
         var calls = -1
+        c.onTile = {
+            run.cancel()
+            calls = http.calls.size
+        }
         try {
-            run.on {
-                art().browse("TSUKI", null, 53) {
-                    tiles += it
-                    if (tiles.size == 2) {
-                        run.cancel()
-                        calls = http.calls.size
-                    }
-                }
-            }
+            run.on { art().browse("TSUKI", null, 53, c, Inline) }
             fail()
         } catch (e: IOException) {
             assertEquals("cancelled", e.message)
         }
-        assertEquals(2, tiles.size)
+        assertEquals(1, c.tiles.size)
         assertTrue(http.calls.none { it == search })
         assertEquals(calls, http.calls.size)
+        assertEquals(c.order, c.done)
     }
 
     @Test
@@ -163,10 +145,10 @@ class BrowseTest {
             if (url.contains("dzcdn.net") && url.contains("3c0e4ec7")) throw IllegalArgumentException("bad url")
             http.get(url, h)
         }
-        val tiles = ArrayList<Tile>()
-        val ok = ArtistArt(bad, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time).browse("TSUKI", null, 53) { tiles += it }
-        assertTrue(ok)
-        assertEquals(9, tiles.count { it.source == Sources.DEEZER })
-        assertEquals(10, tiles.count { it.source == Sources.YOUTUBE })
+        val c = Collected()
+        ArtistArt(bad, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time).browse("TSUKI", null, 53, c, Inline)
+        assertEquals(true, c.search)
+        assertEquals(9, c.of(Sources.DEEZER).size)
+        assertEquals(9, c.of(ArtistArt.YOUTUBE_SEARCH).size)
     }
 }

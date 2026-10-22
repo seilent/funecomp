@@ -69,7 +69,7 @@ class ArtPickUiTest {
     private var taken: Previewed? = Previewed.Refused("image too small")
     private var galleried: Previewed? = null
     private val late = ArrayList<(Previewed) -> Unit>()
-    private var tile: ((BrowseTile) -> Unit)? = null
+    private var tile: ((String, BrowseTile) -> Unit)? = null
     private var ended: ((Boolean) -> Unit)? = null
     private val offer = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", null, null, "月-Tsuki-", ByteArray(1))
     private val lib = Library(listOf(Track(1, "TSUKI, Other", listOf("TSUKI", "Other"), "A", "TSUKI", "Song", 200_000, "a", "a.flac", listOf("", dj))))
@@ -92,7 +92,7 @@ class ArtPickUiTest {
                 return { calls += "cancel gallery" }
             }
 
-            override fun browse(name: String, mbid: String?, px: Int, tile: (BrowseTile) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name $mbid"
                 this@ArtPickUiTest.tile = tile
                 ended = done
@@ -437,7 +437,7 @@ class ArtPickUiTest {
     private fun browseFilled(n: Int = 12): Pair<Shell, PickFor> {
         val target = PickFor("TSUKI")
         val (shell, _) = start(listOf(Page.Home, Page.NowPlaying, Page.Browse(target)))
-        tiles(n).forEach { tile!!(it) }
+        tiles(n).forEach { tile!!(it.tile.source, it) }
         settle(500)
         return shell to target
     }
@@ -463,7 +463,7 @@ class ArtPickUiTest {
         val p = previewing(shell)
         assertTrue(p.fromBrowse)
         assertTrue(picked.isEmpty())
-        tiles(14).drop(12).forEach { tile!!(it) }
+        tiles(14).drop(12).forEach { tile!!(it.tile.source, it) }
         settle(300)
         tap("back")
         settle(1500)
@@ -541,7 +541,7 @@ class ArtPickUiTest {
         settle(1500)
         assertTrue(shell.nav.top is Page.PickPreview)
         assertEquals(2, calls.count { it == "browse TSUKI null" })
-        tile!!(tiles(1).single())
+        tiles(1).single().let { tile!!(it.tile.source, it) }
         shell.nav.pop()
         settle(1500)
         assertEquals(Page.Browse(target), shell.nav.top)
@@ -556,7 +556,7 @@ class ArtPickUiTest {
         var shown by mutableStateOf(true)
         val c = SimControl("ap80", lib)
         val control = object : Control by c {
-            override fun browse(name: String, mbid: String?, px: Int, tile: (BrowseTile) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name"
                 return { calls += "cancel $name" }
             }
@@ -585,7 +585,7 @@ class ArtPickUiTest {
         val shell = Shell(Nav(listOf(Page.Home, Page.NowPlaying, Page.Browse(target))))
         val c = SimControl("ap80", lib)
         val control = object : Control by c {
-            override fun browse(name: String, mbid: String?, px: Int, tile: (BrowseTile) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name"
                 this@ArtPickUiTest.tile = tile
                 return { calls += "cancel $name" }
@@ -603,7 +603,7 @@ class ArtPickUiTest {
             }
         }
         settle(1000)
-        tiles(6).forEach { tile!!(it) }
+        tiles(6).forEach { tile!!(it.tile.source, it) }
         settle(500)
         tap("pick.tile.4")
         settle(1500)
@@ -623,7 +623,7 @@ class ArtPickUiTest {
         ended!!(false)
         settle(300)
         rule.onNodeWithTag("pick.state").assertExists()
-        tiles(1).forEach { tile!!(it) }
+        tiles(1).forEach { tile!!(it.tile.source, it) }
         settle(300)
         rule.onNodeWithTag("pick.tile.0").assertExists()
         rule.onNodeWithTag("pick.state").assertExists()

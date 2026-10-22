@@ -131,7 +131,7 @@ class ParkCond(private val clock: Clock) : Cond {
     override fun signalAll() {}
 }
 
-class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true) : Clock {
+class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true, private val strict: Boolean = true) : Clock {
     private val lock = Object()
     private var t = start
     private var pending = 0
@@ -226,7 +226,7 @@ class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true) : Clock {
         if (!auto) return
         val next = all.mapNotNull { it.deadline }.minOrNull()
         if (next == null) {
-            if (all.isNotEmpty() && all.none { it.external }) fail("deadlock: every registered thread waits with no deadline")
+            if (strict && all.isNotEmpty() && all.none { it.external }) fail("deadlock: every registered thread waits with no deadline")
             return
         }
         if (next > t) t = next
@@ -270,7 +270,7 @@ class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true) : Clock {
     }
 
     fun executor(n: Int): java.util.concurrent.ExecutorService {
-        val d = java.util.concurrent.Executors.newFixedThreadPool(n)
+        val d = java.util.concurrent.Executors.newFixedThreadPool(n) { r -> Thread(r, "art-browse-test").apply { isDaemon = true } }
         return object : java.util.concurrent.AbstractExecutorService() {
             override fun execute(command: Runnable) = d.execute(task(command))
             override fun shutdown() = d.shutdown()
@@ -381,4 +381,42 @@ class AwtCodec(var face: ((Int, Int) -> Pair<Double, Double>?)? = null) : Codec 
             }
         }
     }
+}
+
+class Collected : BrowseSink {
+    val order = java.util.Collections.synchronizedList(ArrayList<String>())
+    val tiles = java.util.Collections.synchronizedList(ArrayList<Pair<String, Tile>>())
+    val done = java.util.Collections.synchronizedList(ArrayList<String>())
+    @Volatile var search: Boolean? = null
+    var onTile: (Pair<String, Tile>) -> Unit = {}
+
+    override fun sections(order: List<String>) {
+        this.order += order
+    }
+
+    override fun tile(section: String, t: Tile) {
+        tiles += section to t
+        onTile(section to t)
+    }
+
+    override fun sectionDone(section: String) {
+        done += section
+    }
+
+    override fun youtubeSearch(ok: Boolean) {
+        search = ok
+    }
+
+    fun of(section: String): List<Tile> = synchronized(tiles) { tiles.filter { it.first == section }.map { it.second } }
+
+    fun all(): List<Tile> = synchronized(tiles) { tiles.map { it.second } }
+}
+
+object Inline : java.util.concurrent.AbstractExecutorService() {
+    override fun execute(command: Runnable) = command.run()
+    override fun shutdown() {}
+    override fun shutdownNow(): MutableList<Runnable> = ArrayList()
+    override fun isShutdown() = false
+    override fun isTerminated() = false
+    override fun awaitTermination(timeout: Long, unit: java.util.concurrent.TimeUnit) = true
 }
