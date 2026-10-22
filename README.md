@@ -44,6 +44,10 @@ Release signing reads `app/keystores/keystore.properties` (`storeFile`, `storePa
 without it the release APK is unsigned. Last.fm scrobbling reads `app/keystores/lastfm.properties` (`lastfm.key`,
 `lastfm.secret`); without it, build with `-PnoLastFm`.
 
+## Issues and Pull Requests
+
+Issues and pull requests are off for now. funeCOMP is still in active development, with bugs and optimization left to do. Bug reports open once development slows down.
+
 ## License
 
 GPL-3.0-or-later. Selawik is under the SIL Open Font License 1.1 (`app/src/main/assets/OFL-Selawik.txt`).
