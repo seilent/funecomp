@@ -4,6 +4,26 @@ Android remote for [funeOS](https://github.com/seilent/funeos) on the Hidizs AP8
 Playback, volume, queue, library, settings and EQ from the phone. Artist photos are fetched on the phone and pushed to
 the device as the Now Playing backdrop.
 
+<p>
+<img src="images/nowplaying.png" width="240" alt="Now Playing">
+<img src="images/lyrics-open.gif" width="240" alt="Lyrics view">
+<img src="images/home.png" width="240" alt="Home">
+</p>
+
+<img src="images/lyrics-slide.gif" width="480" alt="Lyrics line change">
+
+<p>
+<img src="images/music.png" width="180" alt="Music">
+<img src="images/music-pivots.gif" width="180" alt="Music pivots">
+<img src="images/settings.png" width="180" alt="Settings">
+<img src="images/eq.png" width="180" alt="EQ">
+</p>
+
+<p>
+<img src="images/autoeq.png" width="180" alt="AutoEQ">
+<img src="images/online-art.png" width="180" alt="Artist art sources">
+</p>
+
 ## Setup
 
 1. On the device: Settings > System > PHONE APP on, then PAIR PHONE APP.
