@@ -4,6 +4,9 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.system.ErrnoException
+import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -58,7 +61,7 @@ object Scrobbles {
     var view by mutableStateOf(ScrobbleView())
         private set
 
-    fun init(c: Context, pair: AppPair, http: Http? = null) {
+    fun init(c: Context, pair: AppPair, http: Http? = null, sync: (File) -> Unit = ::syncDir) {
         if (context != null && http == null) return
         val app = c.applicationContext
         context = app
@@ -69,7 +72,7 @@ object Scrobbles {
         view = ScrobbleView(accounts(app), app = pair, pending = pending(app) != null)
         val net = http ?: UrlHttp()
         exec.execute {
-            val s = Scrobbler(d, net, { accounts(app) }, pair, version, reauth = ::expired) { Log.i(Remote.TAG, it) }
+            val s = Scrobbler(d, net, { accounts(app) }, pair, version, reauth = ::expired, dirSync = sync) { Log.i(Remote.TAG, it) }
             scrobbler = s
             plays = Plays(File(d, OPEN).takeIf { it.isFile }?.readText()?.let { Play.parse(it) })
             refresh()
@@ -358,10 +361,28 @@ object Scrobbles {
 
     private fun refresh(listenBrainz: String? = null) {
         val c = context ?: return
-        val queued = scrobbler?.pending() ?: 0
+        val queued = try {
+            scrobbler?.pending() ?: 0
+        } catch (e: IOException) {
+            Log.w(Remote.TAG, "scrobble: $e")
+            view.queued
+        }
         val t = pending(c)
         val lastFm = if (t != null) pendingError?.takeIf { it.first == t }?.second.orEmpty() else lastFmError
         view = ScrobbleView(accounts(c), queued, lastFm, listenBrainz ?: view.listenBrainz, pair, t != null, keyRefused.toSet(), tokenPage)
+    }
+
+    private fun syncDir(d: File) {
+        try {
+            val fd = Os.open(d.path, OsConstants.O_RDONLY, 0)
+            try {
+                Os.fsync(fd)
+            } finally {
+                Os.close(fd)
+            }
+        } catch (e: ErrnoException) {
+            throw IOException("fsync ${d.name}", e)
+        }
     }
 
     private fun executor() = Executors.newSingleThreadExecutor { Thread(it, "scrobble").apply { isDaemon = true } }

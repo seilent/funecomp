@@ -1,5 +1,6 @@
 package net.seilent.funecomp.artist
 
+import net.seilent.funecomp.proto.PlayEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -9,6 +10,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.IOException
 import java.net.URLDecoder
+import java.time.ZoneOffset
 
 class ScrobbleTest {
     @get:Rule
@@ -26,6 +28,7 @@ class ScrobbleTest {
         val calls = ArrayList<Call>()
         val script = HashMap<String, ArrayDeque<() -> Response>>()
         var down = HashSet<String>()
+        val rules = HashMap<String, (Call) -> Response?>()
 
         fun on(host: String, vararg r: () -> Response) {
             script.getOrPut(host) { ArrayDeque() }.addAll(r)
@@ -34,6 +37,7 @@ class ScrobbleTest {
         private fun answer(c: Call): Response {
             if (c.host in down) throw IOException("offline")
             calls += c
+            rules[c.host]?.invoke(c)?.let { return it }
             return script[c.host]?.removeFirstOrNull()?.invoke() ?: ok(c.host)
         }
 
@@ -53,6 +57,7 @@ class ScrobbleTest {
         fun ok(host: String) = Response(200, Fixtures.load(if (host == LFM) "lfm-scrobble-doc.json" else "lb-validate-doc.json"))
 
         val NOW = 1_800_000_000_000L
+        const val MBID = "a74b1b7f-71a5-4011-9441-d0b5e4122711"
     }
 
     private var accounts = Accounts(true, "k".repeat(32), "s3cret", "me", "sk1", true, "tok", "me")
@@ -188,7 +193,7 @@ class ScrobbleTest {
     }
 
     @Test
-    fun aServiceEnabledLaterSendsNothingOlder() {
+    fun aServiceEnabledLaterSendsTheQueuedPlays() {
         accounts = accounts.copy(listenBrainz = false)
         val s = scrobbler()
         net.down += LFM
@@ -197,8 +202,178 @@ class ScrobbleTest {
         accounts = accounts.copy(listenBrainz = true)
         s.enable(Accounts.LISTEN_BRAINZ)
         s.add(listen(2))
-        assertEquals(listOf("Track 2"), lbTracks())
+        assertEquals(listOf("Track 0", "Track 1", "Track 2"), lbTracks())
         assertEquals(3, s.pending())
+    }
+
+    @Test
+    fun aSignInAfterATransferSendsTheCarriedLinesWithinFourteenDays() {
+        val dir = tmp.newFolder("moved")
+        val q = ScrobbleQueue(dir)
+        q.sent(Accounts.LAST_FM, 0)
+        q.add(listen(0, NOW / 1000 - 15 * 86400), setOf(Accounts.LAST_FM))
+        q.add(listen(1), setOf(Accounts.LAST_FM))
+        q.add(listen(2), setOf(Accounts.LAST_FM))
+        accounts = accounts.copy(lastFm = false, listenBrainz = false)
+        val s = scrobbler(dir)
+        s.flush()
+        assertEquals(3, s.queue.size)
+        accounts = accounts.copy(lastFm = true)
+        s.enable(Accounts.LAST_FM)
+        s.flush()
+        assertEquals(listOf("Track 1", "Track 2"), lfmTracks())
+        assertEquals(0, s.queue.size)
+    }
+
+    private fun entry(seq: Long, startS: Long = NOW / 1000 - 7200 + seq * 60, mbids: List<String> = listOf(MBID), albumArtist: String? = "Radiohead") =
+        PlayEntry(seq, startS, 200_000, 240_000, 7, "Track $seq", "Radiohead", listOf("Radiohead"), mbids, "OK Computer", albumArtist, seq.toInt(), 0)
+
+    @Test
+    fun logEntriesSendAlbumArtistTrackNumberAndMbids() {
+        val s = scrobbler()
+        assertEquals(1L, s.addLog(0xA1, listOf(entry(1, albumArtist = "Various Artists")), ZoneOffset.UTC))
+        s.flush()
+        val f = net.sent(LFM).single().form
+        assertEquals("Various Artists", f["albumArtist[0]"])
+        assertEquals("1", f["trackNumber[0]"])
+        val start = NOW / 1000 - 7200 + 60
+        assertEquals(
+            "{\"listen_type\":\"single\",\"payload\":[{\"listened_at\":$start,\"track_metadata\":{\"artist_name\":\"Radiohead\",\"track_name\":\"Track 1\",\"release_name\":\"OK Computer\"," +
+                "\"additional_info\":{\"duration_ms\":240000,\"artist_mbids\":[\"$MBID\"],\"tracknumber\":\"1\",\"media_player\":\"funeOS\",\"submission_client\":\"funecomp\",\"submission_client_version\":\"0.1.0\"}}}]}",
+            net.sent(LB).single().body,
+        )
+        net.calls.clear()
+        s.addLog(0xA1, listOf(entry(2)), ZoneOffset.UTC)
+        s.flush()
+        assertFalse(net.sent(LFM).single().form.containsKey("albumArtist[0]"))
+    }
+
+    @Test
+    fun anEntryWithANonUuidMbidSendsNoMbids() {
+        val s = scrobbler()
+        s.addLog(0xA1, listOf(entry(1, mbids = listOf(MBID, "radiohead"))), ZoneOffset.UTC)
+        s.flush()
+        assertFalse(net.sent(LB).single().body.contains("artist_mbids"))
+    }
+
+    @Test
+    fun aMissingCursorFileIsCreatedBeforeThePageIsStored() {
+        val s = scrobbler(tmp.newFolder("fresh"))
+        s.addLog(0xA1, (1L..3L).map { entry(it) }, ZoneOffset.UTC)
+        s.flush()
+        assertEquals((1..3).map { "Track $it" }, lfmTracks())
+        assertEquals((1..3).map { "Track $it" }, lbTracks())
+    }
+
+    @Test
+    fun oneBadEntryInAListenBrainzBatchIsSkippedAlone() {
+        accounts = accounts.copy(lastFm = false)
+        val s = scrobbler()
+        s.addLog(0xA1, (1L..100L).map { entry(it) }, ZoneOffset.UTC)
+        var cursorAtBad: Long? = null
+        net.rules[LB] = { c ->
+            if (c.body.contains("\"Track 37\"")) {
+                if (!c.body.contains("\"Track 36\"") && !c.body.contains("\"Track 38\"")) cursorAtBad = s.queue.cursor(Accounts.LISTEN_BRAINZ)
+                Response(400, "{}".toByteArray())
+            } else {
+                null
+            }
+        }
+        s.flush()
+        val ok = net.sent(LB).filter { !it.body.contains("\"Track 37\"") }.flatMap { c -> Regex("\"track_name\":\"([^\"]+)\"").findAll(c.body).map { it.groupValues[1] } }
+        assertEquals((1..100).filter { it != 37 }.map { "Track $it" }, ok.sortedBy { it.removePrefix("Track ").toInt() })
+        assertEquals(36L, cursorAtBad)
+        assertEquals(0, s.pending())
+    }
+
+    @Test
+    fun oneBadEntryInALastFmBatchIsSkippedAlone() {
+        accounts = accounts.copy(listenBrainz = false)
+        val s = scrobbler()
+        s.addLog(0xA1, (1L..50L).map { entry(it) }, ZoneOffset.UTC)
+        net.rules[LFM] = { c -> if ("Track 21" in c.form.values) Response(400, "{\"error\":6,\"message\":\"Invalid parameters\"}".toByteArray()) else null }
+        s.flush()
+        val ok = net.sent(LFM).filter { "Track 21" !in it.form.values }.flatMap { c -> c.form.filterKeys { it.startsWith("track[") }.entries.sortedBy { it.key.removePrefix("track[").removeSuffix("]").toInt() }.map { it.value } }
+        assertEquals((1..50).filter { it != 21 }.map { "Track $it" }, ok.sortedBy { it.removePrefix("Track ").toInt() })
+        assertEquals(0, s.pending())
+    }
+
+    @Test
+    fun aBatchWhereEveryEntrySkipsIsSplitToSingleEntries() {
+        accounts = accounts.copy(lastFm = false)
+        val s = scrobbler()
+        s.addLog(0xA1, (1L..100L).map { entry(it) }, ZoneOffset.UTC)
+        net.rules[LB] = { Response(400, "{}".toByteArray()) }
+        s.flush()
+        assertEquals(199, net.sent(LB).size)
+        assertEquals(100L, s.queue.cursor(Accounts.LISTEN_BRAINZ))
+        assertEquals(0, s.pending())
+    }
+
+    private fun refused(vararg bad: Int): List<String> {
+        accounts = accounts.copy(lastFm = false)
+        val s = scrobbler()
+        s.addLog(0xA1, (1L..100L).map { entry(it) }, ZoneOffset.UTC)
+        val names = bad.map { "\"Track $it\"" }
+        val ok = ArrayList<String>()
+        net.rules[LB] = { c ->
+            if (names.any { c.body.contains(it) }) {
+                Response(400, "{}".toByteArray())
+            } else {
+                ok += Regex("\"track_name\":\"([^\"]+)\"").findAll(c.body).map { it.groupValues[1] }
+                null
+            }
+        }
+        s.flush()
+        assertEquals(100L, s.queue.cursor(Accounts.LISTEN_BRAINZ))
+        assertEquals(0, s.pending())
+        return ok
+    }
+
+    @Test
+    fun twoRefusedEntriesInDifferentHalvesLoseOnlyThemselves() {
+        val ok = refused(10, 90)
+        assertEquals((1..100).filter { it != 10 && it != 90 }.map { "Track $it" }, ok)
+    }
+
+    @Test
+    fun twoRefusedEntriesInTheSameQuarterLoseOnlyThemselves() {
+        val ok = refused(5, 20)
+        assertEquals((1..100).filter { it != 5 && it != 20 }.map { "Track $it" }, ok)
+    }
+
+    @Test
+    fun aRetryInsideASplitResendsNothingThatWentOut() {
+        accounts = accounts.copy(lastFm = false)
+        val s = scrobbler()
+        s.addLog(0xA1, (1L..100L).map { entry(it) }, ZoneOffset.UTC)
+        val ok = ArrayList<String>()
+        var calls = 0
+        net.rules[LB] = { c ->
+            calls++
+            when {
+                calls == 5 -> Response(503, "{}".toByteArray())
+                c.body.contains("\"Track 40\"") -> Response(400, "{}".toByteArray())
+                else -> {
+                    ok += Regex("\"track_name\":\"([^\"]+)\"").findAll(c.body).map { it.groupValues[1] }
+                    null
+                }
+            }
+        }
+        assertEquals(Sent.RETRY, s.flush()[Accounts.LISTEN_BRAINZ])
+        assertEquals(25L, s.queue.cursor(Accounts.LISTEN_BRAINZ))
+        s.flush()
+        assertEquals((1..100).filter { it != 40 }.map { "Track $it" }, ok)
+        assertEquals(0, s.pending())
+    }
+
+    @Test
+    fun aFifteenDayOldLogEntryGoesToListenBrainzOnly() {
+        val s = scrobbler()
+        s.addLog(0xA1, listOf(entry(1, NOW / 1000 - 15 * 86400), entry(2)), ZoneOffset.UTC)
+        s.flush()
+        assertEquals(listOf("Track 2"), lfmTracks())
+        assertEquals(listOf("Track 1", "Track 2"), lbTracks())
     }
 
     @Test

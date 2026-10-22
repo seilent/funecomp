@@ -9,6 +9,7 @@
         <exclude domain="file" path="thumb/" />
         <exclude domain="file" path="firmware/" />
         <exclude domain="file" path="autoeq/" />
+        <exclude domain="file" path="scrobble/" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="art.xml" />

@@ -92,7 +92,7 @@ class ScrobbleSignInTest {
     }
 
     private fun start(pair: AppPair = ZEROS) {
-        Scrobbles.init(app, pair, net)
+        Scrobbles.init(app, pair, net) {}
         Scrobbles.opener = { opened += it; true }
         settle()
     }
@@ -244,7 +244,7 @@ class ScrobbleSignInTest {
         pend(T1)
         start()
         Scrobbles.reset()
-        Scrobbles.init(app, ZEROS, net)
+        Scrobbles.init(app, ZEROS, net) {}
         assertEquals("waiting", row())
         settle()
         assertEquals("waiting", row())
@@ -509,7 +509,7 @@ class ScrobbleSignInTest {
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
         app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE).edit().putString(Main.EXTRA_LINK, "tcp:127.0.0.1:1").commit()
         app.getSharedPreferences(Main.DEVICE_PREFS, Context.MODE_PRIVATE).edit().putBoolean("batteryAsked", true).commit()
-        Scrobbles.init(app, ZEROS, net)
+        Scrobbles.init(app, ZEROS, net) {}
         val a = Robolectric.buildActivity(Main::class.java, Intent(app, Main::class.java).setAction(Intent.ACTION_MAIN).putExtra(Main.EXTRA_PAGE, "scrobbling")).create().start().resume().visible()
         try {
             shadowOf(Looper.getMainLooper()).idle()

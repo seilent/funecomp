@@ -1,8 +1,10 @@
 package net.seilent.funecomp.artist
 
+import net.seilent.funecomp.proto.PlayEntry
 import java.io.File
 import java.io.IOException
 import java.security.MessageDigest
+import java.time.ZoneId
 
 data class AppPair(val key: String, val secret: String) {
     val empty: Boolean get() = key.isBlank() || secret.isBlank()
@@ -110,6 +112,8 @@ class LastFm(
             if (i != null) put(k("timestamp"), l.startS.toString())
             l.album?.takeIf { it.isNotBlank() }?.let { put(k("album"), it) }
             l.durationS?.let { put(k("duration"), it.toString()) }
+            l.albumArtist?.takeIf { it.isNotBlank() && it != l.artist }?.let { put(k("albumArtist"), it) }
+            l.trackNo?.let { put(k("trackNumber"), it.toString()) }
         }
     }
 
@@ -203,6 +207,8 @@ class ListenBrainz(
                 l.album?.takeIf { it.isNotBlank() }?.let { append(",\"release_name\":").append(quote(it)) }
                 append(",\"additional_info\":{")
                 l.durationS?.let { append("\"duration_ms\":").append(it * 1000).append(',') }
+                if (l.mbids.isNotEmpty()) append("\"artist_mbids\":[").append(l.mbids.joinToString(",") { quote(it) }).append("],")
+                l.trackNo?.let { append("\"tracknumber\":").append(quote(it.toString())).append(',') }
                 append("\"media_player\":\"funeOS\",\"submission_client\":\"funecomp\",\"submission_client_version\":").append(quote(version))
                 append("}}}")
             }
@@ -250,9 +256,10 @@ class Scrobbler(
     sleep: (Long) -> Unit = { Thread.sleep(it) },
     mono: () -> Long = { System.nanoTime() / 1_000_000 },
     private val reauth: (String) -> Unit = {},
+    dirSync: (File) -> Unit = {},
     private val log: (String) -> Unit = {},
 ) {
-    val queue = ScrobbleQueue(dir)
+    val queue = ScrobbleQueue(dir, dirSync)
     private val ua = "funecomp/$version (https://github.com/seilent/funecomp)"
     private val lastFm = LastFm(http, ua, RateLimiter(LAST_FM_INTERVAL_MS, mono), sleep)
     private val listenBrainz = ListenBrainz(http, ua, RateLimiter(LISTEN_BRAINZ_INTERVAL_MS, mono), sleep, version = version)
@@ -274,6 +281,12 @@ class Scrobbler(
 
     fun enable(service: String) = queue.enable(service)
 
+    fun addLog(log: Long, entries: List<PlayEntry>, zone: ZoneId): Long? {
+        val upTo = queue.addLog(log, entries, accounts().enabled, zone, clock() / 1000, this.log) ?: return null
+        this.log("playlog stored ${java.lang.Long.toHexString(log)} up to $upTo")
+        return upTo
+    }
+
     fun flush(): Map<String, Sent> {
         val a = accounts()
         val out = HashMap<String, Sent>()
@@ -286,36 +299,62 @@ class Scrobbler(
     }
 
     private fun send(service: String, a: Accounts): Sent? {
-        val now = clock() / 1000
         val p = a.pair(app)
+        if (service == Accounts.LAST_FM && p == null) return null
         var called = false
         while (true) {
             val rest = queue.after(service)
             if (rest.isEmpty()) return if (called) Sent.OK else null
-            var last = 0L
-            val batch = ArrayList<Listen>()
+            val window = ArrayList<Listen>()
+            var n = 0
             for (l in rest) {
-                if (batch.size == batchSize(service)) break
-                last = l.id
-                if (service == Accounts.LAST_FM && now - l.startS > LAST_FM_MAX_AGE_S) continue
-                batch += l
+                if (n == batchSize(service)) break
+                window += l
+                if (!old(service, l)) n++
             }
-            if (batch.isEmpty()) {
-                queue.sent(service, last)
+            if (n == 0) {
+                queue.sent(service, window.last().id)
                 continue
             }
-            val r = if (service == Accounts.LAST_FM) lastFm.scrobble(a, p ?: return null, batch) else listenBrainz.submit(a.token, batch)
             called = true
-            log("scrobble $service ${batch.size} up to $last $r")
-            when (r) {
-                Sent.OK, Sent.SKIP -> queue.sent(service, last)
-                Sent.REAUTH -> {
-                    reauth(service)
-                    return r
+            val r = window(service, a, p, window)
+            if (r != Sent.OK && r != Sent.SKIP) return r
+        }
+    }
+
+    private fun old(service: String, l: Listen) = service == Accounts.LAST_FM && clock() / 1000 - l.startS > LAST_FM_MAX_AGE_S
+
+    private fun call(service: String, a: Accounts, p: AppPair?, batch: List<Listen>): Sent {
+        val r = if (service == Accounts.LAST_FM) lastFm.scrobble(a, p!!, batch) else listenBrainz.submit(a.token, batch)
+        log("scrobble $service ${batch.size} up to ${batch.last().id} $r")
+        if (r == Sent.REAUTH) reauth(service)
+        return r
+    }
+
+    private fun halves(seg: List<Listen>, service: String): List<List<Listen>> {
+        val batch = seg.filter { !old(service, it) }
+        val at = seg.indexOf(batch[batch.size / 2])
+        return listOf(seg.subList(0, at), seg.subList(at, seg.size))
+    }
+
+    private fun window(service: String, a: Accounts, p: AppPair?, window: List<Listen>): Sent {
+        val open = ArrayDeque<List<Listen>>()
+        open.addLast(window)
+        var out = Sent.SKIP
+        while (open.isNotEmpty()) {
+            val seg = open.removeLast()
+            val batch = seg.filter { !old(service, it) }
+            val r = call(service, a, p, batch)
+            when {
+                r == Sent.SKIP && batch.size > 1 -> halves(seg, service).asReversed().forEach { open.addLast(it) }
+                r == Sent.OK || r == Sent.SKIP -> {
+                    if (r == Sent.OK) out = Sent.OK
+                    queue.sent(service, seg.last().id)
                 }
                 else -> return r
             }
         }
+        return out
     }
 
     private fun batchSize(service: String) = if (service == Accounts.LAST_FM) LAST_FM_BATCH else LISTEN_BRAINZ_BATCH

@@ -8,4 +8,5 @@
     <exclude domain="file" path="thumb/" />
     <exclude domain="file" path="firmware/" />
     <exclude domain="file" path="autoeq/" />
+    <exclude domain="file" path="scrobble/" />
 </full-backup-content>

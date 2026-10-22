@@ -28,7 +28,7 @@ private var refusing = Refusing()
 
 fun scrobblesOff(c: Context) {
     refusing = Refusing()
-    Scrobbles.init(c, AppPair.EMPTY, refusing)
+    Scrobbles.init(c, AppPair.EMPTY, refusing) {}
 }
 
 fun scrobblesReset() {

@@ -35,8 +35,8 @@ class BackupRulesTest {
     }
 
     @Test
-    fun cloudBackupLeavesOutTheCachesAndTransferCarriesAllButTheKeys() {
-        val cloud = (keys + listOf("file lyrics/", "file art/", "file thumb/", "file firmware/", "file autoeq/")).sorted()
+    fun cloudBackupLeavesOutTheCachesAndTheQueueAndTransferCarriesAllButTheKeys() {
+        val cloud = (keys + listOf("file lyrics/", "file art/", "file thumb/", "file firmware/", "file autoeq/", "file scrobble/")).sorted()
         val rules = excludes(R.xml.data_extraction_rules)
         assertEquals(cloud, rules["cloud-backup"]?.sorted())
         assertEquals(keys.sorted(), rules["device-transfer"]?.sorted())
