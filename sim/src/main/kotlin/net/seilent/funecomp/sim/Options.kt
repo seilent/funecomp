@@ -149,6 +149,7 @@ class Options(
     val source: Int = Enums.Source.local,
     val rescanLib: Library? = null,
     val version: String? = null,
+    val lyrOffsets: Map<Long, Int> = emptyMap(),
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()

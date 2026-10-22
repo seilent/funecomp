@@ -8,7 +8,7 @@ import kotlin.system.exitProcess
 private const val USAGE = "usage: sim --board ap80|v1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
-    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--quiet]"
+    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -34,6 +34,7 @@ fun main(args: Array<String>) {
     var source: String? = null
     var rescanLib: String? = null
     var version: String? = null
+    val lyrOffsets = HashMap<Long, Int>()
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -63,6 +64,7 @@ fun main(args: Array<String>) {
             "--source" -> source = value()
             "--rescan-lib" -> rescanLib = value()
             "--version" -> version = value()
+            "--lyr-offset" -> value().let { lyrOffsets[it.substringBefore(':').toULong().toLong()] = it.substringAfter(':').toInt() }
             "--quiet" -> quiet = true
             else -> {
                 System.err.println(USAGE)
@@ -103,6 +105,7 @@ fun main(args: Array<String>) {
         source?.let { v -> Enums.Source.names.entries.firstOrNull { it.value == v }?.key ?: throw IllegalArgumentException("source must be local or phone, not $v") } ?: base.source,
         rescanLib?.let { Library.load(File(it)) },
         version,
+        lyrOffsets,
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {

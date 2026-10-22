@@ -76,6 +76,8 @@ private val OFFSET = Regex("^\\[offset:\\s*([+-]?[0-9]+)\\s*]$", RegexOption.IGN
 class Lyr(val kind: Int, val lines: List<LyrLine>) {
     val crc: Long = lyricsCrc(kind, lines)
 
+    fun shifted(by: Int): Lyr = if (kind != Enums.LyricsKind.synced) this else Lyr(kind, lines.map { it.copy(ms = ((it.ms ?: 0) - by).coerceAtLeast(0)) })
+
     companion object {
         fun parse(text: String): Lyr? {
             val raw = text.lines().map { it.trim() }
@@ -93,7 +95,7 @@ class Lyr(val kind: Int, val lines: List<LyrLine>) {
                     stamps += m.groupValues[1].toLong() * 60_000 + Math.round(m.groupValues[2].toDouble() * 1000)
                     rest = rest.substring(m.range.last + 1)
                 }
-                for (ms in stamps) out += LyrLine((ms - shift).coerceAtLeast(0), cut(rest.trim()))
+                for (ms in stamps) out += LyrLine(ms - shift, cut(rest.trim()))
             }
             return Lyr(Enums.LyricsKind.synced, out.sortedBy { it.ms })
         }
@@ -224,7 +226,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val started = clock()
     private var lastBattery = -1
     private val lyrs = HashMap<Long, Lyr>()
-    private val offsets = HashMap<Long, Int>()
+    private val offsets = HashMap<Long, Int>(opts.lyrOffsets.filterValues { it != 0 })
+    private val phone = HashMap<Long, ByteArray>()
     private val arts = HashMap<Pair<Long, Int>, Art>()
     private var upd: Upd? = null
     private var favsBusy = faults.favsBusy
@@ -235,10 +238,20 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     init {
         opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f ->
             val id = f.name.removeSuffix(".lrc").toULongOrNull()?.toLong()
-            val l = Lyr.parse(f.readText())
-            if (id != null && l != null) lyrs[id] = l
+            val bytes = f.readBytes()
+            val l = Lyr.parse(String(bytes, Charsets.UTF_8))
+            if (id != null && l != null) {
+                lyrs[id] = l
+                phone[id] = bytes
+            }
         }
     }
+
+    private fun offsetOf(id: Long) = if (allowed(Msg.LYR_OFFSET)) offsets[id] ?: 0 else 0
+
+    private fun served(id: Long) = lyrs[id]?.shifted(offsetOf(id))
+
+    private fun offsetTag(id: Long) = if (allowed(Msg.LYR_OFFSET)) offsets[id]?.takeIf { it != 0 } else null
 
     private fun hasSynced(id: Long) = lyrs[id]?.kind == Enums.LyricsKind.synced
 
@@ -344,8 +357,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             if (v13 && t != null && favsBusy == 0) t.id in lib.favorites else null,
             if (v13) lib.snapRev else null,
             if (v14 && t != null && !unread) hasPlain(t.id) else null,
-            if (allowed(Msg.LYR_GET) && t != null && !unread) lyrs[t.id]?.crc else null,
+            if (allowed(Msg.LYR_GET) && t != null && !unread) served(t.id)?.crc else null,
             if (v110) false else null,
+            lyricsOffsetMs = if (t != null && !unread && hasSynced(t.id)) offsetTag(t.id) else null,
         ).encode()
     }
 
@@ -1102,33 +1116,38 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (!synced && hasSynced(track)) return Answer.Fail(Err.refused, "refused")
         opts.lrcDir?.let { File(it.apply { mkdirs() }, "${java.lang.Long.toUnsignedString(track)}.lrc").writeBytes(text) }
         lyrs[track] = parsed
+        val same = phone[track]?.contentEquals(text) == true
+        phone[track] = text
         opts.log("stored lrc track=${java.lang.Long.toUnsignedString(track)} bytes=${text.size} kind=${if (synced) "synced" else "plain"}")
+        if (!same && offsets.remove(track) != null) opts.log("lyr offset reset track=${java.lang.Long.toUnsignedString(track)}")
         return Answer.Ok(state = queue.getOrNull(slot) == track)
     }
 
     private fun lrcDel(b: Node): Answer {
         val track = b.long(Tags.LrcDel.track) ?: return Answer.Fail(Err.badValue, "no track")
         opts.lrcDir?.let { File(it, "${java.lang.Long.toUnsignedString(track)}.lrc").delete() }
+        phone.remove(track)
         return Answer.Ok(state = lyrs.remove(track) != null && queue.getOrNull(slot) == track)
     }
 
     private fun lyrGet(b: Node): Answer {
         val track = b.long(Tags.LyrGet.track) ?: return Answer.Fail(Err.badValue, "no track")
         if (track !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
-        val l = lyrs[track] ?: return Answer.Fail(Err.notFound, "not found")
+        val l = served(track) ?: return Answer.Fail(Err.notFound, "not found")
         val offset = b.long(Tags.LyrGet.offset) ?: 0
         val have = b.long(Tags.LyrGet.have)
         val id = java.lang.Long.toUnsignedString(track)
+        val ms = offsetTag(track)
         if (offset == 0L && have == l.crc) {
             opts.log("lyr have track=$id")
-            return Answer.Ok(LyrGetReply(l.crc, l.kind, l.lines.size.toLong(), 0, false, emptyList()).encode())
+            return Answer.Ok(LyrGetReply(l.crc, l.kind, l.lines.size.toLong(), 0, false, emptyList(), ms).encode())
         }
         if (offset > 0 && have != null && have != l.crc) {
             opts.log("lyr restart track=$id")
-            return lyrPage(id, l, 0)
+            return lyrPage(id, l, 0, ms)
         }
         if (offset >= l.lines.size) return Answer.Fail(Err.badValue, "offset over total")
-        return lyrPage(id, l, offset.toInt())
+        return lyrPage(id, l, offset.toInt(), ms)
     }
 
     private fun lyrOffset(b: Node): Answer {
@@ -1148,9 +1167,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         return Answer.Ok(LyrOffsetReply(ms).encode(), state = ms != old && queue.getOrNull(slot) == track)
     }
 
-    private fun lyrPage(id: String, l: Lyr, at: Int): Answer {
+    private fun lyrPage(id: String, l: Lyr, at: Int, ms: Int?): Answer {
         val total = l.lines.size.toLong()
-        val head = if (at == 0) LyrGetReply(l.crc, l.kind, total, 0, true, emptyList()) else LyrGetReply(null, null, null, at.toLong(), true, emptyList())
+        val head = if (at == 0) LyrGetReply(l.crc, l.kind, total, 0, true, emptyList(), ms) else LyrGetReply(null, null, null, at.toLong(), true, emptyList())
         val n = PageInfo.fill(l.lines.map { it.size }, at, head.encode().size)
         val more = at + n < l.lines.size
         opts.log("lyr get track=$id offset=$at lines=$n total=$total")

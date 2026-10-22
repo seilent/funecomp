@@ -4,6 +4,7 @@ import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
+import net.seilent.funecomp.proto.LyrOffsetReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
@@ -16,8 +17,10 @@ import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LyricsFetch
+import net.seilent.funecomp.state.OffsetSend
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -25,6 +28,7 @@ import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.CRC32
 
 class DapLyricsTest {
@@ -219,6 +223,105 @@ class DapLyricsTest {
         val forced = rig(minor = 6, features = Groups.all)
         forced.lyrics.shown(true)
         waitFor("lines") { shown(forced) != null }
+    }
+
+    private fun put(r: Rig, text: String) = text.toByteArray().let {
+        r.session.call(Msg.LRC_PUT, Req.lrcPut(track, lib.rev, it, CRC32().apply { update(it) }.value)).also { res -> if (res is Session.Result.Ok) r.lyrics.dropped(track) }
+    }
+
+    private fun times(r: Rig) = shown(r)?.copy?.lines?.map { it.ms }
+
+    @Test
+    fun anOffsetSetShiftsTheLinesAndADifferentBodyResetsIt() {
+        lrc("[00:01.00]one\n[00:03.00]two\n")
+        val r = rig()
+        r.lyrics.shown(true)
+        waitFor("lines") { times(r) == listOf(1000L, 3000L) }
+        assertTrue(r.session.call(Msg.LYR_OFFSET, Req.lyrOffset(track, 1500)) is Session.Result.Ok)
+        waitFor("state 38") { r.state.playback.state.lyricsOffsetMs == 1500 }
+        waitFor("shifted") { times(r) == listOf(0L, 1500L) }
+        assertTrue(put(r, "[00:01.00]one\n[00:03.00]two\n[00:05.00]three\n") is Session.Result.Ok)
+        waitFor("reset") { r.state.playback.state.lyricsOffsetMs == null }
+        waitFor("unshifted") { times(r) == listOf(1000L, 3000L, 5000L) }
+    }
+
+    @Test
+    fun aStepRepliedDuringARefetchKeepsTheHoldPastItsLanding() {
+        lrc(lines(1024))
+        val r = rig(faults = listOf("stall-ms=40"))
+        r.lyrics.shown(true)
+        waitFor("lines") { times(r)?.get(1) == 1000L }
+        var reply: Session.Result? = null
+        val replied = CountDownLatch(1)
+        r.session.request(Msg.LYR_OFFSET, Req.lyrOffset(track, 100)) {
+            if (it is Session.Result.Ok) r.lyrics.offsetSet(track)
+            reply = it
+            replied.countDown()
+        }
+        assertTrue(replied.await(10, TimeUnit.SECONDS))
+        assertTrue(reply is Session.Result.Ok)
+        val before = asks().size
+        waitFor("refetch") { asks().size > before }
+        r.lyrics.offsetSet(track)
+        assertEquals(1000L, times(r)?.get(1))
+        waitFor("second copy") { times(r)?.get(1) == 900L }
+        val seen = java.util.concurrent.CopyOnWriteArrayList<LyricsFetch.Show>()
+        val sampling = AtomicBoolean(true)
+        val sampler = Thread {
+            while (sampling.get()) {
+                seen += r.lyrics.show
+                Thread.sleep(2)
+            }
+        }.apply { start() }
+        r.sim.device.request(Msg.LYR_OFFSET, Node.decode("LYR_OFFSET", Req.lyrOffset(track, 200)), object : net.seilent.funecomp.sim.Out {
+            override fun push(type: Int, payload: ByteArray) {}
+        })
+        seek(r)
+        waitFor("third copy") { times(r)?.get(1) == 800L }
+        sampling.set(false)
+        sampler.join()
+        val gaps = synchronized(seen) { seen.filter { it !is LyricsFetch.Show.Lines } }
+        assertTrue("$gaps", gaps.isEmpty())
+        assertTrue(synchronized(seen) { seen.any { it is LyricsFetch.Show.Lines && it.held && it.copy.lines[1].ms == 900L } })
+        neverTwoPending()
+    }
+
+    @Test
+    fun anEditAcrossAnOkPutEndsWithoutARestore() {
+        lrc("[00:01.00]one\n[00:03.00]two\n")
+        val r = rig()
+        put(r, "[00:01.00]one\n[00:03.00]two\n")
+        val o = OffsetSend(track, 0)
+        fun run(out: OffsetSend.Out) {
+            val s = out.send ?: return
+            r.session.request(Msg.LYR_OFFSET, Req.lyrOffset(track, s.ms)) { res ->
+                run(
+                    o.replied(
+                        when (res) {
+                            is Session.Result.Ok -> OffsetSend.Reply.Ok(LyrOffsetReply.from(res.body).ms)
+                            is Session.Result.Failed -> OffsetSend.Reply.Failed(res.error.code)
+                            else -> OffsetSend.Reply.Lost
+                        },
+                    ),
+                )
+            }
+        }
+        run(o.open())
+        waitFor("read") { o.stored == 0 }
+        run(o.begin())
+        run(o.step(1))
+        run(o.step(1))
+        waitFor("steps") { o.stored == 200 && o.mark().idle }
+        val at = logs.size
+        assertTrue(put(r, "[00:02.00]new\n") is Session.Result.Ok)
+        run(o.replaced(track))
+        waitFor("read after put") { o.stored == 0 && o.mark().idle }
+        assertEquals(0, o.shown)
+        assertFalse(o.editing)
+        run(o.close(true))
+        quiet()
+        val after = synchronized(logs) { logs.drop(at).map { it.second }.filter { it.startsWith("lyr offset ") } }
+        assertEquals(listOf("lyr offset reset track=$id", "lyr offset read track=$id ms=0"), after)
     }
 
     @Test
