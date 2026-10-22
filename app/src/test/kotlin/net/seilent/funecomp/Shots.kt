@@ -116,6 +116,7 @@ class Shot(
     val cols: ((Float) -> Int)? = null,
     val gated: Boolean = false,
     val labels: Boolean = true,
+    val white: Boolean = false,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -312,6 +313,30 @@ private fun lyricsAt(ms: Long): (SimControl) -> Unit = { c ->
     lyricsOn()(c)
     val p = c.device.playback
     c.device = c.device.copy(playback = p.copy(state = p.state.copy(positionMs = ms)))
+}
+
+private fun lyrFlags(lyrics: Boolean?, plain: Boolean?, source: Int? = null): (SimControl) -> Unit = { c ->
+    val s = c.device.playback.state
+    c.device = c.device.withState(s.copy(lyrics = lyrics, lyricsPlain = plain, lyricsCrc = 1, source = source ?: s.source), SystemClock.elapsedRealtime())
+}
+
+private fun lyrLongNext(c: SimControl) {
+    lyricsOn()(c)
+    val slot = c.device.playback.state.slot ?: return
+    c.queuePage(slot + 1)
+    val q = c.device.queue
+    val next = q.items[slot + 1] ?: return
+    c.device = c.device.copy(queue = q.copy(items = q.items + (slot + 1 to next.copy(title = "Everything In Its Right Place (Live in Paris, 2001, from the Amnesiac tour bonus disc remaster)"))))
+}
+
+private fun lyrLongTitle(c: SimControl) {
+    lyricsOn()(c)
+    longTitle(c)
+}
+
+private fun lyrHeart(c: SimControl) {
+    favorite(c)
+    lyrFlags(true, false)(c)
 }
 
 private fun shown(lines: List<LyrLine>, kind: Int = Enums.LyricsKind.synced): (DeviceState) -> LyricsFetch.Show = { d ->
@@ -763,6 +788,19 @@ val SHOTS = listOf(
     Shot("np-block-wrong", pages = NP, prep = ::held, artEntry = HELD, wrong = true) { holdBackdrop() },
     Shot("lyr-mark", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))),
     Shot("lyr-mark-nonext", pages = NP, prep = ::lyricsLast, artEntry = HELD, lyrics = shown(stamped(SUNG))),
+    Shot("lyrmark-short", pages = NP, prep = lyricsOn(), art = true, artEntry = HELD, lyrics = shown(stamped(SUNG))),
+    Shot("lyrmark-longtitle", pages = NP, prep = ::lyrLongTitle, art = true, artEntry = HELD, lyrics = shown(stamped(SUNG))),
+    Shot("lyrmark-longnext", pages = NP, prep = ::lyrLongNext, art = true, artEntry = HELD, lyrics = shown(stamped(SUNG))),
+    Shot("lyrmark-nonext", pages = NP, prep = ::lyricsLast, art = true, artEntry = HELD, lyrics = shown(stamped(SUNG))),
+    Shot("lyrmark-noart", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))),
+    Shot("lyrmark-plain", pages = NP, prep = lyricsOn(plain = true), art = true, artEntry = HELD, lyrics = shown(PLAIN_TEXT, Enums.LyricsKind.plain)),
+    Shot("lyrmark-pending", pages = NP, prep = { c -> playing(c); lyrFlags(null, null)(c) }, art = true, artEntry = HELD),
+    Shot("lyrmark-none", pages = NP, prep = { c -> playing(c); lyrFlags(false, false)(c) }, art = true, artEntry = HELD, lyrics = { LyricsFetch.Show.None }),
+    Shot("lyrmark-mode", pages = NP, prep = lyricsOn(), art = true, artEntry = HELD, lyrics = shown(stamped(SUNG))) { lyricsMode() },
+    Shot("lyrmark-phone", pages = NP, prep = { c -> playing(c); lyrFlags(true, false, Enums.Source.phone)(c) }, art = true, artEntry = HELD, lyrics = shown(stamped(SUNG))),
+    Shot("lyrmark-white", pages = NP, prep = lyricsOn(), art = true, artEntry = HELD, white = true, lyrics = shown(stamped(SUNG))),
+    Shot("lyrmark-idle", pages = NP, prep = lyricsOn(), art = true, artEntry = HELD, lyrics = shown(stamped(SUNG)), after = (Tok.motion_idle + Tok.motion_idleFade).toLong() + 100),
+    Shot("lyrmark-heart", pages = NP, prep = ::lyrHeart, art = true, artEntry = HELD, lyrics = shown(stamped(SUNG))),
     Shot("lyr-synced", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))) { lyricsMode() },
     Shot("lyr-before", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG, 70_000))) { lyricsMode() },
     Shot("lyr-plain", pages = NP, prep = lyricsOn(plain = true), artEntry = HELD, lyrics = shown(PLAIN_TEXT, Enums.LyricsKind.plain)) { lyricsMode() },
@@ -929,16 +967,20 @@ class Shots {
         dir
     }
 
-    private val plain: ImageBitmap by lazy {
+    private fun fill(paint: java.awt.Paint): ImageBitmap {
         val img = java.awt.image.BufferedImage(720, 960, java.awt.image.BufferedImage.TYPE_INT_RGB)
         val g = img.createGraphics()
-        g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(90, 70, 60), 720f, 960f, java.awt.Color(20, 30, 50))
+        g.paint = paint
         g.fillRect(0, 0, 720, 960)
         g.dispose()
         val out = java.io.ByteArrayOutputStream()
         javax.imageio.ImageIO.write(img, "jpg", out)
-        BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size()).asImageBitmap()
+        return BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size()).asImageBitmap()
     }
+
+    private val plain: ImageBitmap by lazy { fill(java.awt.GradientPaint(0f, 0f, java.awt.Color(90, 70, 60), 720f, 960f, java.awt.Color(20, 30, 50))) }
+
+    private val whiteBg: ImageBitmap by lazy { fill(java.awt.Color(255, 255, 255)) }
 
     private val backdrop: ImageBitmap? by lazy {
         System.getProperty("shots.backdrop")?.let { File(it) }?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
@@ -954,7 +996,7 @@ class Shots {
             val c = control ?: return@setContent
             key(f) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
-                    val held = f.first.artEntry?.let { BackdropArt(backdrop ?: plain, null, it, f.first.wrong) }
+                    val held = f.first.artEntry?.let { BackdropArt(if (f.first.white) whiteBg else backdrop ?: plain, null, it, f.first.wrong) }
                     App(c.device, f.first.link, c, shell, sources, { sources = it }, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, scrobbleLabels = f.first.labels, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * f.first.ime).dp))
                 }
             }

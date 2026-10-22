@@ -73,6 +73,8 @@ fun Ui.npTransportX(index: Int) = (npRingCenter(index) + npRingCenter(index + 1)
 
 fun npHeartFits(art: Float) = art >= Tok.npRing + 2 * Tok.detailRingInset
 
+fun npMarkFits(art: Float, landscape: Boolean) = art >= if (landscape) 2 * Tok.detailRingInset + 2 * Tok.npRing + Tok.detailRingGap / 2 else Tok.npRing
+
 val Ui.detailNameBaseline get() = pivotBaseline + Tok.detailNameDrop
 val Ui.detailLabelBaseline get() = if (landscape) contentTop + Tok.capHeight * Roles.sectionLabel.size else DETAIL_LABEL_BASELINE
 val Ui.detailRowsTop get() = detailLabelBaseline + Tok.detailLabelDrop

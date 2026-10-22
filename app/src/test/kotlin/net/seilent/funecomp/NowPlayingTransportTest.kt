@@ -171,15 +171,47 @@ class NowPlayingTransportTest {
     }
 
     @Test
-    fun rowItemsDoNotOverlapTheTitleBlockOrEachOther() {
-        start()
-        for (name in listOf("411x960", "360x640", "600x960", "flip960x411", "cover361x399")) {
-            size = SIZES.first { it.name == name }
+    fun theLyricsMarkSitsBesideTheArtInPortraitAndInItsCornerInLandscape() {
+        val c = start()
+        lyricsOn()(c)
+        for (s in SIZES) {
+            size = s
             settle(1000)
-            val tags = listOf("np.shuffle", "np.prev", "np.toggle", "np.nextTrack", "np.repeat", "np.titleBlock", "np.seek", "np.heart")
+            val np = rule.onNodeWithTag("np").fetchSemanticsNode().size
+            val ui = Ui.of(np.width.toFloat(), np.height.toFloat())
+            val ring = bounds("np.mark")
+            val art = bounds("np.art")
+            if (ui.landscape) {
+                assertEquals(s.name, Tok.detailRingInset * ui.u, art.right - ring.right, 1.5f)
+                assertEquals(s.name, Tok.detailRingInset * ui.u, art.bottom - ring.bottom, 1.5f)
+            } else {
+                assertEquals(s.name, Tok.tileLGutter * ui.u, ring.left - art.right, 1.5f)
+                assertEquals(s.name, art.bottom, ring.bottom, 1.5f)
+            }
+            assertEquals(s.name, Tok.npRing * ui.u, ring.width, 1.5f)
+            assertEquals(s.name, Tok.npRing * ui.u, ring.height, 1.5f)
+        }
+    }
+
+    @Test
+    fun rowItemsDoNotOverlapTheTitleBlockOrEachOther() {
+        val c = start()
+        lyricsOn()(c)
+        for (s in SIZES) {
+            size = s
+            settle(1000)
+            val tags = listOf("np.shuffle", "np.prev", "np.toggle", "np.nextTrack", "np.repeat", "np.titleBlock", "np.seek", "np.heart", "np.mark.hit")
             val boxes = tags.map { it to bounds(it) }
             for (i in boxes.indices) for (j in i + 1 until boxes.size) {
-                assertFalse("$name ${boxes[i].first} ${boxes[j].first}", overlap(boxes[i].second, boxes[j].second))
+                assertFalse("${s.name} ${boxes[i].first} ${boxes[j].first}", overlap(boxes[i].second, boxes[j].second))
+            }
+            val np = rule.onNodeWithTag("np").fetchSemanticsNode().size
+            val mark = bounds("np.mark.hit")
+            val art = bounds("np.art")
+            if (Ui.of(np.width.toFloat(), np.height.toFloat()).landscape) {
+                assertTrue(s.name, mark.left >= art.left && mark.top >= art.top && mark.right <= art.right && mark.bottom <= art.bottom)
+            } else {
+                assertFalse(s.name, overlap(mark, art))
             }
         }
     }

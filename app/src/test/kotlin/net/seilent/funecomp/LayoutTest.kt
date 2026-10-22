@@ -25,6 +25,7 @@ import net.seilent.funecomp.ui.npArt
 import net.seilent.funecomp.ui.npArtTop
 import net.seilent.funecomp.ui.npArtistBaseline
 import net.seilent.funecomp.ui.npHeartFits
+import net.seilent.funecomp.ui.npMarkFits
 import net.seilent.funecomp.ui.npLyricBottom
 import net.seilent.funecomp.ui.npLyricTop
 import net.seilent.funecomp.ui.npProgressY
@@ -109,6 +110,14 @@ class LayoutTest {
     fun heartFitsOnlyOnA48Art() {
         assertFalse(npHeartFits(47.9f))
         assertTrue(npHeartFits(48f))
+    }
+
+    @Test
+    fun theMarkFitsBesideA32ArtAndInTheCornerOfA92Art() {
+        assertFalse(npMarkFits(31.9f, false))
+        assertTrue(npMarkFits(32f, false))
+        assertFalse(npMarkFits(91.9f, true))
+        assertTrue(npMarkFits(92f, true))
     }
 
     @Test

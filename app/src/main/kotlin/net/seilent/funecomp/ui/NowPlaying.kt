@@ -80,10 +80,6 @@ import net.seilent.funecomp.state.LyricsFetch
 internal const val PIN_LEAD_MS = 200L
 val LocalUptime = staticCompositionLocalOf<() -> Long> { SystemClock::uptimeMillis }
 
-private const val MIC_INK_LEFT = 8f
-private const val MIC_INK_RIGHT = 24f
-private const val MIC_INK_TOP = 3f
-private const val MIC_INK_BOTTOM = 30f
 private val PLAIN = Roles.npAlbum.copy(case = Case.MIXED)
 private const val SHUFFLE = 0
 private const val PREV = 1
@@ -504,19 +500,20 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
                 }
                 Box(Modifier.at(textX, titleTop).size(textW.dp(), (titleBottom - titleTop).coerceAtLeast(0f).dp()).press({ onQueue() }).testTag("np.titleBlock"))
                 RoleText(s.title ?: "", Roles.npTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"))
-                val markSide = Roles.npNext.size * Tok.capHeight * Tok.glyphBox / (MIC_INK_BOTTOM - MIC_INK_TOP)
-                val markX = ui.w - Tok.edge - MIC_INK_RIGHT * markSide / Tok.glyphBox
-                val markY = ui.npNextBaseline - MIC_INK_BOTTOM * markSide / Tok.glyphBox
-                val nextRight = ui.px(if (canLyrics) markX + MIC_INK_LEFT * markSide / Tok.glyphBox - Tok.statusGap else ui.w - Tok.edge)
                 upcoming.forEachIndexed { i, t ->
                     val x = textX + ui.px(Tok.npNextIndent)
-                    RoleText(t, Roles.npNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, (if (i == 0) nextRight else ui.px(ui.w - Tok.edge)) - x).testTag("np.next.$i"))
+                    RoleText(t, Roles.npNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
                 }
-                if (canLyrics) {
-                    Glyph(GlyphName.MIC, markSide, white(Roles.npNext.alpha), Modifier.at(ui.px(markX), ui.px(markY)).testTag("np.mark"))
-                    val cx = markX + (MIC_INK_LEFT + MIC_INK_RIGHT) / 2 * markSide / Tok.glyphBox
-                    val cy = markY + (MIC_INK_TOP + MIC_INK_BOTTOM) / 2 * markSide / Tok.glyphBox
-                    Box(Modifier.at(ui.px(cx), ui.px(cy), 0.5f, 0.5f).size(ui.px(Tok.npRing).dp()).press({ lyricsKey() }, longPress).testTag("np.mark.hit"))
+                val corner = ui.landscape
+                if (canLyrics && s.source != Enums.Source.phone && artSide > 0f && npMarkFits(ui.npArt, corner)) {
+                    val ring = ui.px(Tok.npRing)
+                    val cx = if (corner) artX + artSide - ui.px(Tok.detailRingInset) - ring / 2 else artX + artSide + ui.px(Tok.tileLGutter) + ring / 2
+                    val cy = artY + artSide - (if (corner) ui.px(Tok.detailRingInset) else 0f) - ring / 2
+                    var down by remember { mutableStateOf(false) }
+                    Box(Modifier.at(cx, cy, 0.5f, 0.5f).testTag("np.mark")) {
+                        Ring(Tok.npRing, GlyphName.MIC, false, pressed = down)
+                    }
+                    Box(Modifier.at(cx, cy, 0.5f, 0.5f).size(ring.dp()).press({ lyricsKey() }, longPress) { down = it }.testTag("np.mark.hit"))
                 }
             }
         }

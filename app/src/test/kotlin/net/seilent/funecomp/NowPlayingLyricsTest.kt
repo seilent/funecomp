@@ -58,6 +58,7 @@ import net.seilent.funecomp.ui.RefreshPin
 import net.seilent.funecomp.ui.RefreshPin.ModeInfo
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LyricsFetch
 import org.junit.Assert.assertEquals
@@ -182,6 +183,50 @@ class NowPlayingLyricsTest {
         assertTrue(exists("np.mark"))
         rule.onNodeWithTag("np.mark").assertIsDisplayed()
         assertFalse(exists("np.lyrics"))
+    }
+
+    @Test
+    fun theMarkHidesWithSourcePhone() {
+        start()
+        assertTrue(exists("np.mark"))
+        val s = c.device.playback.state
+        c.device = c.device.withState(s.copy(source = Enums.Source.phone), SystemClock.elapsedRealtime())
+        settle(100)
+        assertFalse(exists("np.mark"))
+        assertFalse(exists("np.mark.hit"))
+    }
+
+    @Test
+    fun theMarkShowsForPlainOnTheTileFallback() {
+        start(on = false, copy = plain, kind = Enums.LyricsKind.plain, plain = true)
+        assertFalse(exists("np.art.image"))
+        assertTrue(exists("np.mark"))
+        enterBy("np.mark.hit")
+        assertTrue(exists("np.lyric.plain.0"))
+    }
+
+    @Test
+    fun theMarkShowsWithNoNextTrack() {
+        start()
+        val p = c.device.playback
+        c.device = c.device.copy(playback = p.copy(state = p.state.copy(slot = (p.state.slots ?: 1) - 1)))
+        settle(100)
+        assertFalse(exists("np.next.0"))
+        assertTrue(exists("np.mark"))
+    }
+
+    @Test
+    fun theNextRowRunsToTheEdgeBesideTheMark() {
+        start()
+        val slot = c.device.playback.state.slot!!
+        c.queuePage(slot + 1)
+        val q = c.device.queue
+        c.device = c.device.copy(queue = q.copy(items = q.items + (slot + 1 to q.items[slot + 1]!!.copy(title = "x".repeat(200)))))
+        settle(100)
+        assertTrue(exists("np.mark"))
+        val np = rule.onNodeWithTag("np").fetchSemanticsNode().size
+        val ui = Ui.of(np.width.toFloat(), np.height.toFloat())
+        assertEquals(ui.px(ui.w - Tok.edge), rule.onNodeWithTag("np.next.0").fetchSemanticsNode().boundsInRoot.right, 1f)
     }
 
     @Test
