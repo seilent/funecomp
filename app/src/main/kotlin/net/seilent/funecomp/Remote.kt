@@ -112,6 +112,7 @@ object Remote : Control {
     private val faces = Memo<Found>(FACES)
     internal var forgetting: () -> Unit = {}
     internal var queuedAsk: () -> Unit = {}
+    internal var asking: () -> Unit = {}
     @Volatile var pickAsk: ((PickFor) -> Boolean)? = null
     private val pickLock = Any()
     private var resolving: HttpRun? = null
@@ -407,9 +408,14 @@ object Remote : Control {
         refreshNames.remove(name)
     }
 
-    override fun blockArt(e: ArtCache.Entry) = blockArt(e, null)
+    override fun blockArt(e: ArtCache.Entry) = blockArt(e, shownCrc(e))
 
-    override fun wrongArtist(e: ArtCache.Entry) = wrongArtist(e, null)
+    override fun wrongArtist(e: ArtCache.Entry) = wrongArtist(e, shownCrc(e))
+
+    private fun shownCrc(e: ArtCache.Entry): Long? {
+        val h = device.hello ?: return null
+        return artist?.renderedCrc(e, h.backdropW ?: return null, h.backdropH ?: return null)
+    }
 
     private fun blockArt(e: ArtCache.Entry, crc: Long?, after: () -> Unit = {}) {
         val a = artist ?: return
@@ -430,6 +436,7 @@ object Remote : Control {
     }
 
     private fun artAsk(q: ArtBlock, st: State, dev: String?, w: Int?, h: Int?, r: Responder) {
+        asking()
         val cmd = q.cmd
         val name = q.name?.takeIf { it.isNotBlank() }
         val crc = q.crc

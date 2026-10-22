@@ -25,6 +25,7 @@ import net.seilent.funecomp.sim.Track
 import net.seilent.funecomp.ui.Phase
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -52,8 +53,10 @@ class ArtBlockTest {
     private val sims = ArrayList<Sim>()
     private val faced = Remote.faced
     private val asked = CopyOnWriteArrayList<String>()
+    @Volatile private var fetched: () -> Unit = {}
     private val http = Http { url, _ ->
         asked += url
+        fetched()
         Response(404, ByteArray(0))
     }
 
@@ -76,6 +79,7 @@ class ArtBlockTest {
         Remote.faced = faced
         Remote.forgetting = {}
         Remote.queuedAsk = {}
+        Remote.asking = {}
         scrobblesReset()
     }
 
@@ -309,6 +313,9 @@ class ArtBlockTest {
         val s = asking(track(utadaEn, mbids = listOf(mbid)), utadaEn)
         assertEquals("error 4 wrong artist not offered", s.askBlock(wrong, utadaEn))
         assertTrue(blocks().isEmpty())
+        val crc = s.block(wrong, utadaEn).crc
+        Remote.wrongArtist(cache().hit(mbid)!!)
+        assertEquals(crc, (blocks().single() as ArtBlocks.Reject).crc)
     }
 
     @Test
@@ -527,7 +534,30 @@ class ArtBlockTest {
         t.join(10_000)
         assertEquals("ok", answer)
         assertEquals(1, ja())
-        assertTrue(recorded(utadaJa))
+        assertEquals(q.crc, (blocks().single { it.key == mbid } as ArtBlocks.Block).crc)
+    }
+
+    @Test
+    fun aSheetBlockAppliedBeforeTheQueuedAskRunsCoversIt() {
+        val (latch, s) = held()
+        val q = s.block(block, utadaJa)
+        val looked = CountDownLatch(1)
+        fetched = { if (cache().hit(mbid) == null) looked.countDown() }
+        Remote.asking = { looked.await(10, TimeUnit.SECONDS) }
+        val queued = CountDownLatch(1)
+        Remote.queuedAsk = { queued.countDown() }
+        var answer = ""
+        val t = Thread { answer = s.askBlock(q) }.apply { start() }
+        assertTrue(queued.await(5, TimeUnit.SECONDS))
+        Remote.blockArt(cache().hit(mbid)!!)
+        latch.countDown()
+        t.join(15_000)
+        assertEquals(0, looked.count)
+        assertTrue(deleted(utadaJa))
+        assertEquals("ok", answer)
+        assertEquals(1, ja())
+        assertEquals(q.crc, (blocks().single { it.key == mbid } as ArtBlocks.Block).crc)
+        assertFalse(recorded(utadaJa))
     }
 
     @Test
