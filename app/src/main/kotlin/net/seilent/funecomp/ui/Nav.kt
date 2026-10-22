@@ -119,6 +119,7 @@ fun debugPages(name: String): List<Page>? {
         "online" -> base + Page.Online()
         else -> when {
             name.startsWith("artist:") -> base + Page.Music + Page.Artist(name.removePrefix("artist:"))
+            name.startsWith("browse:") -> base + Page.Online() + Page.Browse(PickFor(name.removePrefix("browse:")))
             name.startsWith("album:") -> {
                 val p = name.removePrefix("album:").split('|')
                 base + Page.Music + Page.Album(p[0], p.getOrElse(1) { "" }, p.getOrElse(2) { "" })

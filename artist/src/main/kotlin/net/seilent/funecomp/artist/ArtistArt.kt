@@ -14,13 +14,14 @@ class ArtistArt(
     version: String,
     private val clock: () -> Long = { System.currentTimeMillis() },
     private val sleep: (Long) -> Unit = { Thread.sleep(it) },
-    mono: () -> Long = { System.nanoTime() / 1_000_000 },
+    private val mono: () -> Long = { System.nanoTime() / 1_000_000 },
     private val online: () -> Boolean = { true },
     val blocks: ArtBlocks = ArtBlocks(),
     val picks: ArtPicks = ArtPicks(),
     private val placeholders: Set<String> = Deezer.PLACEHOLDERS,
     val gallery: GalleryStore? = null,
     private val log: (String) -> Unit = {},
+    private val browseLog: (String) -> Unit = {},
 ) {
     private val ua = "funecomp/$version (github@seilent.net)"
     private fun api(limiter: RateLimiter) = Api(http, ua, limiter, sleep)
@@ -275,6 +276,10 @@ class ArtistArt(
     fun browse(name: String, mbid: String?, px: Int, sink: (Tile) -> Unit): Boolean {
         val on = sources().enabled
         val run = HttpRun.current.get()
+        val t0 = mono()
+        var section = ""
+        var n = 0
+        fun done(s: String) = browseLog("art browse source $s done n=$n +${mono() - t0}")
         fun <T> attempt(block: () -> T): T? = try {
             block()
         } catch (e: IOException) {
@@ -286,11 +291,15 @@ class ArtistArt(
         fun tile(source: String, caption: String, preview: String, full: String, id: String = ImageIds.of(source, full), credit: Credit? = null) {
             val b = attempt { (images[source] ?: otherImages).get(preview) }?.body ?: return
             sink(Tile(source, caption, b, full, id, credit))
+            n++
+            browseLog("art browse tile $section +${mono() - t0}")
         }
         val ids = ((attempt { mb.searchAll(name) } ?: emptyList()).take(BROWSE_MBIDS) + listOfNotNull(Names.mbid(mbid))).distinct()
         val artists = ids.mapNotNull { attempt { mb.artist(it) } }
         fun caption(a: MbArtist) = a.disambiguation.ifEmpty { a.name }
         for (source in sources().order.filter { it in on }) {
+            section = source
+            n = 0
             when (source) {
                 Wikimedia.SOURCE -> for (a in artists) attempt { wikimedia.candidates(a, PICK_W, PICK_H, px) }?.take(MAX_TRIES)?.forEach { tile(source, caption(a), it.url, it.id, it.id, it.credit) }
                 Sources.THE_AUDIO_DB -> for (a in artists) attempt { audioDb.candidates(a.id) }?.take(MAX_TRIES)?.forEach { tile(source, caption(a), it.url, it.url) }
@@ -303,11 +312,15 @@ class ArtistArt(
                     tile(source, d["name"].str ?: "", small, full)
                 }
             }
+            done(source)
         }
         if (Sources.YOUTUBE !in on) return true
-        val found = attempt { youtube.search(name) }?.takeIf { it.isNotEmpty() } ?: return false
-        found.take(BROWSE_RESULTS).forEach { c -> tile(Sources.YOUTUBE, c.title, YouTube.sized(c.thumb, YT_PREVIEW), YouTube.sized(c.thumb, YT_FULL)) }
-        return true
+        section = YOUTUBE_SEARCH
+        n = 0
+        val found = attempt { youtube.search(name) }?.takeIf { it.isNotEmpty() }
+        found?.take(BROWSE_RESULTS)?.forEach { c -> tile(Sources.YOUTUBE, c.title, YouTube.sized(c.thumb, YT_PREVIEW), YouTube.sized(c.thumb, YT_FULL)) }
+        done(YOUTUBE_SEARCH)
+        return found != null
     }
 
     private fun find(name: String, tag: String?, id: String?, key: String, w: Int, h: Int, on: Set<String>, now: Long, skipped: AtomicBoolean): Found? {
@@ -487,5 +500,6 @@ class ArtistArt(
         const val BROWSE_RESULTS = 10
         const val YT_PREVIEW = 176
         const val YT_FULL = 900
+        const val YOUTUBE_SEARCH = "youtube search"
     }
 }

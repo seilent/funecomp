@@ -3,6 +3,7 @@ package net.seilent.funecomp
 import net.seilent.funecomp.ui.ONLINE_LYRICS
 import net.seilent.funecomp.ui.ONLINE_SCROBBLING
 import net.seilent.funecomp.ui.Page
+import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.debugPages
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -32,6 +33,7 @@ class DebugPagesTest {
             "lyrics" to home + Page.Online(ONLINE_LYRICS),
             "online" to home + Page.Online(),
             "artist:Radiohead" to home + Page.Music + Page.Artist("Radiohead"),
+            "browse:TSUKI" to home + Page.Online() + Page.Browse(PickFor("TSUKI")),
             "album:k|In Rainbows|Radiohead" to home + Page.Music + Page.Album("k", "In Rainbows", "Radiohead"),
             "album:k" to home + Page.Music + Page.Album("k", "", ""),
         )

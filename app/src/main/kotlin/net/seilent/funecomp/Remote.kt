@@ -375,7 +375,7 @@ object Remote : Control {
             network(c)
             val blocks = ArtBlocks(File(c.filesDir, "artblock.tsv")) { Log.w(TAG, it) }
             val picks = ArtPicks(File(c.filesDir, "artpick.tsv")) { Log.w(TAG, it) }
-            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks, gallery = GalleryStore(File(c.filesDir, "pickimg")), log = { Log.w(TAG, it) }).also {
+            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks, gallery = GalleryStore(File(c.filesDir, "pickimg")), log = { Log.w(TAG, it) }, browseLog = { Log.i(TAG, it.replace(SECRET, "$1=x")) }).also {
                 artist = it
                 showBlocked { blocks.records() }
                 showPicks { picks.list() }
@@ -600,6 +600,8 @@ object Remote : Control {
         }
         val run = HttpRun { Log.i(TAG, "art browse http ${it.replace(SECRET, "$1=x")}") }
         Thread({
+            val t0 = SystemClock.elapsedRealtime()
+            Log.i(TAG, "art browse start $name")
             val ok = try {
                 run.on {
                     a.browse(name, mbid, px) { t ->
@@ -614,7 +616,7 @@ object Remote : Control {
                 Log.w(TAG, "art browse: $e")
                 false
             }
-            Log.i(TAG, "art browse $name -> ${ok ?: "cancelled"}")
+            Log.i(TAG, "art browse end $name -> ${ok ?: "cancelled"} +${SystemClock.elapsedRealtime() - t0}")
             if (ok != null) main.post { if (!run.cancelled) done(ok) }
         }, "art-browse").apply { isDaemon = true }.start()
         return { run.cancel() }

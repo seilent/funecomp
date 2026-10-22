@@ -51,6 +51,27 @@ class BrowseTest {
     }
 
     @Test
+    fun timingLinesNameEveryTileAndSection() {
+        val lines = ArrayList<String>()
+        val a = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time.sleep, { time.now }, browseLog = { lines += it })
+        http.now = { time.now }
+        val t0 = time.now
+        val tiles = ArrayList<Tile>()
+        assertTrue(a.browse("TSUKI", null, 53) { tiles += it })
+        val sections = sources.ordered + ArtistArt.YOUTUBE_SEARCH
+        val tile = Regex("art browse tile (.+) \\+(\\d+)")
+        val done = Regex("art browse source (.+) done n=(\\d+) \\+(\\d+)")
+        assertEquals(sections, lines.mapNotNull { done.matchEntire(it)?.groupValues?.get(1) })
+        assertEquals(tiles.size, lines.count { tile.matches(it) })
+        assertEquals(lines.size, tiles.size + sections.size)
+        val counts = lines.mapNotNull { done.matchEntire(it) }.associate { it.groupValues[1] to it.groupValues[2].toInt() }
+        assertEquals(mapOf(Wikimedia.SOURCE to 0, Sources.YOUTUBE to 0, Sources.DISCOGS to 1, Sources.DEEZER to 10, ArtistArt.YOUTUBE_SEARCH to 10), counts)
+        val ms = lines.map { it.substringAfterLast('+').toLong() }
+        assertEquals(ms.sorted(), ms)
+        assertEquals(time.now - t0, ms.last())
+    }
+
+    @Test
     fun theLimitersHoldAcrossTheFanOut() {
         browse()
         fun gaps(hosts: Set<String>) = http.times.filter { (_, u) -> u.substringAfter("://").substringBefore('/') in hosts }.map { it.first }.zipWithNext { a, b -> b - a }
