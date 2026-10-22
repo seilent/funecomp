@@ -20,12 +20,18 @@ import net.seilent.funecomp.artist.Scrobbler
 import net.seilent.funecomp.artist.Sent
 import net.seilent.funecomp.artist.SignIn
 import net.seilent.funecomp.artist.UrlHttp
+import net.seilent.funecomp.link.Session
+import net.seilent.funecomp.proto.PlayLogReply
+import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.state.Play
+import net.seilent.funecomp.state.PlayLogSync
 import net.seilent.funecomp.state.Plays
 import net.seilent.funecomp.ui.ScrobbleView
 import java.io.File
 import java.io.IOException
+import java.time.ZoneId
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
@@ -55,6 +61,9 @@ object Scrobbles {
     @Volatile private var pendingError: Pair<String, String>? = null
     @Volatile private var tokenPage = ""
     internal var now: () -> Long = { System.currentTimeMillis() }
+    internal var zone: () -> ZoneId = { ZoneId.systemDefault() }
+    private var sync = playLogSync()
+    @Volatile private var link: Session? = null
 
     @Volatile var opener: ((String) -> Boolean)? = null
 
@@ -101,8 +110,13 @@ object Scrobbles {
         tokenPage = ""
         opener = null
         now = { System.currentTimeMillis() }
+        zone = { ZoneId.systemDefault() }
+        link = null
+        sync = playLogSync()
         view = ScrobbleView()
     }
+
+    private fun playLogSync() = PlayLogSync({ scrobbler?.queue?.dap(it) }) { Log.i(Remote.TAG, it) }
 
     internal fun idle() {
         exec.submit {}.get(DRAIN_S, TimeUnit.SECONDS)
@@ -110,7 +124,63 @@ object Scrobbles {
 
     fun session(clocked: Boolean) = exec.execute { plays?.session(clocked) }
 
+    fun linked(s: Session, playLog: Boolean) {
+        exec.execute {
+            link = s
+            val c = context ?: return@execute
+            perform(sync.hello(playLog, accounts(c).enabled.isNotEmpty()))
+        }
+    }
+
+    fun unlinked() = exec.execute {
+        link = null
+        sync.closed()
+    }
+
+    private fun perform(d: PlayLogSync.Do?) {
+        val s = link ?: return
+        when (d) {
+            null -> {}
+            is PlayLogSync.Get -> s.request(Msg.PLAYLOG_GET, Req.playLogGet(d.after, d.count)) { r ->
+                exec.execute {
+                    when (r) {
+                        is Session.Result.Ok -> {
+                            val reply = try {
+                                PlayLogReply.from(r.body)
+                            } catch (e: RuntimeException) {
+                                Log.w(Remote.TAG, "playlog reply: $e")
+                                null
+                            }
+                            if (reply == null) sync.getFailed(d.gen, null) else perform(sync.reply(d.gen, reply))
+                        }
+                        is Session.Result.Failed -> sync.getFailed(d.gen, r.error.code)
+                        else -> sync.getFailed(d.gen, null)
+                    }
+                }
+            }
+            is PlayLogSync.Store -> {
+                val upTo = try {
+                    scrobbler?.addLog(d.log, d.entries, zone())
+                } catch (e: IOException) {
+                    Log.w(Remote.TAG, "playlog store: $e")
+                    null
+                } catch (e: RuntimeException) {
+                    Log.w(Remote.TAG, "playlog store: $e")
+                    null
+                }
+                perform(sync.stored(d.gen, d.log, upTo, d.more))
+                if (!d.more) attempt { note(scrobbler?.flush()) }
+                refresh()
+            }
+            is PlayLogSync.Ack -> s.request(Msg.PLAYLOG_ACK, Req.playLogAck(d.log, d.upTo)) { r ->
+                Log.i(Remote.TAG, "playlog ack ${java.lang.Long.toHexString(d.log)} up to ${d.upTo} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
+                exec.execute { perform(sync.acked(d.gen, d, (r as? Session.Result.Failed)?.error?.code, r is Session.Result.Ok || r is Session.Result.Failed)) }
+            }
+        }
+    }
+
     fun state(s: State, wallMs: Long) = exec.execute {
+        perform(sync.state(s.playLogSeq))
         val p = plays ?: return@execute
         val before = p.open
         val events = p.frame(s, wallMs)
@@ -119,7 +189,7 @@ object Scrobbles {
             val l = listen(e) ?: continue
             when (e) {
                 is Plays.Event.NowPlaying -> attempt { scrobbler?.nowPlaying(l) }
-                is Plays.Event.Scrobble -> attempt { note(scrobbler?.add(l)) }
+                is Plays.Event.Scrobble -> if (!sync.logged) attempt { note(scrobbler?.add(l)) }
             }
         }
         if (events.isNotEmpty()) refresh()
@@ -136,10 +206,11 @@ object Scrobbles {
         prefs(c).edit().putBoolean("lastfm", a.lastFm).putBoolean("listenbrainz", a.listenBrainz).commit()
         view = view.copy(accounts = accounts(c))
         exec.execute {
-            if (a.lastFm && !old.lastFm) scrobbler?.enable(Accounts.LAST_FM)
-            if (a.listenBrainz && !old.listenBrainz) scrobbler?.enable(Accounts.LISTEN_BRAINZ)
+            if (a.lastFm && !old.lastFm) attempt { scrobbler?.enable(Accounts.LAST_FM) }
+            if (a.listenBrainz && !old.listenBrainz) attempt { scrobbler?.enable(Accounts.LISTEN_BRAINZ) }
             attempt { note(scrobbler?.flush()) }
             refresh()
+            perform(sync.services(a.enabled.isNotEmpty(), (a.lastFm && !old.lastFm) || (a.listenBrainz && !old.listenBrainz)))
         }
     }
 

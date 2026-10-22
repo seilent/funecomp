@@ -238,7 +238,7 @@ object Remote : Control {
             Log.i(TAG, "link $spec")
             wake(context)
             val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0"
-            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(version, features = Groups.mask("artBlock", "artPick", "imgOrigin")), SystemClock::elapsedRealtime)
+            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(version, features = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog")), SystemClock::elapsedRealtime)
             link = l
             art = worker(context, l)
             l.start()
@@ -1000,6 +1000,7 @@ object Remote : Control {
     private fun drop() {
         generation++
         heart.down()
+        Scrobbles.unlinked()
         heartToast = null
         spec = null
         synchronized(asked) { asked.clear() }
@@ -1199,6 +1200,7 @@ object Remote : Control {
             everLive = true
             board = hello.board
             Scrobbles.session(hello.has("stateClock"))
+            link?.session?.let { Scrobbles.linked(it, hello.has("playLog")) }
             Firmwares.hello(hello.board, hello.version)
             Lyrics.session()
             dapLyrics.session()
@@ -1277,6 +1279,7 @@ object Remote : Control {
             art?.cancel()
             clockOff()
             Lyrics.session()
+            Scrobbles.unlinked()
             phase(Phase.DOWN)
             onDrop?.invoke()
             wake?.drop(ATTEMPT)
