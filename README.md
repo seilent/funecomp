@@ -10,7 +10,7 @@ the device as the Now Playing backdrop.
 2. Pair the phone from its Bluetooth settings and confirm the code on both screens.
 3. Open funeCOMP: it shows Connection until the device is linked. Pick the device under DEVICE.
 
-Artist art sources (TheAudioDB, fanart.tv with a key, YouTube, Discogs, Deezer) and lyrics sources (LRCLIB, NetEase) are on by default: Home > Online.
+Artist art sources (TheAudioDB, fanart.tv with a key, YouTube, Discogs, Wikimedia Commons, Deezer) and lyrics sources (LRCLIB, NetEase) are on by default: Home > Online.
 
 Android 12 or newer.
 
@@ -21,9 +21,9 @@ Android 12 or newer.
 ```
 
 Release signing reads `app/keystores/keystore.properties` (`storeFile`, `storePassword`, `keyAlias`, `keyPassword`);
-without it the release APK is unsigned.
+without it the release APK is unsigned. Last.fm scrobbling reads `app/keystores/lastfm.properties` (`lastfm.key`,
+`lastfm.secret`); without it, build with `-PnoLastFm`.
 
 ## License
 
-GPL-3.0-or-later. `third_party/funeos/` (protocol spec and UI tokens) is also MIT. Selawik is under the SIL Open Font
-License 1.1 (`app/src/main/assets/OFL-Selawik.txt`).
+GPL-3.0-or-later. Selawik is under the SIL Open Font License 1.1 (`app/src/main/assets/OFL-Selawik.txt`).
