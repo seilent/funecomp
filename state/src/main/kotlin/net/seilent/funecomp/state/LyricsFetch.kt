@@ -18,7 +18,7 @@ class LyricsFetch {
         data object Off : Show
         data object Blank : Show
         data object None : Show
-        data class Lines(val track: Long, val copy: Copy) : Show
+        data class Lines(val track: Long, val copy: Copy, val held: Boolean = false) : Show
     }
 
     data class Decision(val show: Show, val want: Want?)
@@ -41,12 +41,26 @@ class LyricsFetch {
     private val busy = bounded<Key, Int>(MARKS)
     private val retryAt = bounded<Key, Long>(MARKS)
     private var snap: Long? = null
+    private var seen: Pair<Long, Long?>? = null
+    private var held: Long? = null
+    private var heldAt = 0L
 
     fun session() {
         cache.clear()
         marks.clear()
         busy.clear()
         retryAt.clear()
+        held = null
+    }
+
+    fun hold(track: Long, at: Long) {
+        if (cache[track] == null) return
+        held = track
+        heldAt = at
+    }
+
+    fun unhold() {
+        held = null
     }
 
     fun opened() {
@@ -65,19 +79,34 @@ class LyricsFetch {
             snap = d.lib.snap
             cache.clear()
         }
+        val crc = s.lyricsCrc
+        val last = seen
+        if (last != null && last.first == track && crc != null && last.second != crc) marks.entries.removeAll { it.key.track == track && it.value == Mark.FAILED }
+        seen = track to crc
+        if (held != track) held = null
         if (s.lyrics == false && s.lyricsPlain == false) {
+            held = null
             cache.remove(track)
             return Decision(Show.None, null)
         }
-        val crc = s.lyricsCrc
-        if ((s.lyrics != true && s.lyricsPlain != true) || crc == null) return Decision(Show.Blank, null)
+        if ((s.lyrics != true && s.lyricsPlain != true) || crc == null) {
+            held = null
+            return Decision(Show.Blank, null)
+        }
         val copy = cache[track]
-        if (copy?.crc == crc) return Decision(Show.Lines(track, copy), null)
+        if (copy?.crc == crc) {
+            if (d.playback.receivedAt != heldAt) held = null
+            return Decision(Show.Lines(track, copy, held = held == track), null)
+        }
         val want = Want(track, crc, snap, copy?.crc)
+        val blank = if (held == track && copy != null) Show.Lines(track, copy, held = true) else Show.Blank
         return when (marks[want.key]) {
-            Mark.NONE -> Decision(Show.None, null)
-            Mark.FAILED -> Decision(Show.Blank, null)
-            null -> Decision(Show.Blank, want.takeIf { (retryAt[want.key] ?: 0L) <= now })
+            Mark.NONE -> {
+                held = null
+                Decision(Show.None, null)
+            }
+            Mark.FAILED -> Decision(blank, null)
+            null -> Decision(blank, want.takeIf { (retryAt[want.key] ?: 0L) <= now })
         }
     }
 
@@ -94,6 +123,7 @@ class LyricsFetch {
             is Got.Failed -> null
         }
         if (crc != null && crc != w.crc) marks[key] = Mark.FAILED
+        if (held == w.track && got is Got.Failed && got.code != Err.busy) held = null
         when (got) {
             is Got.Lines -> cache[w.track] = got.copy
             is Got.Have -> {}
@@ -106,6 +136,7 @@ class LyricsFetch {
                         busy.remove(key)
                         retryAt.remove(key)
                         marks[key] = Mark.FAILED
+                        if (held == w.track) held = null
                         return null
                     }
                     busy[key] = n + 1

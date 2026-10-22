@@ -50,7 +50,6 @@ object Groups {
         "outputKinds",
         "rowConfirm",
         "search",
-        "lyricsOffset",
         "playLog",
         "genres",
         "queueAdd",

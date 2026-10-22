@@ -220,7 +220,7 @@ class OldPeerTest {
         assertEquals(20000L, now.positionMs)
         assertEquals(4000103L, now.sentMs)
         assertEquals(14, Feature.stateClock)
-        assertEquals(32767L, Groups.all)
+        assertEquals(32767L or (1L shl Feature.lyricsOffset), Groups.all)
     }
 
     @Test
@@ -372,8 +372,9 @@ class OldPeerTest {
         )
         assertArrayEquals(body("playlog_get_reply"), log.encode())
 
-        for (f in listOf(Feature.lyricsOffset, Feature.playLog, Feature.genres, Feature.queueAdd)) assertEquals(0L, Groups.all and (1L shl f))
-        assertEquals(32767L, Groups.all)
+        for (f in listOf(Feature.playLog, Feature.genres, Feature.queueAdd)) assertEquals(0L, Groups.all and (1L shl f))
+        assertEquals(Groups.members.keys.filter { it !in Groups.unserved }.fold(0L) { m, g -> m or (1L shl Groups.bit(g)!!) }, Groups.all)
+        assertTrue(Groups.allowed(Msg.LYR_OFFSET, Groups.all))
     }
 
     @Test

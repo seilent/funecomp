@@ -74,7 +74,9 @@ class InboundTest {
         assertTrue(Groups.allowed(Msg.SET, Groups.mask("settings")))
         assertFalse(Groups.allowed(Msg.EQ_SET, Groups.mask("settings")))
         assertTrue(Groups.allowed(Msg.IMG_DATA, Groups.all))
-        assertEquals(32767L, Groups.all)
+        assertEquals(Groups.members.keys.filter { it !in Groups.unserved }.fold(0L) { m, g -> m or (1L shl Groups.bit(g)!!) }, Groups.all)
+        assertTrue(Groups.allowed(Msg.LYR_OFFSET, Groups.all))
+        for (f in Feature.eqSlots..Feature.search) assertEquals(0L, Groups.all and (1L shl f))
     }
 
     @Test

@@ -44,6 +44,18 @@ class DapLyrics(
         poke()
     }
 
+    fun offsetSet(track: Long) {
+        val d = device()
+        if (d.playback.state.track != track) return
+        synchronized(fetch) { fetch.hold(track, d.playback.receivedAt) }
+        poke()
+    }
+
+    fun unhold() {
+        synchronized(fetch) { fetch.unhold() }
+        poke()
+    }
+
     fun poke() = exec.execute { pump() }
 
     private fun pump() {

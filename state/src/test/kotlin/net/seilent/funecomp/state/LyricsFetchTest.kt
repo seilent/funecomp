@@ -68,11 +68,14 @@ class LyricsFetchTest {
             assertNull(f.done(w, LyricsFetch.Got.Failed(code), 0))
             assertEquals("$code", LyricsFetch.Decision(LyricsFetch.Show.Blank, null), f.decide(device(), 0))
             assertEquals(LyricsFetch.Want(8, 100, 4, null), f.decide(device(track = 8), 0).want)
-            assertEquals(LyricsFetch.Want(7, 101, 4, null), f.decide(device(crc = 101), 0).want)
+            assertNull(f.decide(device(), 0).want)
             assertEquals(LyricsFetch.Want(7, 100, 5, null), f.decide(device(snap = 5), 0).want)
             assertNull(f.decide(device(snap = 4), 0).want)
             f.opened()
             assertEquals(w, f.decide(device(snap = 4), 0).want)
+            f.done(w, LyricsFetch.Got.Failed(code), 0)
+            assertEquals(LyricsFetch.Want(7, 101, 4, null), f.decide(device(crc = 101), 0).want)
+            assertEquals(w, f.decide(device(), 0).want)
         }
     }
 
@@ -139,10 +142,10 @@ class LyricsFetchTest {
     @Test
     fun marksKeepTheLast64Keys() {
         val f = LyricsFetch()
-        for (c in 1L..LyricsFetch.MARKS + 1L) f.done(f.decide(device(crc = c), 0).want!!, LyricsFetch.Got.Failed(Err.staleRev), 0)
-        assertEquals(LyricsFetch.Want(7, 1, 4, null), f.decide(device(crc = 1), 0).want)
-        assertNull(f.decide(device(crc = LyricsFetch.MARKS + 1L), 0).want)
-        assertNull(f.decide(device(crc = 3), 0).want)
+        for (t in 1L..LyricsFetch.MARKS + 1L) f.done(f.decide(device(track = t), 0).want!!, LyricsFetch.Got.Failed(Err.staleRev), 0)
+        assertEquals(LyricsFetch.Want(1, 100, 4, null), f.decide(device(track = 1), 0).want)
+        assertNull(f.decide(device(track = LyricsFetch.MARKS + 1L), 0).want)
+        assertNull(f.decide(device(track = 3), 0).want)
     }
 
     @Test
@@ -151,6 +154,155 @@ class LyricsFetchTest {
         for (t in 1L..9L) f.done(f.decide(device(track = t), 0).want!!, LyricsFetch.Got.Lines(copy), 0)
         assertEquals(LyricsFetch.Want(1, 100, 4, null), f.decide(device(track = 1), 0).want)
         for (t in 3L..9L) assertEquals(LyricsFetch.Show.Lines(t, copy), f.decide(device(track = t), 0).show)
+    }
+
+    private fun at(crc: Long?, ms: Long, lyrics: Boolean? = true, plain: Boolean? = false, track: Long = 7) =
+        DeviceState(hello()).withState(State(track = track, lyrics = lyrics, lyricsPlain = plain, lyricsCrc = crc, snapRev = 4), ms)
+
+    private fun lines(crc: Long) = LyricsFetch.Copy(crc, Enums.LyricsKind.synced, listOf(LyrLine(crc, "l$crc")))
+
+    @Test
+    fun aRevisitedCrcRefetchesAfterAMismatchedReply() {
+        val f = LyricsFetch()
+        f.done(f.decide(device(crc = 0), 0).want!!, LyricsFetch.Got.Lines(lines(0)), 0)
+        val c1 = f.decide(device(crc = 1), 0).want!!
+        f.done(c1, LyricsFetch.Got.Lines(lines(2)), 0)
+        assertNull(f.decide(device(crc = 1), 0).want)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(2)), f.decide(device(crc = 2), 0).show)
+        val again = f.decide(device(crc = 1), 0)
+        assertEquals(LyricsFetch.Want(7, 1, 4, 2), again.want)
+        f.done(again.want!!, LyricsFetch.Got.Lines(lines(1)), 0)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(1)), f.decide(device(crc = 1), 0).show)
+    }
+
+    @Test
+    fun aStepAndRestoreBeforeTheRefetchThenTheSameStepRefetches() {
+        val f = LyricsFetch()
+        f.done(f.decide(device(crc = 0), 0).want!!, LyricsFetch.Got.Lines(lines(0)), 0)
+        val c1 = f.decide(device(crc = 1), 0).want!!
+        assertEquals(0L, c1.have)
+        f.done(c1, LyricsFetch.Got.Have(0), 0)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(0)), f.decide(device(crc = 0), 0).show)
+        assertEquals(c1, f.decide(device(crc = 1), 0).want)
+    }
+
+    @Test
+    fun aRestartOverflowRefetchesAtTheNextCrc() {
+        val f = LyricsFetch()
+        val c1 = f.decide(device(crc = 1), 0).want!!
+        f.done(c1, LyricsFetch.Got.Failed(null), 0)
+        assertNull(f.decide(device(crc = 1), 0).want)
+        assertEquals(LyricsFetch.Want(7, 2, 4, null), f.decide(device(crc = 2), 0).want)
+    }
+
+    @Test
+    fun aSteadyCrcAnsweredWithAnotherAsksOnce() {
+        val f = LyricsFetch()
+        val c1 = f.decide(device(crc = 1), 0).want!!
+        f.done(c1, LyricsFetch.Got.Lines(lines(2)), 0)
+        for (i in 0 until 3) assertNull(f.decide(device(crc = 1), 0).want)
+    }
+
+    @Test
+    fun noneMarksSurviveACrcMove() {
+        val f = LyricsFetch()
+        f.done(f.decide(device(crc = 1), 0).want!!, LyricsFetch.Got.None(1), 0)
+        f.decide(device(crc = 2), 0)
+        assertEquals(LyricsFetch.Decision(LyricsFetch.Show.None, null), f.decide(device(crc = 1), 0))
+    }
+
+    private fun held(): LyricsFetch {
+        val f = LyricsFetch()
+        f.done(f.decide(at(0, 10), 0).want!!, LyricsFetch.Got.Lines(lines(0)), 0)
+        f.hold(7, 10)
+        return f
+    }
+
+    @Test
+    fun aHoldKeepsTheOldCopyAcrossAMovedCrcForThatTrackOnly() {
+        val f = held()
+        val d = f.decide(at(1, 20), 0)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(0), held = true), d.show)
+        assertEquals(LyricsFetch.Want(7, 1, 4, 0), d.want)
+        f.done(d.want!!, LyricsFetch.Got.Lines(lines(1)), 0)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(1)), f.decide(at(1, 20), 0).show)
+        assertEquals(LyricsFetch.Show.Blank, f.decide(at(2, 30), 0).show)
+        val other = held()
+        assertEquals(LyricsFetch.Show.Blank, other.decide(at(1, 20, track = 8), 0).show)
+        assertEquals(LyricsFetch.Show.Blank, other.decide(at(1, 30), 0).show)
+        val none = LyricsFetch()
+        none.hold(7, 0)
+        assertEquals(LyricsFetch.Show.Blank, none.decide(at(1, 20), 0).show)
+    }
+
+    @Test
+    fun aHoldEndsOnTheCachedCrcFromANewerState() {
+        val f = held()
+        assertEquals(LyricsFetch.Show.Lines(7, lines(0), held = true), f.decide(at(0, 10), 0).show)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(0), held = true), f.decide(at(1, 20), 0).show)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(0)), f.decide(at(0, 30), 0).show)
+        assertEquals(LyricsFetch.Show.Blank, f.decide(at(1, 40), 0).show)
+    }
+
+    @Test
+    fun aRefetchForAnOlderCrcKeepsTheHoldOfTheNextStep() {
+        val f = held()
+        val w1 = f.decide(at(1, 20), 0).want!!
+        f.hold(7, 20)
+        f.done(w1, LyricsFetch.Got.Lines(lines(1)), 0)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(1), held = true), f.decide(at(1, 20), 0).show)
+        val d = f.decide(at(2, 30), 0)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(1), held = true), d.show)
+        assertEquals(LyricsFetch.Want(7, 2, 4, 1), d.want)
+        f.done(d.want!!, LyricsFetch.Got.Lines(lines(2)), 0)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(2)), f.decide(at(2, 30), 0).show)
+        assertEquals(LyricsFetch.Show.Blank, f.decide(at(3, 40), 0).show)
+    }
+
+    @Test
+    fun aHoldEndsOnFailedTrackChangeOrUnholdButNotOnAMismatch() {
+        val f = held()
+        val w = f.decide(at(1, 20), 0).want!!
+        f.done(w, LyricsFetch.Got.Lines(lines(2)), 0)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(2), held = true), f.decide(at(1, 20), 0).show)
+        val w3 = f.decide(at(3, 30), 0).want!!
+        f.done(w3, LyricsFetch.Got.Failed(null), 0)
+        assertEquals(LyricsFetch.Show.Blank, f.decide(at(3, 30), 0).show)
+        val t = held()
+        t.decide(at(5, 20, track = 8), 0)
+        assertEquals(LyricsFetch.Show.Blank, t.decide(at(1, 30), 0).show)
+        val u = held()
+        u.unhold()
+        assertEquals(LyricsFetch.Show.Blank, u.decide(at(1, 20), 0).show)
+        val b = held()
+        val wb = b.decide(at(1, 20), 0).want!!
+        b.done(wb, LyricsFetch.Got.Failed(Err.busy), 0)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(0), held = true), b.decide(at(1, 20), 0).show)
+    }
+
+    @Test
+    fun aBusyLimitOnTheRefetchEndsTheHold() {
+        val f = held()
+        val w = f.decide(at(1, 20), 0).want!!
+        repeat(Proto.backoffMs.size) {
+            f.done(w, LyricsFetch.Got.Failed(Err.busy), 0)
+            assertEquals(LyricsFetch.Show.Lines(7, lines(0), held = true), f.decide(at(1, 20), 0).show)
+        }
+        assertNull(f.done(w, LyricsFetch.Got.Failed(Err.busy), 0))
+        assertEquals(LyricsFetch.Decision(LyricsFetch.Show.Blank, null), f.decide(at(1, 20), 0))
+    }
+
+    @Test
+    fun anEmptiedCueSpanEndsTheHoldAndAStepBackRefetches() {
+        val blank = held()
+        assertEquals(LyricsFetch.Decision(LyricsFetch.Show.Blank, null), blank.decide(at(null, 20, lyrics = null, plain = null), 0))
+        assertEquals(LyricsFetch.Show.Blank, blank.decide(at(1, 30), 0).show)
+        val none = held()
+        assertEquals(LyricsFetch.Decision(LyricsFetch.Show.None, null), none.decide(at(null, 20, lyrics = false, plain = false), 0))
+        val back = none.decide(at(1, 30), 0)
+        assertEquals(LyricsFetch.Want(7, 1, 4, null), back.want)
+        none.done(back.want!!, LyricsFetch.Got.Lines(lines(1)), 0)
+        assertEquals(LyricsFetch.Show.Lines(7, lines(1)), none.decide(at(1, 30), 0).show)
     }
 
     @Test

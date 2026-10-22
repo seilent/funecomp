@@ -13,6 +13,7 @@ import net.seilent.funecomp.proto.ImgListReply
 import net.seilent.funecomp.proto.Lib
 import net.seilent.funecomp.proto.LyrGetReply
 import net.seilent.funecomp.proto.LyrLine
+import net.seilent.funecomp.proto.LyrOffsetReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.PageInfo
 import net.seilent.funecomp.proto.Profile
@@ -223,6 +224,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val started = clock()
     private var lastBattery = -1
     private val lyrs = HashMap<Long, Lyr>()
+    private val offsets = HashMap<Long, Int>()
     private val arts = HashMap<Pair<Long, Int>, Art>()
     private var upd: Upd? = null
     private var favsBusy = faults.favsBusy
@@ -446,6 +448,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Msg.LRC_PUT -> lrcPut(body)
             Msg.LRC_DEL -> lrcDel(body)
             Msg.LYR_GET -> lyrGet(body)
+            Msg.LYR_OFFSET -> lyrOffset(body)
             Msg.UPD_BEGIN -> updBegin(body)
             Msg.UPD_END -> updEnd(body)
             else -> Answer.Fail(Err.unknown, "unknown")
@@ -1126,6 +1129,23 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
         if (offset >= l.lines.size) return Answer.Fail(Err.badValue, "offset over total")
         return lyrPage(id, l, offset.toInt())
+    }
+
+    private fun lyrOffset(b: Node): Answer {
+        val track = b.long(Tags.LyrOffset.track) ?: return Answer.Fail(Err.badValue, "no track")
+        val ms = b.int(Tags.LyrOffset.ms)
+        if (ms != null && ms !in -Proto.lyrOffsetMaxMs..Proto.lyrOffsetMaxMs) return Answer.Fail(Err.badValue, "out of range")
+        if (lib.tracks.isEmpty()) return Answer.Fail(Err.noLibrary, "no library")
+        if (track !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
+        val id = java.lang.Long.toUnsignedString(track)
+        val old = offsets[track] ?: 0
+        if (ms == null) {
+            opts.log("lyr offset read track=$id ms=$old")
+            return Answer.Ok(LyrOffsetReply(old).encode())
+        }
+        if (ms == 0) offsets.remove(track) else offsets[track] = ms
+        opts.log("lyr offset set track=$id ms=$ms")
+        return Answer.Ok(LyrOffsetReply(ms).encode(), state = ms != old && queue.getOrNull(slot) == track)
     }
 
     private fun lyrPage(id: String, l: Lyr, at: Int): Answer {

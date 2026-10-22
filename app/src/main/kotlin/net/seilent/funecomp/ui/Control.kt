@@ -90,6 +90,9 @@ interface Control {
     fun lyricSource(id: String, on: Boolean) {}
     fun lyricMove(id: String, by: Int) {}
     fun nowPlayingShown(on: Boolean) {}
+    fun lyricsOffset(track: Long, ms: Int?, done: (Int?, Int?) -> Unit) = done(-1, null)
+    fun lyricsOffsetEdit(edit: OffsetEdit?) {}
+    fun lyricsHold(track: Long?) {}
     fun reconnect(on: Boolean) {}
     fun wantArt(slot: Int, track: Long, px: Int, album: String?) {}
     fun art(track: Long, px: Int): ImageBitmap? = null

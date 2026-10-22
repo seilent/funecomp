@@ -60,6 +60,7 @@ import net.seilent.funecomp.proto.Bye
 import net.seilent.funecomp.proto.EqPresetReply
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
+import net.seilent.funecomp.proto.LyrOffsetReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Req
@@ -78,6 +79,7 @@ import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LIB_PAGE
+import net.seilent.funecomp.ui.OffsetEdit
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.Preview
@@ -206,6 +208,7 @@ object Remote : Control {
     @Volatile private var thumbs: ThumbWorker? = null
     private val heart = Heart()
     val dapLyrics = DapLyrics({ link?.session }, { device }) { Log.i(TAG, it) }
+    @Volatile private var offset: OffsetEdit? = null
     @Volatile private var heartToast: ((String, String) -> Unit)? = null
     private val main = Handler(Looper.getMainLooper())
 
@@ -425,6 +428,17 @@ object Remote : Control {
     }
 
     override fun nowPlayingShown(on: Boolean) = dapLyrics.shown(on)
+
+    override fun lyricsOffset(track: Long, ms: Int?, done: (Int?, Int?) -> Unit) {
+        var got: Int? = null
+        send(Msg.LYR_OFFSET, Req.lyrOffset(track, ms), "lyr offset ${java.lang.Long.toUnsignedString(track)} ${ms ?: "read"}", ok = { got = LyrOffsetReply.from(it).ms }, done = { code, _ -> done(code, got) })
+    }
+
+    override fun lyricsOffsetEdit(edit: OffsetEdit?) {
+        offset = edit
+    }
+
+    override fun lyricsHold(track: Long?) = if (track == null) dapLyrics.unhold() else dapLyrics.offsetSet(track)
 
     override fun lyricsMode() = app?.let { LyricsMode.on(it) } == true
 
@@ -1009,7 +1023,10 @@ object Remote : Control {
     fun lrcPut(track: Long, libRev: Long?, snapRev: Long?, text: ByteArray, crc: Long, synced: Boolean, source: String, done: (Int?) -> Unit) {
         val s = link?.session ?: return done(-1)
         s.request(Msg.LRC_PUT, Req.lrcPut(track, libRev, text, crc, snapRev)) { r ->
-            if (r is Session.Result.Ok) dapLyrics.dropped(track)
+            if (r is Session.Result.Ok) {
+                dapLyrics.dropped(track)
+                offset?.replaced(track)
+            }
             Log.i(TAG, "lrc put ${java.lang.Long.toUnsignedString(track)} ${text.size} ${if (synced) "synced" else "plain"} $source -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
             done(
                 when (r) {
@@ -1193,6 +1210,8 @@ object Remote : Control {
 
         override fun onPush(type: Int, body: Node) {
             if (!live) return
+            val edit = offset
+            val mark = if (type == Msg.STATE) edit?.mark() else null
             val now = SystemClock.elapsedRealtime()
             var old = device.playback.state
             update {
@@ -1204,6 +1223,7 @@ object Remote : Control {
             if (type != Msg.STATE) return
             dapLyrics.poke()
             val s = State.from(body)
+            edit?.state(s, mark)
             (s.snapRev ?: s.libRev)?.let { r -> if (r != (old.snapRev ?: old.libRev)) thumbs?.rev(r) }
             heartShow(heart.state(s))
             Scrobbles.state(s, System.currentTimeMillis())
@@ -1250,6 +1270,7 @@ object Remote : Control {
         override fun onClosed(reason: String) {
             if (!live) return
             app?.let { PickNotice.clear(it) }
+            offset?.end(false)
             update { it.copy(hello = null) }
             dapLyrics.poke()
             heart.down()

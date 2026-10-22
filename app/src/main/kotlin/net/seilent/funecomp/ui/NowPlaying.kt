@@ -589,7 +589,7 @@ private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: St
     val w = ui.px(ui.w - Tok.edge) - x
     val room = ui.npLyricBottom - ui.npLyricTop
     val surface = Modifier.at(x, ui.px(ui.npLyricTop)).size(w.dp(), ui.px(room).coerceAtLeast(0f).dp())
-    val copy = (lyrics as? LyricsFetch.Show.Lines)?.takeIf { it.track == s.track && it.copy.crc == s.lyricsCrc }?.copy
+    val copy = (lyrics as? LyricsFetch.Show.Lines)?.takeIf { it.track == s.track && (it.held || it.copy.crc == s.lyricsCrc) }?.copy
     val measurer = rememberTextMeasurer()
     val styles = listOf(Roles.npTitle, Roles.npNext, PLAIN).map { textStyle(it, white(1f)) }
     val wraps = remember(copy, s.title, next, w, ui.u) { HashMap<Pair<String, Int>, List<String>>() }
