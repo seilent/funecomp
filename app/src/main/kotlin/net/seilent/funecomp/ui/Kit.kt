@@ -429,7 +429,7 @@ fun SettingsRow(
 }
 
 @Composable
-fun SearchField(text: String, onChange: (String) -> Unit, tag: String, ime: ImeAction, onAction: () -> Unit = {}) {
+fun SearchField(text: String, onChange: (String) -> Unit, tag: String, ime: ImeAction, modifier: Modifier = Modifier, onAction: () -> Unit = {}) {
     val ui = LocalUi.current
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
@@ -441,7 +441,7 @@ fun SearchField(text: String, onChange: (String) -> Unit, tag: String, ime: ImeA
     BasicTextField(
         text,
         onChange,
-        Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(ui.pivotBaseline)).width(ui.px(ui.w - 2 * Tok.hubEdge).dp()).testTag(tag),
+        Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(ui.pivotBaseline)).width(ui.px(ui.w - 2 * Tok.hubEdge).dp()).then(modifier).testTag(tag),
         textStyle = textStyle(Roles.listPrimary, white(Roles.listPrimary.alpha)),
         singleLine = true,
         cursorBrush = SolidColor(Accent),

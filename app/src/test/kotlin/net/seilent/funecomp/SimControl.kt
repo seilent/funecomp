@@ -466,6 +466,10 @@ class SimControl(
             Filter 10: ON PK Fc 5332 Hz Gain -1.1 dB Q 5.75
         """.trimIndent()
 
-        val FULL: AutoEqList by lazy { AutoEqList.build(AutoEqIndex.parse(File("../artist/src/test/resources/autoeq/index.md").readText())) }
+        private val INDEX by lazy { File("../artist/src/test/resources/autoeq/index.md").readText() }
+
+        val FULL: AutoEqList by lazy { AutoEqList.build(AutoEqIndex.parse(INDEX)) }
+
+        val KANJI: AutoEqList by lazy { AutoEqList.build(AutoEqIndex.parse(INDEX.replaceFirst("\n- [", "\n- [漢字 HP1](./crinacle/711%20in-ear/x)\n- ["))) }
     }
 }

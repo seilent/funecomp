@@ -122,6 +122,10 @@ type.overlayLabel.size 7 u
 type.overlayLabel.style Bold style
 type.overlayLabel.case upper case
 type.overlayLabel.alpha 0.6 alpha
+type.jumpExit.size 11 u
+type.jumpExit.style Bold style
+type.jumpExit.case upper case
+type.jumpExit.alpha 0.6 alpha
 type.toastArtist.size 10 u
 type.toastArtist.style Bold style
 type.toastArtist.case upper case
@@ -157,7 +161,7 @@ type.dialogItem.alpha 1.0 alpha
 type.dialogItem.alphaDim 0.6 alpha
 type.watermark.size 14 u
 type.watermark.style Light style
-type.watermark.case lower case
+type.watermark.case mixed case
 type.watermark.alpha 0.08 alpha
 color.bg #111111 rgb
 color.bgElevated #181818 rgb
@@ -294,6 +298,7 @@ settingsPitch 43 u
 settingsLabelBaselineInset 8 u
 settingsSwatch 12 u
 settingsSwatchGap 4 u
+settingsTitlePitch 17 u
 settingsValueFocused 0.85 alpha
 settingsValueDim 0.4 alpha
 eqValueGap 8 u
@@ -353,14 +358,12 @@ overlayGlyphOffset 80 u
 toastHeight 40 u
 toastArtistBaseline 16 u
 toastTitleBaseline 34 u
-jumpCols 5 count
-jumpGap 8 u
-jumpTile 29 u
+jumpCols 4 count
+jumpGap 4 u
 jumpExitCells 2 count
 jumpCells 38 count
-jumpRows 8 count
-jumpGridH 288 u
 jumpTop 16 u
+jumpSearchGlyph 17 u
 kb.fieldTop 16 u
 kb.fieldH 37 u
 kb.fieldPad 10 u
@@ -529,6 +532,7 @@ input.knobDoubleMs 350 ms
 input.knobHoldMs 500 ms
 input.knobHoldLongMs 2000 ms
 input.modeExitHoldMs 2000 ms
+input.searchDebounceMs 150 ms
 power.screenOffDefaultS 300 s
 power.saverDefaultS 30 s
 history.rows 100 count
@@ -551,7 +555,11 @@ eq.freqMax 20000 hz
 eq.freqPoints 61 count
 eq.bands 10 count
 eq.profilesMax 200 count
+eq.importsMax 200 count
+settings.backupsMax 200 count
+settings.backupMaxKib 2048 kib
 eq.fileMaxKib 64 kib
+eq.importMs 2500 ms
 volume.stepDefault 5 pct
 settings.volumeSteps 2,5,10 pct
 settings.saverSteps 10,15,30,60,120,300 s
@@ -592,6 +600,7 @@ large.rowRing 28 u
 large.songIndent 35 u
 large.settingsPitch 49 u
 large.settingsLabelBaselineInset 8 u
+large.settingsTitlePitch 22 u
 large.btStateDrop 41 u
 large.btRowDrop 66 u
 large.toastHeight 52 u
@@ -616,3 +625,7 @@ large.npNextPitch 23 u
 large.npAlbumPitch 31 u
 wifi.levelHigh -60 dbm
 wifi.levelMid -70 dbm
+gesture.swipe 45 u
+gesture.edge 16 u
+gesture.edgeRight 22 u
+gesture.bottom 14 u

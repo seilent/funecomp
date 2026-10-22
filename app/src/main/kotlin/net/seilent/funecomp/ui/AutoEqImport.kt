@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -21,6 +22,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.flow.collectLatest
@@ -103,6 +108,10 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
     }
     var view by remember { mutableStateOf<AutoEqList.View?>(null) }
     val state = rememberLazyListState()
+    val jump = rememberScrollState()
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val field = remember { FocusRequester() }
     LaunchedEffect(list) {
         val l = list ?: return@LaunchedEffect
         snapshotFlow { query.value }.collectLatest { q ->
@@ -133,7 +142,10 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
                     items(shown.items, contentType = { it is AutoEqList.Divider }) { item ->
                         when (item) {
                             is AutoEqList.Divider -> DividerRow(item.letter) {
+                                keyboard?.hide()
+                                focusManager.clearFocus()
                                 letters = shown.letters
+                                jump.dispatchRawDelta(ui.px(JumpLayout.of(ui).offsetFor(JumpLayout.slot(item.letter), ui.h)) - jump.value)
                                 grid = item.letter
                             }
                             is AutoEqList.Hit -> {
@@ -148,12 +160,16 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
                     item(IME_KEY, IME_KEY) { Spacer(Modifier.windowInsetsBottomHeight(ime)) }
                 }
             }
-            SearchField(query.value, { query.value = it }, "aeq.field", ImeAction.Done)
+            SearchField(query.value, { query.value = it }, "aeq.field", ImeAction.Done, modifier = Modifier.focusRequester(field))
         }
         if (list != null) {
-            JumpGrid(letters, grid ?: JUMP_NONE, grid != null, { letter ->
+            JumpGrid(letters, grid ?: JUMP_NONE, grid != null, jump, { letter ->
                 view?.index?.get(AutoEqList.Divider(letter).key)?.let { scope.launch { state.scrollToItem(it) } }
                 grid = null
+            }, {
+                grid = null
+                field.requestFocus()
+                keyboard?.show()
             }) { grid = null }
         }
     }

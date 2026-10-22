@@ -123,6 +123,10 @@ object Tok {
     const val type_overlayLabel_style = "Bold"
     const val type_overlayLabel_case = "upper"
     const val type_overlayLabel_alpha = 0.6f
+    const val type_jumpExit_size = 11f
+    const val type_jumpExit_style = "Bold"
+    const val type_jumpExit_case = "upper"
+    const val type_jumpExit_alpha = 0.6f
     const val type_toastArtist_size = 10f
     const val type_toastArtist_style = "Bold"
     const val type_toastArtist_case = "upper"
@@ -158,7 +162,7 @@ object Tok {
     const val type_dialogItem_alphaDim = 0.6f
     const val type_watermark_size = 14f
     const val type_watermark_style = "Light"
-    const val type_watermark_case = "lower"
+    const val type_watermark_case = "mixed"
     const val type_watermark_alpha = 0.08f
     const val color_bg = 0xFF111111L
     const val color_bgElevated = 0xFF181818L
@@ -295,6 +299,7 @@ object Tok {
     const val settingsLabelBaselineInset = 8f
     const val settingsSwatch = 12f
     const val settingsSwatchGap = 4f
+    const val settingsTitlePitch = 17f
     const val settingsValueFocused = 0.85f
     const val settingsValueDim = 0.4f
     const val eqValueGap = 8f
@@ -354,14 +359,12 @@ object Tok {
     const val toastHeight = 40f
     const val toastArtistBaseline = 16f
     const val toastTitleBaseline = 34f
-    const val jumpCols = 5f
-    const val jumpGap = 8f
-    const val jumpTile = 29f
+    const val jumpCols = 4f
+    const val jumpGap = 4f
     const val jumpExitCells = 2f
     const val jumpCells = 38f
-    const val jumpRows = 8f
-    const val jumpGridH = 288f
     const val jumpTop = 16f
+    const val jumpSearchGlyph = 17f
     const val kb_fieldTop = 16f
     const val kb_fieldH = 37f
     const val kb_fieldPad = 10f
@@ -530,6 +533,7 @@ object Tok {
     const val input_knobHoldMs = 500f
     const val input_knobHoldLongMs = 2000f
     const val input_modeExitHoldMs = 2000f
+    const val input_searchDebounceMs = 150f
     const val power_screenOffDefaultS = 300f
     const val power_saverDefaultS = 30f
     const val history_rows = 100f
@@ -552,7 +556,11 @@ object Tok {
     const val eq_freqPoints = 61f
     const val eq_bands = 10f
     const val eq_profilesMax = 200f
+    const val eq_importsMax = 200f
+    const val settings_backupsMax = 200f
+    const val settings_backupMaxKib = 2048f
     const val eq_fileMaxKib = 64f
+    const val eq_importMs = 2500f
     const val volume_stepDefault = 5f
     const val settings_volumeSteps = "2,5,10"
     const val settings_saverSteps = "10,15,30,60,120,300"
@@ -589,6 +597,7 @@ object Tok {
     const val large_songIndent = 35f
     const val large_settingsPitch = 49f
     const val large_settingsLabelBaselineInset = 8f
+    const val large_settingsTitlePitch = 22f
     const val large_btStateDrop = 41f
     const val large_btRowDrop = 66f
     const val large_toastHeight = 52f
@@ -613,6 +622,10 @@ object Tok {
     const val large_npAlbumPitch = 31f
     const val wifi_levelHigh = -60f
     const val wifi_levelMid = -70f
+    const val gesture_swipe = 45f
+    const val gesture_edge = 16f
+    const val gesture_edgeRight = 22f
+    const val gesture_bottom = 14f
 }
 
 object TokUnit {
@@ -738,6 +751,10 @@ object TokUnit {
     const val type_overlayLabel_style = "style"
     const val type_overlayLabel_case = "case"
     const val type_overlayLabel_alpha = "alpha"
+    const val type_jumpExit_size = "u"
+    const val type_jumpExit_style = "style"
+    const val type_jumpExit_case = "case"
+    const val type_jumpExit_alpha = "alpha"
     const val type_toastArtist_size = "u"
     const val type_toastArtist_style = "style"
     const val type_toastArtist_case = "case"
@@ -910,6 +927,7 @@ object TokUnit {
     const val settingsLabelBaselineInset = "u"
     const val settingsSwatch = "u"
     const val settingsSwatchGap = "u"
+    const val settingsTitlePitch = "u"
     const val settingsValueFocused = "alpha"
     const val settingsValueDim = "alpha"
     const val eqValueGap = "u"
@@ -971,12 +989,10 @@ object TokUnit {
     const val toastTitleBaseline = "u"
     const val jumpCols = "count"
     const val jumpGap = "u"
-    const val jumpTile = "u"
     const val jumpExitCells = "count"
     const val jumpCells = "count"
-    const val jumpRows = "count"
-    const val jumpGridH = "u"
     const val jumpTop = "u"
+    const val jumpSearchGlyph = "u"
     const val kb_fieldTop = "u"
     const val kb_fieldH = "u"
     const val kb_fieldPad = "u"
@@ -1145,6 +1161,7 @@ object TokUnit {
     const val input_knobHoldMs = "ms"
     const val input_knobHoldLongMs = "ms"
     const val input_modeExitHoldMs = "ms"
+    const val input_searchDebounceMs = "ms"
     const val power_screenOffDefaultS = "s"
     const val power_saverDefaultS = "s"
     const val history_rows = "count"
@@ -1167,7 +1184,11 @@ object TokUnit {
     const val eq_freqPoints = "count"
     const val eq_bands = "count"
     const val eq_profilesMax = "count"
+    const val eq_importsMax = "count"
+    const val settings_backupsMax = "count"
+    const val settings_backupMaxKib = "kib"
     const val eq_fileMaxKib = "kib"
+    const val eq_importMs = "ms"
     const val volume_stepDefault = "pct"
     const val settings_volumeSteps = "pct"
     const val settings_saverSteps = "s"
@@ -1204,6 +1225,7 @@ object TokUnit {
     const val large_songIndent = "u"
     const val large_settingsPitch = "u"
     const val large_settingsLabelBaselineInset = "u"
+    const val large_settingsTitlePitch = "u"
     const val large_btStateDrop = "u"
     const val large_btRowDrop = "u"
     const val large_toastHeight = "u"
@@ -1228,4 +1250,8 @@ object TokUnit {
     const val large_npAlbumPitch = "u"
     const val wifi_levelHigh = "dbm"
     const val wifi_levelMid = "dbm"
+    const val gesture_swipe = "u"
+    const val gesture_edge = "u"
+    const val gesture_edgeRight = "u"
+    const val gesture_bottom = "u"
 }

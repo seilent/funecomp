@@ -22,7 +22,7 @@ object TokBoard {
     val v1 = Board(
         u = 1.0f,
         minTextPx = 8f,
-        settings_filterCount = 4f,
+        settings_filterCount = 5f,
         settings_maxVolumeSteps = "5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100",
         settings_powerOnSteps = "0,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100",
         settings_brightnessDefault = 35f,

@@ -40,6 +40,7 @@ import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.ArtistArt
+import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Offer
@@ -887,9 +888,35 @@ val SHOTS = listOf(
         jump(25)
         scrollTo("aeq.div.z")
     },
-    Shot("autoeq-jump", pages = AEQ) {
-        jump(19)
-        rule.onNodeWithTag("aeq.div.s").performClick()
+    Shot("autoeq-jump", pages = AEQ) { jumpOpen() },
+    Shot("autoeq-jump-end", pages = AEQ, prep = { it.autoEq = SimControl.KANJI }) {
+        rule.onNodeWithTag("rows").performScrollToIndex(SimControl.KANJI.items("").indexOfFirst { it is AutoEqList.Divider && it.letter == 37 })
+        settle(300)
+        rule.onNodeWithTag("aeq.div.漢").performClick()
+    },
+    Shot("autoeq-jump-mid", pages = AEQ, held = true) {
+        jumpOpen()
+        settle(300)
+        rule.onNodeWithTag("jump").performTouchInput {
+            down(center)
+            moveBy(Offset(0f, -height * 0.05f))
+            moveBy(Offset(0f, -height * 0.05f))
+        }
+    },
+    Shot("autoeq-jump-press", pages = AEQ, held = true) {
+        jumpOpen()
+        settle(300)
+        rule.onNodeWithTag("jump.19").performTouchInput { down(center) }
+    },
+    Shot("autoeq-jump-search", pages = AEQ, ime = AEQ_IME) {
+        jumpOpen()
+        settle(300)
+        rule.onNodeWithTag("jump.search").performClick()
+    },
+    Shot("autoeq-jump-ime", pages = AEQ, ime = AEQ_IME) {
+        rule.onNodeWithTag("aeq.field").performClick()
+        settle(300)
+        rule.onAllNodesWithTag("aeq.div.#")[0].performClick()
     },
     Shot("autoeq-hd650", pages = AEQ) { type("hd 650") },
     Shot("autoeq-oratory1990", pages = AEQ) { type("oratory1990") },
@@ -1235,8 +1262,17 @@ class Shots {
     fun jump(letter: Int) {
         rule.onAllNodesWithTag("aeq.div.#")[0].performClick()
         settle(300)
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("jump").performScrollToNode(hasTestTag("jump.$letter"))
+        rule.mainClock.autoAdvance = false
+        settle(300)
         rule.onNodeWithTag("jump.$letter").performClick()
         settle(300)
+    }
+
+    fun jumpOpen() {
+        jump(19)
+        rule.onNodeWithTag("aeq.div.s").performClick()
     }
 
     fun scrollTo(tag: String) {

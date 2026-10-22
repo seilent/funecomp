@@ -106,6 +106,7 @@ object Roles {
     val dialogItem = Role(Tok.type_dialogItem_size, weight(Tok.type_dialogItem_style), case(Tok.type_dialogItem_case), Tok.type_dialogItem_alpha, Tok.type_dialogItem_alphaDim)
     val gridCaption = Role(Tok.type_gridCaption_size, weight(Tok.type_gridCaption_style), case(Tok.type_gridCaption_case), Tok.type_gridCaption_alpha)
     val letterGlyph = Role(Tok.type_letterGlyph_size, weight(Tok.type_letterGlyph_style), case(Tok.type_letterGlyph_case), Tok.type_letterGlyph_alpha)
+    val jumpExit = Role(Tok.type_jumpExit_size, weight(Tok.type_jumpExit_style), case(Tok.type_jumpExit_case), Tok.type_jumpExit_alpha)
     val watermark = Role(Tok.type_watermark_size, weight(Tok.type_watermark_style), case(Tok.type_watermark_case), Tok.type_watermark_alpha)
 }
 
