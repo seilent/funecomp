@@ -34,6 +34,7 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.artist.Accounts
+import net.seilent.funecomp.artist.AppPair
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
@@ -467,7 +468,8 @@ private val BLOCKED: List<ArtBlocks.Record> = (0 until 12).map { i ->
 
 private val ORDERED = Sources.NONE.copy(theAudioDb = true, fanartTv = true, deezer = true, order = Sources.order("deezer,commons,theaudiodb"))
 
-private val SCROBBLE = ScrobbleView(Accounts(true, "0123456789abcdef0123456789abcdef", "secret", "seilent", "session", true, "token", "seilent"), queued = 3)
+private val SCROBBLE = ScrobbleView(Accounts(true, "", "", "seilent", "session", true, "token", "seilent"), queued = 3, app = ZEROS)
+private val SCROBBLE_OUT = ScrobbleView(Accounts(true, listenBrainz = true), app = ZEROS)
 
 private val FW = HOME + Page.Settings + Page.Firmware
 
@@ -895,8 +897,22 @@ val SHOTS = listOf(
     Shot("online-lyrics-off", pages = HOME + Page.Online(ONLINE_LYRICS), link = LinkView(Phase.LIVE, "AP80", everLive = true, lyrics = LyricSources(lrclib = false, order = listOf(LyricSources.NETEASE, LyricSources.LRCLIB)))),
     Shot("online-scrobbling", pages = HOME + Page.Online(ONLINE_SCROBBLING)),
     Shot("online-scrobbling-set", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE),
-    Shot("online-scrobbling-failed", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE.copy(accounts = SCROBBLE.accounts.copy(lastFmSession = ""), lastFm = "sign in failed", listenBrainz = "invalid")),
-    Shot("online-scrobbling-entry", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE.copy(accounts = SCROBBLE.accounts.copy(token = ""))) { tapRow("scrobble.token") },
+    Shot("online-scrobbling-failed", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT.copy(lastFm = "sign in failed", listenBrainz = "invalid")),
+    Shot("online-scrobbling-out", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT),
+    Shot("online-scrobbling-waiting", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT.copy(pending = true)),
+    Shot("online-scrobbling-notapproved", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT.copy(pending = true, lastFm = "not approved")),
+    Shot("online-scrobbling-nobrowser", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT.copy(lastFm = "no browser")),
+    Shot("online-scrobbling-tokennobrowser", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT.copy(tokenPage = "no browser")),
+    Shot("online-scrobbling-keyrefused", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE.copy(keyRefused = setOf(Accounts.LAST_FM))),
+    Shot("online-scrobbling-debug", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT.copy(app = AppPair.EMPTY)),
+    Shot("online-scrobbling-account", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { tapRow("scrobble.account") },
+    Shot("online-scrobbling-signout", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { shell ->
+        tapRow("scrobble.account")
+        settle(600)
+        shell.sheet.accept(0)
+    },
+    Shot("online-scrobbling-lbsheet", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { tapRow("scrobble.token") },
+    Shot("online-scrobbling-entry", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT) { tapRow("scrobble.token") },
     Shot("online-scrobbling-plain", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, labels = false),
     Shot("settings-about", pages = HOME + Page.Settings) { about() },
     Shot("settings-about-v1", board = "v1", pages = HOME + Page.Settings) { about() },

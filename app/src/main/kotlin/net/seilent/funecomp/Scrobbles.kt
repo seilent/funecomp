@@ -1,6 +1,9 @@
 package net.seilent.funecomp
 
 import android.content.Context
+import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -8,8 +11,11 @@ import androidx.compose.runtime.setValue
 import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.AppPair
 import net.seilent.funecomp.artist.Http
+import net.seilent.funecomp.artist.LastFm
 import net.seilent.funecomp.artist.Listen
 import net.seilent.funecomp.artist.Scrobbler
+import net.seilent.funecomp.artist.Sent
+import net.seilent.funecomp.artist.SignIn
 import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.state.Play
@@ -24,12 +30,30 @@ object Scrobbles {
     private const val PREFS = "scrobble"
     private const val OPEN = "open.tsv"
     private const val DRAIN_S = 2L
+    private const val PENDING = "pendingToken"
+    private const val PENDING_AT = "pendingAt"
+    private const val PENDING_MS = 60 * 60 * 1000L
+    const val NO_BROWSER = "no browser"
+    const val SIGN_IN_AGAIN = "sign in again"
+    const val LISTEN_BRAINZ_TOKEN_URL = "https://listenbrainz.org/settings/"
     @Volatile private var exec = executor()
     private var context: Context? = null
     private var pair = AppPair.EMPTY
     private var scrobbler: Scrobbler? = null
     private var plays: Plays? = null
     private var dir: File? = null
+    private val lock = Any()
+    private var starting = false
+    private var queuedFor: String? = null
+    private var runningFor: String? = null
+    private var rerun = false
+    private val keyRefused = HashSet<String>()
+    @Volatile private var lastFmError = ""
+    @Volatile private var pendingError: Pair<String, String>? = null
+    @Volatile private var tokenPage = ""
+    internal var now: () -> Long = { System.currentTimeMillis() }
+
+    @Volatile var opener: ((String) -> Boolean)? = null
 
     var view by mutableStateOf(ScrobbleView())
         private set
@@ -42,7 +66,7 @@ object Scrobbles {
         val version = app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0"
         val d = File(app.filesDir, "scrobble")
         dir = d
-        view = ScrobbleView(accounts(app))
+        view = ScrobbleView(accounts(app), app = pair, pending = pending(app) != null)
         val net = http ?: UrlHttp()
         exec.execute {
             val s = Scrobbler(d, net, { accounts(app) }, pair, version, reauth = ::expired) { Log.i(Remote.TAG, it) }
@@ -62,7 +86,23 @@ object Scrobbles {
         scrobbler = null
         plays = null
         dir = null
+        synchronized(lock) {
+            starting = false
+            queuedFor = null
+            runningFor = null
+            rerun = false
+        }
+        keyRefused.clear()
+        lastFmError = ""
+        pendingError = null
+        tokenPage = ""
+        opener = null
+        now = { System.currentTimeMillis() }
         view = ScrobbleView()
+    }
+
+    internal fun idle() {
+        exec.submit {}.get(DRAIN_S, TimeUnit.SECONDS)
     }
 
     fun session(clocked: Boolean) = exec.execute { plays?.session(clocked) }
@@ -76,27 +116,161 @@ object Scrobbles {
             val l = listen(e) ?: continue
             when (e) {
                 is Plays.Event.NowPlaying -> attempt { scrobbler?.nowPlaying(l) }
-                is Plays.Event.Scrobble -> attempt { scrobbler?.add(l) }
+                is Plays.Event.Scrobble -> attempt { note(scrobbler?.add(l)) }
             }
         }
         if (events.isNotEmpty()) refresh()
     }
 
     fun flush() = exec.execute {
-        attempt { scrobbler?.flush() }
+        attempt { note(scrobbler?.flush()) }
         refresh()
     }
 
     fun set(a: Accounts) {
         val c = context ?: return
         val old = accounts(c)
-        store(c, if (a.apiKey != old.apiKey || a.secret != old.secret) a.copy(lastFmUser = "", lastFmSession = "") else a)
+        prefs(c).edit().putBoolean("lastfm", a.lastFm).putBoolean("listenbrainz", a.listenBrainz).commit()
+        view = view.copy(accounts = accounts(c))
         exec.execute {
             if (a.lastFm && !old.lastFm) scrobbler?.enable(Accounts.LAST_FM)
             if (a.listenBrainz && !old.listenBrainz) scrobbler?.enable(Accounts.LISTEN_BRAINZ)
-            attempt { scrobbler?.flush() }
+            attempt { note(scrobbler?.flush()) }
             refresh()
         }
+    }
+
+    fun lastFmStart() {
+        val c = context ?: return
+        if (pair.empty) return
+        pending(c)?.let { t ->
+            open(c, t)
+            return
+        }
+        synchronized(lock) {
+            if (starting) return
+            starting = true
+        }
+        exec.execute {
+            var posted = false
+            try {
+                val t = try {
+                    if (accounts(c).lastFmSession.isNotBlank()) null else token(c)
+                } catch (e: Exception) {
+                    Log.w(Remote.TAG, "lastfm token: ${code(e)}")
+                    lastFmError = signIn(e, false).row
+                    refresh()
+                    null
+                } ?: return@execute
+                posted = Handler(Looper.getMainLooper()).post {
+                    synchronized(lock) { starting = false }
+                    if (opener == null) return@post
+                    prefs(c).edit().putString(PENDING, t).putLong(PENDING_AT, now()).commit()
+                    lastFmError = ""
+                    pendingError = null
+                    open(c, t)
+                }
+            } finally {
+                if (!posted) synchronized(lock) { starting = false }
+            }
+        }
+    }
+
+    private fun token(c: Context): String? {
+        val a = accounts(c)
+        if (a.apiKey.isNotEmpty() || a.secret.isNotEmpty()) store(c, a.copy(apiKey = "", secret = ""))
+        return scrobbler?.lastFmToken()
+    }
+
+    private fun open(c: Context, t: String) {
+        val o = opener ?: return
+        val url = Uri.Builder().scheme("https").authority("www.last.fm").path("/api/auth/")
+            .appendQueryParameter("api_key", pair.key).appendQueryParameter("token", t).build().toString()
+        if (!o(url)) {
+            dropPending(c)
+            lastFmError = NO_BROWSER
+        }
+        exec.execute { refresh() }
+    }
+
+    fun resumed() {
+        val c = context ?: return
+        val t = pending(c)
+        if (t != null) lastFmExchange(t) else exec.execute { refresh() }
+    }
+
+    fun lastFmExchange(expected: String) {
+        synchronized(lock) {
+            if (queuedFor == expected) return
+            if (runningFor == expected) {
+                rerun = true
+                return
+            }
+            queuedFor = expected
+        }
+        exec.execute { exchange(expected) }
+    }
+
+    private fun exchange(expected: String) {
+        synchronized(lock) {
+            queuedFor = null
+            runningFor = expected
+            rerun = false
+        }
+        val c = context
+        try {
+            if (c == null || pending(c) != expected) return
+            val (name, key) = try {
+                scrobbler?.lastFmSession(expected) ?: return
+            } catch (e: Exception) {
+                Log.w(Remote.TAG, "lastfm session: ${code(e)}")
+                val r = signIn(e, true)
+                if (pending(c) == expected) {
+                    if (r.keeps) {
+                        pendingError = expected to r.row
+                    } else {
+                        dropPending(c)
+                        lastFmError = r.row
+                    }
+                }
+                return
+            }
+            store(c, accounts(c).copy(lastFmUser = name, lastFmSession = key))
+            dropPending(c)
+            keyRefused -= Accounts.LAST_FM
+            lastFmError = ""
+            attempt { note(scrobbler?.flush()) }
+        } finally {
+            val again = synchronized(lock) {
+                runningFor = null
+                rerun.also { rerun = false }
+            }
+            refresh()
+            if (again && c != null && pending(c) == expected) lastFmExchange(expected)
+        }
+    }
+
+    fun signOut(service: String) {
+        val c = context ?: return
+        exec.execute {
+            val e = prefs(c).edit()
+            if (service == Accounts.LAST_FM) {
+                listOf("lastfmUser", "lastfmSession", "apiKey", "secret", PENDING, PENDING_AT).forEach { e.remove(it) }
+                lastFmError = ""
+                pendingError = null
+            } else {
+                listOf("token", "listenbrainzUser").forEach { e.remove(it) }
+            }
+            e.commit()
+            keyRefused -= service
+            refresh(listenBrainz = if (service == Accounts.LISTEN_BRAINZ) "" else null)
+        }
+    }
+
+    fun listenBrainzOpen() {
+        val o = opener ?: return
+        tokenPage = if (o(LISTEN_BRAINZ_TOKEN_URL)) "" else NO_BROWSER
+        exec.execute { refresh() }
     }
 
     fun listenBrainzToken(token: String) {
@@ -109,7 +283,7 @@ object Scrobbles {
                     "invalid"
                 } else {
                     store(c, accounts(c).copy(token = token.trim(), listenBrainzUser = user))
-                    attempt { scrobbler?.flush() }
+                    attempt { note(scrobbler?.flush()) }
                     ""
                 }
             } catch (e: IOException) {
@@ -123,8 +297,38 @@ object Scrobbles {
     private fun expired(service: String) {
         val c = context ?: return
         val a = accounts(c)
-        store(c, if (service == Accounts.LAST_FM) a.copy(lastFmSession = "") else a.copy(token = ""))
+        if (service == Accounts.LAST_FM) {
+            store(c, a.copy(lastFmSession = "", apiKey = "", secret = ""))
+            lastFmError = SIGN_IN_AGAIN
+        } else {
+            store(c, a.copy(token = ""))
+        }
         Log.w(Remote.TAG, "scrobble $service credentials refused")
+    }
+
+    private fun note(r: Map<String, Sent>?) {
+        for ((service, sent) in r ?: return) {
+            if (sent == Sent.KEY) keyRefused += service
+            if (sent == Sent.OK) keyRefused -= service
+        }
+    }
+
+    private fun code(e: Exception) = (e as? LastFm.Failed)?.let { "error ${it.code ?: "none"}" } ?: "io"
+
+    private fun signIn(e: Exception, session: Boolean) = (e as? IOException)?.let { LastFm.signIn(it, session) } ?: SignIn.FAILED
+
+    private fun pending(c: Context): String? {
+        val p = prefs(c)
+        val t = p.getString(PENDING, null) ?: return null
+        val age = now() - p.getLong(PENDING_AT, 0)
+        if (age in 0 until PENDING_MS) return t
+        dropPending(c)
+        return null
+    }
+
+    private fun dropPending(c: Context) {
+        prefs(c).edit().remove(PENDING).remove(PENDING_AT).commit()
+        pendingError = null
     }
 
     private fun listen(e: Plays.Event): Listen? {
@@ -152,11 +356,12 @@ object Scrobbles {
         tmp.renameTo(f)
     }
 
-    private fun refresh(lastFm: String? = null, listenBrainz: String? = null) {
+    private fun refresh(listenBrainz: String? = null) {
         val c = context ?: return
         val queued = scrobbler?.pending() ?: 0
-        val v = view
-        view = ScrobbleView(accounts(c), queued, lastFm ?: v.lastFm, listenBrainz ?: v.listenBrainz)
+        val t = pending(c)
+        val lastFm = if (t != null) pendingError?.takeIf { it.first == t }?.second.orEmpty() else lastFmError
+        view = ScrobbleView(accounts(c), queued, lastFm, listenBrainz ?: view.listenBrainz, pair, t != null, keyRefused.toSet(), tokenPage)
     }
 
     private fun executor() = Executors.newSingleThreadExecutor { Thread(it, "scrobble").apply { isDaemon = true } }

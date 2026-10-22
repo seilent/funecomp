@@ -21,6 +21,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -142,6 +143,12 @@ class Main : ComponentActivity() {
         }
 
         override fun scrobble(accounts: Accounts) = Scrobbles.set(accounts)
+
+        override fun lastFmSignIn() = Scrobbles.lastFmStart()
+
+        override fun signOut(service: String) = Scrobbles.signOut(service)
+
+        override fun openListenBrainzToken() = Scrobbles.listenBrainzOpen()
 
         override fun listenBrainzToken(token: String) = Scrobbles.listenBrainzToken(token)
 
@@ -276,17 +283,20 @@ class Main : ComponentActivity() {
         Remote.pickAsk = { target ->
             (!shell.gated && !shell.sheet.shown && shell.pick == null && !askBattery() && !reconnectAsk).also { if (it) shell.pick = target }
         }
+        Scrobbles.opener = { browse(it) }
         launched()
     }
 
     override fun onResume() {
         super.onResume()
         battery = readBattery()
+        Scrobbles.resumed()
     }
 
     override fun onStop() {
         super.onStop()
         Remote.pickAsk = null
+        Scrobbles.opener = null
         if (!isChangingConfigurations) Remote.shown(false)
     }
 
@@ -294,6 +304,13 @@ class Main : ComponentActivity() {
         if (!launch) return
         launch = false
         startLink()
+    }
+
+    private fun browse(url: String): Boolean = try {
+        CustomTabsIntent.Builder().build().launchUrl(this, Uri.parse(url))
+        true
+    } catch (_: ActivityNotFoundException) {
+        false
     }
 
     private fun readBattery(): Battery = when {

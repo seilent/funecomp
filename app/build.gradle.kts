@@ -89,6 +89,7 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.activity.compose)
     implementation(libs.lifecycle.runtime.compose)
+    implementation(libs.androidx.browser)
     testImplementation(libs.junit)
     testImplementation(project(":sim"))
     testImplementation(libs.robolectric)
