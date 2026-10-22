@@ -35,4 +35,5 @@ system	usbMode	draft	USB MODE	storage,dock,audio	STORAGE,DOCK,AUDIO	-	-
 system	dateTime	draft	DATE/TIME	-	-	-	-
 system	wifi	info	WI-FI	-	-	-	readOnly,boardOnly
 system	companion	toggle	PHONE APP	off,on	OFF,ON	-	readOnly,boardOnly
+system	scrobble	choice	SCROBBLE	phone,card,off	PHONE,CARD LOG,OFF	-	-
 system	about	info	ABOUT	-	-	-	readOnly

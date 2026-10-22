@@ -177,7 +177,7 @@ class DeviceTest {
             assertEquals(listOf("off", "on"), row.values)
             assertEquals(listOf("OFF", "ON"), row.words)
             assertTrue(row.flags.isEmpty())
-            assertEquals(if (b == "v1") 38 else 40, d.rows.size)
+            assertEquals(if (b == "v1") 39 else 41, d.rows.size)
             val out = Sink()
             d.greet(out)
             assertTrue("saverLyrics=off" in Settings.from(out.of(Msg.SETTINGS).single()).text.lines())

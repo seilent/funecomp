@@ -77,6 +77,7 @@ class InboundTest {
         assertEquals(Groups.members.keys.filter { it !in Groups.unserved }.fold(0L) { m, g -> m or (1L shl Groups.bit(g)!!) }, Groups.all)
         assertTrue(Groups.allowed(Msg.LYR_OFFSET, Groups.all))
         for (f in Feature.eqSlots..Feature.search) assertEquals(0L, Groups.all and (1L shl f))
+        assertEquals(32767L or (1L shl 21) or (7L shl 23), Groups.all)
     }
 
     @Test

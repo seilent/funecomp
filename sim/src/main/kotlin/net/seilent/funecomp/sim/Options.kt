@@ -1,6 +1,7 @@
 package net.seilent.funecomp.sim
 
 import net.seilent.funecomp.proto.Groups
+import net.seilent.funecomp.proto.PlayEntry
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
@@ -55,6 +56,8 @@ class Faults(specs: List<String>) {
     val eqHidden = HashSet<String>()
     var lyricsLate: Long? = null
     val lyricsAbsent = HashSet<String>()
+    var newlog = false
+    val dropAck = java.util.concurrent.atomic.AtomicBoolean(false)
 
     init {
         for (spec in specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }) {
@@ -112,6 +115,8 @@ class Faults(specs: List<String>) {
                 "eq-hidden" -> eqHidden += v
                 "lyrics-late" -> lyricsLate = v.toLong()
                 "lyrics-absent" -> lyricsAbsent += v
+                "newlog" -> newlog = true
+                "drop-ack" -> dropAck.set(true)
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')
@@ -150,6 +155,11 @@ class Options(
     val rescanLib: Library? = null,
     val version: String? = null,
     val lyrOffsets: Map<Long, Int> = emptyMap(),
+    val playLog: List<PlayEntry> = emptyList(),
+    val playLogId: Long = PlayLog.ID,
+    val playLogCap: Int = PlayLog.CAP,
+    val wall: () -> Long = { System.currentTimeMillis() },
+    val deviceClock: (() -> Long)? = null,
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
@@ -159,7 +169,7 @@ class Options(
         if (minor < 8) faults.features = faults.features and Groups.mask("artPick").inv()
         if (minor < 9) faults.features = faults.features and Groups.mask("imgOrigin").inv()
         if (minor < 10) faults.features = faults.features and Groups.mask("stateClock").inv()
-        if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset").inv()
+        if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd").inv()
     }
 
     companion object {

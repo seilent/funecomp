@@ -124,6 +124,7 @@ class Conn(
             closed = reason
         }
         answered(null, "closed")
+        device.unlinked(this)
         try {
             closer()
         } catch (_: Exception) {
@@ -222,6 +223,7 @@ class Conn(
         faults.fail[f.type]?.let { return error(f, it, "fault $it") }
         if ((faults.busy[f.type]?.getAndDecrement() ?: 0) > 0) return error(f, Err.busy, "busy")
         if (f.type == Msg.QUEUE_OP && body.int(Tags.QueueOp.cmd) == Enums.QueueCmd.page && (body.long(Tags.QueueOp.offset) ?: 0L) in faults.busyPages) return error(f, Err.busy, "busy")
+        if (f.type == Msg.PLAYLOG_ACK && faults.dropAck.compareAndSet(true, false)) return close("drop-ack")
         val at = clock()
         if (faults.stallMs > 0) Thread.sleep(faults.stallMs)
         if (faults.muteCmd[f.type]?.let { it == body.int(Tags.QueueOp.cmd) } != false && (faults.mute[f.type]?.getAndDecrement() ?: 0) > 0) {
@@ -260,6 +262,7 @@ class Conn(
         if (closed != null) return
         if (h.major != faults.major) return bye(Enums.ByeReason.version, faults.major, Proto.minor)
         if (faults.bye == Enums.ByeReason.refused) return bye(Enums.ByeReason.refused)
+        device.linked(this, appFeatures)
         reply(f, device.helloReply().encode())
         helloDone = true
         device.greet(this, at)

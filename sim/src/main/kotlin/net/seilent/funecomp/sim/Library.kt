@@ -15,9 +15,13 @@ class Track(
     val folder: String,
     val file: String,
     val mbids: List<String> = artists.map { "" },
+    val genre: String = "",
+    val no: Int = 1,
 ) {
     fun mbidOf(name: String): String? = mbids.getOrNull(artists.indexOf(name))?.takeIf { it.isNotEmpty() }
 }
+
+private class Album(val artist: String, val album: String, val genre: String, val titles: List<String>)
 
 class Library(val tracks: List<Track>) {
     val byId: Map<Long, Track> = tracks.associateBy { it.id }
@@ -63,8 +67,18 @@ class Library(val tracks: List<Track>) {
             }
         }
         Enums.View.favorites -> favorites.mapNotNull { byId[it] }.map { trackRow(it) }
+        Enums.View.genres -> if (parent.isEmpty()) {
+            genres().map { g ->
+                val ts = tracks.filter { it.genre == g }
+                LibRow(g, ts.size.toLong(), ts[0].id, g)
+            }
+        } else {
+            tracks.filter { it.genre == parent }.map { trackRow(it) }.takeIf { it.isNotEmpty() }
+        }
         else -> null
     }
+
+    private fun genres(): List<String> = tracks.map { it.genre }.filter { it.isNotEmpty() }.distinct().sortedWith { a, b -> folderCompare(a, b) }
 
     private fun under(parent: String): List<Track> {
         val prefix = if (parent.isEmpty()) "" else "$parent/"
@@ -89,6 +103,7 @@ class Library(val tracks: List<Track>) {
         Enums.View.folders -> folderOrder(parent).map { it.id }.takeIf { parent.isEmpty() || it.isNotEmpty() }
         Enums.View.favorites -> favorites.toList()
         Enums.View.playlists -> emptyList()
+        Enums.View.genres -> if (parent.isEmpty()) emptyList() else tracks.filter { it.genre == parent }.map { it.id }.takeIf { it.isNotEmpty() }
         else -> null
     }
 
@@ -122,11 +137,11 @@ class Library(val tracks: List<Track>) {
             return text.replace(" / ", "; ").replace(", ", "; ").split("; ").map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         }
 
-        fun track(artist: String, album: String, title: String, no: Int, durationMs: Long, albumArtist: String = artist, mbids: List<String> = emptyList()): Track {
+        fun track(artist: String, album: String, title: String, no: Int, durationMs: Long, albumArtist: String = artist, mbids: List<String> = emptyList(), genre: String = ""): Track {
             val folder = "${albumArtist.trim()}/${album.trim()}"
             val file = "%02d %s.flac".format(no, title)
             val names = split(artist, albumArtist)
-            return Track(hash64("$folder/$file"), artist, names, album, albumArtist, title, durationMs, folder, file, names.indices.map { mbids.getOrElse(it) { "" }.trim() })
+            return Track(hash64("$folder/$file"), artist, names, album, albumArtist, title, durationMs, folder, file, names.indices.map { mbids.getOrElse(it) { "" }.trim() }, genre.trim(), no)
         }
 
         fun load(f: File): Library {
@@ -136,30 +151,30 @@ class Library(val tracks: List<Track>) {
                 require(p.size >= 4) { "${f.name}: needs artist, album, title, duration ms: $line" }
                 val albumArtist = p.getOrElse(4) { p[0] }.ifEmpty { p[0] }
                 val n = no.merge(albumArtist.trim() to p[1].trim(), 1, Int::plus)!!
-                track(p[0], p[1], p[2], n, p[3].toLong(), albumArtist, p.getOrNull(5)?.split(';').orEmpty())
+                track(p[0], p[1], p[2], n, p[3].toLong(), albumArtist, p.getOrNull(5)?.split(';').orEmpty(), p.getOrElse(6) { "" })
             }
             return Library(tracks)
         }
 
         fun synthetic(): Library {
             val albums = listOf(
-                Triple("Utada Hikaru", "First Love", listOf("Automatic", "Movin' on without you", "In My Room", "First Love", "Never Let Go")),
-                Triple("Utada Hikaru", "BADモード", listOf("BADモード", "君に夢中", "One Last Kiss", "PINK BLOOD")),
-                Triple("宇多田ヒカル", "初恋", listOf("Play A Love Song", "あなた", "初恋", "誓い")),
-                Triple("Ichiko Aoba", "Windswept Adan", listOf("Prologue", "Porcelain", "Pilgrimage", "Sagu Palm's Song")),
-                Triple("きのこ帝国", "フェイクワールドワンダーランド", listOf("東京", "クロノスタシス", "ラストデイ")),
-                Triple("Sigur Rós", "Ágætis byrjun", listOf("Svefn-g-englar", "Starálfur", "Flugufrelsarinn", "Ný batterí")),
-                Triple("Yorushika", "だから僕は音楽を辞めた", listOf("八月、某、月明かり", "藍二乗", "爆弾魔")),
-                Triple("坂本龍一", "async", listOf("andata", "disintegration", "solari", "ZURE")),
+                Album("Utada Hikaru", "First Love", "J-Pop", listOf("Automatic", "Movin' on without you", "In My Room", "First Love", "Never Let Go")),
+                Album("Utada Hikaru", "BADモード", "J-Pop", listOf("BADモード", "君に夢中", "One Last Kiss", "PINK BLOOD")),
+                Album("宇多田ヒカル", "初恋", "J-pop", listOf("Play A Love Song", "あなた", "初恋", "誓い")),
+                Album("Ichiko Aoba", "Windswept Adan", "Folk", listOf("Prologue", "Porcelain", "Pilgrimage", "Sagu Palm's Song")),
+                Album("きのこ帝国", "フェイクワールドワンダーランド", "Rock", listOf("東京", "クロノスタシス", "ラストデイ")),
+                Album("Sigur Rós", "Ágætis byrjun", "Post-Rock", listOf("Svefn-g-englar", "Starálfur", "Flugufrelsarinn", "Ný batterí")),
+                Album("Yorushika", "だから僕は音楽を辞めた", "Rock", listOf("八月、某、月明かり", "藍二乗", "爆弾魔")),
+                Album("坂本龍一", "async", "Contemporary Classical and Electronic Ambient", listOf("andata", "disintegration", "solari", "ZURE")),
             )
             val out = ArrayList<Track>()
             var n = 0
-            for ((artist, album, titles) in albums) {
-                titles.forEachIndexed { i, t -> out += track(artist, album, t, i + 1, 180_000L + 17_000L * ((n++ * 7) % 11)) }
+            for (a in albums) {
+                a.titles.forEachIndexed { i, t -> out += track(a.artist, a.album, t, i + 1, 180_000L + 17_000L * ((n++ * 7) % 11), genre = a.genre) }
             }
-            out += track("Utada Hikaru, Skrillex", "Hikari", "Face My Fears", 1, 220_000, "Utada Hikaru")
-            out += track("Yorushika / n-buna", "盗作", "春ひさぎ", 1, 240_000, "Yorushika")
-            out += track("Kendrick Lamar; SZA", "Black Panther", "All The Stars", 1, 232_000, "Various Artists")
+            out += track("Utada Hikaru, Skrillex", "Hikari", "Face My Fears", 1, 220_000, "Utada Hikaru", genre = "J-Pop")
+            out += track("Yorushika / n-buna", "盗作", "春ひさぎ", 1, 240_000, "Yorushika", genre = "Rock")
+            out += track("Kendrick Lamar; SZA", "Black Panther", "All The Stars", 1, 232_000, "Various Artists", genre = "Hip-Hop")
             return Library(out)
         }
     }

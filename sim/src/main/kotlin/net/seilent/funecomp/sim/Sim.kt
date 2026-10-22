@@ -13,7 +13,7 @@ import java.util.concurrent.CompletableFuture
 
 class Sim(private val opts: Options, lib: Library = Library.synthetic()) {
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 }
-    val device = Device(opts, lib, clock)
+    val device = Device(opts, lib, opts.deviceClock ?: clock)
     private val connects = ArrayDeque<Long>()
     private var server: ServerSocket? = null
     private var ids = 0

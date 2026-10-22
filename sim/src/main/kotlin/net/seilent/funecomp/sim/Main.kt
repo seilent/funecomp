@@ -8,7 +8,8 @@ import kotlin.system.exitProcess
 private const val USAGE = "usage: sim --board ap80|v1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
-    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... [--quiet]"
+    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... " +
+    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -35,6 +36,9 @@ fun main(args: Array<String>) {
     var rescanLib: String? = null
     var version: String? = null
     val lyrOffsets = HashMap<Long, Int>()
+    var playLog: String? = null
+    var playLogId: String? = null
+    var playLogCap: Int? = null
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -65,6 +69,9 @@ fun main(args: Array<String>) {
             "--rescan-lib" -> rescanLib = value()
             "--version" -> version = value()
             "--lyr-offset" -> value().let { lyrOffsets[it.substringBefore(':').toULong().toLong()] = it.substringAfter(':').toInt() }
+            "--playlog" -> playLog = value()
+            "--playlog-id" -> playLogId = value()
+            "--playlog-cap" -> playLogCap = value().toInt()
             "--quiet" -> quiet = true
             else -> {
                 System.err.println(USAGE)
@@ -106,6 +113,9 @@ fun main(args: Array<String>) {
         rescanLib?.let { Library.load(File(it)) },
         version,
         lyrOffsets,
+        playLog?.let { PlayLog.parse(File(it)) } ?: base.playLog,
+        playLogId?.let { java.lang.Long.parseUnsignedLong(it.removePrefix("0x"), 16) } ?: base.playLogId,
+        playLogCap ?: base.playLogCap,
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {
