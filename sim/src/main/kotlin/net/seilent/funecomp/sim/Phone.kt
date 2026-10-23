@@ -96,6 +96,8 @@ class Phone(private val opts: Options, private val clock: () -> Long) {
         return if (opts.receiver && !suspended()) l else null
     }
 
+    fun streaming(): Boolean = playing && current() != null
+
     private fun lateMeta() = faults.phoneLateMeta?.let { now() - lineAt < it } == true
 
     private fun duration(l: PhoneLine): Long {

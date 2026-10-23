@@ -2,6 +2,7 @@ package net.seilent.funecomp
 
 import net.seilent.funecomp.art.ArtWorker
 import net.seilent.funecomp.art.Forward
+import net.seilent.funecomp.art.Pending
 import net.seilent.funecomp.artist.Art
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtPusher
@@ -20,8 +21,10 @@ import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
+import net.seilent.funecomp.sim.PhoneLine
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.LIB_PAGE
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -30,6 +33,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 import java.io.IOException
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
@@ -116,6 +120,9 @@ class ForwardTest {
         onLibGet: (Session) -> Unit = {},
         known: (String, String?) -> Boolean = { _, _ -> true },
         gate: () -> Boolean = { true },
+        pending: Pending? = null,
+        phoneGate: () -> Boolean = { false },
+        cardDown: () -> Boolean = { false },
         upgrades: Forward.Upgrades? = null,
         version: (String) -> Int = { 0 },
         looking: () -> Boolean = { true },
@@ -142,6 +149,9 @@ class ForwardTest {
         marks = marks,
         blocks = blocks,
         cached = known,
+        cardDown = cardDown,
+        pending = pending,
+        phoneGate = phoneGate,
         upgrades = upgrades,
         looking = looking,
         log = log,
@@ -1370,5 +1380,203 @@ class ForwardTest {
         assertTrue("ha" in sim.device.stored.keys)
         assertTrue(records.held("tcp:A").isEmpty())
     }
-}
 
+    private val stream = listOf(
+        PhoneLine("Idol", "YOASOBI", "THE BOOK 3", 213_000, 0, true),
+        PhoneLine("Bling-Bang-Bang-Born", "Creepy Nuts", "Bling-Bang-Bang-Born", 200_000, 0, true),
+    )
+
+    private fun phoneSim(vararg faults: String): Pair<Sim, Session> {
+        val sim = Sim(Options(Board.of("v1"), Faults(faults.toList()), log = { lines += it }, imgDir = tmp.newFolder(), phone = stream, receiver = true), lib(10))
+        sims += sim
+        val s = session(sim.listen(0))
+        waitUntil { device.playback.state.source == Enums.Source.phone }
+        return sim to s
+    }
+
+    private fun waitUntil(ms: Long = 5_000, what: () -> Boolean) {
+        val end = System.nanoTime() + ms * 1_000_000L
+        while (!what() && System.nanoTime() < end) Thread.sleep(10)
+        assertTrue(what())
+    }
+
+    private fun now() = System.nanoTime() / 1_000_000
+
+    private fun pendingFile() = File(tmp.root, "art/pending.txt")
+
+    private fun pending() = Pending(pendingFile())
+
+    private fun phoneForward(
+        looked: Lookups,
+        p: Pending,
+        rule: PushGate.PhoneArtRule,
+        missing: (String) -> Boolean = { false },
+        blocks: Forward.Blocks? = null,
+        cardDown: () -> Boolean = { false },
+    ) = forward(looked, missing = missing, blocks = blocks, gate = { PushGate.open(device, now()) }, pending = p, phoneGate = { PushGate.phoneArt(device, rule) }, cardDown = cardDown)
+
+    private fun transport(s: Session, cmd: Int) = assertTrue(s.call(Msg.TRANSPORT, Req.transport(cmd)) is Session.Result.Ok)
+
+    private fun pause(s: Session) {
+        transport(s, Enums.TransportCmd.pause)
+        waitUntil { device.playback.state.playing == false }
+    }
+
+    private fun begins(sim: Sim) = sim.device.begins.toList()
+
+    @Test
+    fun underPausedOnlyAPhoneArtistIsHeldWhileTheLinePlaysAndPushedAtThePause() {
+        val (sim, s) = phoneSim()
+        val p = pending()
+        val f = phoneForward(Lookups(), p, PushGate.PhoneArtRule.PausedOnly)
+        assertEquals(ArtPusher.Stop.GATE, f.run(s) { true }.stop)
+        assertTrue(begins(sim).isEmpty())
+        assertEquals(listOf("YOASOBI"), p.list().map { it.name })
+        pause(s)
+        f.run(s) { true }
+        assertEquals(listOf("YOASOBI" to Enums.ImgOrigin.phone), begins(sim))
+        assertEquals(setOf("yoasobi"), sim.device.stored.keys)
+        assertTrue(p.list().isEmpty())
+        assertEquals(0, sim.device.imgDuringStream)
+        assertFalse(lines.any { it == "img during stream" })
+    }
+
+    @Test
+    fun underAnyAPhoneArtistIsPushedWhileTheLinePlays() {
+        val (sim, s) = phoneSim()
+        val p = pending()
+        phoneForward(Lookups(), p, PushGate.PhoneArtRule.Any).run(s) { true }
+        assertEquals(true, device.playback.state.playing)
+        assertEquals(listOf("YOASOBI" to Enums.ImgOrigin.phone), begins(sim))
+        assertEquals(setOf("yoasobi"), sim.device.stored.keys)
+        assertTrue(p.list().isEmpty())
+        assertTrue(sim.device.imgDuringStream > 0)
+        assertFalse(lines.any { "rx LIB_GET" in it || "rx QUEUE_OP" in it })
+        assertTrue(lines.any { it == "img during stream" })
+    }
+
+    @Test
+    fun anArtistSkippedWhilePlayingStaysPendingAndIsPushedAtTheNextPause() {
+        val (sim, s) = phoneSim()
+        val p = pending()
+        val f = phoneForward(Lookups(), p, PushGate.PhoneArtRule.PausedOnly)
+        f.run(s) { true }
+        transport(s, Enums.TransportCmd.next)
+        waitUntil { device.playback.state.title == "Bling-Bang-Bang-Born" }
+        f.run(s) { true }
+        assertTrue(begins(sim).isEmpty())
+        assertEquals(listOf("YOASOBI", "Creepy Nuts"), p.list().map { it.name })
+        pause(s)
+        f.run(s) { true }
+        assertEquals(setOf("YOASOBI", "Creepy Nuts"), begins(sim).map { it.first }.toSet())
+        assertEquals(setOf("yoasobi", "creepy nuts"), sim.device.stored.keys)
+        assertTrue(p.list().isEmpty())
+        assertEquals(0, sim.device.imgDuringStream)
+    }
+
+    @Test
+    fun tenClosedGateRunsKeepTheEntryAndARestartKeepsTheSet() {
+        val (sim, s) = phoneSim()
+        val f = phoneForward(Lookups(), pending(), PushGate.PhoneArtRule.PausedOnly)
+        repeat(10) { assertEquals(ArtPusher.Stop.GATE, f.run(s) { true }.stop) }
+        assertEquals("YOASOBI\t\n", pendingFile().readText())
+        val again = pending()
+        assertEquals(listOf("YOASOBI"), again.list().map { it.name })
+        pause(s)
+        phoneForward(Lookups(), again, PushGate.PhoneArtRule.PausedOnly).run(s) { true }
+        assertEquals(listOf("YOASOBI" to Enums.ImgOrigin.phone), begins(sim))
+        assertEquals("", pendingFile().readText())
+    }
+
+    @Test
+    fun anArtistWithNoPhotoLeftLeavesTheSet() {
+        val (sim, s) = phoneSim()
+        val p = pending()
+        phoneForward(Lookups(), p, PushGate.PhoneArtRule.Any, missing = { it == "YOASOBI" }).run(s) { true }
+        assertTrue(p.list().isEmpty())
+        assertTrue(sim.device.stored.isEmpty())
+    }
+
+    @Test
+    fun aNetworkErrorKeepsTheEntry() {
+        val (_, s) = phoneSim()
+        val p = pending()
+        forward(Lookups(), fail = true, gate = { PushGate.open(device, now()) }, pending = p, phoneGate = { PushGate.phoneArt(device, PushGate.PhoneArtRule.Any) }).run(s) { true }
+        assertEquals(listOf("YOASOBI"), p.list().map { it.name })
+    }
+
+    @Test
+    fun thePageExitPushesTheSetThroughTheOrdinaryGate() {
+        val (sim, s) = phoneSim("phone-exit=5000")
+        val p = pending()
+        val f = phoneForward(Lookups(), p, PushGate.PhoneArtRule.PausedOnly)
+        f.run(s) { true }
+        assertEquals(Enums.Source.phone, device.playback.state.source)
+        assertEquals(listOf("YOASOBI"), p.list().map { it.name })
+        assertTrue(begins(sim).isEmpty())
+        waitUntil(10_000) { device.playback.state.output == Enums.Output.wired && device.playback.state.source == Enums.Source.local }
+        waitUntil { PushGate.open(device, now()) }
+        f.run(s) { true }
+        assertEquals("YOASOBI" to Enums.ImgOrigin.phone, begins(sim).first())
+        assertTrue("yoasobi" in sim.device.stored.keys)
+        assertTrue(p.list().isEmpty())
+        assertEquals(0, sim.device.imgDuringStream)
+    }
+
+    @Test
+    fun anAbortedPhonePushStillLetsTheBlockDeletesRun() {
+        val (sim, s) = phoneSim("fail=IMG_BEGIN:${net.seilent.funecomp.proto.gen.Err.noSpace}")
+        val p = pending()
+        val records = ArtBlocks()
+        records.add(ArtBlocks.Block("x", "x", "test", "x", "", "Nobody", 1))
+        phoneForward(Lookups(), p, PushGate.PhoneArtRule.Any, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertEquals(listOf("YOASOBI"), p.list().map { it.name })
+        assertTrue(sim.device.stored.isEmpty())
+        assertTrue(records.pending("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun anEntryWaitsWhileABlockDeleteOnItsResolvedKeyIsPending() {
+        val (sim, s) = phoneSim()
+        val p = pending()
+        val records = ArtBlocks()
+        records.add(ArtBlocks.Block("mb-y", "mb-y", "test", "x", "", "YOASOBI", 1))
+        val b = Forward.Blocks(records, { "tcp:A" }, { n, m -> if (n == "YOASOBI") "mb-y" else m ?: "name:$n" })
+        phoneForward(Lookups(), p, PushGate.PhoneArtRule.Any, blocks = b).run(s) { true }
+        assertTrue(begins(sim).isEmpty())
+        assertEquals(listOf("YOASOBI"), p.list().map { it.name })
+    }
+
+    @Test
+    fun thePlayingArtistGoesBeforeOlderEntries() {
+        pendingFile().apply { parentFile.mkdirs() }.writeText("Creepy Nuts\t\nOld One\t\n")
+        val (sim, s) = phoneSim()
+        phoneForward(Lookups(), pending(), PushGate.PhoneArtRule.Any).run(s) { true }
+        assertEquals(listOf("YOASOBI", "Creepy Nuts", "Old One"), begins(sim).map { it.first })
+    }
+
+    @Test
+    fun aCardRunClosesThePhoneStage() {
+        val (sim, s) = phoneSim()
+        val p = pending()
+        p.take(listOf("YOASOBI" to null))
+        assertEquals(ArtPusher.Stop.GATE, phoneForward(Lookups(), p, PushGate.PhoneArtRule.Any, cardDown = { true }).run(s) { true }.stop)
+        assertTrue(begins(sim).isEmpty())
+        assertEquals(listOf("YOASOBI"), p.list().map { it.name })
+    }
+
+    @Test
+    fun aListSeenAgainIsNotAddedBackAfterItsPush() {
+        val p = pending()
+        val yoasobi = listOf("YOASOBI" to null)
+        p.take(yoasobi)
+        p.remove(listOf("YOASOBI"))
+        p.take(yoasobi)
+        assertTrue(p.list().isEmpty())
+        p.take(emptyList())
+        p.take(yoasobi)
+        assertEquals(listOf(Pending.Entry("YOASOBI", null)), p.list())
+        p.take(listOf("YOASOBI" to null, "Creepy Nuts" to "mb-c"))
+        assertEquals(listOf(Pending.Entry("YOASOBI", null), Pending.Entry("Creepy Nuts", "mb-c")), Pending(pendingFile()).list())
+    }
+}

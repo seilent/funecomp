@@ -96,6 +96,7 @@ private const val HEART = 5
 private val ITEM_TAGS = mapOf(SHUFFLE to "np.shuffle", PREV to "np.prev", TOGGLE to "np.toggle", NEXT to "np.nextTrack", REPEAT to "np.repeat")
 private const val MODE_ON = "lyrics mode on"
 private const val MODE_OFF = "lyrics mode off"
+private const val ARTIST_PHOTO = "artistPhoto"
 private const val WINDOW_MS = (Tok.motion_trackHide + Tok.motion_trackShow).toLong()
 
 private data class Seen(val track: NpKey?, val at: Long, val f: Boolean?, val calm: Long, val hand: Boolean = false)
@@ -202,7 +203,7 @@ private fun BackdropLayer(art: BackdropArt, alpha: Float) {
     Image(
         painter,
         null,
-        Modifier.requiredSize(w.dp(), h.dp()).graphicsLayer { this.alpha = alpha },
+        Modifier.requiredSize(w.dp(), h.dp()).graphicsLayer { this.alpha = alpha }.testTag("backdrop.photo"),
         contentScale = ContentScale.FillBounds,
     )
 }
@@ -521,9 +522,10 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
             }
         }.testTag("np"),
     ) {
-        Backdrop(art)
-        if (art != null && shaded) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).graphicsLayer { alpha = frame().shade * (swap()?.shade ?: 1f) }.background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha)).testTag("np.shade"))
-        val held = art?.takeIf { it.entry != null }
+        val photo = art?.takeIf { !onPhone || device.settings.values[ARTIST_PHOTO] != "off" }
+        Backdrop(photo)
+        if (photo != null && shaded) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).graphicsLayer { alpha = frame().shade * (swap()?.shade ?: 1f) }.background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha)).testTag("np.shade"))
+        val held = photo?.takeIf { it.entry != null }
         val lyricsTap: () -> Unit = {
             val k = npKey
             val c = copyFor(lyrics, k, s)

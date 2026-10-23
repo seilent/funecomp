@@ -290,6 +290,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     class Upd(val board: String, val size: Long, val md5: String, val part: File)
     @Volatile var droppedData = 0
         private set
+    private val streamFrames = java.util.concurrent.atomic.AtomicInteger()
+    val imgDuringStream: Int get() = streamFrames.get()
 
     val stored: Map<String, Stored> get() = synchronized(lock) { images.toMap() }
 
@@ -723,8 +725,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Msg.QUEUE_OP -> queueOp(body, out)
             Msg.LIB_GET -> libGet(body, out)
             Msg.ACTION -> action(body, out)
-            Msg.IMG_BEGIN -> imgBegin(body, out)
-            Msg.IMG_END -> imgEnd(body)
+            Msg.IMG_BEGIN -> imgBegin(body, out).also { duringStream() }
+            Msg.IMG_END -> imgEnd(body).also { duringStream() }
             Msg.IMG_LIST -> imgList(body)
             Msg.IMG_DEL -> imgDel(body)
             Msg.IMG_TAG -> imgTag(body)
@@ -1297,8 +1299,15 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         return Answer.Ok(ImgBeginReply(bytes.size.toLong(), if (bytes.isEmpty()) 0 else crc(bytes)).encode())
     }
 
+    private fun duringStream() {
+        if (!stream.streaming()) return
+        streamFrames.incrementAndGet()
+        opts.log("img during stream")
+    }
+
     fun imgData(b: Node, out: Out) = synchronized(lock) {
         cardEdge()
+        duringStream()
         val p = push ?: return@synchronized
         if (pushDropped) {
             droppedData++

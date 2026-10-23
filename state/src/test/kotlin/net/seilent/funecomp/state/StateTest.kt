@@ -189,6 +189,22 @@ class StateTest {
     }
 
     @Test
+    fun phoneArtOpensOnlyOnThePhoneReceiverByTheRule() {
+        val playing = State(source = Enums.Source.phone, output = Enums.Output.phoneReceiver, playing = true)
+        val d = DeviceState().withState(playing, 0)
+        val paused = DeviceState().withState(playing.copy(playing = false), 0)
+        assertEquals(PushGate.PhoneArtRule.Any, PushGate.PHONE_ART_RULE)
+        assertTrue(PushGate.phoneArt(d))
+        assertTrue(PushGate.phoneArt(d, PushGate.PhoneArtRule.Any))
+        assertFalse(PushGate.phoneArt(d, PushGate.PhoneArtRule.PausedOnly))
+        assertTrue(PushGate.phoneArt(paused, PushGate.PhoneArtRule.PausedOnly))
+        assertFalse(PushGate.open(d, 30_000))
+        assertFalse(PushGate.phoneArt(DeviceState().withState(playing.copy(output = Enums.Output.wired), 0)))
+        assertFalse(PushGate.phoneArt(DeviceState().withState(playing.copy(source = Enums.Source.local), 0)))
+        assertFalse(PushGate.phoneArt(DeviceState().withState(State(source = Enums.Source.local, output = Enums.Output.phoneReceiver, playing = false), 0), PushGate.PhoneArtRule.PausedOnly))
+    }
+
+    @Test
     fun reconnectBackoffAndByeRules() {
         val r = Reconnect(random = { 0.5 })
         assertEquals(0L, r.delayMs())

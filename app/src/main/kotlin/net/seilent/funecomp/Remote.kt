@@ -24,6 +24,7 @@ import net.seilent.funecomp.art.BitmapCodec
 import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.art.Gallery
 import net.seilent.funecomp.art.Memo
+import net.seilent.funecomp.art.Pending
 import net.seilent.funecomp.art.ThumbWorker
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
@@ -196,6 +197,7 @@ object Remote : Control {
     internal val linkSpec: String? get() = spec
     private val asked = HashSet<String>()
     private var artist: ArtistArt? = null
+    private var pending: Pending? = null
     @Volatile private var art: ArtWorker? = null
     @Volatile private var artKey: List<Any?>? = null
     @Volatile private var backdropFor: List<String>? = null
@@ -501,9 +503,14 @@ object Remote : Control {
         }
     }
 
+    private fun pending(context: Context): Pending = synchronized(lock) {
+        pending ?: Pending(File(context.applicationContext.filesDir, "art/pending.txt")) { Log.w(TAG, it) }.also { pending = it }
+    }
+
     internal fun resetArtist() = synchronized(lock) {
         artist = null
         breaker.network()
+        pending = null
         showBlocked { emptyList() }
         showPicks { emptyList() }
         galleryMissing = emptySet()
@@ -909,6 +916,12 @@ object Remote : Control {
         return open
     }
 
+    private fun phoneGate(): Boolean {
+        val open = PushGate.phoneArt(device) && !Firmwares.sending && !PushGate.card(device)
+        if (open) wake?.hold(ART, ART_WAKE_MS)
+        return open
+    }
+
     private fun libPage(s: Session, offset: Long, rev: Long?): Session.Result {
         val key = "lib ${Enums.View.artists}  $offset $rev"
         once(key)
@@ -946,6 +959,8 @@ object Remote : Control {
             a::known,
             { !shown },
             { PushGate.card(device) },
+            pending(context),
+            ::phoneGate,
             object : Forward.Upgrades {
                 override fun due() = a.upgrades().map { it.name to it.mbid }
                 override fun run(name: String, mbid: String?, w: Int, h: Int) =
@@ -967,7 +982,7 @@ object Remote : Control {
             trigger = { trigger.get() },
             onHttp = { url ->
                 Log.i(TAG, "art http ${url.replace(SECRET, "$1=x")}")
-                if (PushGate.open(device, SystemClock.elapsedRealtime())) wake?.hold(ART, ART_WAKE_MS)
+                if (PushGate.open(device, SystemClock.elapsedRealtime()) || PushGate.phoneArt(device)) wake?.hold(ART, ART_WAKE_MS)
             },
             ended = { wake?.drop(ART) },
         ) { r, e ->
@@ -1296,6 +1311,7 @@ object Remote : Control {
             val s = pushed!!
             edit?.state(s, mark)
             phoneCover.state(s)
+            pending?.take(Forward.phoneArtists(s))
             (s.snapRev ?: s.libRev)?.let { r -> if (r != (old.snapRev ?: old.libRev)) thumbs?.rev(r) }
             heartShow(heart.state(s))
             Scrobbles.state(s, System.currentTimeMillis(), device.card)
@@ -1303,7 +1319,7 @@ object Remote : Control {
             onState?.invoke()
             Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB} pos=${s.positionMs} sent=${s.sentMs} sample=${s.sampleMs} rtt=${device.rttMs} at=$now lateMs=${device.playback.lateMs} held=${s.positionHeld}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
-            val key = listOf(s.artists, s.output, s.queueRev, s.slot)
+            val key = listOf(s.artists, s.output, s.queueRev, s.slot, PushGate.phoneArt(device))
             val ready = device.card.epoch != epoch
             if (ready) {
                 Log.i(TAG, "card ready edge ${device.card.epoch}")

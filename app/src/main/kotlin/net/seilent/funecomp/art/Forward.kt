@@ -33,6 +33,8 @@ class Forward(
     private val cached: (String, String?) -> Boolean = { _, _ -> true },
     private val holding: () -> Boolean = { true },
     private val cardDown: () -> Boolean = { false },
+    private val pending: Pending? = null,
+    private val phoneGate: () -> Boolean = { false },
     private val upgrades: Upgrades? = null,
     private val looking: () -> Boolean = { true },
     private val log: (String) -> Unit = {},
@@ -76,6 +78,7 @@ class Forward(
     fun run(s: Session, keep: () -> Boolean): ArtPusher.Report {
         libSet = null
         if (cardDown()) return ArtPusher.Report(ArtPusher.Stop.GATE)
+        pending?.let { p -> phone(s, keep, p)?.let { return it } }
         val pusher = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, false) }, keep, gate)
         val library = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, true) }, keep, gate)
         blocks?.let { b -> b.device()?.let { dev -> unblocked(s, library, keep, b, dev)?.let { return it } } }
@@ -106,6 +109,21 @@ class Forward(
         }
         if (!sweeping()) return now
         return sweep(s, library, keep)
+    }
+
+    private fun phone(s: Session, keep: () -> Boolean, p: Pending): ArtPusher.Report? {
+        val now = phoneArtists(device().playback.state)
+        p.take(now)
+        val b = blocks
+        val dev = b?.device()
+        val held = if (b == null || dev == null) emptySet() else b.records.pending(dev).mapTo(HashSet()) { it.key }
+        val first = now.mapTo(HashSet()) { it.first }
+        val list = p.list().filter { b == null || b.keyOf(it.name, it.mbid) !in held }.sortedBy { it.name !in first }
+        if (list.isEmpty()) return null
+        val r = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, false) }, keep) { gate() || phoneGate() }.run(list.map { it.name to it.mbid }, origin = Enums.ImgOrigin.phone)
+        note(s, "phone", r)
+        p.remove(r.pushed.keys + r.stored + r.missing)
+        return r.takeIf { it.stop == ArtPusher.Stop.CLOSED || it.stop == ArtPusher.Stop.PREEMPTED || it.stop == ArtPusher.Stop.UNSUPPORTED }
     }
 
     private fun unblocked(s: Session, pusher: ArtPusher, keep: () -> Boolean, b: Blocks, dev: String): ArtPusher.Report? {
@@ -608,12 +626,15 @@ class Forward(
         }
     }
 
-    private fun real(name: String) = name.trim().lowercase() !in PLACEHOLDERS
-
     companion object {
         const val QUEUE_AHEAD = 5L
         val PLACEHOLDERS = setOf("unknown artist", "null")
         const val CREDITS_EVERY = 20
         private const val MAX_RESTARTS = 3
+
+        private fun real(name: String) = name.trim().lowercase() !in PLACEHOLDERS
+
+        fun phoneArtists(st: State): List<Pair<String, String?>> =
+            if (st.source != Enums.Source.phone) emptyList() else ArtPusher.order(st).filter { real(it.first) }
     }
 }

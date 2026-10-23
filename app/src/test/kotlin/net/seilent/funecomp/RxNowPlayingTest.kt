@@ -11,19 +11,24 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.PhoneKey
+import net.seilent.funecomp.state.SettingsMirror
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -76,11 +81,12 @@ class RxNowPlayingTest {
         c.device = c.device.withState(s.copy(source = Enums.Source.local, output = Enums.Output.wired, track = 7, title = "track 7", phoneName = null, phoneTrackNo = null, phoneTracks = null, phoneArtCrc = null, receiver = null), SystemClock.elapsedRealtime())
     }
 
-    private fun start(show: LyricsFetch.Show, stored: Boolean = false, seed: Boolean = stored): Shell {
+    private fun start(show: LyricsFetch.Show, stored: Boolean = false, seed: Boolean = stored, art: BackdropArt? = null, photo: String? = null): Shell {
         c = SimControl("v1", minor = 15)
         c.mode = stored
         c.phoneMode = seed
         phone()
+        photo?.let { c.device = c.device.copy(settings = SettingsMirror(1, "artistPhoto=$it\n")) }
         lyrics = show
         val shell = Shell(Nav(listOf(Page.Home, Page.NowPlaying)))
         owner.registry.currentState = Lifecycle.State.RESUMED
@@ -88,7 +94,7 @@ class RxNowPlayingTest {
         rule.setUptimeContent {
             CompositionLocalProvider(LocalLifecycleOwner provides owner) {
                 Box(Modifier.requiredSize(411.dp, 960.dp)) {
-                    App(c.device, LinkView(Phase.LIVE, "V1", everLive = true), c, shell, lyrics = lyrics, liveDevice = { c.device })
+                    App(c.device, LinkView(Phase.LIVE, "V1", everLive = true), c, shell, art = art, lyrics = lyrics, liveDevice = { c.device })
                 }
             }
         }
@@ -113,6 +119,28 @@ class RxNowPlayingTest {
     private fun exists(tag: String) = rule.onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty()
 
     private fun copy() = LyricsFetch.Show.Phone(idol, true, LyricsFetch.Copy(1, Enums.LyricsKind.synced, synced))
+
+    private val yoasobi = ArtCache.Entry("name:yoasobi", "YOASOBI", null, "deezer", null, "https://cdn-images.dzcdn.net/images/artist/y/1000x1000.jpg", 1, sha = "s")
+
+    private fun longPress(shell: Shell): List<String> {
+        rule.onNodeWithTag("np.backdrop").performTouchInput { longClick() }
+        settle(500)
+        return shell.sheet.items
+    }
+
+    @Test
+    fun aPhoneTrackDrawsTheArtistPhotoAndALongPressOpensItsSheet() {
+        val shell = start(LyricsFetch.Show.Phone(idol, false, null), art = BackdropArt(ImageBitmap(8, 8), null, yoasobi))
+        assertTrue(exists("backdrop.photo"))
+        assertEquals("block image", longPress(shell).first())
+    }
+
+    @Test
+    fun artistPhotoOffDrawsNoPhotoOnAPhoneTrack() {
+        val shell = start(LyricsFetch.Show.Phone(idol, false, null), art = BackdropArt(ImageBitmap(8, 8), null, yoasobi), photo = "off")
+        assertFalse(exists("backdrop.photo"))
+        assertFalse("block image" in longPress(shell))
+    }
 
     @Test
     fun aPhoneTrackDrawsTheBluetoothVariant() {
