@@ -77,7 +77,7 @@ class DapLyrics(
             LyricsFetch.Got.Failed(null)
         }
         if (got != null) {
-            val retry = synchronized(fetch) { if (gen == generation) fetch.done(w, got, clock()) else null }
+            val retry = synchronized(fetch) { if (gen == generation) fetch.done(w, got, clock(), device().card) else null }
             if (retry != null) exec.schedule({ pump() }, retry, TimeUnit.MILLISECONDS)
             log("lyr ${java.lang.Long.toUnsignedString(w.track)} crc=${w.crc} -> ${got.javaClass.simpleName.lowercase()}${(got as? LyricsFetch.Got.Failed)?.code?.let { " $it" } ?: ""}")
         }

@@ -157,6 +157,22 @@ class PushTest {
     }
 
     @Test
+    fun aCardAbortOrACardRefusalEndsTheRunAbortedWithNoArtistRetry() {
+        for ((fault, minor) in listOf("card-run=60000+0@img:1" to 15, "card-run=60000+0@0" to 15, "card-run=60000+0@img:1" to 14, "busy=IMG_BEGIN:5" to 15)) {
+            val lines = java.util.concurrent.CopyOnWriteArrayList<String>()
+            val sim = Sim(Options(Board.of("ap80"), Faults(listOf(fault)), 30_000, 5_000, 5_000, log = { lines += it }, minor = minor))
+            sims += sim
+            val s = session(sim.listen(0))
+            val looked = ArrayList<String>()
+            val r = ArtPusher(s, { n, _, w, h -> looked += n; art(n, noise(w, h, 3), w, h) }) { true }.run(listOf("Ado" to null, "Eve" to null))
+            assertEquals("$fault $minor", ArtPusher.Stop.ABORTED, r.stop)
+            assertEquals("$fault $minor", listOf("Ado"), looked)
+            assertEquals("$fault $minor", 1, lines.count { "rx IMG_BEGIN" in it })
+            assertTrue(sim.device.stored.isEmpty())
+        }
+    }
+
+    @Test
     fun rejectedImageSkipsThatArtistOnly() {
         val (sim, port) = sim()
         val s = session(port)

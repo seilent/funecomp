@@ -914,9 +914,10 @@ object Remote : Control {
                 override fun mark(): Any = a.mark()
                 override fun holds(mark: Any) = mark is ArtistArt.Mark && a.holds(mark, unmetered)
             },
-            Forward.Blocks(a.blocks, { spec }, a::keyOf, a::hasHit) { !Firmwares.sending },
+            Forward.Blocks(a.blocks, { spec }, a::keyOf, a::hasHit) { !Firmwares.sending && !PushGate.card(device) },
             a::known,
             { !shown },
+            { PushGate.card(device) },
             object : Forward.Upgrades {
                 override fun due() = a.upgrades().map { it.name to it.mbid }
                 override fun run(name: String, mbid: String?, w: Int, h: Int) =
@@ -1234,8 +1235,10 @@ object Remote : Control {
             val mark = if (type == Msg.STATE) edit?.mark() else null
             val now = SystemClock.elapsedRealtime()
             var old = device.playback.state
+            var epoch = device.card.epoch
             update {
                 old = it.playback.state
+                epoch = it.card.epoch
                 it.reduce(type, body, now)
             }
             if (type == Msg.STATE || type == Msg.QUEUE) Lyrics.poke()
@@ -1252,11 +1255,19 @@ object Remote : Control {
             Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB} pos=${s.positionMs} sent=${s.sentMs} sample=${s.sampleMs} rtt=${device.rttMs} at=$now lateMs=${device.playback.lateMs} held=${s.positionHeld}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
             val key = listOf(s.artists, s.output, s.queueRev, s.slot)
-            if (key != artKey) {
+            val ready = device.card.epoch != epoch
+            if (ready) Log.i(TAG, "card ready edge ${device.card.epoch}")
+            if (key != artKey || ready) {
                 artKey = key
                 trigger.incrementAndGet()
                 art?.want()
             }
+        }
+
+        override fun onRefused(code: Int, abort: Boolean) {
+            if (!live || code != if (abort) Enums.AbortCode.noCard else Err.noCard) return
+            update { it.copy(card = it.card.refused()) }
+            Log.i(TAG, "card refused ${if (abort) "abort" else "error"} $code")
         }
 
         override fun onRtt(ms: Long) {

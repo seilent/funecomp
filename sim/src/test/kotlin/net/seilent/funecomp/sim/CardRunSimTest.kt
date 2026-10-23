@@ -221,6 +221,18 @@ class CardRunSimTest {
     }
 
     @Test
+    fun landedServesTheLyricsOfTheTrackPlayingAtTheRunStartOnly() {
+        val d = device(15, tmp.newFolder(), "card-run=5000+3000@1000")
+        val out = linked(d)
+        val playing = state(d).track!!
+        at(d, out, 1500)
+        val mine = code(req(d, Msg.LYR_GET, Req.lyrGet(playing, 0, null)))
+        assertTrue("$mine", mine != Err.noCard && mine != Err.busy)
+        val other = lib.tracks.first { it.id != playing }.id
+        assertEquals(Err.noCard, code(req(d, Msg.LYR_GET, Req.lyrGet(other, 0, null))))
+    }
+
+    @Test
     fun landedOnAMinor14SessionAnswers3WithTheText() {
         val got = answers(14, "card-run=5000+3000@1000", phase = 1500)
         for ((k, a) in got) {
@@ -403,6 +415,8 @@ class CardRunSimTest {
         assertEquals(3000L, r.indexMs)
         assertEquals(4096L, (r.start as CardRun.Start.Img).bytes)
         assertTrue(Faults(listOf("card-run=1+2@hello")).cardRun!!.start == CardRun.Start.Hello)
+        assertTrue(Faults(listOf("card-run=1+2@play")).cardRun!!.start == CardRun.Start.Play)
+        assertTrue(Faults(listOf("card-run=1+2@manual")).cardRun!!.start == CardRun.Start.Manual)
         assertEquals(7L, (Faults(listOf("card-run=1+2@upd:7")).cardRun!!.start as CardRun.Start.Upd).bytes)
         assertEquals(0L, (Faults(listOf("card-run=1+2")).cardRun!!.start as CardRun.Start.Delay).ms)
         for (bad in listOf("card-run=5000", "card-run=a+1", "card-seq=nope:1,ready", "card-seq=busy,ready", "card-device=new", "card-run=1+1,card-seq=ready")) {

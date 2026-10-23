@@ -115,6 +115,8 @@ class Link(
 
                 override fun onRtt(ms: Long) = listener.onRtt(ms)
 
+                override fun onRefused(code: Int, abort: Boolean) = listener.onRefused(code, abort)
+
                 override fun onClosed(reason: String) = listener.onClosed(reason)
 
                 override fun onRequest(type: Int, body: Node, responder: Responder) = listener.onRequest(type, body, responder)

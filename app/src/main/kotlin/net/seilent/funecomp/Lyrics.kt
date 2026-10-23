@@ -141,7 +141,7 @@ object Lyrics {
         refused.removeAll { it.first == spec && it.second != version }
         for (w in LyricsPlan.wants(d, done + refused.filter { it.first == spec }.map { it.third })) {
             if (gen != generation || !on || Remote.phase != Phase.LIVE) return
-            if (Firmwares.sending || !PushGate.open(Remote.device, SystemClock.elapsedRealtime())) {
+            if (Firmwares.sending || !PushGate.open(Remote.device, SystemClock.elapsedRealtime()) || PushGate.card(Remote.device)) {
                 exec.schedule({ poke() }, Proto.pushGateMs.toLong(), TimeUnit.MILLISECONDS)
                 return
             }
@@ -181,7 +181,7 @@ object Lyrics {
             if (gen != generation) return
             val code = put(w.track, rev, snap, bytes, found.synced, found.source)
             if (gen != generation) return
-            if (code != Err.busy && code != NO_REPLY) done += w.track
+            if (code != Err.busy && code != Err.noCard && code != NO_REPLY) done += w.track
             if (code in repeats) refused += Triple(spec, version, w.track)
         }
     }

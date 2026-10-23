@@ -47,6 +47,7 @@ class Session(
         fun onPush(type: Int, body: Node) {}
         fun onBye(bye: Bye) {}
         fun onRtt(ms: Long) {}
+        fun onRefused(code: Int, abort: Boolean) {}
         fun onClosed(reason: String) {}
         fun onRequest(type: Int, body: Node, responder: Responder): Boolean = false
     }
@@ -295,7 +296,9 @@ class Session(
                 p
             }
             if (f.type == Msg.PING) listener.onRtt(now - pingAt)
-            p.done(if (f.isError) Result.Failed(ErrorReply.from(body)) else Result.Ok(body))
+            val r = if (f.isError) Result.Failed(ErrorReply.from(body)) else Result.Ok(body)
+            if (r is Result.Failed) listener.onRefused(r.error.code, false)
+            p.done(r)
             return
         }
         if (f.type == Msg.BYE) {
@@ -310,8 +313,8 @@ class Session(
         }
         val h = hello ?: return
         if (!Groups.allowed(f.type, h.features)) return
-        if (f.type == Msg.IMG_ABORT) abortListener?.invoke(ImgAbort.from(body))
-        if (f.type == Msg.UPD_ABORT) updAbortListener?.invoke(UpdAbort.from(body))
+        if (f.type == Msg.IMG_ABORT) ImgAbort.from(body).let { listener.onRefused(it.code, true); abortListener?.invoke(it) }
+        if (f.type == Msg.UPD_ABORT) UpdAbort.from(body).let { listener.onRefused(it.code, true); updAbortListener?.invoke(it) }
         listener.onPush(f.type, body)
     }
 

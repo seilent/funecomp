@@ -8,7 +8,7 @@ import net.seilent.funecomp.proto.gen.Proto
 class LyricsFetch {
     data class Copy(val crc: Long, val kind: Int, val lines: List<LyrLine>)
 
-    data class Want(val track: Long, val crc: Long, val snapRev: Long?, val have: Long?) {
+    data class Want(val track: Long, val crc: Long, val snapRev: Long?, val have: Long?, val epoch: Int = 0) {
         val key: Key get() = Key(track, crc, snapRev)
     }
 
@@ -40,6 +40,7 @@ class LyricsFetch {
     private val marks = bounded<Key, Mark>(MARKS)
     private val busy = bounded<Key, Int>(MARKS)
     private val retryAt = bounded<Key, Long>(MARKS)
+    private val waits = bounded<Key, Int>(MARKS)
     private var snap: Long? = null
     private var seen: Pair<Long, Long?>? = null
     private var held: Long? = null
@@ -50,6 +51,7 @@ class LyricsFetch {
         marks.clear()
         busy.clear()
         retryAt.clear()
+        waits.clear()
         held = null
     }
 
@@ -98,7 +100,7 @@ class LyricsFetch {
             if (d.playback.receivedAt != heldAt) held = null
             return Decision(Show.Lines(track, copy, held = held == track), null)
         }
-        val want = Want(track, crc, snap, copy?.crc)
+        val want = Want(track, crc, snap, copy?.crc, d.card.epoch)
         val blank = if (held == track && copy != null) Show.Lines(track, copy, held = true) else Show.Blank
         return when (marks[want.key]) {
             Mark.NONE -> {
@@ -106,12 +108,27 @@ class LyricsFetch {
                 Decision(Show.None, null)
             }
             Mark.FAILED -> Decision(blank, null)
-            null -> Decision(blank, want.takeIf { (retryAt[want.key] ?: 0L) <= now })
+            null -> {
+                waits[want.key]?.let { if (it < d.card.epoch) waits.remove(want.key) }
+                Decision(blank, want.takeIf { want.key !in waits && (retryAt[want.key] ?: 0L) <= now })
+            }
         }
     }
 
-    fun done(w: Want, got: Got, now: Long): Long? {
+    fun done(w: Want, got: Got, now: Long, card: CardView = CardView()): Long? {
         val key = w.key
+        if (got is Got.Failed && got.code in CARD_CODES) {
+            if (w.epoch < card.epoch) {
+                retryAt.remove(key)
+                waits.remove(key)
+                return null
+            }
+            if (got.code == Err.noCard || card.down) {
+                retryAt.remove(key)
+                waits[key] = card.epoch
+                return null
+            }
+        }
         if (got !is Got.Failed || got.code != Err.busy) {
             busy.remove(key)
             retryAt.remove(key)
@@ -155,6 +172,7 @@ class LyricsFetch {
         private const val KEEP = 8
         const val MARKS = 64
         const val LYRFLAGS_MINOR = 15
+        private val CARD_CODES = setOf(Err.busy, Err.staleRev, Err.noLibrary, Err.notFound, Err.noCard)
 
         fun has(d: DeviceState): Boolean {
             val s = d.playback.state

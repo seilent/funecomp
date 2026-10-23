@@ -32,6 +32,7 @@ class Forward(
     private val blocks: Blocks? = null,
     private val cached: (String, String?) -> Boolean = { _, _ -> true },
     private val holding: () -> Boolean = { true },
+    private val cardDown: () -> Boolean = { false },
     private val upgrades: Upgrades? = null,
     private val looking: () -> Boolean = { true },
     private val log: (String) -> Unit = {},
@@ -74,6 +75,7 @@ class Forward(
 
     fun run(s: Session, keep: () -> Boolean): ArtPusher.Report {
         libSet = null
+        if (cardDown()) return ArtPusher.Report(ArtPusher.Stop.GATE)
         val pusher = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, false) }, keep, gate)
         val library = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, true) }, keep, gate)
         blocks?.let { b -> b.device()?.let { dev -> unblocked(s, library, keep, b, dev)?.let { return it } } }

@@ -125,8 +125,8 @@ class ArtPusher(
 
     companion object {
         const val NAMES = 10
-        private val finalAborts = setOf(Enums.AbortCode.busy, Enums.AbortCode.noSpace, Enums.AbortCode.superseded)
-        private val finalErrors = setOf(Err.busy, Err.noSpace)
+        private val finalAborts = setOf(Enums.AbortCode.busy, Enums.AbortCode.noSpace, Enums.AbortCode.superseded, Enums.AbortCode.noCard)
+        private val finalErrors = setOf(Err.busy, Err.noSpace, Err.noCard)
 
         fun origin(source: Int?): Int? = if (source == Enums.Source.phone || source == Enums.Source.phoneFile) Enums.ImgOrigin.phone else null
 

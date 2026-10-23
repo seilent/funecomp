@@ -36,6 +36,8 @@ class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
         data object Hello : Start
         class Img(val bytes: Long) : Start
         class Upd(val bytes: Long) : Start
+        data object Play : Start
+        data object Manual : Start
     }
 
     companion object {
@@ -46,6 +48,8 @@ class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
             val index = run.substringAfter('+', "").toLongOrNull() ?: throw IllegalArgumentException("card-run: index missing in $v")
             val start = when {
                 at == "hello" -> Start.Hello
+                at == "play" -> Start.Play
+                at == "manual" -> Start.Manual
                 at.startsWith("img:") -> Start.Img(at.removePrefix("img:").toLongOrNull() ?: throw IllegalArgumentException("card-run: bad bytes in $v"))
                 at.startsWith("upd:") -> Start.Upd(at.removePrefix("upd:").toLongOrNull() ?: throw IllegalArgumentException("card-run: bad bytes in $v"))
                 else -> Start.Delay(at.toLongOrNull() ?: throw IllegalArgumentException("card-run: bad start in $v"))

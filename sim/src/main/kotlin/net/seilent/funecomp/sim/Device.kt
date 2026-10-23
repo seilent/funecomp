@@ -258,6 +258,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private var lagBusy = false
     private var cardArmed = faults.cardRun != null || faults.cardSeq.isNotEmpty()
     private var cardGate = Enums.Card.ready
+    private var cardLyrics: Long? = null
     private val cardSent = HashMap<Out, Triple<Int, Boolean, Long?>>()
     private var pushOut: Out? = null
     private var updOut: Out? = null
@@ -313,9 +314,12 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
     }
 
+    fun startCard() = synchronized(lock) { cardStart(now()) }
+
     private fun cardStart(at: Long) {
         if (!cardArmed) return
         cardArmed = false
+        cardLyrics = queue.getOrNull(slot)
         cardForced = null
         val run = faults.cardRun
         cardEdges = if (run != null) {
@@ -428,7 +432,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private fun landedRefusal(type: Int, b: Node): Answer.Fail? = when (type) {
-        Msg.PLAY, Msg.LYR_GET, Msg.LRC_PUT, Msg.IMG_BEGIN, Msg.IMG_DEL, Msg.IMG_TAG, Msg.UPD_BEGIN -> noCard()
+        Msg.LYR_GET -> if (b.long(Tags.LyrGet.track) == cardLyrics) null else noCard()
+        Msg.PLAY, Msg.LRC_PUT, Msg.IMG_BEGIN, Msg.IMG_DEL, Msg.IMG_TAG, Msg.UPD_BEGIN -> noCard()
         Msg.QUEUE_OP -> if (b.int(Tags.QueueOp.cmd) == Enums.QueueCmd.page) null else noCard()
         Msg.ACTION -> when (b.int(Tags.Action.cmd)) {
             Enums.ActionCmd.shuffleLibrary -> if (lib.tracks.isEmpty()) null else noCard()
@@ -785,6 +790,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
         if (playing) stopped = false
         positionAt = now()
+        if (playing && faults.cardRun?.start == CardRun.Start.Play && cardArmed) cardStart(now())
         return changed()
     }
 

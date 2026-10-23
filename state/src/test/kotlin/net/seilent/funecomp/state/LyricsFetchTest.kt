@@ -361,4 +361,110 @@ class LyricsFetchTest {
             assertEquals(false, LyricsFetch.resolve(false, 1000, 1000, lyrflags))
         }
     }
+
+    private fun carded(vararg cards: Int) = cards.fold(DeviceState(hello())) { d, c ->
+        d.withState(State(track = 7, lyrics = true, lyricsPlain = false, lyricsCrc = 100, snapRev = 4, card = c), 0)
+    }
+
+    private fun DeviceState.then(c: Int) = withState(State(track = 7, lyrics = true, lyricsPlain = false, lyricsCrc = 100, snapRev = 4, card = c), 0)
+
+    @Test
+    fun thePlayingTrackIsAskedWhileTheCardIsDown() {
+        for (c in listOf(Enums.Card.busy, Enums.Card.out, Enums.Card.error)) {
+            assertEquals(LyricsFetch.Decision(LyricsFetch.Show.Blank, LyricsFetch.Want(7, 100, 4, null, 0)), LyricsFetch().decide(carded(c), 0))
+            assertEquals(LyricsFetch.Decision(LyricsFetch.Show.Blank, LyricsFetch.Want(7, 100, 4, null, 1)), LyricsFetch().decide(carded(Enums.Card.ready, c), 100_000))
+        }
+        assertEquals(LyricsFetch.Want(7, 100, 4, null, 1), LyricsFetch().decide(carded(Enums.Card.busy, Enums.Card.ready), 0).want)
+    }
+
+    @Test
+    fun aDownCardAnswerForThePlayingTrackShowsItsLines() {
+        val f = LyricsFetch()
+        val down = carded(Enums.Card.busy)
+        val w = f.decide(down, 0).want!!
+        f.done(w, LyricsFetch.Got.Lines(copy), 0, down.card)
+        assertEquals(LyricsFetch.Show.Lines(7, copy), f.decide(down, 0).show)
+    }
+
+    @Test
+    fun a14WaitsWithNoTimerUntilTheReadyEdge() {
+        val f = LyricsFetch()
+        val up = carded(Enums.Card.ready)
+        val w = f.decide(up, 0).want!!
+        assertEquals(1, w.epoch)
+        assertNull(f.done(w, LyricsFetch.Got.Failed(Err.noCard), 0, up.card))
+        assertNull(f.decide(up, 100_000).want)
+        f.opened()
+        assertNull(f.decide(up, 200_000).want)
+        val down = up.then(Enums.Card.busy)
+        assertNull(f.decide(down, 0).want)
+        val again = down.then(Enums.Card.ready)
+        assertEquals(LyricsFetch.Want(7, 100, 4, null, 2), f.decide(again, 0).want)
+    }
+
+    @Test
+    fun aBusyAtEveryBackoffStepWhileDownStaysUnmarked() {
+        val f = LyricsFetch()
+        val up = carded(Enums.Card.ready)
+        val w = f.decide(up, 0).want!!
+        val down = up.then(Enums.Card.busy)
+        repeat(Proto.backoffMs.size + 2) { assertNull(f.done(w, LyricsFetch.Got.Failed(Err.busy), it * 60_000L, down.card)) }
+        val again = down.then(Enums.Card.ready)
+        assertEquals(w.copy(epoch = 2), f.decide(again, 0).want)
+    }
+
+    @Test
+    fun staleNoLibraryAndNotFoundWhileDownWaitAndTheEdgeAsksAgain() {
+        for (code in listOf(Err.staleRev, Err.noLibrary, Err.notFound)) {
+            val f = LyricsFetch()
+            val up = carded(Enums.Card.ready)
+            val w = f.decide(up, 0).want!!
+            val down = up.then(Enums.Card.busy)
+            assertNull(f.done(w, LyricsFetch.Got.Failed(code), 0, down.card))
+            assertNull("$code", f.decide(down, 0).want)
+            val again = down.then(Enums.Card.ready)
+            assertEquals("$code", LyricsFetch.Decision(LyricsFetch.Show.Blank, w.copy(epoch = 2)), f.decide(again, 0))
+        }
+    }
+
+    @Test
+    fun withTheCardUpABusyStillFailsAndANotFoundStillMarksNone() {
+        val f = LyricsFetch()
+        val up = carded(Enums.Card.ready)
+        val w = f.decide(up, 0).want!!
+        var now = 0L
+        for (ms in Proto.backoffMs) {
+            assertEquals(ms.toLong(), f.done(w, LyricsFetch.Got.Failed(Err.busy), now, up.card))
+            now += ms
+        }
+        assertNull(f.done(w, LyricsFetch.Got.Failed(Err.busy), now, up.card))
+        assertNull(f.decide(up, now + 100_000).want)
+        val g = LyricsFetch()
+        g.done(g.decide(up, 0).want!!, LyricsFetch.Got.Failed(Err.notFound), 0, up.card)
+        assertEquals(LyricsFetch.Decision(LyricsFetch.Show.None, null), g.decide(up, 0))
+    }
+
+    @Test
+    fun a14HandledAfterTheEdgeRetriesAtOnce() {
+        val f = LyricsFetch()
+        val up = carded(Enums.Card.ready)
+        val w = f.decide(up, 0).want!!
+        val again = up.then(Enums.Card.busy).then(Enums.Card.ready)
+        assertNull(f.done(w, LyricsFetch.Got.Failed(Err.noCard), 0, again.card))
+        assertEquals(w.copy(epoch = 2), f.decide(again, 0).want)
+    }
+
+    @Test
+    fun aBusyHandledAfterTheEdgeNeitherBacksOffNorMarks() {
+        val f = LyricsFetch()
+        val up = carded(Enums.Card.ready)
+        val w = f.decide(up, 0).want!!
+        val again = up.then(Enums.Card.busy).then(Enums.Card.ready)
+        repeat(Proto.backoffMs.size + 2) { assertNull(f.done(w, LyricsFetch.Got.Failed(Err.busy), 0, again.card)) }
+        assertEquals(w.copy(epoch = 2), f.decide(again, 0).want)
+        val n = LyricsFetch()
+        val wn = n.decide(up, 0).want!!
+        assertNull(n.done(wn, LyricsFetch.Got.Failed(Err.notFound), 0, again.card))
+        assertEquals(wn.copy(epoch = 2), n.decide(again, 0).want)
+    }
 }
