@@ -2,6 +2,7 @@ package net.seilent.funecomp.state
 
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
 
@@ -93,7 +94,7 @@ class Heart(private val windowMs: Long = WINDOW_MS) {
 
         fun cardToast(code: Int?, minor: Int) = code == Err.noCard || code == Err.busy && minor < CARD_MINOR
 
-        fun shown(hello: HelloReply?, s: State) = hello?.snapRev != null && s.track != null
+        fun shown(hello: HelloReply?, s: State) = hello?.snapRev != null && s.track != null && s.source != Enums.Source.phone
 
         fun lit(s: State) = s.favorite == true
     }

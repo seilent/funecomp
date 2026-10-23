@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.state.PhoneKey
 
 enum class Phase { NONE, CONNECTING, LIVE, DOWN, STOPPED }
 
@@ -95,6 +96,10 @@ interface Control {
     fun lyricsOffset(track: Long, ms: Int?, done: (Int?, Int?) -> Unit) = done(-1, null)
     fun lyricsOffsetEdit(edit: OffsetEdit?) {}
     fun lyricsHold(track: Long?) {}
+    fun phoneLyricsMode(): Boolean = false
+    fun phoneLyricsMode(on: Boolean) {}
+    fun phoneOffset(key: PhoneKey, ms: Int?, done: (Int?, Int?) -> Unit) = done(-1, null)
+    fun phoneCover(crc: Long): ImageBitmap? = null
     fun reconnect(on: Boolean) {}
     fun wantArt(slot: Int, track: Long, px: Int, album: String?) {}
     fun art(track: Long, px: Int): ImageBitmap? = null

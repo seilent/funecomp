@@ -3,10 +3,14 @@ package net.seilent.funecomp.sim
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
+import java.io.ByteArrayInputStream
 import java.io.File
+import java.util.zip.CRC32
+import javax.imageio.ImageIO
 
 const val RECEIVER_TEXT = "bluetooth receiver"
 private const val PREV_RESTART_MS = 3000
@@ -52,6 +56,9 @@ class Phone(private val opts: Options, private val clock: () -> Long) {
     private var sentSig: List<Any?>? = null
     private var sentPos = 0L
     private var sentAt = 0L
+    class Cover(val bytes: ByteArray, val crc: Long, val w: Int, val h: Int)
+
+    private val covers = HashMap<File, Cover?>()
 
     init {
         if (lines.isNotEmpty()) enter(0)
@@ -112,22 +119,33 @@ class Phone(private val opts: Options, private val clock: () -> Long) {
         positionAt = now()
     }
 
-    fun cover(): ByteArray? {
+    fun cover(): Cover? {
         val l = current() ?: return null
         if (faults.phoneArtLate?.let { now() - lineAt < it } == true) return null
-        return l.cover?.takeIf { it.isFile }?.readBytes()
+        val f = l.cover ?: return null
+        return covers.getOrPut(f) {
+            val b = f.takeIf { it.isFile }?.readBytes() ?: return@getOrPut null
+            val img = ImageIO.read(ByteArrayInputStream(b)) ?: return@getOrPut null
+            Cover(b, CRC32().apply { update(b) }.value, img.width, img.height)
+        }
+    }
+
+    private fun coverCrc(): Long? {
+        if ((faults.features ushr Groups.bit("art")!!) and 1L == 0L) return null
+        return cover()?.crc
     }
 
     private fun sig(): List<Any?> {
         val l = current()
-        return listOf(l != null, at, l?.title, l != null && playing)
+        return listOf(l != null, at, l?.title, l != null && playing, coverCrc(), receiver)
     }
 
     fun over(s: State): State {
         val l = current()
         sentSig = sig()
         sentAt = now()
-        if (l == null) return s
+        val hold = if (receiver && (faults.features ushr Groups.bit("receiver")!!) and 1L == 1L) true else null
+        if (l == null) return s.copy(receiver = hold)
         sentPos = position(l)
         val late = lateMeta()
         val artist = if (late) before?.artist.orEmpty() else l.artist
@@ -135,7 +153,8 @@ class Phone(private val opts: Options, private val clock: () -> Long) {
             source = Enums.Source.phone, output = Enums.Output.phoneReceiver, track = 0, title = l.title, artist = artist,
             artists = Library.split(artist, ""), mbids = emptyList(), durationMs = duration(l), positionMs = sentPos,
             playing = playing, shuffle = false, repeat = Enums.Repeat.off, album = if (late) before?.album.orEmpty() else l.album,
-            lyrics = null, favorite = null, lyricsPlain = null, lyricsCrc = null,
+            lyrics = null, favorite = null, lyricsPlain = null, lyricsCrc = null, lyricsOffsetMs = null, receiver = hold, phoneName = l.name,
+            phoneArtCrc = coverCrc(), phoneTrackNo = l.trackNo?.toLong(), phoneTracks = l.count?.toLong(),
         )
     }
 

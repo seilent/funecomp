@@ -3,8 +3,11 @@ package net.seilent.funecomp
 import net.seilent.funecomp.artist.Lrclib
 import net.seilent.funecomp.artist.LyricChain
 import net.seilent.funecomp.artist.LyricSources
+import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.Lrc
+import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.PhoneKey
 import java.util.zip.CRC32
 
@@ -49,7 +52,9 @@ class PhoneLyrics(
     private var queued: Ask? = null
     private var posted = false
     private var gen = 0
+    private var served: Triple<PhoneKey, Int, LyricsFetch.Copy>? = null
 
+    @Volatile var mode = false
     var settled: PhoneKey? = null
         get() = synchronized(lock) { field }
         private set
@@ -60,6 +65,25 @@ class PhoneLyrics(
 
     fun offset(key: PhoneKey, ms: Int) = synchronized(lock) {
         if (ms == 0) offsets.remove(key) else offsets[key] = ms
+    }
+
+    fun show(): LyricsFetch.Show = synchronized(lock) {
+        val key = settled?.takeIf { it == seen } ?: return LyricsFetch.Show.Off
+        val e = entries[key]
+        LyricsFetch.Show.Phone(key, e?.follow, e?.takeIf { it.has }?.let { copy(key, it) })
+    }
+
+    private fun copy(key: PhoneKey, e: Entry): LyricsFetch.Copy {
+        val shift = offsets[key] ?: 0
+        served?.let { (k, o, c) -> if (k == key && o == shift && c.crc == e.crc) return c }
+        val p = e.copy!!
+        val c = if (p.have == Lrc.Have.Synced) {
+            LyricsFetch.Copy(e.crc!!, Enums.LyricsKind.synced, Lrc.shift(p.lines, shift.toLong()).map { LyrLine(it.ms, Lrc.cut(it.text)) })
+        } else {
+            LyricsFetch.Copy(e.crc!!, Enums.LyricsKind.plain, p.plain.map { LyrLine(null, Lrc.cut(it)) })
+        }
+        served = Triple(key, shift, c)
+        return c
     }
 
     fun see(s: State, now: Long, shown: Boolean): Long? = synchronized(lock) {
@@ -152,6 +176,8 @@ class PhoneLyrics(
         gen++
         entries.clear()
         offsets.clear()
+        served = null
+        mode = false
         seen = null
         settled = null
         queued = null

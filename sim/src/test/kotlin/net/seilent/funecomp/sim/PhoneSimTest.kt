@@ -14,7 +14,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.awt.image.BufferedImage
 import java.io.File
+import javax.imageio.ImageIO
 
 class PhoneSimTest {
     @get:Rule
@@ -261,8 +263,8 @@ class PhoneSimTest {
 
     @Test
     fun theCoverIsHeldBackForTheArtLateDelay() {
-        val jpeg = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 1, 2)
-        File(tmp.root, "idol.jpg").writeBytes(jpeg)
+        ImageIO.write(BufferedImage(200, 200, BufferedImage.TYPE_INT_RGB), "jpeg", File(tmp.root, "idol.jpg"))
+        val jpeg = File(tmp.root, "idol.jpg").readBytes()
         val f = File(tmp.root, "phone.tsv")
         f.writeText("Idol\tYOASOBI\tTHE BOOK 3\t213000\t0\t1\tPixel\t1\t12\tidol.jpg\nNo Cover\tX\t\t0\t0\t1\n")
         val lines = PhoneLine.load(f)
@@ -274,6 +276,7 @@ class PhoneSimTest {
         val p = Phone(Options(Board.of("v1"), Faults(listOf("phone-art-late=2000")), phone = lines, receiver = true)) { t }
         assertNull(p.cover())
         t += 2_000
-        assertArrayEquals(jpeg, p.cover())
+        assertArrayEquals(jpeg, p.cover()?.bytes)
+        assertEquals(200, p.cover()?.w)
     }
 }

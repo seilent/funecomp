@@ -48,6 +48,7 @@ import net.seilent.funecomp.artist.Targets
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.artist.YouTube
+import net.seilent.funecomp.link.ArtGet
 import net.seilent.funecomp.link.Link
 import net.seilent.funecomp.link.Responder
 import net.seilent.funecomp.link.Session
@@ -70,9 +71,11 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.state.ClockSync
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
+import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
 import net.seilent.funecomp.state.Wake
@@ -213,6 +216,7 @@ object Remote : Control {
     private val heart = Heart()
     val phoneLyrics: PhoneLyrics = PhoneLyrics(Lyrics::phone, Lyrics::phoneChain, { dapLyrics.poke() }) { Log.i(TAG, it) }
     val dapLyrics: DapLyrics = DapLyrics({ link?.session }, { device }, phone = phoneLyrics) { Log.i(TAG, it) }
+    val phoneCover = PhoneCover({ crc, cancel -> link?.session?.let { ArtGet(it, cancel).run(PhoneCover.PHONE_TRACK, Proto.artMaxPx) } }, log = { Log.i(TAG, it) })
     @Volatile private var offset: OffsetEdit? = null
     @Volatile private var heartToast: ((String, String) -> Unit)? = null
     private val refusalToast = AtomicReference<((String, String) -> Unit)?>()
@@ -259,6 +263,7 @@ object Remote : Control {
         wake?.drop(ATTEMPT)
         wake?.drop(ART)
         update { DeviceState() }
+        phoneCover.clear()
         dapLyrics.poke()
         everLive = false
         bluetoothOff = false
@@ -445,6 +450,23 @@ object Remote : Control {
     }
 
     override fun lyricsHold(track: Long?) = if (track == null) dapLyrics.unhold() else dapLyrics.offsetSet(track)
+
+    override fun phoneLyricsMode() = phoneLyrics.mode
+
+    override fun phoneLyricsMode(on: Boolean) {
+        phoneLyrics.mode = on
+    }
+
+    override fun phoneOffset(key: PhoneKey, ms: Int?, done: (Int?, Int?) -> Unit) {
+        if (ms != null && ms !in -Proto.lyrOffsetMaxMs..Proto.lyrOffsetMaxMs) return done(Err.badValue, null)
+        if (ms != null) {
+            phoneLyrics.offset(key, ms)
+            dapLyrics.poke()
+        }
+        done(null, phoneLyrics.offset(key))
+    }
+
+    override fun phoneCover(crc: Long): ImageBitmap? = phoneCover.image(crc)
 
     override fun lyricsMode() = app?.let { LyricsMode.on(it) } == true
 
@@ -1128,7 +1150,7 @@ object Remote : Control {
     }
 
     override fun favorite(s: State, toast: (String, String) -> Unit) {
-        if (device.hello?.snapRev == null) return
+        if (!Heart.shown(device.hello, s)) return
         heartToast = toast
         val t = heart.tap(s) ?: return
         action(Enums.ActionCmd.favorite, t.track) { code, text ->
@@ -1254,6 +1276,8 @@ object Remote : Control {
             val now = SystemClock.elapsedRealtime()
             var old = device.playback.state
             var epoch = device.card.epoch
+            val pushed = if (type == Msg.STATE) State.from(body) else null
+            if (pushed?.source == Enums.Source.phone && old.source != Enums.Source.phone) phoneLyrics.mode = lyricsMode()
             update {
                 old = it.playback.state
                 epoch = it.card.epoch
@@ -1263,8 +1287,9 @@ object Remote : Control {
             if (type == Msg.LIB || type == Msg.QUEUE) synchronized(asked) { asked.removeAll { k -> k.startsWith(if (type == Msg.LIB) "lib " else "queue ") } }
             if (type != Msg.STATE) return
             dapLyrics.poke()
-            val s = State.from(body)
+            val s = pushed!!
             edit?.state(s, mark)
+            phoneCover.state(s)
             (s.snapRev ?: s.libRev)?.let { r -> if (r != (old.snapRev ?: old.libRev)) thumbs?.rev(r) }
             heartShow(heart.state(s))
             Scrobbles.state(s, System.currentTimeMillis(), device.card)
@@ -1323,6 +1348,7 @@ object Remote : Control {
             if (!live) return
             app?.let { PickNotice.clear(it) }
             offset?.end(false)
+            phoneCover.clear()
             update { it.copy(hello = null) }
             dapLyrics.poke()
             heart.down()

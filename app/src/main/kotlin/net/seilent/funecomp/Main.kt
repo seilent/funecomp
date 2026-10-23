@@ -307,7 +307,7 @@ class Main : ComponentActivity() {
         Remote.pickAsk = null
         Scrobbles.opener = null
         if (!isChangingConfigurations) {
-            shell.offset?.end(Remote.device.has(OffsetEdit.GROUP))
+            shell.offset?.let { it.end(it.phone != null || Remote.device.has(OffsetEdit.GROUP)) }
             Remote.shown(false)
         }
     }

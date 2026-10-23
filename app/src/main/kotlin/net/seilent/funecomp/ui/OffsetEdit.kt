@@ -9,19 +9,20 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.state.OffsetSend
+import net.seilent.funecomp.state.PhoneKey
 
 private const val SHEET = "lyrics"
 private const val ITEM = "offset"
 private const val UNIT = "ms"
 
-fun lyricsSheet(shell: Shell, control: Control, track: Long, shown: Int) {
+fun lyricsSheet(shell: Shell, control: Control, track: Long, shown: Int, phone: PhoneKey? = null) {
     lateinit var e: OffsetEdit
-    e = OffsetEdit(track, shown, control, { line, title -> shell.toast.show(line, title) }) {
+    e = OffsetEdit(track, shown, control, { line, title -> shell.toast.show(line, title) }, phone = phone) {
         if (shell.offset === e) shell.offset = null
         shell.sheet.closeIf(e)
     }
     shell.offset = e
-    control.lyricsOffsetEdit(e)
+    if (phone == null) control.lyricsOffsetEdit(e)
     e.show(shell.sheet)
     e.open()
 }
@@ -32,6 +33,7 @@ class OffsetEdit(
     shown: Int,
     private val control: Control,
     private val toast: (String, String) -> Unit = { _, _ -> },
+    val phone: PhoneKey? = null,
     private val closed: () -> Unit = {},
 ) {
     private val send = OffsetSend(track, shown)
@@ -56,7 +58,7 @@ class OffsetEdit(
 
     private fun run(o: OffsetSend.Out) {
         sync()
-        if (o.held) control.lyricsHold(track)
+        if (o.held && phone == null) control.lyricsHold(track)
         o.toast?.let { code ->
             ui {
                 toast(OffsetSend.TITLE, OffsetSend.toast(code))
@@ -64,7 +66,7 @@ class OffsetEdit(
             }
         }
         val s = o.send ?: return
-        control.lyricsOffset(track, s.ms) { code, ms ->
+        val reply = { code: Int?, ms: Int? ->
             run(
                 send.replied(
                     when {
@@ -75,6 +77,7 @@ class OffsetEdit(
                 ),
             )
         }
+        if (phone != null) control.phoneOffset(phone, s.ms, reply) else control.lyricsOffset(track, s.ms, reply)
     }
 
     fun open() = run(send.open())
@@ -171,6 +174,7 @@ class OffsetEdit(
             ended = true
         }
         run(send.close(sessionUp))
+        if (phone != null) return ui(closed)
         control.lyricsHold(null)
         control.lyricsOffsetEdit(null)
         ui(closed)

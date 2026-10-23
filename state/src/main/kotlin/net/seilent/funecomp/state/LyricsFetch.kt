@@ -19,6 +19,7 @@ class LyricsFetch {
         data object Blank : Show
         data object None : Show
         data class Lines(val track: Long, val copy: Copy, val held: Boolean = false) : Show
+        data class Phone(val key: PhoneKey, val follow: Boolean?, val copy: Copy?) : Show
     }
 
     data class Decision(val show: Show, val want: Want?)

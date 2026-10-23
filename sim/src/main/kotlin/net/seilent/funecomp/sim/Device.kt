@@ -1398,9 +1398,20 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private fun artGet(track: Long, px: Int, offset: Long, have: Long?): Answer {
+        if (track == 0L) return phoneArt(px, offset, have)
         if (track !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
         val s = px.coerceIn(Proto.artMinPx, Proto.artMaxPx)
         val a = arts[track to s]?.takeIf { it.source == source(track) } ?: encode(track, s)?.also { arts[track to s] = it } ?: return Answer.Fail(Err.notFound, "no art")
+        return serve(a, track, px, s, offset, have)
+    }
+
+    private fun phoneArt(px: Int, offset: Long, have: Long?): Answer {
+        if (stream.current() == null) return Answer.Fail(Err.staleRev, "stale rev")
+        val c = stream.cover() ?: return Answer.Fail(Err.notFound, "no art")
+        return serve(Art(c.crc, c.w, c.h, c.bytes, 0L to 0L), 0L, px, px, offset, have)
+    }
+
+    private fun serve(a: Art, track: Long, px: Int, s: Int, offset: Long, have: Long?): Answer {
         if (offset == 0L && have == a.crc) {
             opts.log("art have track=$track px=$s")
             return Answer.Ok(ArtGetReply(a.crc, a.bytes.size.toLong(), a.w, a.h, 0, null).encode())

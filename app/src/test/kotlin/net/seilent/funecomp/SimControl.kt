@@ -34,6 +34,7 @@ import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Out
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
+import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.ui.Bonded
@@ -301,6 +302,25 @@ class SimControl(
     override fun lyricsMode(on: Boolean) {
         mode = on
     }
+
+    var phoneMode by mutableStateOf(false)
+    var phoneCovers by mutableStateOf<Map<Long, ImageBitmap>>(emptyMap())
+    val phoneOffsets = HashMap<PhoneKey, Int>()
+    val phoneOffsetAsks = ArrayList<Int?>()
+
+    override fun phoneLyricsMode() = phoneMode
+
+    override fun phoneLyricsMode(on: Boolean) {
+        phoneMode = on
+    }
+
+    override fun phoneOffset(key: PhoneKey, ms: Int?, done: (Int?, Int?) -> Unit) {
+        phoneOffsetAsks += ms
+        if (ms != null) phoneOffsets[key] = ms
+        done(null, phoneOffsets[key] ?: 0)
+    }
+
+    override fun phoneCover(crc: Long): ImageBitmap? = phoneCovers[crc]
 
     override fun reconnect(on: Boolean) {
         reconnects += on

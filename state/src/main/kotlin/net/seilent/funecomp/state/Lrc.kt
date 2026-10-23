@@ -3,7 +3,7 @@ package net.seilent.funecomp.state
 object Lrc {
     const val CAP = 64 shl 10
     const val LINE_MAX = 4096
-    private const val MAX_STAMP_MS = 100L * 3600 * 1000
+    const val MAX_STAMP_MS = 100L * 3600 * 1000
     private const val MAX_OFFSET_MS = 3600L * 1000
     private const val MAX_LINES = 1024
     private const val SPACE = ' '.code

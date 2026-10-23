@@ -96,6 +96,7 @@ object Roles {
     val npAlbum = Role(Tok.type_npAlbum_size, weight(Tok.type_npAlbum_style), case(Tok.type_npAlbum_case), Tok.type_npAlbum_alpha)
     val npTitle = Role(Tok.type_npTitle_size, weight(Tok.type_npTitle_style), case(Tok.type_npTitle_case), Tok.type_npTitle_alpha)
     val npNext = Role(Tok.type_npNext_size, weight(Tok.type_npNext_style), case(Tok.type_npNext_case), Tok.type_npNext_alpha)
+    val npCount = Role(Tok.type_npCount_size, weight(Tok.type_npCount_style), case(Tok.type_npCount_case), Tok.type_npCount_alpha)
     val time = Role(Tok.type_time_size, weight(Tok.type_time_style), case(Tok.type_time_case), Tok.type_time_alpha)
     val overlayNumber = Role(Tok.type_overlayNumber_size, weight(Tok.type_overlayNumber_style), Case.MIXED, Tok.type_overlayNumber_alpha)
     val overlayLabel = Role(Tok.type_overlayLabel_size, weight(Tok.type_overlayLabel_style), case(Tok.type_overlayLabel_case), Tok.type_overlayLabel_alpha)

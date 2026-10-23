@@ -6,6 +6,7 @@ import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.Lrc
+import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.PhoneKey
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -412,5 +413,49 @@ class PhoneLyricsTest {
         val small = Lrclib.Found("[00:01.00]ne\n", true, LyricSources.NETEASE)
         assertEquals(PhoneLyrics.Found.Copy(small.text, LyricSources.NETEASE), ask(213_000, lrclib = { big }, netease = { small }))
         assertEquals(PhoneLyrics.Found.Miss, ask(213_000, lrclib = { big }))
+    }
+
+    @Test
+    fun theShowCarriesTheSettledKeyWithItsShiftedCopy() {
+        assertEquals(LyricsFetch.Show.Off, p.show())
+        answer = { synced }
+        settle()
+        assertEquals(LyricsFetch.Show.Phone(idol, null, null), p.show())
+        drain()
+        val c = (p.show() as LyricsFetch.Show.Phone).copy!!
+        assertEquals(Enums.LyricsKind.synced, c.kind)
+        assertEquals(listOf(1000L, 2000L), c.lines.map { it.ms })
+        assertEquals(p.entry(idol)!!.crc, c.crc)
+        p.offset(idol, 1500)
+        assertEquals(listOf(0L, 500L), (p.show() as LyricsFetch.Show.Phone).copy!!.lines.map { it.ms })
+        p.offset(idol, -500)
+        assertEquals(listOf(1500L, 2500L), (p.show() as LyricsFetch.Show.Phone).copy!!.lines.map { it.ms })
+        p.see(phone(title = "Next"), t, true)
+        assertEquals(LyricsFetch.Show.Off, p.show())
+    }
+
+    @Test
+    fun aPlainCopyShowsAsPlainWithNoFollowAndAMissShowsNothing() {
+        answer = { plain }
+        settle()
+        drain()
+        val show = p.show() as LyricsFetch.Show.Phone
+        assertEquals(false, show.follow)
+        assertEquals(Enums.LyricsKind.plain, show.copy!!.kind)
+        assertEquals(listOf("one", "two"), show.copy!!.lines.map { it.text })
+        assertNull(show.copy!!.lines.first().ms)
+        val q = PhoneLyrics({ tasks += it; true }, { PhoneLyrics.Found.Miss }, {})
+        q.see(phone(), t, true)
+        t += PhoneLyrics.SETTLE_MS
+        q.see(phone(), t, true)
+        drain()
+        assertEquals(LyricsFetch.Show.Phone(idol, false, null), q.show())
+    }
+
+    @Test
+    fun clearResetsThePhoneMode() {
+        p.mode = true
+        p.clear()
+        assertFalse(p.mode)
     }
 }

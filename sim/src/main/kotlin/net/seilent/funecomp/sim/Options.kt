@@ -256,6 +256,7 @@ class Options(
         if (minor < 9) faults.features = faults.features and Groups.mask("imgOrigin").inv()
         if (minor < 10) faults.features = faults.features and Groups.mask("stateClock").inv()
         if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd").inv()
+        if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
     }
 
     companion object {

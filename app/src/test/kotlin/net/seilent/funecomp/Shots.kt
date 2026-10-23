@@ -57,6 +57,7 @@ import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LyricsFetch
+import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Battery
@@ -612,6 +613,32 @@ private fun state(edit: (net.seilent.funecomp.proto.State) -> net.seilent.funeco
     c.device = c.device.copy(playback = p.copy(state = edit(p.state)))
 }
 
+private val PHONE_KEY = PhoneKey("Signal Fire", "Kaze Ensemble")
+
+private fun phoneTrack(name: String? = "Phone 7", no: Long? = 3, of: Long? = 12, duration: Long = 213_000, crc: Long? = null, shuffle: Boolean = false, repeat: Int = Enums.Repeat.off): (SimControl) -> Unit = { c ->
+    playing(c)
+    val s = c.device.playback.state
+    c.device = c.device.withState(
+        s.copy(
+            source = Enums.Source.phone, output = Enums.Output.phoneReceiver, track = 0, title = PHONE_KEY.title, artist = PHONE_KEY.artist,
+            artists = listOf(PHONE_KEY.artist), mbids = emptyList(), album = "Coastlines", durationMs = duration, positionMs = 61_000, playing = false,
+            shuffle = shuffle, repeat = repeat, lyrics = null, lyricsPlain = null, lyricsCrc = null, lyricsOffsetMs = null, favorite = null,
+            receiver = true, phoneName = name, phoneTrackNo = no, phoneTracks = of, phoneArtCrc = crc,
+        ),
+        SystemClock.elapsedRealtime(),
+    )
+    if (crc != null) c.phoneCovers = mapOf(crc to tileImage(2))
+}
+
+private fun phoneLyrics(on: Boolean): (SimControl) -> Unit = { c ->
+    phoneTrack()(c)
+    c.phoneMode = on
+}
+
+private fun phoneShown(lines: List<LyrLine>?, kind: Int = Enums.LyricsKind.synced, follow: Boolean? = kind == Enums.LyricsKind.synced): (DeviceState) -> LyricsFetch.Show = {
+    LyricsFetch.Show.Phone(PHONE_KEY, follow, lines?.let { LyricsFetch.Copy(1, kind, it) })
+}
+
 private val FOUND = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true)
 
 private val EQ = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)
@@ -1118,6 +1145,18 @@ val SHOTS = listOf(
     Shot("online-scrobbling-dapsheet", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { tapRow("scrobble.dap") },
     Shot("online-scrobbling-unlinked", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, link = LinkView(Phase.DOWN, "AP80", everLive = true), prep = { it.device = it.device.copy(hello = null) }),
     Shot("online-scrobbling-14", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, minor = 14, prep = { c -> c.device = c.device.copy(schema = c.device.schema.copy(rows = c.device.schema.rows.filter { it.key != "scrobble" })) }),
+    Shot("rxnp-phone", board = "v1", pages = NP, prep = phoneTrack(), lyrics = phoneShown(null, follow = false)),
+    Shot("rxnp-phone-cover", board = "v1", pages = NP, prep = phoneTrack(crc = 77), lyrics = phoneShown(null, follow = false)),
+    Shot("rxnp-phone-bare", board = "v1", pages = NP, prep = phoneTrack(name = null, no = null, of = null, duration = 0), lyrics = phoneShown(null, follow = false)),
+    Shot("rxnp-phone-rings", board = "v1", pages = NP, prep = phoneTrack(shuffle = true, repeat = Enums.Repeat.all), lyrics = phoneShown(null, follow = false)),
+    Shot("rxnp-phone-mark", board = "v1", pages = NP, prep = phoneTrack(), lyrics = phoneShown(stamped(SUNG))),
+    Shot("rxnp-phone-synced", board = "v1", pages = NP, prep = phoneLyrics(true), lyrics = phoneShown(stamped(SUNG))),
+    Shot("rxnp-phone-plain", board = "v1", pages = NP, prep = phoneTrack(), lyrics = phoneShown(PLAIN_TEXT, Enums.LyricsKind.plain)) { lyricsMode() },
+    Shot("rxnp-phone-sheet", board = "v1", pages = NP, prep = phoneLyrics(true), lyrics = phoneShown(stamped(SUNG))) {
+        rule.onNodeWithTag("np.lyrics").performClick()
+        settle(600)
+    },
+    Shot("rxnp-phone-mode", board = "v1", pages = NP, prep = phoneTrack(), lyrics = phoneShown(null, follow = null), after = 600) { lyricsMode() },
     Shot("settings-about", pages = HOME + Page.Settings) { about() },
     Shot("settings-about-v1", board = "v1", pages = HOME + Page.Settings) { about() },
     Shot("settings-about-sending", board = "v1", pages = HOME + Page.Settings, firmware = FOUND.copy(ready = true, send = "firmware 42%")) { about() },

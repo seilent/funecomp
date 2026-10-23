@@ -2,6 +2,7 @@ package net.seilent.funecomp.state
 
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -22,6 +23,7 @@ class HeartTest {
         assertFalse(Heart.shown(hello(null), a))
         assertFalse(Heart.shown(hello(4), State()))
         assertFalse(Heart.shown(null, a))
+        assertFalse(Heart.shown(hello(4), a.copy(track = 0, source = Enums.Source.phone)))
         assertTrue(Heart.lit(b))
         assertFalse(Heart.lit(a))
         assertFalse(Heart.lit(a.copy(favorite = null)))

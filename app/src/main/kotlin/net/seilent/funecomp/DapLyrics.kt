@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import net.seilent.funecomp.link.LyrGet
 import net.seilent.funecomp.link.Session
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LyricsFetch
 import java.util.concurrent.Executors
@@ -70,6 +71,10 @@ class DapLyrics(
         phone?.see(device().playback.state, clock(), shown)?.let { wait ->
             settle?.cancel(false)
             settle = exec.schedule({ pump() }, wait, TimeUnit.MILLISECONDS)
+        }
+        if (phone != null && device().playback.state.source == Enums.Source.phone) {
+            show = phone.show()
+            return
         }
         val (d, gen) = synchronized(fetch) { fetch.decide(device(), clock()) to generation }
         show = d.show

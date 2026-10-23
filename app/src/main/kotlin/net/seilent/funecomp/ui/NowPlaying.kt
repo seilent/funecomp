@@ -71,12 +71,15 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LyricsFetch
+import net.seilent.funecomp.state.NpKey
+import net.seilent.funecomp.state.PhoneKey
 
 internal const val PIN_LEAD_MS = 200L
 val LocalUptime = staticCompositionLocalOf<() -> Long> { SystemClock::uptimeMillis }
@@ -93,17 +96,44 @@ private const val MODE_ON = "lyrics mode on"
 private const val MODE_OFF = "lyrics mode off"
 private const val WINDOW_MS = (Tok.motion_trackHide + Tok.motion_trackShow).toLong()
 
-private data class Seen(val track: Long?, val at: Long, val f: Boolean?, val calm: Long, val hand: Boolean = false)
+private data class Seen(val track: NpKey?, val at: Long, val f: Boolean?, val calm: Long, val hand: Boolean = false)
 
-private fun keyable(d: DeviceState) = d.playback.receivedAt != 0L && d.has(LyricsFetch.GROUP) && d.playback.state.track != null && d.playback.state.source != Enums.Source.phone
+private fun phone(d: DeviceState) = d.playback.state.source == Enums.Source.phone
 
-private fun record(d: DeviceState, old: Seen, calm: Boolean): Seen {
+private fun phoneShow(d: DeviceState, show: LyricsFetch.Show) = (show as? LyricsFetch.Show.Phone)?.takeIf { it.key == PhoneKey.of(d.playback.state) }
+
+private fun npKey(d: DeviceState, show: LyricsFetch.Show): NpKey? = when {
+    d.playback.receivedAt == 0L -> null
+    phone(d) -> phoneShow(d, show)?.key?.let { NpKey.Phone(it) }
+    else -> d.playback.state.track?.let { NpKey.Lib(it) }
+}
+
+private fun has(d: DeviceState, show: LyricsFetch.Show) = if (phone(d)) phoneShow(d, show)?.copy != null else LyricsFetch.has(d)
+
+private fun follow(d: DeviceState, show: LyricsFetch.Show): Boolean? = when {
+    d.playback.receivedAt == 0L -> null
+    phone(d) -> phoneShow(d, show)?.follow ?: if (PhoneKey.of(d.playback.state) == null) false else null
+    else -> LyricsFetch.follow(d)
+}
+
+private fun keyable(d: DeviceState, show: LyricsFetch.Show) = d.playback.receivedAt != 0L && if (phone(d)) phoneShow(d, show) != null else d.has(LyricsFetch.GROUP) && d.playback.state.track != null
+
+private fun copyFor(show: LyricsFetch.Show, key: NpKey?, s: State): LyricsFetch.Copy? = when (key) {
+    is NpKey.Lib -> (show as? LyricsFetch.Show.Lines)?.takeIf { it.track == key.track && (it.held || it.copy.crc == s.lyricsCrc) }?.copy
+    is NpKey.Phone -> (show as? LyricsFetch.Show.Phone)?.takeIf { it.key == key.key }?.copy
+    null -> null
+}
+
+private fun none(show: LyricsFetch.Show) = show == LyricsFetch.Show.None || (show is LyricsFetch.Show.Phone && show.copy == null && show.follow == false)
+
+private fun record(d: DeviceState, show: LyricsFetch.Show, old: Seen, calm: Boolean): Seen {
     val p = d.playback
-    val track = p.state.track?.takeIf { p.receivedAt != 0L }
-    val f = LyricsFetch.follow(d)
+    val track = npKey(d, show)
+    val f = follow(d, show)
     return when {
+        track == null && phone(d) && old.track != null -> Seen(null, p.receivedAt, false, if (calm) 0L else p.receivedAt + WINDOW_MS)
         track == null && f == null -> old
-        track == old.track -> old.copy(f = f, hand = old.hand && (f == null || LyricsFetch.has(d)))
+        track == old.track -> old.copy(f = f, hand = old.hand && (f == null || has(d, show)))
         else -> Seen(track, p.receivedAt, f, if (calm) 0L else p.receivedAt + WINDOW_MS)
     }
 }
@@ -197,15 +227,18 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
     val liveNow by rememberUpdatedState(live)
     val activeNow by rememberUpdatedState(active)
     val sheet = LocalSheet.current
+    val lyricsNow by rememberUpdatedState(lyrics)
     var pressing by remember { mutableStateOf(false) }
-    var seen by remember { mutableStateOf(record(liveNow(), Seen(null, 0L, null, 0L), true).copy(at = SystemClock.elapsedRealtime())) }
+    var seen by remember { mutableStateOf(record(liveNow(), lyrics, Seen(null, 0L, null, 0L), true).copy(at = SystemClock.elapsedRealtime())) }
+    fun mode() = if (phone(liveNow())) control.phoneLyricsMode() else control.lyricsMode()
+    fun mode(on: Boolean) = if (phone(liveNow())) control.phoneLyricsMode(on) else control.lyricsMode(on)
     fun target(): Boolean? {
         val r = seen
         return when {
-            !control.lyricsMode() -> false
+            !mode() -> false
             r.hand -> true
             r.track == null -> r.f
-            else -> liveNow().let { d -> if (d.playback.receivedAt == 0L) r.f else LyricsFetch.resolve(r.f, r.at, SystemClock.elapsedRealtime(), LyricsFetch.lyrflags(d)) }
+            else -> liveNow().let { d -> if (d.playback.receivedAt == 0L) r.f else LyricsFetch.resolve(r.f, r.at, SystemClock.elapsedRealtime(), phone(d) || LyricsFetch.lyrflags(d)) }
         }
     }
     var lyricTarget by remember { mutableStateOf(target() ?: false) }
@@ -215,7 +248,9 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
     var start by remember { mutableStateOf<Long?>(null) }
     val motion = remember { MutatorMutex() }
     val uptime = LocalUptime.current
-    val canLyrics = LyricsFetch.has(device)
+    val canLyrics = has(device, lyrics)
+    val npKey = npKey(device, lyrics)
+    val onPhone = phone(device)
     fun fadeTo(on: Boolean) {
         lyricTarget = on
         fade = if (on) LyricFade.Dir.Enter else LyricFade.Dir.Close
@@ -275,7 +310,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
         if (t != null && t != lyricTarget) fadeTo(t)
     }
     fun leave() {
-        control.lyricsMode(false)
+        mode(false)
         seen = seen.copy(hand = false)
         step(true)
     }
@@ -283,19 +318,20 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
         val d = liveNow()
         val settled = fade == null
         if (!settled && (fade != LyricFade.Dir.Enter || reversing)) return
-        if (settled && !lyricTarget && !keyable(d)) return
+        val l = lyricsNow
+        if (settled && !lyricTarget && !keyable(d, l)) return
         if (overlay.visible) overlay.hide()
-        seen = record(d, seen, false)
+        seen = record(d, l, seen, false)
         when {
             !settled || lyricTarget -> leave()
-            LyricsFetch.has(d) -> {
-                control.lyricsMode(true)
-                if (LyricsFetch.follow(d) != true) seen = seen.copy(hand = true)
+            has(d, l) -> {
+                mode(true)
+                if (follow(d, l) != true) seen = seen.copy(hand = true)
                 step(true)
             }
             else -> {
-                val on = !control.lyricsMode()
-                control.lyricsMode(on)
+                val on = !mode()
+                mode(on)
                 toast.show(if (on) MODE_ON else MODE_OFF, "")
             }
         }
@@ -326,7 +362,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
             when (e) {
                 Lifecycle.Event.ON_STOP -> settle()
                 Lifecycle.Event.ON_START -> {
-                    seen = record(liveNow(), seen, true)
+                    seen = record(liveNow(), lyricsNow, seen, true)
                     settle()
                 }
                 else -> {}
@@ -335,8 +371,8 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
         lifecycle.addObserver(o)
         onDispose { lifecycle.removeObserver(o) }
     }
-    LaunchedEffect(s.track, device.playback.receivedAt == 0L, LyricsFetch.follow(device), canLyrics) {
-        seen = record(device, seen, false)
+    LaunchedEffect(npKey, device.playback.receivedAt == 0L, follow(device, lyrics), canLyrics) {
+        seen = record(device, lyrics, seen, false)
     }
     val blocked = sheet?.shown == true || pressing || !active
     LaunchedEffect(seen, blocked, overlay.until, fade == null, device.playback.receivedAt == 0L) {
@@ -346,7 +382,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
             val now = SystemClock.elapsedRealtime()
             var w = maxOf(r.calm - now, overlay.until - SystemClock.uptimeMillis())
             val d = liveNow()
-            if (r.track != null && r.f == null && d.playback.receivedAt != 0L && !LyricsFetch.lyrflags(d)) w = maxOf(w, r.at + Proto.stateIntervalMs - now)
+            if (r.track != null && r.f == null && d.playback.receivedAt != 0L && !phone(d) && !LyricsFetch.lyrflags(d)) w = maxOf(w, r.at + Proto.stateIntervalMs - now)
             if (w <= 0) break
             delay(w)
         }
@@ -371,12 +407,15 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
     BackHandler(active && sheet?.shown != true) { back() }
     val edit = shell?.offset
     val offsets = device.has(OffsetEdit.GROUP)
-    LaunchedEffect(edit, s.track, s.lyricsPlain, lyricTarget, active, offsets, sheet?.shown) {
+    LaunchedEffect(edit, s.track, npKey, s.lyricsPlain, lyrics, lyricTarget, active, offsets, sheet?.shown) {
         val e = edit ?: return@LaunchedEffect
-        if (!offsets) e.end(false) else if (s.track != e.track || s.lyricsPlain == true || !lyricTarget || !active || sheet?.shown != true) e.end(true)
+        val p = e.phone
+        if (p != null) {
+            if (npKey != NpKey.Phone(p) || copyFor(lyrics, npKey, s)?.kind != Enums.LyricsKind.synced || !lyricTarget || !active || sheet?.shown != true) e.end(true)
+        } else if (!offsets) e.end(false) else if (s.track != e.track || s.lyricsPlain == true || !lyricTarget || !active || sheet?.shown != true) e.end(true)
     }
     DisposableEffect(shell) {
-        onDispose { shell?.offset?.end(liveNow().has(OffsetEdit.GROUP)) }
+        onDispose { shell?.offset?.let { it.end(it.phone != null || liveNow().has(OffsetEdit.GROUP)) } }
     }
     var touches by remember { mutableIntStateOf(0) }
     var idle by remember { mutableStateOf(false) }
@@ -406,7 +445,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
     val position = seekFraction?.let { (it * duration).toLong() } ?: device.positionMs(now)
     val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
     val slot = s.slot
-    val upcoming = if (slot == null) emptyList() else (1..NP_NEXT_COUNT).mapNotNull { device.queue.items[slot + it]?.title }
+    val upcoming = if (slot == null || onPhone) emptyList() else (1..NP_NEXT_COUNT).mapNotNull { device.queue.items[slot + it]?.title }
     LaunchedEffect(slot, device.queue.rev, s.queueRev) {
         if (slot == null || !device.has("queue")) return@LaunchedEffect
         val total = s.slots ?: return@LaunchedEffect
@@ -433,10 +472,14 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
         if (art != null && shaded) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).graphicsLayer { alpha = frame().shade }.background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha)).testTag("np.shade"))
         val held = art?.takeIf { it.entry != null }
         val lyricsTap: () -> Unit = {
-            val t = s.track
-            val c = (lyrics as? LyricsFetch.Show.Lines)?.takeIf { it.track == t && (it.held || it.copy.crc == s.lyricsCrc) }?.copy
-            if (shell != null && t != null && offsets && s.source == Enums.Source.local && c?.kind == Enums.LyricsKind.synced && fade == null && !reversing && lyricTarget && sheet?.shown != true) {
-                lyricsSheet(shell, control, t, s.lyricsOffsetMs ?: 0)
+            val k = npKey
+            val c = copyFor(lyrics, k, s)
+            if (shell != null && c?.kind == Enums.LyricsKind.synced && fade == null && !reversing && lyricTarget && sheet?.shown != true) {
+                when (k) {
+                    is NpKey.Lib -> if (offsets && s.source == Enums.Source.local) lyricsSheet(shell, control, k.track, s.lyricsOffsetMs ?: 0)
+                    is NpKey.Phone -> lyricsSheet(shell, control, 0, 0, k.key)
+                    null -> {}
+                }
             }
         }
         val backdrop = onBackdrop?.takeIf { held != null || s.artists.isNotEmpty() }
@@ -444,9 +487,12 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
         if (backdrop != null) Box(Modifier.fillMaxSize().press({}, longPress).testTag("np.backdrop"))
         BackRing { back() }
         Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
+        if (onPhone) s.phoneName?.let { name ->
+            RoleText("from $name", Roles.sectionLabel, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline - (Tok.npTextTop - Tok.npFromBaseline)), textW).testTag("np.from"))
+        }
         if (drawn) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = frame().alpha }) {
-                LyricsColumn(device, lyrics, upcoming.firstOrNull(), lifecycle, lyricTarget, lyricsTap, longPress)
+                LyricsColumn(device, lyrics, npKey, upcoming.firstOrNull(), lifecycle, lyricTarget, lyricsTap, longPress)
             }
         } else {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = frame().alpha }) {
@@ -455,10 +501,18 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
                 if (artSide > 0f) {
                     val track = s.track
                     val px = artSide.roundToInt()
-                    LaunchedEffect(track, px, device.hello) { if (track != null) control.wantArt(Thumbs.NOW_PLAYING, track, px, s.album) }
-                    val enter = if (keyable(device)) Modifier.press({ lyricsKey() }, longPress) else Modifier
-                    Box(Modifier.at(artX, artY).size(artSide.dp()).background(Color(Tok.color_tile)).then(enter).testTag("np.art")) {
-                        track?.let { control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
+                    LaunchedEffect(track, px, device.hello, onPhone) { if (track != null && !onPhone) control.wantArt(Thumbs.NOW_PLAYING, track, px, s.album) }
+                    val enter = if (keyable(device, lyrics)) Modifier.press({ lyricsKey() }, longPress) else Modifier
+                    if (onPhone) {
+                        val cover = s.phoneArtCrc?.let { control.phoneCover(it) }
+                        Box(Modifier.at(artX, artY).size(artSide.dp()).then(enter).testTag("np.art")) {
+                            cover?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
+                        }
+                        if (cover == null) Glyph(GlyphName.BLUETOOTH, Tok.npBtGlyph, white(Tok.alpha_full), Modifier.at(artX + artSide / 2, artY + artSide / 2, 0.5f, 0.5f).testTag("np.art.bluetooth"))
+                    } else {
+                        Box(Modifier.at(artX, artY).size(artSide.dp()).background(Color(Tok.color_tile)).then(enter).testTag("np.art")) {
+                            track?.let { control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
+                        }
                     }
                     if (Heart.shown(device.hello, s) && npHeartFits(ui.npArt)) {
                         key(HEART) {
@@ -483,7 +537,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
                         }
                     }
                 }
-                if (s.track != null) {
+                if (s.track != null && (!onPhone || duration > 0)) {
                     val thick = ui.px(Tok.npProgressThick).dp()
                     Box(Modifier.at(artX, progressY).size(artSide.dp(), thick).background(white(Tok.alpha_low)))
                     Box(Modifier.at(artX, progressY).size((artSide * fraction).dp(), thick).background(Accent).testTag("np.progress"))
@@ -492,7 +546,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
                     RoleText(remaining, Roles.time, Modifier.atBaseline(artX + artSide, timeBaseline, ax = 1f).testTag("np.remaining"))
                     val margin = ui.px(Tok.edge - Tok.npSeekBandX0)
                     val bandW = artSide + 2 * margin
-                    Box(
+                    if (!onPhone) Box(
                         Modifier.at(artX - margin, progressY).size(bandW.dp(), (seekBottom - progressY).dp()).systemGestureExclusion().testTag("np.seek")
                             .pointerInput(duration, artSide) {
                                 awaitEachGesture {
@@ -521,8 +575,14 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
                     val x = textX + ui.px(Tok.npNextIndent)
                     RoleText(t, Roles.npNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
                 }
+                val n = s.phoneTrackNo
+                val m = s.phoneTracks
+                if (onPhone && n != null && m != null) {
+                    val x = textX + ui.px(Tok.npNextIndent)
+                    RoleText("$n of $m", Roles.npCount, Modifier.atBaseline(x, nextBaseline, ui.px(ui.w - Tok.edge) - x).testTag("np.count"))
+                }
                 val corner = ui.landscape
-                if (canLyrics && s.source != Enums.Source.phone && artSide > 0f && npMarkFits(ui.npArt, corner)) {
+                if (canLyrics && artSide > 0f && npMarkFits(ui.npArt, corner)) {
                     val ring = ui.px(Tok.npRing)
                     val cx = if (corner) artX + artSide - ui.px(Tok.detailRingInset) - ring / 2 else artX + artSide + ui.px(Tok.tileLGutter) + ring / 2
                     val cy = artY + artSide - (if (corner) ui.px(Tok.detailRingInset) else 0f) - ring / 2
@@ -597,14 +657,14 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
 }
 
 @Composable
-private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: String?, lifecycle: Lifecycle, active: Boolean, onTap: () -> Unit, onLong: () -> Unit) {
+private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, np: NpKey?, next: String?, lifecycle: Lifecycle, active: Boolean, onTap: () -> Unit, onLong: () -> Unit) {
     val ui = LocalUi.current
     val s = device.playback.state
     val x = ui.px(Tok.edge)
     val w = ui.px(ui.w - Tok.edge) - x
     val room = ui.npLyricBottom - ui.npLyricTop
     val surface = Modifier.at(x, ui.px(ui.npLyricTop)).size(w.dp(), ui.px(room).coerceAtLeast(0f).dp())
-    val copy = (lyrics as? LyricsFetch.Show.Lines)?.takeIf { it.track == s.track && (it.held || it.copy.crc == s.lyricsCrc) }?.copy
+    val copy = copyFor(lyrics, np, s)
     val measurer = rememberTextMeasurer()
     val styles = listOf(Roles.npTitle, Roles.npNext, PLAIN).map { textStyle(it, white(1f)) }
     val wraps = remember(copy, s.title, next, w, ui.u) { HashMap<Pair<String, Int>, List<String>>() }
@@ -681,8 +741,8 @@ private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, next: St
     val view = LocalView.current
     val index = lines?.let { LyricsFetch.index(it, device.positionMs(maxOf(at, device.playback.receivedAt))) } ?: -1
     Box(surface.press({ onTap() }, onLong).testTag("np.lyrics")) {
-        if (copy == null && lyrics != LyricsFetch.Show.None) return@Box
-        key(s.track, copy) {
+        if (copy == null && !none(lyrics)) return@Box
+        key(np, copy) {
             var shown by remember { mutableIntStateOf(index) }
             var slide by remember { mutableStateOf<LyricSlide.Slide?>(null) }
             var frame by remember { mutableLongStateOf(0L) }
@@ -754,7 +814,7 @@ fun Status(device: DeviceState) {
         right -= step
     }
     val playing = s.playing == true
-    val paused = !playing && (s.slots ?: 0L) > 0L
+    val paused = !playing && (s.source == Enums.Source.phone || (s.slots ?: 0L) > 0L)
     if (playing || paused) {
         Glyph(
             if (playing) GlyphName.PLAY else GlyphName.PAUSE,
