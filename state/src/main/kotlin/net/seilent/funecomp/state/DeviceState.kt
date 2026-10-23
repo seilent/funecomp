@@ -63,6 +63,19 @@ data class LibMirror(val rev: Long? = null, val pages: Map<LibKey, LibList> = em
 
 data class LibList(val total: Long = 0, val rows: Map<Long, LibRow> = emptyMap())
 
+data class CardView(val value: Int? = null, val seen: Boolean = false, val epoch: Int = 0) {
+    val down: Boolean get() = value != null && value != Enums.Card.ready
+
+    fun with(v: Int?): CardView = when {
+        v == null -> this
+        v != Enums.Card.ready -> CardView(v, false, epoch)
+        seen -> copy(value = v)
+        else -> CardView(v, true, epoch + 1)
+    }
+
+    fun refused(): CardView = copy(seen = false)
+}
+
 data class DeviceState(
     val hello: HelloReply? = null,
     val playback: Playback = Playback(),
@@ -73,7 +86,10 @@ data class DeviceState(
     val queue: QueueMirror = QueueMirror(),
     val lib: LibMirror = LibMirror(),
     val clock: DeviceClock = DeviceClock(),
+    val card: CardView = CardView(),
 ) {
+    val cardDown: Boolean get() = card.down
+
     fun has(group: String) = hello?.has(group) ?: false
 
     fun positionMs(now: Long): Long = Position.at(playback, rttMs, now)
@@ -109,7 +125,7 @@ data class DeviceState(
         val sent = s.sentMs?.takeIf { s.sampleMs != null && has("stateClock") }
         val c = sent?.let { clock.add(now, now - it) } ?: clock
         val late = sent?.let { now - it - (c.offset ?: 0) } ?: 0
-        return copy(playback = Playback(s, now, gateAt, late), queue = q, lib = l, clock = c)
+        return copy(playback = Playback(s, now, gateAt, late), queue = q, lib = l, clock = c, card = card.with(s.card))
     }
 
     fun withSchema(s: Schema): DeviceState {

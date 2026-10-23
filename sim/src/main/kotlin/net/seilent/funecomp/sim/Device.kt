@@ -71,6 +71,7 @@ private const val MIB = 1L shl 20
 private const val UPDATE_RESERVE = 64L shl 20
 private const val LIBRARY = 1
 private const val PHONE = 2
+private const val CARD = "card not available"
 private const val CROSS_MIN_MS = 30_000L
 private const val CROSS_CAP_MS = 240_000L
 private val SYNCED = Regex("^\\[[0-9]+:[0-9]{2}(\\.[0-9]+)?]", RegexOption.MULTILINE)
@@ -237,6 +238,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val v19: Boolean get() = opts.minor >= 9
     private val v110: Boolean get() = opts.minor >= 10
     private var source = opts.source
+    private var output = Enums.Output.wired
     private var rescanLib = opts.rescanLib
     val begins: MutableList<Pair<String, Int?>> = java.util.Collections.synchronizedList(ArrayList())
     private val started = clock()
@@ -250,6 +252,15 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private var flagTrack: Long? = null
     private var flagAt = 0L
     private var late = false
+    private class CardEdge(val at: Long, val value: Int, val mounted: Boolean, val index: Boolean)
+    private var cardEdges: List<CardEdge> = emptyList()
+    private var cardForced: CardEdge? = null
+    private var lagBusy = false
+    private var cardArmed = faults.cardRun != null || faults.cardSeq.isNotEmpty()
+    private var cardGate = Enums.Card.ready
+    private val cardSent = HashMap<Out, Triple<Int, Boolean, Long?>>()
+    private var pushOut: Out? = null
+    private var updOut: Out? = null
 
     init {
         opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f ->
@@ -302,6 +313,152 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
     }
 
+    private fun cardStart(at: Long) {
+        if (!cardArmed) return
+        cardArmed = false
+        cardForced = null
+        val run = faults.cardRun
+        cardEdges = if (run != null) {
+            listOf(
+                CardEdge(at, Enums.Card.busy, false, false),
+                CardEdge(at + run.holdMs, Enums.Card.busy, true, true),
+                CardEdge(at + run.holdMs + run.indexMs, Enums.Card.ready, true, false),
+            )
+        } else {
+            var t = at
+            faults.cardSeq.map { (v, ms) -> CardEdge(t, v, v == Enums.Card.ready, false).also { t += ms } }
+        }
+        opts.log("card run from $at")
+    }
+
+    private fun edgeAt(t: Long) = cardEdges.lastOrNull { it.at <= t }
+
+    private fun stateEdge(): CardEdge? {
+        if (lagBusy) {
+            if (lagging()) return CardEdge(now(), Enums.Card.busy, true, false)
+            lagBusy = false
+        }
+        val lag = edgeAt(now() - faults.lateState)
+        if (faults.cardCoalesce) return lag?.takeIf { it.value == Enums.Card.ready }
+        val f = cardForced ?: return lag
+        if (lag != null && lag.at >= f.at) {
+            cardForced = null
+            return lag
+        }
+        return f
+    }
+
+    private fun forceCard() {
+        if (faults.cardCoalesce) return
+        if (lagging()) {
+            lagBusy = true
+            return
+        }
+        val e = edgeAt(now()) ?: return
+        if (e.value != Enums.Card.ready && stateCard() == Enums.Card.ready) cardForced = e
+    }
+
+    private fun stateCard() = stateEdge()?.value ?: Enums.Card.ready
+
+    private fun mounted() = stateEdge()?.mounted ?: true
+
+    private fun cardAbort() = if (!faults.cardOld && opts.minor >= 15) Enums.AbortCode.noCard else Enums.AbortCode.busy
+
+    private fun cardEdge() {
+        val v = edgeAt(now())?.value ?: Enums.Card.ready
+        if (v == cardGate) return
+        val was = cardGate
+        cardGate = v
+        opts.log("card gate ${Enums.Card.names[v]}")
+        if (was != Enums.Card.ready || v == Enums.Card.ready) return
+        if (faults.cardOld && edgeAt(now())?.mounted == true) return
+        val p = push
+        val o = pushOut
+        if (cardAbort() == Enums.AbortCode.noCard && ((p != null && !pushDropped && o != null) || (upd != null && updOut != null))) forceCard()
+        if (p != null && !pushDropped && o != null) {
+            cardPush(o)
+            opts.log("card stop img name=${p.name} at=${p.data.size()}")
+            abort(o, p, cardAbort())
+        }
+        val u = upd
+        val uo = updOut
+        if (u != null && uo != null) {
+            cardPush(uo)
+            opts.log("card stop upd at=${u.part.length()}")
+            send(uo, Msg.UPD_ABORT, UpdAbort(u.part.length(), cardAbort()).encode())
+            upd = null
+        }
+    }
+
+    private fun cardKey() = Triple(stateCard(), mounted(), if (faults.cardCoalesce) stateEdge()?.at else null)
+
+    private fun cardPush(out: Out) {
+        val c = cardKey()
+        if (cardEdges.isEmpty() || cardSent[out] == c) return
+        cardSent[out] = c
+        opts.log("card state ${Enums.Card.names[c.first]}${if (c.second) "" else " unmounted"}")
+        send(out, Msg.STATE, state())
+    }
+
+    private fun lagging(): Boolean {
+        if (faults.playLag <= 0) return false
+        val r = cardEdges.lastOrNull { it.value == Enums.Card.ready } ?: return false
+        val from = r.at + faults.lateState
+        return now() >= from && now() < from + faults.playLag
+    }
+
+    private fun playCmd(type: Int, b: Node): Boolean = when (type) {
+        Msg.PLAY -> true
+        Msg.QUEUE_OP -> b.int(Tags.QueueOp.cmd) in setOf(Enums.QueueCmd.playAt, Enums.QueueCmd.playNext, Enums.QueueCmd.add)
+        Msg.ACTION -> b.int(Tags.Action.cmd) == Enums.ActionCmd.shuffleLibrary
+        else -> false
+    }
+
+    private fun noCard() = if (opts.minor >= 15) Answer.Fail(Err.noCard, CARD) else Answer.Fail(Err.busy, CARD)
+
+    private fun cardRefusal(type: Int, b: Node): Answer.Fail? {
+        if (cardEdges.isEmpty()) return null
+        val e = edgeAt(now())
+        if (e == null || e.value == Enums.Card.ready) {
+            if (!lagging() || !playCmd(type, b)) return null
+            if (type == Msg.ACTION && lib.tracks.isEmpty()) return null
+            return if (faults.cardOld) Answer.Fail(Err.busy, "busy") else noCard()
+        }
+        return if (faults.cardOld) oldRefusal(type, b, !e.mounted) else landedRefusal(type, b)
+    }
+
+    private fun landedRefusal(type: Int, b: Node): Answer.Fail? = when (type) {
+        Msg.PLAY, Msg.LYR_GET, Msg.LRC_PUT, Msg.IMG_BEGIN, Msg.IMG_DEL, Msg.IMG_TAG, Msg.UPD_BEGIN -> noCard()
+        Msg.QUEUE_OP -> if (b.int(Tags.QueueOp.cmd) == Enums.QueueCmd.page) null else noCard()
+        Msg.ACTION -> when (b.int(Tags.Action.cmd)) {
+            Enums.ActionCmd.shuffleLibrary -> if (lib.tracks.isEmpty()) null else noCard()
+            Enums.ActionCmd.favorite -> noCard()
+            else -> null
+        }
+        else -> null
+    }
+
+    private fun oldRefusal(type: Int, b: Node, hold: Boolean): Answer.Fail? {
+        val busy = Answer.Fail(Err.busy, "busy")
+        return when (type) {
+            Msg.PLAY, Msg.QUEUE_OP, Msg.IMG_BEGIN, Msg.IMG_LIST, Msg.IMG_DEL, Msg.IMG_TAG, Msg.LRC_PUT -> if (hold) busy else null
+            Msg.UPD_BEGIN -> busy
+            Msg.LYR_GET -> if (hold && b.long(Tags.LyrGet.track) != queue.getOrNull(slot)) busy else null
+            Msg.ACTION -> when (b.int(Tags.Action.cmd)) {
+                Enums.ActionCmd.shuffleLibrary -> if (lib.tracks.isEmpty() || !hold) null else Answer.Fail(Err.busy, CARD)
+                Enums.ActionCmd.favorite -> Answer.Fail(Err.busy, CARD)
+                else -> null
+            }
+            else -> null
+        }
+    }
+
+    private fun dropped(type: Int): Boolean {
+        if (type != Msg.PLAY || !faults.playDrop || !faults.cardOld) return false
+        val e = edgeAt(now()) ?: return false
+        return e.index && e.value != Enums.Card.ready
+    }
+
     fun restart() = synchronized(lock) {
         partials.clear()
         push = null
@@ -320,14 +477,20 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     fun greet(out: Out, receipt: Long? = null) = synchronized(lock) {
+        if (faults.cardSeq.isNotEmpty()) cardStart(now())
+        cardEdge()
+        cardSent[out] = cardKey()
         send(out, Msg.STATE, state(receipt))
+        (faults.cardRun?.start as? CardRun.Start.Delay)?.let { cardStart(now() + it.ms) }
         pushSchema(out)
         pushSettings(out)
         pushEq(out, Enums.EqOutput.wired)
         pushEq(out, Enums.EqOutput.bt)
     }
 
-    private fun now() = clock()
+    private val frozen = ThreadLocal<Long>()
+
+    private fun now() = frozen.get() ?: clock()
 
     private fun position(): Long {
         val t = lib.byId[queue.getOrNull(slot)]
@@ -343,7 +506,19 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private fun sleepLeft(): Long = if (sleepLeftS <= 0) 0 else maxOf(0L, sleepLeftS - (now() - sleepSetAt) / 1000)
 
     fun state(receipt: Long? = null): ByteArray = synchronized(lock) {
+        if (frozen.get() != null) return@synchronized build(receipt)
+        frozen.set(clock())
+        try {
+            build(receipt)
+        } finally {
+            frozen.remove()
+        }
+    }
+
+    private fun build(receipt: Long?): ByteArray = run {
+        cardEdge()
         val t = lib.byId[queue.getOrNull(slot)]
+        val on = mounted()
         lastStateAt = now()
         val sample = if (v110) now() else receipt ?: now()
         val sent = if (v110) now() else sample
@@ -360,12 +535,12 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (late && now() - flagAt >= (faults.lyricsLate ?: 0)) late = false
         val unread = t != null && (late || t.title in faults.lyricsAbsent)
         State(
-            source, Enums.Output.wired, t?.id, t?.title, t?.artist, t?.artists.orEmpty(),
+            source, output, t?.id, t?.title, t?.artist, t?.artists.orEmpty(),
             t?.mbids.orEmpty(), t?.durationMs, position(), sample, sent, playing, shuffle, repeat,
             volume, maxVolume, bat, queueRev, slot.toLong(), queue.size.toLong(), lib.rev, t?.album, sleepLeft(),
             if (v12) opts.battery.charging else null,
-            if (v12) opts.cardFreeMiB else null,
-            if (v12) opts.cardTotalMiB else null,
+            if (v12 && on) opts.cardFreeMiB else null,
+            if (v12 && on) opts.cardTotalMiB else null,
             if (v12) volumePercent(volume) else null,
             if (v12) prefs.getValue("volumeStep").toIntOrNull() ?: 5 else null,
             if (v12 && t != null && !unread) hasSynced(t.id) else null,
@@ -377,6 +552,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             if (v110) false else null,
             lyricsOffsetMs = if (t != null && !unread && hasSynced(t.id)) offsetTag(t.id) else null,
             playLogSeq = if (allowed(Msg.PLAYLOG_GET)) playLog.newest else null,
+            card = if (opts.minor >= 14) stateCard() else null,
         ).encode()
     }
 
@@ -384,6 +560,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun tick(out: Out) = synchronized(lock) {
         follow()
+        cardEdge()
+        cardPush(out)
         val t = lib.byId[queue.getOrNull(slot)]
         if (sleepLeftS > 0 && sleepLeft() == 0L) {
             sleepLeftS = 0
@@ -405,6 +583,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     fun linked(out: Out, features: Long) = synchronized(lock) {
+        if (faults.cardRun?.start == CardRun.Start.Hello) cardStart(now())
         linked[out] = features
         if (++connects == 2 && faults.newlog) {
             playLog.renew(playLog.id + 1)
@@ -412,7 +591,12 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
     }
 
-    fun unlinked(out: Out) = synchronized(lock) { linked.remove(out) }
+    fun unlinked(out: Out) = synchronized(lock) {
+        linked.remove(out)
+        cardSent.remove(out)
+        if (pushOut === out) pushOut = null
+        if (updOut === out) updOut = null
+    }
 
     val plays: List<PlayEntry> get() = synchronized(lock) { playLog.held }
 
@@ -510,6 +694,13 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun request(type: Int, body: Node, out: Out): Answer = synchronized(lock) {
         follow()
+        cardEdge()
+        cardRefusal(type, body)?.let {
+            if (it.code == Err.noCard) forceCard()
+            cardPush(out)
+            return@synchronized it
+        }
+        if (dropped(type)) return@synchronized Answer.Ok()
         when (type) {
             Msg.TRANSPORT -> transport(body)
             Msg.VOLUME -> volume(body)
@@ -533,7 +724,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Msg.LRC_DEL -> lrcDel(body)
             Msg.LYR_GET -> lyrGet(body)
             Msg.LYR_OFFSET -> lyrOffset(body)
-            Msg.UPD_BEGIN -> updBegin(body)
+            Msg.UPD_BEGIN -> updBegin(body, out)
             Msg.UPD_END -> updEnd(body)
             Msg.PLAYLOG_GET -> playLogGet(body)
             Msg.PLAYLOG_ACK -> playLogAck(body)
@@ -1003,6 +1194,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun source(v: Int) = synchronized(lock) { source = v }
 
+    fun output(v: Int) = synchronized(lock) { output = v }
+
     fun rescan(next: Library?) = synchronized(lock) {
         val old = lib
         if (next != null) {
@@ -1082,6 +1275,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             p.data.write(bytes)
         }
         push = p
+        pushOut = out
         pushMbid = b.str(Tags.ImgBegin.mbid)
         pushMeta = meta
         pushDropped = false
@@ -1090,6 +1284,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     fun imgData(b: Node, out: Out) = synchronized(lock) {
+        cardEdge()
         val p = push ?: return@synchronized
         if (pushDropped) {
             droppedData++
@@ -1101,6 +1296,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (off != p.data.size().toLong()) return@synchronized abort(out, p, Enums.AbortCode.offsetMismatch)
         if (off + data.size > p.total) return@synchronized abort(out, p, Enums.AbortCode.badValue)
         p.data.write(data)
+        (faults.cardRun?.start as? CardRun.Start.Img)?.let { if (p.data.size() >= it.bytes) cardStart(now()) }
+        cardEdge()
+        if (pushDropped) return@synchronized
         val at = faults.abortAt
         if (at != null && !abortFired && p.data.size() >= at) {
             abortFired = true
@@ -1317,7 +1515,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun updName() = if (board.name == "v1") "v1.upt" else "update.upt"
 
-    private fun updBegin(b: Node): Answer {
+    private fun updBegin(b: Node, out: Out): Answer {
         val dir = opts.updDir ?: return Answer.Fail(Err.refused, "no update dir")
         val name = b.str(Tags.UpdBegin.board) ?: return Answer.Fail(Err.badValue, "no board")
         val size = b.long(Tags.UpdBegin.size) ?: return Answer.Fail(Err.badValue, "no size")
@@ -1335,11 +1533,13 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
         if (size - part.length() > opts.cardFreeMiB * MIB - UPDATE_RESERVE) return Answer.Fail(Err.noSpace, "no space")
         upd = Upd(name, size, md5, part)
+        updOut = out
         opts.log("upd begin size=$size offset=${part.length()}")
         return Answer.Ok(UpdBeginReply(part.length()).encode())
     }
 
     fun updData(b: Node, out: Out) = synchronized(lock) {
+        cardEdge()
         val u = upd ?: return@synchronized
         val off = b.long(Tags.UpdData.offset) ?: return@synchronized
         val data = b.bytes(Tags.UpdData.`data`) ?: return@synchronized
@@ -1349,6 +1549,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             return@synchronized
         }
         u.part.appendBytes(data)
+        (faults.cardRun?.start as? CardRun.Start.Upd)?.let { if (u.part.length() >= it.bytes) cardStart(now()) }
+        cardEdge()
+        if (upd == null) return@synchronized
         val at = faults.updAbortAt
         if (at != null && !updAbortFired && u.part.length() >= at) {
             updAbortFired = true

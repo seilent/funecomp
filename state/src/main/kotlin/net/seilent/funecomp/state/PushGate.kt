@@ -10,4 +10,6 @@ object PushGate {
         val start = p.gateAt ?: return true
         return now - start >= Proto.pushGateMs
     }
+
+    fun card(d: DeviceState): Boolean = d.cardDown
 }

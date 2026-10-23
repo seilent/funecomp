@@ -30,6 +30,41 @@ class Board(
 
 class EnumFault(val type: Int, val tag: Int, val value: Int)
 
+class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
+    sealed interface Start {
+        class Delay(val ms: Long) : Start
+        data object Hello : Start
+        class Img(val bytes: Long) : Start
+        class Upd(val bytes: Long) : Start
+    }
+
+    companion object {
+        fun parse(v: String): CardRun {
+            val run = v.substringBefore('@')
+            val at = v.substringAfter('@', "0")
+            val hold = run.substringBefore('+').toLongOrNull() ?: throw IllegalArgumentException("card-run: hold missing in $v")
+            val index = run.substringAfter('+', "").toLongOrNull() ?: throw IllegalArgumentException("card-run: index missing in $v")
+            val start = when {
+                at == "hello" -> Start.Hello
+                at.startsWith("img:") -> Start.Img(at.removePrefix("img:").toLongOrNull() ?: throw IllegalArgumentException("card-run: bad bytes in $v"))
+                at.startsWith("upd:") -> Start.Upd(at.removePrefix("upd:").toLongOrNull() ?: throw IllegalArgumentException("card-run: bad bytes in $v"))
+                else -> Start.Delay(at.toLongOrNull() ?: throw IllegalArgumentException("card-run: bad start in $v"))
+            }
+            return CardRun(hold, index, start)
+        }
+
+        fun seq(v: String): List<Pair<Int, Long>> {
+            val steps = v.split(',').map { it.trim() }
+            return steps.mapIndexed { i, step ->
+                val name = step.substringBefore(':')
+                val value = Enums.Card.names.entries.firstOrNull { it.value == name }?.key ?: throw IllegalArgumentException("card-seq: unknown value $name")
+                val ms = if (i == steps.lastIndex) 0L else step.substringAfter(':', "").toLongOrNull() ?: throw IllegalArgumentException("card-seq: duration missing in $step")
+                value to ms
+            }
+        }
+    }
+}
+
 class Faults(specs: List<String>) {
     var dropAfterBytes: Long? = null
     var stallMs = 0L
@@ -58,9 +93,21 @@ class Faults(specs: List<String>) {
     val lyricsAbsent = HashSet<String>()
     var newlog = false
     val dropAck = java.util.concurrent.atomic.AtomicBoolean(false)
+    var cardRun: CardRun? = null
+    var cardSeq: List<Pair<Int, Long>> = emptyList()
+    var cardOld = false
+    var lateState = 0L
+    var playLag = 0L
+    var playDrop = false
+    var cardCoalesce = false
 
     init {
-        for (spec in specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }) {
+        val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
+            val step = '=' !in t && t.substringBefore(':') in Enums.Card.names.values
+            if (step && acc.lastOrNull()?.startsWith("card-seq=") == true) acc[acc.lastIndex] = acc.last() + "," + t else acc += t
+            acc
+        }
+        for (spec in tokens) {
             val k = spec.substringBefore('=')
             val v = spec.substringAfter('=', "")
             when (k) {
@@ -117,6 +164,17 @@ class Faults(specs: List<String>) {
                 "lyrics-absent" -> lyricsAbsent += v
                 "newlog" -> newlog = true
                 "drop-ack" -> dropAck.set(true)
+                "card-run" -> cardRun = CardRun.parse(v)
+                "card-seq" -> cardSeq = CardRun.seq(v)
+                "card-device" -> cardOld = when (v) {
+                    "landed" -> false
+                    "old" -> true
+                    else -> throw IllegalArgumentException("card-device: landed or old, not $v")
+                }
+                "late-state" -> lateState = v.toLong()
+                "play-lag" -> playLag = v.toLong()
+                "play-drop" -> playDrop = true
+                "card-coalesce" -> cardCoalesce = true
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')
@@ -129,6 +187,7 @@ class Faults(specs: List<String>) {
                 else -> throw IllegalArgumentException("unknown fault $k")
             }
         }
+        if (cardRun != null && cardSeq.isNotEmpty()) throw IllegalArgumentException("card-run and card-seq together")
     }
 }
 

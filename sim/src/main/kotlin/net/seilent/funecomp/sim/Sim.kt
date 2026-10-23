@@ -109,6 +109,11 @@ class Sim(private val opts: Options, lib: Library = Library.synthetic()) {
         current?.takeIf { it.closed == null }?.push(Msg.STATE, device.state())
     }
 
+    fun output(v: Int) {
+        device.output(v)
+        current?.takeIf { it.closed == null }?.push(Msg.STATE, device.state())
+    }
+
     fun rescan(lib: Library) {
         device.rescan(lib)
         current?.takeIf { it.closed == null }?.push(Msg.STATE, device.state())
