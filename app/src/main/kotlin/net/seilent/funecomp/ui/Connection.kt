@@ -88,10 +88,14 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
             if (!link.permission) {
                 ctx.control.askPermission()
             } else {
-                val list = read()
-                bonded = list
-                val at = list.indexOfFirst { it.name == link.device || it.address == link.device }.coerceAtLeast(0)
-                ctx.sheet.open("device", list.map { it.name }, at, keep = keep(i)) { ctx.control.choose(list[it].address) }
+                bonded = read()
+                val list = bonded.filter { it.companion || it.name == link.device || it.address == link.device }
+                if (list.isEmpty()) {
+                    ctx.control.openBluetoothSettings()
+                } else {
+                    val at = list.indexOfFirst { it.name == link.device || it.address == link.device }.coerceAtLeast(0)
+                    ctx.sheet.open("device", list.map { it.name }, at, keep = keep(i)) { ctx.control.choose(list[it].address) }
+                }
             }
         })
         add(Line("status", statusText(link), tag = "status", tap = tryAgain))

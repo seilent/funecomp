@@ -181,8 +181,13 @@ class SimControl(
     var disconnects = 0
     var allows = 0
     var laters = 0
+    var btSettings = 0
 
     override fun bonded() = bonds
+
+    override fun openBluetoothSettings() {
+        btSettings++
+    }
 
     override fun retry() {
         retries++

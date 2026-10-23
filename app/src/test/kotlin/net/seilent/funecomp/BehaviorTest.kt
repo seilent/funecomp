@@ -148,6 +148,31 @@ class BehaviorTest {
     }
 
     @Test
+    fun deviceSheetListsCompanionBondsAndTheLinkDevice() {
+        val (c, shell) = start(listOf(Page.Home), LinkView(Phase.DOWN, "JBL Flip 6"))
+        c.bonds = listOf(Bonded("JBL Flip 6", "00:00:00:00:00:04"), Bonded("TempoTec V1", "00:00:00:00:00:01", true), Bonded("Fitbit", "00:00:00:00:00:05"))
+        shell.nav.push(Page.Connection)
+        settle(1500)
+        rule.onNodeWithTag("conn.device").performClick()
+        settle(300)
+        assertEquals(listOf("TempoTec V1", "JBL Flip 6"), shell.sheet.items)
+        assertEquals(1, shell.sheet.focus)
+        assertEquals(0, c.btSettings)
+    }
+
+    @Test
+    fun deviceTapWithNoCompanionBondOpensBluetoothSettings() {
+        val (c, shell) = start(listOf(Page.Home), LinkView(Phase.NONE))
+        c.bonds = listOf(Bonded("JBL Flip 6", "00:00:00:00:00:04"))
+        shell.nav.push(Page.Connection)
+        settle(1500)
+        rule.onNodeWithTag("conn.device").performClick()
+        settle(300)
+        assertEquals(1, c.btSettings)
+        assertFalse(shell.sheet.shown)
+    }
+
+    @Test
     fun pairHintHiddenWhileLive() {
         val (c, shell) = start(listOf(Page.Home))
         c.bonds = listOf(Bonded("WH-1000XM4", "00:00:00:00:00:02"))
