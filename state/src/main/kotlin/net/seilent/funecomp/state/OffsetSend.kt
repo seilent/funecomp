@@ -272,7 +272,7 @@ class OffsetSend(val track: Long, shown: Int) {
             Err.badValue -> RANGE
             Err.refused -> "refused"
             Err.staleRev -> "song not in library"
-            Err.noLibrary -> Heart.CARD
+            Err.noLibrary, Err.noCard -> Heart.CARD
             Err.unknown -> "not supported"
             else -> "error $code"
         }

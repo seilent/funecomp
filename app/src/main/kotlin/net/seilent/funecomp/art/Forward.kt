@@ -371,8 +371,8 @@ class Forward(
                     k.names.remove(name)
                     gone++
                 }
-                r is Session.Result.Failed && r.error.code == Err.busy -> {
-                    log("art tag $name -> error ${Err.busy}")
+                r is Session.Result.Failed && (r.error.code == Err.busy || r.error.code == Err.noCard) -> {
+                    log("art tag $name -> error ${r.error.code}")
                     return null
                 }
                 else -> log("art tag $name -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")

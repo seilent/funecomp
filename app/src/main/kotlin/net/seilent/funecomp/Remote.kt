@@ -415,7 +415,7 @@ object Remote : Control {
     }
 
     fun thumbs(context: Context): ThumbWorker = synchronized(lock) {
-        thumbs ?: ThumbWorker(File(context.applicationContext.filesDir, "thumb"), { link?.session }) { Log.i(TAG, it) }.also { thumbs = it }
+        thumbs ?: ThumbWorker(File(context.applicationContext.filesDir, "thumb"), { link?.session }, { device.card }) { Log.i(TAG, it) }.also { thumbs = it }
     }
 
     override fun wantArt(slot: Int, track: Long, px: Int, album: String?) {
@@ -1115,7 +1115,7 @@ object Remote : Control {
         heartToast = toast
         val t = heart.tap(s) ?: return
         action(Enums.ActionCmd.favorite, t.track) { code, text ->
-            heartShow(heart.replied(t, code, text, SystemClock.elapsedRealtime()))
+            heartShow(heart.replied(t, code, text, SystemClock.elapsedRealtime(), device.hello?.minor ?: 0))
             if (code == null) timer.schedule({ heartShow(heart.tick(t, SystemClock.elapsedRealtime())) }, Heart.WINDOW_MS, TimeUnit.MILLISECONDS)
         }
     }
@@ -1249,14 +1249,17 @@ object Remote : Control {
             edit?.state(s, mark)
             (s.snapRev ?: s.libRev)?.let { r -> if (r != (old.snapRev ?: old.libRev)) thumbs?.rev(r) }
             heartShow(heart.state(s))
-            Scrobbles.state(s, System.currentTimeMillis())
+            Scrobbles.state(s, System.currentTimeMillis(), device.card)
             Firmwares.state()
             onState?.invoke()
             Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB} pos=${s.positionMs} sent=${s.sentMs} sample=${s.sampleMs} rtt=${device.rttMs} at=$now lateMs=${device.playback.lateMs} held=${s.positionHeld}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
             val key = listOf(s.artists, s.output, s.queueRev, s.slot)
             val ready = device.card.epoch != epoch
-            if (ready) Log.i(TAG, "card ready edge ${device.card.epoch}")
+            if (ready) {
+                Log.i(TAG, "card ready edge ${device.card.epoch}")
+                thumbs?.cardReady()
+            }
             if (key != artKey || ready) {
                 artKey = key
                 trigger.incrementAndGet()

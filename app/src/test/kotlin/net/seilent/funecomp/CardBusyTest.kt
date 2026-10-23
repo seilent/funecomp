@@ -5,6 +5,7 @@ import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
+import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.LyricSources
@@ -12,12 +13,14 @@ import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
+import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.Phase
 import org.junit.After
@@ -111,8 +114,8 @@ class CardBusyTest {
 
     private fun lib(names: List<String>) = Library(names.mapIndexed { i, n -> Library.track(n, "Album $i", "Song $i", 1, 200_000) })
 
-    private fun sim(lib: Library, faults: List<String>, lrcDir: File? = null, minor: Int = Proto.minor): Sim {
-        val s = Sim(Options(Board.of("v1"), Faults(faults), lrcDir = lrcDir, minor = minor, log = { lines += it }), lib)
+    private fun sim(lib: Library, faults: List<String>, lrcDir: File? = null, minor: Int = Proto.minor, updDir: File? = null, artDir: File? = null): Sim {
+        val s = Sim(Options(Board.of("v1"), Faults(faults), lrcDir = lrcDir, minor = minor, updDir = updDir, artDir = artDir, log = { lines += it }), lib)
         sims += s
         return s
     }
@@ -353,4 +356,174 @@ class CardBusyTest {
         assertEquals(1, edges())
         c.destroy()
     }
+
+    private class Upd(val image: File, val card: File)
+
+    private fun upd(): Upd {
+        val dir = kotlin.io.path.createTempDirectory("upd").toFile()
+        val image = File(dir, "image.upt").apply { writeBytes(ByteArray(400_000) { (it * 7 + 3).toByte() }) }
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        return Upd(image, File(dir, "card"))
+    }
+
+    private fun stored(u: Upd) {
+        val done = File(u.card, "v1.upt")
+        val end = System.currentTimeMillis() + 60_000
+        while (!done.exists()) {
+            check(System.currentTimeMillis() < end) { "timed out: ${lines.filter { it.startsWith("upd") || it.startsWith("card") }} ${Firmwares.view}" }
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+            Thread.sleep(100)
+        }
+        assertTrue(u.image.readBytes().contentEquals(done.readBytes()))
+        waitFor { Firmwares.view.info == "ready on the dap" }
+    }
+
+    private fun updStop(minor: Int) {
+        val u = upd()
+        val c = link(sim(Library.synthetic(), listOf("card-run=8000+4000@upd:150000", "late-state=1500"), minor = minor, updDir = u.card))
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        Firmwares.send(u.image)
+        waitFor(20_000) { Firmwares.view.info == Heart.CARD }
+        assertTrue(Firmwares.view.send, Firmwares.view.send.startsWith("paused"))
+        waitFor { Remote.device.cardDown }
+        val stop = lines.first { it.startsWith("card stop upd") }
+        stored(u)
+        val begins = lines.filter { it.startsWith("upd begin") }
+        assertTrue("$begins", begins.size >= 2)
+        assertEquals(stop.substringAfter("at=").toLong(), begins.last().substringAfter("offset=").toLong())
+        assertTrue(begins.last().substringAfter("offset=").toLong() >= 150_000)
+        assertTrue(index("card gate ready") < lines.indexOf(begins.last()))
+        c.destroy()
+    }
+
+    @Test
+    fun aCardStopMidUpdatePausesKeepsThePickAndResumesAtMinor15() = updStop(15)
+
+    @Test
+    fun aBusyStopMidUpdatePausesKeepsThePickAndResumesAtMinor14() = updStop(14)
+
+    @Test
+    fun anUpdateTappedDuringTheRunIsNotSentUntilReady() {
+        val u = upd()
+        val s = sim(Library.synthetic(), listOf("card-run=4000+2000@manual"), updDir = u.card)
+        val c = link(s)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        s.device.startCard()
+        waitFor { Remote.device.cardDown }
+        Firmwares.send(u.image)
+        waitFor { Firmwares.view.info == Heart.CARD }
+        stored(u)
+        assertEquals(emptyList<String>(), between(0, index("card gate ready"), Regex("rx UPD_BEGIN ")))
+        c.destroy()
+    }
+
+    @Test
+    fun anUpdateBeginRefused14InACoalescedRunResumesAtTheFirstReadyState() {
+        val u = upd()
+        val s = sim(Library.synthetic(), listOf("card-run=4000+2000@manual", "card-coalesce"), updDir = u.card)
+        val c = link(s)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        s.device.startCard()
+        waitFor { lines.contains("card gate busy") }
+        Firmwares.send(u.image)
+        waitFor { Firmwares.view.info == Heart.CARD }
+        assertEquals(false, Remote.device.cardDown)
+        stored(u)
+        val ready = index("card gate ready")
+        assertEquals(1, between(0, ready, Regex("rx UPD_BEGIN ")).size)
+        assertEquals(1, between(0, ready, Regex("tx UPD_BEGIN flags=0x03 ")).size)
+        assertTrue(ready < lines.indexOfFirst { "tx UPD_BEGIN flags=0x01 " in it })
+        c.destroy()
+    }
+
+    @Test
+    fun anUpdateBeginRefusedWithBusyBelowTheCardTagPausesAndResumes() {
+        val u = upd()
+        val s = sim(Library.synthetic(), listOf("card-run=4000+2000@manual"), minor = 13, updDir = u.card)
+        val c = link(s)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        s.device.startCard()
+        waitFor { lines.contains("card gate busy") }
+        assertEquals(null, Remote.device.card.value)
+        Firmwares.send(u.image)
+        waitFor { Firmwares.view.info == "dap busy" }
+        assertTrue(Firmwares.view.send.startsWith("paused") || Firmwares.view.send.isEmpty())
+        stored(u)
+        assertTrue(between(0, index("card gate ready"), Regex("rx UPD_BEGIN ")).isNotEmpty())
+        c.destroy()
+    }
+
+    @Test
+    fun anUpdateBeginRefused14PausesKeepsThePickAndResumes() {
+        val u = upd()
+        val s = sim(Library.synthetic(), listOf("fail=UPD_BEGIN:14:1"), updDir = u.card)
+        val c = link(s)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        Firmwares.send(u.image)
+        waitFor { Firmwares.view.info == Heart.CARD }
+        assertTrue(Firmwares.view.send.startsWith("paused"))
+        settle(Firmwares.BUSY_RETRY_MS + 1000)
+        assertEquals(1, lines.count { "rx UPD_BEGIN" in it })
+        s.current!!.push(Msg.STATE, s.device.state())
+        stored(u)
+        assertEquals(2, lines.count { "rx UPD_BEGIN" in it })
+        c.destroy()
+    }
+
+    @Test
+    fun anUpdateBeginRefused14ThenAReconnectResumesAtTheNewSessionsReady() {
+        val u = upd()
+        val s = sim(Library.synthetic(), listOf("fail=UPD_BEGIN:14:1"), updDir = u.card)
+        val c = link(s)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        Firmwares.send(u.image)
+        waitFor { Firmwares.view.info == Heart.CARD }
+        val hellos = lines.count { "rx HELLO" in it }
+        s.current!!.close("drop")
+        waitFor(15_000) { lines.count { "rx HELLO" in it } > hellos && Remote.phase == Phase.LIVE }
+        stored(u)
+        val begins = lines.withIndex().filter { "rx UPD_BEGIN" in it.value }.map { it.index }
+        val hello = lines.withIndex().filter { "rx HELLO" in it.value }.map { it.index }[1]
+        assertEquals(1, begins.count { it < hello })
+        assertTrue(begins.any { it > hello })
+        c.destroy()
+    }
+
+    private fun albumArt(dir: File, lib: Library, track: Long) {
+        val i = java.awt.image.BufferedImage(600, 600, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        javax.imageio.ImageIO.write(i, "jpg", File(dir, "${lib.albumKey(track)}.jpg"))
+    }
+
+    private fun thumbAfterTheRun(faults: List<String>, artFirst: Boolean, coalesce: Boolean = false) {
+        Remote.resetArtist()
+        Remote.artist(app, http)
+        val lib = lib(listOf("Thumb${System.nanoTime()}"))
+        val dir = kotlin.io.path.createTempDirectory("art").toFile()
+        val track = lib.tracks.first().id
+        if (artFirst) albumArt(dir, lib, track)
+        val s = sim(lib, faults, artDir = dir)
+        val c = link(s)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track == track }
+        s.device.startCard()
+        waitFor { if (coalesce) lines.contains("card gate busy") else Remote.device.cardDown }
+        Remote.wantArt(Thumbs.MEDIA, track, MediaLink.ART_PX, Remote.device.playback.state.album)
+        waitFor { lines.any { "rx ART_GET" in it } }
+        settle(500)
+        if (!artFirst) albumArt(dir, lib, track)
+        assertEquals(!coalesce, Remote.device.cardDown)
+        assertEquals(null, Remote.mediaArt(track, MediaLink.ART_PX))
+        waitFor(15_000) { Remote.mediaArt(track, MediaLink.ART_PX) != null }
+        assertTrue(index("card gate ready") < lines.indexOfLast { "rx ART_GET" in it })
+        c.destroy()
+    }
+
+    @Test
+    fun aThumbNotFoundWhileTheCardIsDownIsAskedAgainAtTheReadyEdge() = thumbAfterTheRun(listOf("card-run=4000+0@manual"), artFirst = false)
+
+    @Test
+    fun aThumbRefusedForTheCardIsAskedAgainAtTheReadyEdge() = thumbAfterTheRun(listOf("card-run=4000+0@manual", "fail=ART_GET:14:1"), artFirst = true)
+
+    @Test
+    fun aThumbRefusedInACoalescedRunIsAskedAgainAtTheFirstReadyState() = thumbAfterTheRun(listOf("card-run=4000+0@manual", "card-coalesce", "fail=ART_GET:14:1"), artFirst = true, coalesce = true)
 }

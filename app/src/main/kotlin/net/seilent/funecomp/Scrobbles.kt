@@ -27,6 +27,7 @@ import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.state.Play
+import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.PlayLogSync
 import net.seilent.funecomp.state.Plays
 import net.seilent.funecomp.ui.ScrobbleView
@@ -67,6 +68,7 @@ object Scrobbles {
     internal var zone: () -> ZoneId = { ZoneId.systemDefault() }
     private var sync = playLogSync()
     @Volatile private var link: Session? = null
+    private var card = CardView()
 
     @Volatile var opener: ((String) -> Boolean)? = null
 
@@ -137,6 +139,7 @@ object Scrobbles {
     fun linked(s: Session, playLog: Boolean) {
         exec.execute {
             link = s
+            card = CardView()
             val c = context ?: return@execute
             perform(sync.hello(playLog, accounts(c).enabled.isNotEmpty()))
         }
@@ -151,20 +154,23 @@ object Scrobbles {
         val s = link ?: return
         when (d) {
             null -> {}
-            is PlayLogSync.Get -> s.request(Msg.PLAYLOG_GET, Req.playLogGet(d.after, d.count)) { r ->
-                exec.execute {
-                    when (r) {
-                        is Session.Result.Ok -> {
-                            val reply = try {
-                                PlayLogReply.from(r.body)
-                            } catch (e: RuntimeException) {
-                                Log.w(Remote.TAG, "playlog reply: $e")
-                                null
+            is PlayLogSync.Get -> {
+                val epoch = card.epoch
+                s.request(Msg.PLAYLOG_GET, Req.playLogGet(d.after, d.count)) { r ->
+                    exec.execute {
+                        when (r) {
+                            is Session.Result.Ok -> {
+                                val reply = try {
+                                    PlayLogReply.from(r.body)
+                                } catch (e: RuntimeException) {
+                                    Log.w(Remote.TAG, "playlog reply: $e")
+                                    null
+                                }
+                                if (reply == null) sync.getFailed(d.gen, null, epoch) else perform(sync.reply(d.gen, reply))
                             }
-                            if (reply == null) sync.getFailed(d.gen, null) else perform(sync.reply(d.gen, reply))
+                            is Session.Result.Failed -> sync.getFailed(d.gen, r.error.code, epoch)
+                            else -> sync.getFailed(d.gen, null, epoch)
                         }
-                        is Session.Result.Failed -> sync.getFailed(d.gen, r.error.code)
-                        else -> sync.getFailed(d.gen, null)
                     }
                 }
             }
@@ -189,8 +195,9 @@ object Scrobbles {
         }
     }
 
-    fun state(s: State, wallMs: Long) = exec.execute {
-        perform(sync.state(s.playLogSeq))
+    fun state(s: State, wallMs: Long, card: CardView = CardView()) = exec.execute {
+        this.card = card
+        perform(sync.state(s.playLogSeq, card))
         val p = plays ?: return@execute
         val before = p.open
         val events = p.frame(s, wallMs)

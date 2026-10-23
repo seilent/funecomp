@@ -527,7 +527,11 @@ class DeviceTest {
         assertEquals(Enums.ByeReason.companionOff, f.bye)
         assertEquals(2, f.busy[Msg.UPD_BEGIN]?.get())
         assertEquals(4096L, f.updAbortAt)
-        for (bad in listOf("nope=1", "enum=STATE.nope=1", "refuse=NOPE", "busy=UPD_BEGIN", "busy=NOPE:1")) {
+        val n = Faults(listOf("fail=IMG_DEL:14:2", "fail=IMG_TAG:3"))
+        assertEquals(14, n.fail[Msg.IMG_DEL])
+        assertEquals(2, n.failLeft[Msg.IMG_DEL]?.get())
+        assertEquals(null, n.failLeft[Msg.IMG_TAG])
+        for (bad in listOf("fail=IMG_DEL:14:x", "nope=1", "enum=STATE.nope=1", "refuse=NOPE", "busy=UPD_BEGIN", "busy=NOPE:1")) {
             try {
                 Faults(listOf(bad))
                 throw AssertionError("$bad parsed")

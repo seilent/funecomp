@@ -97,7 +97,7 @@ class OffsetSendTest {
 
     @Test
     fun anErrorKeepsTheStoredValueAndNamesTheCode() {
-        for (code in listOf(Err.unknown, Err.badValue, Err.refused, Err.staleRev, Err.noLibrary, Err.busy, 99)) {
+        for (code in listOf(Err.unknown, Err.badValue, Err.refused, Err.staleRev, Err.noLibrary, Err.busy, Err.noCard, 99)) {
             val o = opened()
             o.begin()
             o.step(1)
@@ -113,6 +113,8 @@ class OffsetSendTest {
         assertEquals("refused", OffsetSend.toast(Err.refused))
         assertEquals("song not in library", OffsetSend.toast(Err.staleRev))
         assertEquals("card not available", OffsetSend.toast(Err.noLibrary))
+        assertEquals("card not available", OffsetSend.toast(Err.noCard))
+        assertFalse(OffsetSend.closes(Err.noCard))
         assertEquals("error 3", OffsetSend.toast(Err.busy))
         assertEquals("error 99", OffsetSend.toast(99))
         assertEquals("dap did not answer", OffsetSend.toast(OffsetSend.LOST))

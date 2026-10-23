@@ -26,6 +26,8 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
     private var seq: Long? = null
     private var answered: Long? = null
     private val gaps = HashSet<Pair<Long, Long>>()
+    private var retryAfter: Int? = null
+    private var retryNext = false
 
     val logged: Boolean @Synchronized get() = helloBit
 
@@ -41,6 +43,8 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
         busy = false
         seq = null
         answered = null
+        retryAfter = null
+        retryNext = false
         return next()
     }
 
@@ -50,6 +54,8 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
         bit = false
         busy = false
         sessionLog = null
+        retryAfter = null
+        retryNext = false
     }
 
     @Synchronized
@@ -59,8 +65,14 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
     }
 
     @Synchronized
-    fun state(playLogSeq: Long?): Do? {
+    fun state(playLogSeq: Long?, card: CardView = CardView()): Do? {
         seq = playLogSeq
+        if (card.down) return null
+        retryAfter?.let { after ->
+            if (card.epoch <= after) return null
+            return next()
+        }
+        if (retryNext) return next()
         return if (above()) next() else null
     }
 
@@ -89,10 +101,11 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
     }
 
     @Synchronized
-    fun getFailed(gen: Int, code: Int?) {
+    fun getFailed(gen: Int, code: Int?, epoch: Int = 0) {
         if (gen != this.gen) return
         busy = false
         log("playlog: get ${code?.let { "error $it" } ?: "no answer"}")
+        if (code == Err.noCard) retryAfter = epoch else retryNext = true
     }
 
     @Synchronized
@@ -139,6 +152,8 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
         val after = l?.let { cursor(it) } ?: 0
         afterLog = if (l != null && after > 0) l else null
         busy = true
+        retryAfter = null
+        retryNext = false
         return Get(gen, after)
     }
 

@@ -468,7 +468,7 @@ class LyricsSheetTest {
             assertFalse(shell.sheet.shown)
             assertNull(shell.offset)
         }
-        for ((code, words) in listOf(Err.unknown to "not supported", Err.refused to "refused", Err.busy to "error 3", -1 to "dap did not answer")) {
+        for ((code, words) in listOf(Err.unknown to "not supported", Err.refused to "refused", Err.busy to "error 3", Err.noCard to "card not available", -1 to "dap did not answer")) {
             start()
             open()
             tap("sheet.item.0")

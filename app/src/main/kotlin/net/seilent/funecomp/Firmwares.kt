@@ -22,6 +22,7 @@ import net.seilent.funecomp.link.UpdPush
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.FirmwareView
 import net.seilent.funecomp.ui.Phase
@@ -60,6 +61,7 @@ object Firmwares {
     private var pickedUri: Uri? = null
     @Volatile private var stopSend = false
     @Volatile private var busy = false
+    @Volatile private var cardWait: Int? = null
     @Volatile var sending = false
         private set
 
@@ -86,6 +88,7 @@ object Firmwares {
     fun hello(board: String?, version: String?) {
         this.board = board
         this.version = version
+        cardWait = null
         val c = context ?: return
         val p = prefs(c)
         if (p.getBoolean(DAILY, false) && System.currentTimeMillis() - p.getLong(LAST, 0) >= DAY_MS) check()
@@ -96,6 +99,8 @@ object Firmwares {
         val p = prefs(c)
         if (Remote.phase == Phase.LIVE && p.getBoolean(DAILY, false) && System.currentTimeMillis() - p.getLong(LAST, 0) >= DAY_MS) check()
         if (pending == null || sending || stopSend || Remote.device.playback.state.battery == null) return
+        cardWait?.let { if (Remote.device.card.epoch <= it) return }
+        cardWait = null
         main.post { pending?.let { start(it) } }
     }
 
@@ -131,6 +136,7 @@ object Firmwares {
         if (!d.has("update")) return "device has no updater"
         val st = d.playback.state
         if (st.output != null && st.output != Enums.Output.wired) return "dap on bluetooth output"
+        if (PushGate.card(d)) return CardView.REFUSED
         if ((st.battery ?: 0) < DAP_MIN && st.charging != true) return "dap battery under $DAP_MIN%"
         val bm = c.getSystemService(BatteryManager::class.java)
         if (bm != null && bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY) < PHONE_MIN && !bm.isCharging) return "phone battery under $PHONE_MIN%"
@@ -161,7 +167,7 @@ object Firmwares {
             }
             Remote.sourcesChanged()
             val next = pending
-            if (next != null && !stopSend) retryIn(if (next === src && busy) BUSY_RETRY_MS else Proto.pushGateMs.toLong())
+            if (next != null && !stopSend && cardWait == null) retryIn(if (next === src && busy) BUSY_RETRY_MS else Proto.pushGateMs.toLong())
         }
     }
 
@@ -174,14 +180,20 @@ object Firmwares {
         synchronized(retry) { retryNext?.cancel(false) }
         pending = null
         busy = false
+        cardWait = null
         stopSend = false
         view = FirmwareView()
     }
 
     private fun paused(send: String) = "paused ${send.removePrefix("paused ").removePrefix("firmware ")}"
 
+    private fun cardRefused() {
+        cardWait = Remote.device.card.takeIf { !it.seen }?.epoch
+    }
+
     private fun transfer(src: Source): (FirmwareView) -> FirmwareView {
         busy = false
+        cardWait = null
         val s = Remote.session() ?: return upd { it.copy(send = paused(it.send), info = "not connected") }
         val sum = src.md5 ?: md5(src).also { src.md5 = it }
         val b = board ?: return upd { it.copy(send = paused(it.send), info = "not connected") }
@@ -206,16 +218,18 @@ object Firmwares {
                 val why = refusal() ?: if (!PushGate.open(Remote.device, SystemClock.elapsedRealtime())) "waiting for playback to settle" else ""
                 upd { it.copy(send = paused(it.send), info = why) }
             }
-            is UpdPush.Outcome.Aborted -> if (r.abort.code == Enums.AbortCode.busy) {
-                busy = true
-                upd { it.copy(send = paused(it.send), info = "dap busy") }
+            is UpdPush.Outcome.Aborted -> if (r.abort.code == Enums.AbortCode.busy || r.abort.code == Enums.AbortCode.noCard) {
+                if (r.abort.code == Enums.AbortCode.noCard) cardRefused() else busy = true
+                val why = if (r.abort.code == Enums.AbortCode.noCard) CardView.REFUSED else "dap busy"
+                upd { it.copy(send = paused(it.send), info = why) }
             } else {
                 if (pending === src) pending = null
                 upd { it.copy(send = "", info = "send aborted") }
             }
-            is UpdPush.Outcome.Failed -> if (r.error?.code == Err.busy) {
-                busy = true
-                upd { it.copy(send = paused(it.send), info = "dap busy") }
+            is UpdPush.Outcome.Failed -> if (r.error?.code == Err.busy || r.error?.code == Err.noCard) {
+                if (r.error?.code == Err.noCard) cardRefused() else busy = true
+                val why = if (r.error?.code == Err.noCard) CardView.REFUSED else "dap busy"
+                upd { it.copy(send = paused(it.send), info = why) }
             } else {
                 if (pending === src) pending = null
                 val why = r.error?.text?.takeIf { it.startsWith("remove ") } ?: "send failed"

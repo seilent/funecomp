@@ -208,20 +208,22 @@ class GenresTest {
     }
 
     @Test
-    fun busyToastsCardNotAvailableAndStaleOnlyLogs() {
+    fun aCardRefusalToastsCardNotAvailableAndBusyAndStaleOnlyLog() {
         start()
         pivot("genres")
-        answer = null to Err.busy
+        answer = null to Err.noCard
         hold("row.3")
         shell.sheet.accept(1)
         settle()
         assertEquals(Heart.CARD, shell.toast.artist)
         val shows = shell.toast.shows
-        answer = null to Err.staleRev
-        hold("row.3")
-        shell.sheet.accept(1)
-        settle()
-        assertEquals(shows, shell.toast.shows)
-        assertTrue(logs.contains("queue add error 7"))
+        for ((code, line) in listOf(Err.busy to "queue add error 3", Err.staleRev to "queue add error 7")) {
+            answer = null to code
+            hold("row.3")
+            shell.sheet.accept(1)
+            settle()
+            assertEquals(shows, shell.toast.shows)
+            assertTrue(logs.contains(line))
+        }
     }
 }

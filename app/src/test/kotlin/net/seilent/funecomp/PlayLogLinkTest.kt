@@ -15,6 +15,7 @@ import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.PlayEntry
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
@@ -87,8 +88,11 @@ class PlayLogLinkTest {
         PlayEntry(0, System.currentTimeMillis() / 1000 - 7200 + it * 60, 150_000, 300_000, 12, "Seed $it", "Radiohead", listOf("Radiohead"), liveSeen = liveSeen, zoneS = 0)
     }
 
+    private var fx = Faults(emptyList())
+
     private fun sim(minor: Int = 15, faults: List<String> = emptyList(), seed: List<PlayEntry> = emptyList()): Pair<Sim, Int> {
-        val opts = Options(Board.of("v1"), Faults(faults), minor = minor, playLog = seed, log = { logs += it }, deviceClock = { System.nanoTime() / 1_000_000 + skew.get() })
+        fx = Faults(faults)
+        val opts = Options(Board.of("v1"), fx, minor = minor, playLog = seed, log = { logs += it }, deviceClock = { System.nanoTime() / 1_000_000 + skew.get() })
         val s = Sim(opts, Library(listOf(short, other)))
         sims += s
         return s to s.listen(0)
@@ -196,6 +200,57 @@ class PlayLogLinkTest {
     fun aLostAckGivesOneLineAfterTheReReadAndTheNextAckEmptiesTheLog() {
         val s = start(faults = listOf("drop-ack"), seed = seed(1), live = false)
         waitFor(20_000) { logs.any { it.endsWith("closed drop-ack") } }
+        reconnect(1)
+        waitFor(20_000) { s.device.plays.isEmpty() }
+        Scrobbles.idle()
+        assertEquals(listOf("Seed 1"), listens())
+        assertEquals(2, logs.count { it.startsWith("playlog get after 0") })
+    }
+
+    @Test
+    fun aGetRefusedForTheCardAtHelloIsAskedAgainAtTheReadyEdgeAndNotWhileDown() {
+        val s = start(faults = listOf("card-run=3000+0@hello", "fail=PLAYLOG_GET:14:1"), seed = seed(1), live = false)
+        waitFor(20_000) { s.device.plays.isEmpty() }
+        Scrobbles.idle()
+        assertEquals(listOf("Seed 1"), listens())
+        val all = logs.toList()
+        val ready = all.indexOfFirst { it.startsWith("card state ready") }
+        assertTrue(ready > 0)
+        assertEquals(1, all.subList(0, ready).count { "rx PLAYLOG_GET" in it })
+        assertEquals(1, all.subList(ready, all.size).count { it.startsWith("playlog get after 0") })
+    }
+
+    @Test
+    fun aGetRefusedWithNoBusyStateIsAskedAgainAtTheFirstReadyState() {
+        val s = start(faults = listOf("card-run=3000+0@manual", "card-coalesce"), live = false)
+        waitFor { Remote.device.card.epoch >= 1 && Remote.device.playback.state.track != null }
+        Thread.sleep(500)
+        fx.fail[Msg.PLAYLOG_GET] = Err.noCard
+        fx.failLeft[Msg.PLAYLOG_GET] = java.util.concurrent.atomic.AtomicInteger(1)
+        s.device.startCard()
+        s.device.logPlay(seed(1).single())
+        s.current!!.push(Msg.STATE, s.device.state())
+        waitFor { logs.count { " tx PLAYLOG_GET flags=0x03 " in it } == 1 }
+        Thread.sleep(500)
+        assertEquals(1, s.device.plays.size)
+        waitFor(20_000) { s.device.plays.isEmpty() }
+        Scrobbles.idle()
+        assertEquals(listOf("Seed 1"), listens())
+        val all = logs.toList()
+        val ready = all.indexOfFirst { it.startsWith("card state ready") }
+        assertTrue(ready > 0)
+        assertEquals(0, all.subList(0, ready).count { it.startsWith("card state busy") })
+        assertEquals(1, all.subList(0, ready).count { " tx PLAYLOG_GET flags=0x03 " in it })
+        assertEquals(1, all.subList(ready, all.size).count { it.startsWith("playlog get after 0") })
+    }
+
+    @Test
+    fun anAckRefusedForTheCardThenAGetOfTheSameEntriesGivesOneLine() {
+        val s = start(faults = listOf("fail=PLAYLOG_ACK:14:1"), seed = seed(1), live = false)
+        waitFor(20_000) { logs.any { "rx PLAYLOG_ACK" in it } }
+        waitFor(20_000) { listens().isNotEmpty() }
+        assertEquals(1, s.device.plays.size)
+        s.current!!.close("test")
         reconnect(1)
         waitFor(20_000) { s.device.plays.isEmpty() }
         Scrobbles.idle()

@@ -8,11 +8,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import net.seilent.funecomp.MediaLink
 import net.seilent.funecomp.link.ArtGet
 import net.seilent.funecomp.link.Session
+import net.seilent.funecomp.state.CardView
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-class ThumbWorker(dir: File, private val link: () -> Session?, private val log: (String) -> Unit = {}) {
+class ThumbWorker(dir: File, private val link: () -> Session?, private val card: () -> CardView = { CardView() }, private val log: (String) -> Unit = {}) {
     private val thumbs = Thumbs(dir)
     private val exec = Executors.newSingleThreadScheduledExecutor { Thread(it, "thumbs").apply { isDaemon = true } }
     private val order = ArrayList<String>()
@@ -34,6 +35,11 @@ class ThumbWorker(dir: File, private val link: () -> Session?, private val log: 
 
     fun session() = thumbs.session()
 
+    fun cardReady() {
+        thumbs.cardReady()
+        exec.execute { pump() }
+    }
+
     fun want(slot: Int, track: Long, px: Int, album: String?) {
         val w = Thumbs.Want(slot, track, Thumbs.bucket(px), album)
         if (if (slot == Thumbs.MEDIA) synchronized(media) { media.containsKey(w.key) } else images.containsKey(w.key)) return
@@ -47,6 +53,7 @@ class ThumbWorker(dir: File, private val link: () -> Session?, private val log: 
         val s = link() ?: return
         val w = thumbs.next() ?: return
         running = true
+        val epoch = card().epoch
         val got = try {
             when (val r = ArtGet(s) { thumbs.superseded(w) }.run(w.track, w.px, thumbs.have(w))) {
                 is ArtGet.Outcome.Image -> Thumbs.Got.Image(r.crc, r.jpeg)
@@ -61,7 +68,8 @@ class ThumbWorker(dir: File, private val link: () -> Session?, private val log: 
             running = false
         }
         if (got != null) {
-            when (val d = thumbs.done(w, got)) {
+            val c = card()
+            when (val d = thumbs.done(w, got, c.down, epoch < c.epoch)) {
                 is Thumbs.Done.Ready -> show(w, d.file)
                 is Thumbs.Done.Retry -> exec.schedule({ if (thumbs.want(w) == null) pump() }, d.afterMs, TimeUnit.MILLISECONDS)
                 else -> {}

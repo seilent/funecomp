@@ -77,6 +77,7 @@ class Faults(specs: List<String>) {
     var slowBps: Long? = null
     val refuse = HashSet<Int>()
     val fail = HashMap<Int, Int>()
+    val failLeft = HashMap<Int, AtomicInteger>()
     val busy = HashMap<Int, AtomicInteger>()
     val busyPages = HashSet<Long>()
     val mute = HashMap<Int, AtomicInteger>()
@@ -123,8 +124,11 @@ class Faults(specs: List<String>) {
                 "refuse" -> refuse += Msg.byName[v] ?: throw IllegalArgumentException("refuse: unknown msg $v")
                 "fail" -> {
                     val msg = v.substringBefore(':')
-                    val code = v.substringAfter(':', "").toIntOrNull() ?: throw IllegalArgumentException("fail: code missing in $v")
-                    fail[Msg.byName[msg] ?: throw IllegalArgumentException("fail: unknown msg $msg")] = code
+                    val rest = v.substringAfter(':', "")
+                    val code = rest.substringBefore(':').toIntOrNull() ?: throw IllegalArgumentException("fail: code missing in $v")
+                    val type = Msg.byName[msg] ?: throw IllegalArgumentException("fail: unknown msg $msg")
+                    fail[type] = code
+                    if (':' in rest) failLeft[type] = AtomicInteger(rest.substringAfter(':').toIntOrNull() ?: throw IllegalArgumentException("fail: bad count in $v"))
                 }
                 "busy" -> {
                     val msg = v.substringBefore(':')

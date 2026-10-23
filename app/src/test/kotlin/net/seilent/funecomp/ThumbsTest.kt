@@ -111,4 +111,48 @@ class ThumbsTest {
         assertTrue(tmp.root.resolve("00000005.jpg").exists())
         assertNull(Thumbs(tmp.root).want(w))
     }
+
+    @Test
+    fun aCardRefusalWaitsWithNoRetryCountedAndTheReadyEdgeAsksAgain() {
+        val t = thumbs()
+        val w = Want(Thumbs.TILE, 101, 256, "Bad Mode")
+        t.want(w)
+        repeat(5) {
+            assertEquals(Done.Wait, t.done(t.next() ?: w, Got.Failed(Err.noCard)))
+            assertNull(t.next())
+        }
+        t.cardReady()
+        assertEquals(w, t.next())
+        assertTrue(t.done(w, Got.Failed(Err.busy)) is Done.Retry)
+    }
+
+    @Test
+    fun aNotFoundWhileTheCardIsDownIsNoMissAndTheReadyEdgeClearsMisses() {
+        val t = thumbs()
+        val w = Want(Thumbs.TILE, 101, 256, "Bad Mode")
+        t.want(w)
+        assertEquals(Done.Wait, t.done(t.next()!!, Got.Failed(Err.notFound), cardDown = true))
+        assertNull(t.want(w))
+        t.cardReady()
+        assertEquals(w, t.next())
+        assertEquals(Done.Miss, t.done(w, Got.Failed(Err.notFound)))
+        t.want(w)
+        assertNull(t.next())
+        t.cardReady()
+        t.want(w)
+        assertEquals(w, t.next())
+    }
+
+    @Test
+    fun aCardRefusalOrNotFoundHandledAfterTheEdgeRetriesAtOnceWithNoMark() {
+        for (code in listOf(Err.noCard, Err.notFound)) {
+            val t = thumbs()
+            val w = Want(Thumbs.TILE, 101, 256, "Bad Mode")
+            t.want(w)
+            val d = t.done(t.next()!!, Got.Failed(code), cardDown = false, stale = true)
+            assertEquals("$code", 0L, (d as Done.Retry).afterMs)
+            t.want(w)
+            assertEquals("$code", w, t.next())
+        }
+    }
 }

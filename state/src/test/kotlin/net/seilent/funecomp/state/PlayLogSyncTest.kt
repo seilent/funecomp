@@ -2,6 +2,7 @@ package net.seilent.funecomp.state
 
 import net.seilent.funecomp.proto.PlayEntry
 import net.seilent.funecomp.proto.PlayLogReply
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -222,5 +223,69 @@ class PlayLogSyncTest {
         assertNull(sync.reply(n.gen, page(a, LongRange.EMPTY, first = null)))
         assertNull(sync.state(5))
         assertEquals(3L, get(sync.state(6)).after)
+    }
+
+    private fun card(vararg v: Int) = v.fold(CardView()) { c, x -> c.with(x) }
+
+    private val ready1 = card(Enums.Card.ready)
+    private val busy1 = card(Enums.Card.ready, Enums.Card.busy)
+    private val ready2 = card(Enums.Card.ready, Enums.Card.busy, Enums.Card.ready)
+
+    @Test
+    fun aGetRefusedForTheCardAtHelloIsAskedAgainOnlyAtTheReadyEdge() {
+        val g = get(sync.hello(true, true))
+        sync.getFailed(g.gen, Err.noCard, 1)
+        assertNull(sync.state(3, ready1))
+        assertNull(sync.state(3, busy1))
+        assertNull(sync.state(3, ready1))
+        val again = get(sync.state(3, ready2))
+        assertEquals(0L, again.after)
+        assertNull(sync.state(3, ready2))
+    }
+
+    @Test
+    fun aCardRefusalHandledAfterTheEdgeIsAskedAtTheNextState() {
+        val g = get(sync.hello(true, true))
+        sync.getFailed(g.gen, Err.noCard, 0)
+        get(sync.state(3, ready1))
+    }
+
+    @Test
+    fun anyOtherGetFailureIsAskedAgainOnTheNextStateOnce() {
+        for (code in listOf(Err.busy, null)) {
+            val g = get(sync.hello(true, true))
+            sync.getFailed(g.gen, code, 1)
+            val again = get(sync.state(null, ready1))
+            assertNull(sync.state(null, ready1))
+            sync.getFailed(again.gen, code, 1)
+            get(sync.state(null, ready1))
+        }
+    }
+
+    @Test
+    fun noGetGoesOutWhileTheCardIsDown() {
+        val g = get(sync.hello(true, true))
+        assertNull(cycle(page(a, 1L..3L), g))
+        assertNull(sync.state(4, busy1))
+        val n = get(sync.state(4, ready2))
+        assertEquals(3L, n.after)
+        sync.getFailed(n.gen, Err.busy, 2)
+        assertNull(sync.state(4, busy1))
+    }
+
+    @Test
+    fun aGetThatFailsAfterAGoodFirstIsAskedAgain() {
+        val g = get(sync.hello(true, true))
+        assertNull(cycle(page(a, 1L..3L), g))
+        val n = get(sync.state(4, ready1))
+        sync.getFailed(n.gen, Err.noCard, 1)
+        assertNull(sync.state(5, ready1))
+        assertEquals(3L, get(sync.state(5, ready2)).after)
+        val m = PlayLogSync({ cursors[it] }) { logs += it }
+        val h = get(m.hello(true, true))
+        assertNull(m.reply(h.gen, page(a, 4L..3L)))
+        val k = get(m.state(5, ready1))
+        m.getFailed(k.gen, Err.busy, 1)
+        assertEquals(3L, get(m.state(5, ready1)).after)
     }
 }

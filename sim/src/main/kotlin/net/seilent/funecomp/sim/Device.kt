@@ -41,6 +41,7 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.gen.TokBoard
 import net.seilent.funecomp.state.ArtKey
 import net.seilent.funecomp.state.AutoEq
+import net.seilent.funecomp.state.CardView
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
@@ -71,7 +72,6 @@ private const val MIB = 1L shl 20
 private const val UPDATE_RESERVE = 64L shl 20
 private const val LIBRARY = 1
 private const val PHONE = 2
-private const val CARD = "card not available"
 private const val CROSS_MIN_MS = 30_000L
 private const val CROSS_CAP_MS = 240_000L
 private val SYNCED = Regex("^\\[[0-9]+:[0-9]{2}(\\.[0-9]+)?]", RegexOption.MULTILINE)
@@ -418,7 +418,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         else -> false
     }
 
-    private fun noCard() = if (opts.minor >= 15) Answer.Fail(Err.noCard, CARD) else Answer.Fail(Err.busy, CARD)
+    private fun noCard() = if (opts.minor >= 15) Answer.Fail(Err.noCard, CardView.REFUSED) else Answer.Fail(Err.busy, CardView.REFUSED)
 
     private fun cardRefusal(type: Int, b: Node): Answer.Fail? {
         if (cardEdges.isEmpty()) return null
@@ -450,8 +450,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Msg.UPD_BEGIN -> busy
             Msg.LYR_GET -> if (hold && b.long(Tags.LyrGet.track) != queue.getOrNull(slot)) busy else null
             Msg.ACTION -> when (b.int(Tags.Action.cmd)) {
-                Enums.ActionCmd.shuffleLibrary -> if (lib.tracks.isEmpty() || !hold) null else Answer.Fail(Err.busy, CARD)
-                Enums.ActionCmd.favorite -> Answer.Fail(Err.busy, CARD)
+                Enums.ActionCmd.shuffleLibrary -> if (lib.tracks.isEmpty() || !hold) null else Answer.Fail(Err.busy, CardView.REFUSED)
+                Enums.ActionCmd.favorite -> Answer.Fail(Err.busy, CardView.REFUSED)
                 else -> null
             }
             else -> null

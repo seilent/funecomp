@@ -97,4 +97,25 @@ class HeartTest {
         assertNull(h.tap(a))
         assertEquals(Heart.Toast(Heart.ADDED, "One"), h.state(a.copy(favorite = true)))
     }
+
+    @Test
+    fun a14ToastsTheCardLineAtAnyMinorAndAt15ABusyToastsOnlyTheUnreadableText() {
+        for (minor in listOf(0, 14, 15, 16)) assertEquals("$minor", Heart.Toast(Heart.CARD, ""), Heart().let { h -> h.replied(h.tap(a)!!, Err.noCard, null, 0, minor) })
+        for (minor in listOf(15, 16)) {
+            assertEquals(Heart.Toast(Heart.UNREADABLE, ""), Heart().let { h -> h.replied(h.tap(a)!!, Err.busy, Heart.UNREADABLE, 0, minor) })
+            for (text in listOf(Heart.CARD, "busy", null)) assertNull("$minor $text", Heart().let { h -> h.replied(h.tap(a)!!, Err.busy, text, 0, minor) })
+        }
+        for (text in listOf(Heart.CARD, "busy", null)) assertEquals(Heart.Toast(Heart.CARD, ""), Heart().let { h -> h.replied(h.tap(a)!!, Err.busy, text, 0, 14) })
+        assertNull(Heart().let { h -> h.replied(h.tap(a)!!, Err.staleRev, null, 0, 15) })
+    }
+
+    @Test
+    fun theQueueAddCardToastIs14AtAnyMinorAndBusyBelow15() {
+        assertTrue(Heart.cardToast(Err.noCard, 15))
+        assertTrue(Heart.cardToast(Err.noCard, 14))
+        assertTrue(Heart.cardToast(Err.busy, 14))
+        assertFalse(Heart.cardToast(Err.busy, 15))
+        assertFalse(Heart.cardToast(Err.staleRev, 14))
+        assertFalse(Heart.cardToast(null, 14))
+    }
 }

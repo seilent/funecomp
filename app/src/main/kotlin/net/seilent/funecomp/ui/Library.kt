@@ -154,7 +154,7 @@ private fun queued(ctx: Ctx, title: String, added: Long?, code: Int?) {
     when {
         code == null && added != null -> ctx.toast.show("added ${songs(added)}", title)
         code == null -> ctx.control.log("queue add reply with no count")
-        code == Err.busy -> ctx.toast.show(Heart.CARD, "")
+        Heart.cardToast(code, ctx.device.hello?.minor ?: 0) -> ctx.toast.show(Heart.CARD, "")
         code != null -> ctx.control.log("queue add error $code")
     }
 }

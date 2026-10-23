@@ -19,12 +19,14 @@ class Thumbs(private val dir: File) {
         class Retry(val afterMs: Long) : Done
         data object Miss : Done
         data object Dropped : Done
+        data object Wait : Done
     }
 
     private var rev: Long? = null
     private val index = LinkedHashMap<String, Long>()
     private val misses = HashSet<String>()
     private val retries = HashMap<String, Int>()
+    private val waiting = LinkedHashMap<String, Want>()
     private val queued = arrayOfNulls<Want>(SLOTS)
 
     @Synchronized
@@ -33,6 +35,7 @@ class Thumbs(private val dir: File) {
         rev = libRev
         index.clear()
         misses.clear()
+        waiting.clear()
         retries.clear()
         dir.listFiles { f -> f.name.startsWith(INDEX) && f.name != indexName(libRev) }?.forEach { it.delete() }
         val f = File(dir, indexName(libRev))
@@ -46,6 +49,13 @@ class Thumbs(private val dir: File) {
     fun session() {
         misses.clear()
         retries.clear()
+    }
+
+    @Synchronized
+    fun cardReady() {
+        misses.clear()
+        for (w in waiting.values) if (queued[w.slot] == null) queued[w.slot] = w
+        waiting.clear()
     }
 
     @Synchronized
@@ -89,7 +99,7 @@ class Thumbs(private val dir: File) {
     fun have(w: Want): Long? = w.album?.let { index[album(it, w.px)] }
 
     @Synchronized
-    fun done(w: Want, got: Got): Done = when (got) {
+    fun done(w: Want, got: Got, cardDown: Boolean = false, stale: Boolean = false): Done = when (got) {
         is Got.Image -> {
             dir.mkdirs()
             val f = file(got.crc)
@@ -106,12 +116,17 @@ class Thumbs(private val dir: File) {
                 Done.Dropped
             }
         }
-        is Got.Failed -> when (got.code) {
-            Err.notFound -> {
+        is Got.Failed -> when {
+            stale && (got.code == Err.noCard || got.code == Err.notFound) -> Done.Retry(0)
+            got.code == Err.noCard || got.code == Err.notFound && cardDown -> {
+                waiting[w.key] = w
+                Done.Wait
+            }
+            got.code == Err.notFound -> {
                 misses += w.key
                 Done.Miss
             }
-            Err.busy -> {
+            got.code == Err.busy -> {
                 val n = (retries[w.key] ?: 0) + 1
                 retries[w.key] = n
                 if (n > BUSY_TRIES) Done.Dropped else Done.Retry(BUSY_RETRY_MS)

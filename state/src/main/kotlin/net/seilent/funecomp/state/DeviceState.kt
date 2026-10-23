@@ -74,6 +74,10 @@ data class CardView(val value: Int? = null, val seen: Boolean = false, val epoch
     }
 
     fun refused(): CardView = copy(seen = false)
+
+    companion object {
+        const val REFUSED = "card not available"
+    }
 }
 
 data class DeviceState(

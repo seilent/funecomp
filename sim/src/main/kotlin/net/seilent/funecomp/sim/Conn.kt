@@ -220,7 +220,7 @@ class Conn(
             return error(f, Err.unknown, "unknown")
         }
         if (f.type in faults.refuse) return error(f, Err.refused, "refused")
-        faults.fail[f.type]?.let { return error(f, it, "fault $it") }
+        faults.fail[f.type]?.let { code -> if ((faults.failLeft[f.type]?.getAndDecrement() ?: 1) > 0) return error(f, code, "fault $code") }
         if ((faults.busy[f.type]?.getAndDecrement() ?: 0) > 0) return error(f, Err.busy, "busy")
         if (f.type == Msg.QUEUE_OP && body.int(Tags.QueueOp.cmd) == Enums.QueueCmd.page && (body.long(Tags.QueueOp.offset) ?: 0L) in faults.busyPages) return error(f, Err.busy, "busy")
         if (f.type == Msg.PLAYLOG_ACK && faults.dropAck.compareAndSet(true, false)) return close("drop-ack")

@@ -641,8 +641,13 @@ class ForwardTest {
     }
 
     @Test
-    fun aBusyDeleteRetriesOnTheSessionListing() {
-        val (sim, port) = sim(30, 1, Options.IMG_CAP, "busy=IMG_DEL:2")
+    fun aBusyDeleteRetriesOnTheSessionListing() = deleteRetries("busy=IMG_DEL:2")
+
+    @Test
+    fun aCardRefusedDeleteRetriesOnTheSessionListing() = deleteRetries("fail=IMG_DEL:14:2")
+
+    private fun deleteRetries(fault: String) {
+        val (sim, port) = sim(30, 1, Options.IMG_CAP, fault)
         val s = session(port)
         forward(Lookups()).run(s) { true }
         val records = ArtBlocks()
@@ -992,8 +997,13 @@ class ForwardTest {
     }
 
     @Test
-    fun aBusyTagEndsThePassWithoutTheKeptMarkAndTheNextRunTags() {
-        val (_, s) = tagSim(tagLib("Gemma"), Proto.minor, "busy=IMG_TAG:1")
+    fun aBusyTagEndsThePassWithoutTheKeptMarkAndTheNextRunTags() = tagEnds("busy=IMG_TAG:1")
+
+    @Test
+    fun aCardRefusedTagEndsThePassWithoutTheKeptMarkAndTheNextRunTags() = tagEnds("fail=IMG_TAG:14:1")
+
+    private fun tagEnds(fault: String) {
+        val (_, s) = tagSim(tagLib("Gemma"), Proto.minor, fault)
         seed(s, "gemma")
         val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val f = forward(Lookups(), marks = Kept(), log = { logs += it }, missing = ::fill)

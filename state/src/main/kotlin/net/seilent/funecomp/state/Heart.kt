@@ -27,11 +27,17 @@ class Heart(private val windowMs: Long = WINDOW_MS) {
     }
 
     @Synchronized
-    fun replied(t: Tap, code: Int?, text: String?, now: Long): Toast? {
+    fun replied(t: Tap, code: Int?, text: String?, now: Long, minor: Int = 0): Toast? {
         val p = pending?.takeIf { it.tap === t } ?: return null
         if (code != null) {
             pending = null
-            return if (code == Err.busy) Toast(text?.takeIf { it in COPY } ?: CARD, "") else null
+            return when {
+                code == Err.noCard -> Toast(CARD, "")
+                code != Err.busy -> null
+                minor < CARD_MINOR -> Toast(text?.takeIf { it in COPY } ?: CARD, "")
+                text == UNREADABLE -> Toast(UNREADABLE, "")
+                else -> null
+            }
         }
         p.result?.let {
             pending = null
@@ -80,9 +86,12 @@ class Heart(private val windowMs: Long = WINDOW_MS) {
         val WINDOW_MS = Proto.stateIntervalMs.toLong()
         const val ADDED = "added to favorites"
         const val REMOVED = "removed from favorites"
-        const val CARD = "card not available"
+        const val CARD = CardView.REFUSED
         const val UNREADABLE = "favorites not readable"
         private val COPY = setOf(CARD, UNREADABLE)
+        const val CARD_MINOR = 15
+
+        fun cardToast(code: Int?, minor: Int) = code == Err.noCard || code == Err.busy && minor < CARD_MINOR
 
         fun shown(hello: HelloReply?, s: State) = hello?.snapRev != null && s.track != null
 
