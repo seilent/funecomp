@@ -24,6 +24,7 @@ import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -53,6 +54,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -218,6 +220,43 @@ fun BackRing(onBack: () -> Unit) {
 
 @Composable
 fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay: Overlay, onBack: () -> Unit, onQueue: () -> Unit, active: Boolean, art: BackdropArt? = null, lyrics: LyricsFetch.Show = LyricsFetch.Show.Off, live: () -> DeviceState = { device }, shell: Shell? = null, onBackdrop: ((BackdropArt?) -> Unit)? = null) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    val onPhone = phone(device)
+    val cover = if (onPhone) device.playback.state.phoneArtCrc?.let { crc -> control.phoneCover(crc)?.let { crc to it } } else null
+    val last = remember { Last(device, lyrics, cover) }
+    val swap = remember(onPhone) {
+        val from = last.device
+        val run = phone(from) != onPhone && from.playback.receivedAt != 0L && device.playback.receivedAt != 0L && active && !overlay.visible && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        if (run) Swap(if (onPhone) VariantMotion.Dir.In else VariantMotion.Dir.Out, from, last.lyrics, last.cover) else null
+    }
+    var e by remember(swap) { mutableFloatStateOf(0f) }
+    var running by remember(swap) { mutableStateOf(swap != null) }
+    val frame = { swap?.takeIf { running }?.let { VariantMotion.frame(it.dir, e) } }
+    val held by remember(swap) { derivedStateOf { swap?.takeIf { frame()?.from == true } } }
+    SideEffect {
+        last.device = held?.from ?: device
+        last.lyrics = held?.lyrics ?: lyrics
+        last.cover = held?.cover ?: cover
+    }
+    LaunchedEffect(swap) {
+        val w = swap ?: return@LaunchedEffect
+        val k = currentCoroutineContext()[MotionDurationScale]?.scaleFactor ?: 1f
+        val total = VariantMotion.total(w.dir)
+        var start: Long? = null
+        while (k > 0f && e < total) {
+            withFrameMillis { t -> e = ((t - (start ?: t.also { start = it })) / k).coerceIn(0f, total) }
+        }
+        running = false
+    }
+    NowPlayingPage(held?.from ?: device, control, toast, overlay, onBack, onQueue, active, art, held?.lyrics ?: lyrics, live, shell, onBackdrop, frame, swap?.dir, held?.cover ?: cover)
+}
+
+private class Last(var device: DeviceState, var lyrics: LyricsFetch.Show, var cover: Pair<Long, ImageBitmap>?)
+
+private class Swap(val dir: VariantMotion.Dir, val from: DeviceState, val lyrics: LyricsFetch.Show, val cover: Pair<Long, ImageBitmap>?)
+
+@Composable
+private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastState, overlay: Overlay, onBack: () -> Unit, onQueue: () -> Unit, active: Boolean, art: BackdropArt?, lyrics: LyricsFetch.Show, live: () -> DeviceState, shell: Shell?, onBackdrop: ((BackdropArt?) -> Unit)?, swap: () -> VariantMotion.Frame?, swapDir: VariantMotion.Dir?, phoneCover: Pair<Long, ImageBitmap>?) {
     val ui = LocalUi.current
     val s = device.playback.state
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
@@ -228,6 +267,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
     val activeNow by rememberUpdatedState(active)
     val sheet = LocalSheet.current
     val lyricsNow by rememberUpdatedState(lyrics)
+    val swapNow by rememberUpdatedState(swap)
     var pressing by remember { mutableStateOf(false) }
     var seen by remember { mutableStateOf(record(liveNow(), lyrics, Seen(null, 0L, null, 0L), true).copy(at = SystemClock.elapsedRealtime())) }
     fun mode() = if (phone(liveNow())) control.phoneLyricsMode() else control.lyricsMode()
@@ -315,6 +355,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
         step(true)
     }
     fun lyricsKey() {
+        if (swapNow() != null) return
         val d = liveNow()
         val settled = fade == null
         if (!settled && (fade != LyricFade.Dir.Enter || reversing)) return
@@ -338,6 +379,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
     }
     fun back() {
         when {
+            swapNow() != null -> onBack()
             fade == LyricFade.Dir.Enter && !reversing -> leave()
             fade != null -> {}
             lyricTarget -> leave()
@@ -373,6 +415,17 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
     }
     LaunchedEffect(npKey, device.playback.receivedAt == 0L, follow(device, lyrics), canLyrics) {
         seen = record(device, lyrics, seen, false)
+    }
+    var source by remember { mutableStateOf(onPhone) }
+    LaunchedEffect(onPhone) {
+        if (source == onPhone) return@LaunchedEffect
+        source = onPhone
+        fade = null
+        reversing = false
+        lyricTarget = false
+        val r = record(device, lyrics, seen, false)
+        seen = swapDir?.takeIf { swapNow() != null }?.let { r.copy(calm = SystemClock.elapsedRealtime() + VariantMotion.rest(it).toLong()) } ?: r
+        motion.mutate { elapsed = 0f }
     }
     val blocked = sheet?.shown == true || pressing || !active
     LaunchedEffect(seen, blocked, overlay.until, fade == null, device.playback.receivedAt == 0L) {
@@ -469,12 +522,12 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
         }.testTag("np"),
     ) {
         Backdrop(art)
-        if (art != null && shaded) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).graphicsLayer { alpha = frame().shade }.background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha)).testTag("np.shade"))
+        if (art != null && shaded) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).graphicsLayer { alpha = frame().shade * (swap()?.shade ?: 1f) }.background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha)).testTag("np.shade"))
         val held = art?.takeIf { it.entry != null }
         val lyricsTap: () -> Unit = {
             val k = npKey
             val c = copyFor(lyrics, k, s)
-            if (shell != null && c?.kind == Enums.LyricsKind.synced && fade == null && !reversing && lyricTarget && sheet?.shown != true) {
+            if (shell != null && c?.kind == Enums.LyricsKind.synced && fade == null && !reversing && lyricTarget && sheet?.shown != true && swapNow() == null) {
                 when (k) {
                     is NpKey.Lib -> if (offsets && s.source == Enums.Source.local) lyricsSheet(shell, control, k.track, s.lyricsOffsetMs ?: 0)
                     is NpKey.Phone -> lyricsSheet(shell, control, 0, 0, k.key)
@@ -485,171 +538,185 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
         val backdrop = onBackdrop?.takeIf { held != null || s.artists.isNotEmpty() }
         val longPress: () -> Unit = { backdrop?.invoke(held) }
         if (backdrop != null) Box(Modifier.fillMaxSize().press({}, longPress).testTag("np.backdrop"))
-        BackRing { back() }
-        Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
-        if (onPhone) s.phoneName?.let { name ->
-            RoleText("from $name", Roles.sectionLabel, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline - (Tok.npTextTop - Tok.npFromBaseline)), textW).testTag("np.from"))
-        }
-        if (drawn) {
-            Box(Modifier.fillMaxSize().graphicsLayer { alpha = frame().alpha }) {
-                LyricsColumn(device, lyrics, npKey, upcoming.firstOrNull(), lifecycle, lyricTarget, lyricsTap, longPress)
+        Box(
+            Modifier.fillMaxSize().graphicsLayer {
+                val f = swap()
+                alpha = f?.alpha ?: 1f
+                scaleX = f?.scale ?: 1f
+                scaleY = f?.scale ?: 1f
+                transformOrigin = TransformOrigin(Tok.motion_nowPlayingOriginX, Tok.motion_nowPlayingOriginY)
+            }.testTag("np.layer"),
+        ) {
+            BackRing { back() }
+            Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
+            if (onPhone) s.phoneName?.let { name ->
+                RoleText("from $name", Roles.sectionLabel, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline - (Tok.npTextTop - Tok.npFromBaseline)), textW).testTag("np.from"))
             }
-        } else {
-            Box(Modifier.fillMaxSize().graphicsLayer { alpha = frame().alpha }) {
-                RoleText(s.artist ?: "", Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))
-                RoleText(s.album ?: "", Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("np.album"))
-                if (artSide > 0f) {
-                    val track = s.track
-                    val px = artSide.roundToInt()
-                    LaunchedEffect(track, px, device.hello, onPhone) { if (track != null && !onPhone) control.wantArt(Thumbs.NOW_PLAYING, track, px, s.album) }
-                    val enter = if (keyable(device, lyrics)) Modifier.press({ lyricsKey() }, longPress) else Modifier
-                    if (onPhone) {
-                        val cover = s.phoneArtCrc?.let { control.phoneCover(it) }
-                        Box(Modifier.at(artX, artY).size(artSide.dp()).then(enter).testTag("np.art")) {
-                            cover?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
+            if (drawn) {
+                Box(Modifier.fillMaxSize().graphicsLayer { alpha = frame().alpha }) {
+                    LyricsColumn(device, lyrics, npKey, upcoming.firstOrNull(), lifecycle, lyricTarget, lyricsTap, longPress)
+                }
+            } else {
+                Box(Modifier.fillMaxSize().graphicsLayer { alpha = frame().alpha }) {
+                    RoleText(s.artist ?: "", Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))
+                    RoleText(s.album ?: "", Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("np.album"))
+                    if (artSide > 0f) {
+                        val track = s.track
+                        val px = artSide.roundToInt()
+                        LaunchedEffect(track, px, device.hello, onPhone) { if (track != null && !onPhone) control.wantArt(Thumbs.NOW_PLAYING, track, px, s.album) }
+                        val enter = if (keyable(device, lyrics)) Modifier.press({ lyricsKey() }, longPress) else Modifier
+                        if (onPhone) {
+                            val cover = s.phoneArtCrc?.let { crc -> phoneCover?.takeIf { it.first == crc }?.second }
+                            Box(Modifier.at(artX, artY).size(artSide.dp()).then(enter).testTag("np.art")) {
+                                cover?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
+                            }
+                            if (cover == null) Glyph(GlyphName.BLUETOOTH, Tok.npBtGlyph, white(Tok.alpha_full), Modifier.at(artX + artSide / 2, artY + artSide / 2, 0.5f, 0.5f).testTag("np.art.bluetooth"))
+                        } else {
+                            Box(Modifier.at(artX, artY).size(artSide.dp()).background(Color(Tok.color_tile)).then(enter).testTag("np.art")) {
+                                track?.let { control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
+                            }
                         }
-                        if (cover == null) Glyph(GlyphName.BLUETOOTH, Tok.npBtGlyph, white(Tok.alpha_full), Modifier.at(artX + artSide / 2, artY + artSide / 2, 0.5f, 0.5f).testTag("np.art.bluetooth"))
+                        if (Heart.shown(device.hello, s) && npHeartFits(ui.npArt)) {
+                            key(HEART) {
+                                val inset = ui.px(Tok.detailRingInset)
+                                val ring = ui.px(Tok.npRing)
+                                val hx = artX + artSide - inset - ring / 2
+                                val hy = artY + inset + ring / 2
+                                val on = Heart.lit(s)
+                                val focused = ringFocus == HEART
+                                var swaps by remember { mutableIntStateOf(0) }
+                                var down by remember { mutableStateOf(false) }
+                                Box(Modifier.at(hx, hy, 0.5f, 0.5f).alpha(if (focused) 1f else idleAlpha).testTag(if (on) "np.heart.on" else "np.heart.off")) {
+                                    Ring(Tok.npRing, GlyphName.HEART, focused, toggle = true, on = on, swaps = swaps, pressed = down)
+                                }
+                                Box(
+                                    Modifier.at(hx, hy, 0.5f, 0.5f).size((ring + ui.px(Tok.detailRingGap)).dp()).testTag("np.heart").press({
+                                        ringFocus = HEART
+                                        swaps++
+                                        control.favorite(s) { line, title -> toast.show(line, title) }
+                                    }, {}) { down = it },
+                                )
+                            }
+                        }
+                    }
+                    if (s.track != null && (!onPhone || duration > 0)) {
+                        val thick = ui.px(Tok.npProgressThick).dp()
+                        Box(Modifier.at(artX, progressY).size(artSide.dp(), thick).background(white(Tok.alpha_low)))
+                        Box(Modifier.at(artX, progressY).size((artSide * fraction).dp(), thick).background(Accent).testTag("np.progress"))
+                        RoleText(formatTime(position), Roles.time, Modifier.atBaseline(artX, timeBaseline).testTag("np.elapsed"))
+                        val remaining = if (duration > 0) "-" + formatTime(duration - position) else ""
+                        RoleText(remaining, Roles.time, Modifier.atBaseline(artX + artSide, timeBaseline, ax = 1f).testTag("np.remaining"))
+                        val margin = ui.px(Tok.edge - Tok.npSeekBandX0)
+                        val bandW = artSide + 2 * margin
+                        if (!onPhone) Box(
+                            Modifier.at(artX - margin, progressY).size(bandW.dp(), (seekBottom - progressY).dp()).systemGestureExclusion().testTag("np.seek")
+                                .pointerInput(duration, artSide) {
+                                    awaitEachGesture {
+                                        val down = awaitFirstDown()
+                                        if (swapNow() != null) {
+                                            down.consume()
+                                            return@awaitEachGesture
+                                        }
+                                        fun f(x: Float) = ((x - margin) / artSide).coerceIn(0f, 1f)
+                                        seekFraction = f(down.position.x)
+                                        var last = down.position.x
+                                        while (true) {
+                                            val e = awaitPointerEvent()
+                                            val c = e.changes.firstOrNull() ?: break
+                                            if (!c.pressed) break
+                                            last = c.position.x
+                                            seekFraction = f(last)
+                                            c.consume()
+                                        }
+                                        val target = (f(last) * duration).toLong()
+                                        if (duration > 0) control.transport(Enums.TransportCmd.seek, seekMs = target)
+                                        seekFraction = null
+                                    }
+                                },
+                        )
+                    }
+                    Box(Modifier.at(textX, titleTop).size(textW.dp(), (titleBottom - titleTop).coerceAtLeast(0f).dp()).press({ onQueue() }).testTag("np.titleBlock"))
+                    RoleText(s.title ?: "", Roles.npTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"))
+                    upcoming.forEachIndexed { i, t ->
+                        val x = textX + ui.px(Tok.npNextIndent)
+                        RoleText(t, Roles.npNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
+                    }
+                    val n = s.phoneTrackNo
+                    val m = s.phoneTracks
+                    if (onPhone && n != null && m != null) {
+                        val x = textX + ui.px(Tok.npNextIndent)
+                        RoleText("$n of $m", Roles.npCount, Modifier.atBaseline(x, nextBaseline, ui.px(ui.w - Tok.edge) - x).testTag("np.count"))
+                    }
+                    val corner = ui.landscape
+                    if (canLyrics && artSide > 0f && npMarkFits(ui.npArt, corner)) {
+                        val ring = ui.px(Tok.npRing)
+                        val cx = if (corner) artX + artSide - ui.px(Tok.detailRingInset) - ring / 2 else artX + artSide + ui.px(Tok.tileLGutter) + ring / 2
+                        val cy = artY + artSide - (if (corner) ui.px(Tok.detailRingInset) else 0f) - ring / 2
+                        var down by remember { mutableStateOf(false) }
+                        Box(Modifier.at(cx, cy, 0.5f, 0.5f).testTag("np.mark")) {
+                            Ring(Tok.npRing, GlyphName.MIC, false, pressed = down)
+                        }
+                        Box(Modifier.at(cx, cy, 0.5f, 0.5f).size(ring.dp()).press({ lyricsKey() }, longPress) { down = it }.testTag("np.mark.hit"))
+                    }
+                }
+            }
+            val repeat = s.repeat ?: Enums.Repeat.off
+            val queued = s.track != null || (s.slots ?: 0L) > 0L
+            val hitW = ui.px(ui.npRingCenter(1) - ui.npRingCenter(0)) / 2
+            val hitH = ui.px(Tok.overlayRing)
+            val items = listOfNotNull(
+                SHUFFLE to ui.npRingCenter(0),
+                (PREV to ui.npTransportX(0)).takeIf { queued },
+                (TOGGLE to ui.npRingCenter(1)).takeIf { queued },
+                (NEXT to ui.npTransportX(1)).takeIf { queued },
+                REPEAT to ui.npRingCenter(2),
+            )
+            items.forEach { (kind, x) ->
+                key(kind) {
+                    val cx = ui.px(x)
+                    val focused = ringFocus == kind
+                    val alpha = if (focused) 1f else idleAlpha
+                    val hit = Modifier.at(cx, ringY, 0.5f, 0.5f).size(hitW.dp(), hitH.dp()).testTag(ITEM_TAGS.getValue(kind))
+                    if (kind == PREV || kind == NEXT) {
+                        Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(if (focused) Tok.alpha_full else Tok.alpha_mid), Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha))
+                        Box(
+                            hit.press({
+                                ringFocus = kind
+                                control.transport(if (kind == PREV) Enums.TransportCmd.prev else Enums.TransportCmd.next)
+                            }),
+                        )
                     } else {
-                        Box(Modifier.at(artX, artY).size(artSide.dp()).background(Color(Tok.color_tile)).then(enter).testTag("np.art")) {
-                            track?.let { control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
-                        }
-                    }
-                    if (Heart.shown(device.hello, s) && npHeartFits(ui.npArt)) {
-                        key(HEART) {
-                            val inset = ui.px(Tok.detailRingInset)
-                            val ring = ui.px(Tok.npRing)
-                            val hx = artX + artSide - inset - ring / 2
-                            val hy = artY + inset + ring / 2
-                            val on = Heart.lit(s)
-                            val focused = ringFocus == HEART
-                            var swaps by remember { mutableIntStateOf(0) }
-                            var down by remember { mutableStateOf(false) }
-                            Box(Modifier.at(hx, hy, 0.5f, 0.5f).alpha(if (focused) 1f else idleAlpha).testTag(if (on) "np.heart.on" else "np.heart.off")) {
-                                Ring(Tok.npRing, GlyphName.HEART, focused, toggle = true, on = on, swaps = swaps, pressed = down)
-                            }
-                            Box(
-                                Modifier.at(hx, hy, 0.5f, 0.5f).size((ring + ui.px(Tok.detailRingGap)).dp()).testTag("np.heart").press({
-                                    ringFocus = HEART
-                                    swaps++
-                                    control.favorite(s) { line, title -> toast.show(line, title) }
-                                }, {}) { down = it },
-                            )
-                        }
-                    }
-                }
-                if (s.track != null && (!onPhone || duration > 0)) {
-                    val thick = ui.px(Tok.npProgressThick).dp()
-                    Box(Modifier.at(artX, progressY).size(artSide.dp(), thick).background(white(Tok.alpha_low)))
-                    Box(Modifier.at(artX, progressY).size((artSide * fraction).dp(), thick).background(Accent).testTag("np.progress"))
-                    RoleText(formatTime(position), Roles.time, Modifier.atBaseline(artX, timeBaseline).testTag("np.elapsed"))
-                    val remaining = if (duration > 0) "-" + formatTime(duration - position) else ""
-                    RoleText(remaining, Roles.time, Modifier.atBaseline(artX + artSide, timeBaseline, ax = 1f).testTag("np.remaining"))
-                    val margin = ui.px(Tok.edge - Tok.npSeekBandX0)
-                    val bandW = artSide + 2 * margin
-                    if (!onPhone) Box(
-                        Modifier.at(artX - margin, progressY).size(bandW.dp(), (seekBottom - progressY).dp()).systemGestureExclusion().testTag("np.seek")
-                            .pointerInput(duration, artSide) {
-                                awaitEachGesture {
-                                    val down = awaitFirstDown()
-                                    fun f(x: Float) = ((x - margin) / artSide).coerceIn(0f, 1f)
-                                    seekFraction = f(down.position.x)
-                                    var last = down.position.x
-                                    while (true) {
-                                        val e = awaitPointerEvent()
-                                        val c = e.changes.firstOrNull() ?: break
-                                        if (!c.pressed) break
-                                        last = c.position.x
-                                        seekFraction = f(last)
-                                        c.consume()
-                                    }
-                                    val target = (f(last) * duration).toLong()
-                                    if (duration > 0) control.transport(Enums.TransportCmd.seek, seekMs = target)
-                                    seekFraction = null
-                                }
-                            },
-                    )
-                }
-                Box(Modifier.at(textX, titleTop).size(textW.dp(), (titleBottom - titleTop).coerceAtLeast(0f).dp()).press({ onQueue() }).testTag("np.titleBlock"))
-                RoleText(s.title ?: "", Roles.npTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"))
-                upcoming.forEachIndexed { i, t ->
-                    val x = textX + ui.px(Tok.npNextIndent)
-                    RoleText(t, Roles.npNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
-                }
-                val n = s.phoneTrackNo
-                val m = s.phoneTracks
-                if (onPhone && n != null && m != null) {
-                    val x = textX + ui.px(Tok.npNextIndent)
-                    RoleText("$n of $m", Roles.npCount, Modifier.atBaseline(x, nextBaseline, ui.px(ui.w - Tok.edge) - x).testTag("np.count"))
-                }
-                val corner = ui.landscape
-                if (canLyrics && artSide > 0f && npMarkFits(ui.npArt, corner)) {
-                    val ring = ui.px(Tok.npRing)
-                    val cx = if (corner) artX + artSide - ui.px(Tok.detailRingInset) - ring / 2 else artX + artSide + ui.px(Tok.tileLGutter) + ring / 2
-                    val cy = artY + artSide - (if (corner) ui.px(Tok.detailRingInset) else 0f) - ring / 2
-                    var down by remember { mutableStateOf(false) }
-                    Box(Modifier.at(cx, cy, 0.5f, 0.5f).testTag("np.mark")) {
-                        Ring(Tok.npRing, GlyphName.MIC, false, pressed = down)
-                    }
-                    Box(Modifier.at(cx, cy, 0.5f, 0.5f).size(ring.dp()).press({ lyricsKey() }, longPress) { down = it }.testTag("np.mark.hit"))
-                }
-            }
-        }
-        val repeat = s.repeat ?: Enums.Repeat.off
-        val queued = s.track != null || (s.slots ?: 0L) > 0L
-        val hitW = ui.px(ui.npRingCenter(1) - ui.npRingCenter(0)) / 2
-        val hitH = ui.px(Tok.overlayRing)
-        val items = listOfNotNull(
-            SHUFFLE to ui.npRingCenter(0),
-            (PREV to ui.npTransportX(0)).takeIf { queued },
-            (TOGGLE to ui.npRingCenter(1)).takeIf { queued },
-            (NEXT to ui.npTransportX(1)).takeIf { queued },
-            REPEAT to ui.npRingCenter(2),
-        )
-        items.forEach { (kind, x) ->
-            key(kind) {
-                val cx = ui.px(x)
-                val focused = ringFocus == kind
-                val alpha = if (focused) 1f else idleAlpha
-                val hit = Modifier.at(cx, ringY, 0.5f, 0.5f).size(hitW.dp(), hitH.dp()).testTag(ITEM_TAGS.getValue(kind))
-                if (kind == PREV || kind == NEXT) {
-                    Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(if (focused) Tok.alpha_full else Tok.alpha_mid), Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha))
-                    Box(
-                        hit.press({
-                            ringFocus = kind
-                            control.transport(if (kind == PREV) Enums.TransportCmd.prev else Enums.TransportCmd.next)
-                        }),
-                    )
-                } else {
-                    var swaps by remember { mutableIntStateOf(0) }
-                    var down by remember { mutableStateOf(false) }
-                    Box(Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha)) {
-                        when (kind) {
-                            SHUFFLE -> Ring(Tok.npRing, GlyphName.SHUFFLE, focused, toggle = true, on = s.shuffle == true, swaps = swaps, pressed = down)
-                            REPEAT -> Ring(Tok.npRing, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, focused, toggle = true, on = repeat != Enums.Repeat.off, swaps = swaps, pressed = down)
-                            else -> Ring(Tok.overlayRing, if (playing) GlyphName.PAUSE else GlyphName.PLAY, focused, Modifier.testTag(if (playing) "np.toggle.pause" else "np.toggle.play"), pressed = down)
-                        }
-                    }
-                    Box(
-                        hit.press({
-                            ringFocus = kind
+                        var swaps by remember { mutableIntStateOf(0) }
+                        var down by remember { mutableStateOf(false) }
+                        Box(Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha)) {
                             when (kind) {
-                                SHUFFLE -> {
-                                    swaps++
-                                    control.transport(Enums.TransportCmd.shuffle, on = s.shuffle != true)
-                                }
-                                REPEAT -> {
-                                    swaps++
-                                    val next = when (repeat) {
-                                        Enums.Repeat.off -> Enums.Repeat.all
-                                        Enums.Repeat.all -> Enums.Repeat.one
-                                        else -> Enums.Repeat.off
-                                    }
-                                    control.transport(Enums.TransportCmd.repeat, repeat = next)
-                                }
-                                else -> control.transport(Enums.TransportCmd.toggle)
+                                SHUFFLE -> Ring(Tok.npRing, GlyphName.SHUFFLE, focused, toggle = true, on = s.shuffle == true, swaps = swaps, pressed = down)
+                                REPEAT -> Ring(Tok.npRing, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, focused, toggle = true, on = repeat != Enums.Repeat.off, swaps = swaps, pressed = down)
+                                else -> Ring(Tok.overlayRing, if (playing) GlyphName.PAUSE else GlyphName.PLAY, focused, Modifier.testTag(if (playing) "np.toggle.pause" else "np.toggle.play"), pressed = down)
                             }
-                        }) { down = it },
-                    )
+                        }
+                        Box(
+                            hit.press({
+                                ringFocus = kind
+                                when (kind) {
+                                    SHUFFLE -> {
+                                        swaps++
+                                        control.transport(Enums.TransportCmd.shuffle, on = s.shuffle != true)
+                                    }
+                                    REPEAT -> {
+                                        swaps++
+                                        val next = when (repeat) {
+                                            Enums.Repeat.off -> Enums.Repeat.all
+                                            Enums.Repeat.all -> Enums.Repeat.one
+                                            else -> Enums.Repeat.off
+                                        }
+                                        control.transport(Enums.TransportCmd.repeat, repeat = next)
+                                    }
+                                    else -> control.transport(Enums.TransportCmd.toggle)
+                                }
+                            }) { down = it },
+                        )
+                    }
                 }
             }
         }

@@ -192,6 +192,8 @@ class NowPlayingLyricsTest {
         val s = c.device.playback.state
         c.device = c.device.withState(s.copy(source = Enums.Source.phone), SystemClock.elapsedRealtime())
         settle(100)
+        assertTrue(exists("np.mark"))
+        settle(600)
         assertFalse(exists("np.mark"))
         assertFalse(exists("np.mark.hit"))
     }
@@ -1780,11 +1782,14 @@ class NowPlayingLyricsTest {
     @Test
     fun thePhoneSourceShowsNormalAndKeepsTheMode() {
         val shell = inView()
+        c.device = c.device.withState(c.device.playback.state.copy(playing = true), SystemClock.elapsedRealtime())
+        settle(100)
+        assertTrue(view.keepScreenOn)
         val p = c.device.playback
         c.device = c.device.withState(p.state.copy(source = Enums.Source.phone, track = null, title = null, playing = true), SystemClock.elapsedRealtime())
-        settle(880)
+        settle(250)
         assertTrue(view.keepScreenOn)
-        settle(40)
+        settle(150)
         assertFalse(view.keepScreenOn)
         settle(1300)
         assertFalse(exists("np.lyrics"))
@@ -1795,9 +1800,9 @@ class NowPlayingLyricsTest {
         assertTrue(c.mode)
         assertEquals(0, shell.toast.shows)
         c.device = c.device.withState(p.state.copy(source = Enums.Source.local, playing = true), SystemClock.elapsedRealtime())
-        settle(880)
+        settle(700)
         assertFalse(view.keepScreenOn)
-        settle(40)
+        settle(150)
         assertTrue(view.keepScreenOn)
         settle(1300)
         lyricsOn()

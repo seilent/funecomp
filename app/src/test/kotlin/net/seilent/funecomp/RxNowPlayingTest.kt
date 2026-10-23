@@ -283,6 +283,44 @@ class RxNowPlayingTest {
     }
 
     @Test
+    fun aSourceChangeHoldsTheOldContentThroughItsOutLeg() {
+        start(LyricsFetch.Show.Phone(idol, false, null))
+        phone(crc = 77)
+        c.phoneCovers = mapOf(77L to ImageBitmap(8, 8))
+        settle(100)
+        assertTrue(exists("np.art.image"))
+        local()
+        c.phoneCovers = emptyMap()
+        settle(150)
+        assertTrue(exists("np.from"))
+        assertTrue(exists("np.art.image"))
+        settle(400)
+        assertFalse(exists("np.from"))
+        rule.onNodeWithText("track 7", ignoreCase = true).fetchSemanticsNode()
+        phone()
+        settle(150)
+        assertFalse(exists("np.from"))
+        settle(300)
+        assertTrue(exists("np.from"))
+        assertTrue(exists("np.art.bluetooth"))
+    }
+
+    @Test
+    fun aBackDuringTheOutLegClosesNowPlayingAndKeepsBothModes() {
+        val shell = start(copy(), stored = true, seed = true)
+        settle(1000)
+        assertTrue(exists("np.lyrics"))
+        local()
+        settle(100)
+        assertTrue(exists("np.lyrics"))
+        rule.onNodeWithTag("back").performClick()
+        settle(1000)
+        assertEquals(Page.Home, shell.nav.top)
+        assertTrue(c.mode)
+        assertTrue(c.phoneMode)
+    }
+
+    @Test
     fun aPauseKeepsTheKeyAndTheView() {
         start(copy(), seed = true)
         settle(1000)

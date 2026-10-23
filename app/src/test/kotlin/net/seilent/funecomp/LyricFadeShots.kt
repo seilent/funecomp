@@ -52,9 +52,36 @@ private val FADE_LINES = listOf(
     "Nothing left to lose", "Run with me", "One more mile", "Paper moon",
 ).mapIndexed { i, t -> LyrLine(54_000L + 4_000L * i, t) }
 
-private val FADE_ENTRY = ArtCache.Entry("a74b1b7f-71a5-4011-9441-d0b5e4122711", "Radiohead", "a74b1b7f-71a5-4011-9441-d0b5e4122711", "commons", Credit("Raph_PH", "CC BY 4.0", "https://commons.wikimedia.org/wiki/File:RadioheadO2211125_composite.jpg", "https://creativecommons.org/licenses/by/4.0"), "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/RadioheadO2211125_composite.jpg/500px-RadioheadO2211125_composite.jpg", 0, "File:RadioheadO2211125 composite.jpg", "s", "Radiohead")
+internal val FADE_ENTRY = ArtCache.Entry("a74b1b7f-71a5-4011-9441-d0b5e4122711", "Radiohead", "a74b1b7f-71a5-4011-9441-d0b5e4122711", "commons", Credit("Raph_PH", "CC BY 4.0", "https://commons.wikimedia.org/wiki/File:RadioheadO2211125_composite.jpg", "https://creativecommons.org/licenses/by/4.0"), "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/RadioheadO2211125_composite.jpg/500px-RadioheadO2211125_composite.jpg", 0, "File:RadioheadO2211125 composite.jpg", "s", "Radiohead")
 
 private const val BODY_B = "shows on songs with synced lyrics"
+
+internal fun syntheticCovers(): File {
+    val dir = kotlin.io.path.createTempDirectory("covers").toFile()
+    val lib = net.seilent.funecomp.sim.Library.synthetic()
+    lib.tracks.mapNotNull { lib.albumKey(it.id) }.distinct().forEachIndexed { i, key ->
+        val img = java.awt.image.BufferedImage(600, 600, java.awt.image.BufferedImage.TYPE_INT_RGB)
+        val g = img.createGraphics()
+        g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color.getHSBColor(i * 0.13f, 0.6f, 0.8f), 600f, 600f, java.awt.Color.getHSBColor(i * 0.13f + 0.5f, 0.7f, 0.3f))
+        g.fillRect(0, 0, 600, 600)
+        g.color = java.awt.Color(255, 255, 255, 90)
+        g.fillOval(150, 150, 300, 300)
+        g.dispose()
+        javax.imageio.ImageIO.write(img, "jpg", File(dir, "$key.jpg"))
+    }
+    return dir
+}
+
+internal fun shotPhoto(): ImageBitmap = System.getProperty("shots.backdrop")?.let { File(it) }?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() } ?: run {
+    val img = java.awt.image.BufferedImage(720, 960, java.awt.image.BufferedImage.TYPE_INT_RGB)
+    val g = img.createGraphics()
+    g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(90, 70, 60), 720f, 960f, java.awt.Color(20, 30, 50))
+    g.fillRect(0, 0, 720, 960)
+    g.dispose()
+    val out = java.io.ByteArrayOutputStream()
+    javax.imageio.ImageIO.write(img, "jpg", out)
+    BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size()).asImageBitmap()
+}
 
 class FadeCase(val lead: Boolean, val name: String, val dir: String, val frames: Int, val mode: Boolean, val lyrics: Boolean?, val pages: List<Page>, val pre: () -> Unit = {}, val events: List<Pair<Long, () -> Unit>>)
 
@@ -74,21 +101,7 @@ class LyricFadeShots {
     private var base = 0L
     private var sys0 = 0L
 
-    private val made = lazy {
-        val dir = kotlin.io.path.createTempDirectory("covers").toFile()
-        val lib = net.seilent.funecomp.sim.Library.synthetic()
-        lib.tracks.mapNotNull { lib.albumKey(it.id) }.distinct().forEachIndexed { i, key ->
-            val img = java.awt.image.BufferedImage(600, 600, java.awt.image.BufferedImage.TYPE_INT_RGB)
-            val g = img.createGraphics()
-            g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color.getHSBColor(i * 0.13f, 0.6f, 0.8f), 600f, 600f, java.awt.Color.getHSBColor(i * 0.13f + 0.5f, 0.7f, 0.3f))
-            g.fillRect(0, 0, 600, 600)
-            g.color = java.awt.Color(255, 255, 255, 90)
-            g.fillOval(150, 150, 300, 300)
-            g.dispose()
-            javax.imageio.ImageIO.write(img, "jpg", File(dir, "$key.jpg"))
-        }
-        dir
-    }
+    private val made = lazy { syntheticCovers() }
 
     private val covers: File by made
 
@@ -97,18 +110,7 @@ class LyricFadeShots {
         if (made.isInitialized()) covers.deleteRecursively()
     }
 
-    private val photo: ImageBitmap by lazy {
-        System.getProperty("shots.backdrop")?.let { File(it) }?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() } ?: run {
-            val img = java.awt.image.BufferedImage(720, 960, java.awt.image.BufferedImage.TYPE_INT_RGB)
-            val g = img.createGraphics()
-            g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(90, 70, 60), 720f, 960f, java.awt.Color(20, 30, 50))
-            g.fillRect(0, 0, 720, 960)
-            g.dispose()
-            val out = java.io.ByteArrayOutputStream()
-            javax.imageio.ImageIO.write(img, "jpg", out)
-            BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size()).asImageBitmap()
-        }
-    }
+    private val photo: ImageBitmap by lazy { shotPhoto() }
 
     private fun tick(ms: Long) {
         repeat(ms.toInt()) {
