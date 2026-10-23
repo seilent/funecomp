@@ -434,7 +434,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private fun landedRefusal(type: Int, b: Node): Answer.Fail? = when (type) {
         Msg.LYR_GET -> if (b.long(Tags.LyrGet.track) == cardLyrics) null else noCard()
         Msg.PLAY, Msg.LRC_PUT, Msg.IMG_BEGIN, Msg.IMG_DEL, Msg.IMG_TAG, Msg.UPD_BEGIN -> noCard()
-        Msg.QUEUE_OP -> if (b.int(Tags.QueueOp.cmd) == Enums.QueueCmd.page) null else noCard()
+        Msg.QUEUE_OP -> if (b.int(Tags.QueueOp.cmd) == Enums.QueueCmd.page && !faults.cardPage) null else noCard()
         Msg.ACTION -> when (b.int(Tags.Action.cmd)) {
             Enums.ActionCmd.shuffleLibrary -> if (lib.tracks.isEmpty()) null else noCard()
             Enums.ActionCmd.favorite -> noCard()
@@ -699,6 +699,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun request(type: Int, body: Node, out: Out): Answer = synchronized(lock) {
         follow()
+        if (type == Msg.QUEUE_OP && body.int(Tags.QueueOp.cmd) == Enums.QueueCmd.page && faults.cardRun?.start == CardRun.Start.Queue && cardArmed) cardStart(now())
         cardEdge()
         cardRefusal(type, body)?.let {
             if (it.code == Err.noCard) forceCard()

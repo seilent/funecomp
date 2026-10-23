@@ -526,4 +526,34 @@ class CardBusyTest {
 
     @Test
     fun aThumbRefusedInACoalescedRunIsAskedAgainAtTheFirstReadyState() = thumbAfterTheRun(listOf("card-run=4000+0@manual", "card-coalesce", "fail=ART_GET:14:1"), artFirst = true, coalesce = true)
+
+    private fun queueAfterTheRun(faults: List<String>, coalesce: Boolean = false) {
+        Remote.resetArtist()
+        Remote.artist(app, http)
+        val lib = Library.synthetic()
+        val c = link(sim(lib, faults))
+        waitFor { Remote.phase == Phase.LIVE && (Remote.device.playback.state.slots ?: 0) > 0 }
+        val a = Robolectric.buildActivity(Main::class.java, Intent(app, Main::class.java).setAction(Intent.ACTION_MAIN).putExtra(Main.EXTRA_PAGE, "queue")).create().start().resume().visible()
+        waitFor { lines.any { "rx QUEUE_OP" in it } }
+        waitFor(15_000) { if (coalesce) lines.contains("card gate busy") else Remote.device.cardDown }
+        waitFor { lines.any { " tx QUEUE_OP " in it } }
+        assertTrue(lines.first { " tx QUEUE_OP " in it }.contains("flags=0x03"))
+        assertEquals(null, Remote.device.queue.items[0L])
+        waitFor(30_000) { Remote.device.queue.items[0L] != null }
+        assertTrue(index("card gate ready") < lines.indexOfLast { "rx QUEUE_OP" in it })
+        a.pause().stop().destroy()
+        c.destroy()
+    }
+
+    @Test
+    fun aQueuePageRefusedByAnOldRunIsAskedAgainAtTheReadyEdge() = queueAfterTheRun(listOf("card-run=15000+1000@queue", "card-device=old"))
+
+    @Test
+    fun aQueuePageRefused14IsAskedAgainAtTheReadyEdge() = queueAfterTheRun(listOf("card-run=15000+1000@queue", "card-page"))
+
+    @Test
+    fun aQueuePageRefused14InACoalescedRunIsAskedAgainAtTheFirstReadyState() = queueAfterTheRun(listOf("card-run=15000+1000@queue", "card-page", "card-coalesce"), coalesce = true)
+
+    @Test
+    fun aQueuePageRefusedWithALateStateIsAskedAgainAtTheReadyEdge() = queueAfterTheRun(listOf("card-run=15000+1000@queue", "card-device=old", "late-state=500"))
 }

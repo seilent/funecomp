@@ -388,6 +388,20 @@ class CardRunSimTest {
     }
 
     @Test
+    fun cardPageRefusesTheQueuePageOnALandedRunOnly() {
+        val page = requests.getValue("QUEUE_OP page")
+        val d = device(15, null, "card-run=1000+1000@0", "card-page")
+        val out = linked(d)
+        at(d, out, 500)
+        assertEquals(Err.noCard, code(page(d)))
+        at(d, out, 2500)
+        assertEquals(null, code(page(d)))
+        val plain = device(15, null, "card-run=1000+1000@0")
+        at(plain, linked(plain), 500)
+        assertEquals(null, code(page(plain)))
+    }
+
+    @Test
     fun playDropAnswersOkAndStartsNothingInTheOldIndex() {
         val d = device(15, null, "card-run=1000+3000@0", "card-device=old", "play-drop")
         val out = linked(d)
@@ -417,6 +431,7 @@ class CardRunSimTest {
         assertTrue(Faults(listOf("card-run=1+2@hello")).cardRun!!.start == CardRun.Start.Hello)
         assertTrue(Faults(listOf("card-run=1+2@play")).cardRun!!.start == CardRun.Start.Play)
         assertTrue(Faults(listOf("card-run=1+2@manual")).cardRun!!.start == CardRun.Start.Manual)
+        assertTrue(Faults(listOf("card-run=1+2@queue")).cardRun!!.start == CardRun.Start.Queue)
         assertEquals(7L, (Faults(listOf("card-run=1+2@upd:7")).cardRun!!.start as CardRun.Start.Upd).bytes)
         assertEquals(0L, (Faults(listOf("card-run=1+2")).cardRun!!.start as CardRun.Start.Delay).ms)
         for (bad in listOf("card-run=5000", "card-run=a+1", "card-seq=nope:1,ready", "card-seq=busy,ready", "card-device=new", "card-run=1+1,card-seq=ready")) {

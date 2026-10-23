@@ -38,6 +38,7 @@ class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
         class Upd(val bytes: Long) : Start
         data object Play : Start
         data object Manual : Start
+        data object Queue : Start
     }
 
     companion object {
@@ -50,6 +51,7 @@ class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
                 at == "hello" -> Start.Hello
                 at == "play" -> Start.Play
                 at == "manual" -> Start.Manual
+                at == "queue" -> Start.Queue
                 at.startsWith("img:") -> Start.Img(at.removePrefix("img:").toLongOrNull() ?: throw IllegalArgumentException("card-run: bad bytes in $v"))
                 at.startsWith("upd:") -> Start.Upd(at.removePrefix("upd:").toLongOrNull() ?: throw IllegalArgumentException("card-run: bad bytes in $v"))
                 else -> Start.Delay(at.toLongOrNull() ?: throw IllegalArgumentException("card-run: bad start in $v"))
@@ -105,6 +107,7 @@ class Faults(specs: List<String>) {
     var playLag = 0L
     var playDrop = false
     var cardCoalesce = false
+    var cardPage = false
 
     init {
         val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
@@ -183,6 +186,7 @@ class Faults(specs: List<String>) {
                 "play-lag" -> playLag = v.toLong()
                 "play-drop" -> playDrop = true
                 "card-coalesce" -> cardCoalesce = true
+                "card-page" -> cardPage = true
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')

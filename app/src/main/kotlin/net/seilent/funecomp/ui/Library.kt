@@ -345,7 +345,8 @@ fun Queue(ctx: Ctx) {
     val q = ctx.device.queue
     val total = (s.slots ?: q.total).toInt()
     val current = s.slot?.toInt() ?: -1
-    LaunchedEffect(q.rev, s.queueRev) {
+    val epoch = ctx.device.card.epoch
+    LaunchedEffect(q.rev, s.queueRev, epoch) {
         if (ctx.device.has("queue") && q.items.isEmpty() && total > 0) ctx.control.queuePage(0)
     }
     var focus by rememberSaveable { mutableIntStateOf(current) }
@@ -356,7 +357,7 @@ fun Queue(ctx: Ctx) {
         Rows(ui.contentTop, state, focus = focus) {
             items(total) { i ->
                 val item = q.items[i.toLong()]
-                LaunchedEffect(item == null, i) {
+                LaunchedEffect(item == null, i, epoch) {
                     if (item == null && ctx.device.has("queue")) ctx.control.queuePage(i / LIB_PAGE * LIB_PAGE)
                 }
                 val title = item?.title ?: ""

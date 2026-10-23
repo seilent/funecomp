@@ -1059,7 +1059,7 @@ object Remote : Control {
     }
 
     override fun queuePage(offset: Long) {
-        val key = "queue $offset ${device.queue.rev}"
+        val key = "queue $offset ${device.queue.rev} ${device.card.epoch}"
         if (!once(key)) return
         send(Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.page, offset = offset, count = LIB_PAGE), key, fail = { forget(key) })
     }
