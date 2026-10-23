@@ -49,6 +49,7 @@ val Ui.npArtistBaseline get() = if (landscape) NP_ARTIST_LANDSCAPE else npAlbumB
 val Ui.npAlbumBaseline get() = if (landscape) NP_ALBUM_LANDSCAPE else npArtTop - NP_ALBUM_RISE
 val Ui.npArtTop get() = if (landscape) NP_ART_TOP_LANDSCAPE else npProgressY - npArt
 val Ui.npProgressY get() = if (landscape) NP_ART_TOP_LANDSCAPE + npArt + NP_PROGRESS_GAP_LANDSCAPE else h - NP_PROGRESS_FROM_BOTTOM - npRowExtra - npLift
+val Ui.npSeekBottom get() = npProgressY + Tok.npSeekBandBottom - Tok.npProgressY
 val Ui.npArt get() = if (landscape) {
     min(NP_ART_MAX, h - NP_ART_LANDSCAPE_STACK)
 } else {

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -386,6 +387,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
     val artSide = ui.px(ui.npArt)
     val progressY = ui.px(ui.npProgressY)
     val timeBaseline = progressY + ui.px(Tok.npTimeDrop)
+    val seekBottom = ui.px(ui.npSeekBottom)
     val titleBaseline = ui.px(ui.npTitleBaseline)
     val titleTop = titleBaseline - ui.px(Tok.capHeight * Roles.npTitle.size)
     val nextBaseline = ui.px(ui.npNextBaseline)
@@ -476,7 +478,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
                     val margin = ui.px(Tok.edge - Tok.npSeekBandX0)
                     val bandW = artSide + 2 * margin
                     Box(
-                        Modifier.at(artX - margin, progressY).size(bandW.dp(), (titleTop - progressY).coerceAtLeast(0f).dp()).testTag("np.seek")
+                        Modifier.at(artX - margin, progressY).size(bandW.dp(), (seekBottom - progressY).dp()).systemGestureExclusion().testTag("np.seek")
                             .pointerInput(duration, artSide) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown()

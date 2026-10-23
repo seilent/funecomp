@@ -3,6 +3,8 @@ package net.seilent.funecomp
 import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.ui.Roles
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.albumArtTop
 import net.seilent.funecomp.ui.albumArtistBaseline
@@ -31,6 +33,7 @@ import net.seilent.funecomp.ui.npLyricTop
 import net.seilent.funecomp.ui.npProgressY
 import net.seilent.funecomp.ui.npRingCenter
 import net.seilent.funecomp.ui.npRingY
+import net.seilent.funecomp.ui.npSeekBottom
 import net.seilent.funecomp.ui.npTitleBaseline
 import net.seilent.funecomp.ui.npTransportX
 import net.seilent.funecomp.ui.step
@@ -201,5 +204,12 @@ class LayoutTest {
         assertEquals(20000f, gridHz(60), 1e-3f)
         assertEquals("ls 105 hz +5.5 db q 0.70", bandText(Band(Enums.BandType.lowShelf, -1, 105_000, 55, 70)))
         assertEquals("off", bandText(null))
+    }
+
+    @Test
+    fun theSeekBandEndsTheSk1HeightBelowTheProgressLine() {
+        val p = Ui.of(1080f, 2520f)
+        for (ui in listOf(Ui.of(2411f, 930.875f), Ui.of(948f, 748f), p)) assertEquals(ui.npProgressY + 19.8f, ui.npSeekBottom, 1e-3f)
+        assertEquals(p.npTitleBaseline - Tok.capHeight * Roles.npTitle.size, p.npSeekBottom, 1e-3f)
     }
 }
