@@ -60,6 +60,7 @@ class BackgroundTest {
     @After
     fun tearDown() {
         Remote.stop()
+        Remote.shown(false)
         Lyrics.reset()
         Firmwares.reset()
         sims.forEach { it.stop() }

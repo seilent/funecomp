@@ -8,10 +8,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
-import androidx.compose.runtime.snapshots.Snapshot
-import androidx.compose.ui.platform.AndroidUiDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.ArtPick
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Feature
@@ -44,8 +40,6 @@ import org.robolectric.annotation.Config
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -75,10 +69,6 @@ class ArtPickAskTest {
         Remote.stop()
         sims.forEach { it.stop() }
         debuggable(true)
-        waitFor { System.nanoTime() - offMainWrite.get() > QUIET_NS }
-        val ran = AtomicBoolean(false)
-        CoroutineScope(AndroidUiDispatcher.Main).launch { ran.set(true) }
-        waitFor { ran.get() }
         scrobblesReset()
     }
 
@@ -372,14 +362,5 @@ class ArtPickAskTest {
         waitFor { a.get().shell.sheet.shown }
         assertEquals("reconnect after update", a.get().shell.sheet.title)
         a.pause().stop().destroy()
-    }
-
-    companion object {
-        private const val QUIET_NS = 300_000_000L
-        private val offMainWrite = AtomicLong(0)
-
-        init {
-            Snapshot.registerGlobalWriteObserver { if (Looper.myLooper() != Looper.getMainLooper()) offMainWrite.set(System.nanoTime()) }
-        }
     }
 }
