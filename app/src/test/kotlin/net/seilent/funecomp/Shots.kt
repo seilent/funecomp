@@ -38,11 +38,13 @@ import net.seilent.funecomp.artist.AppPair
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
+import net.seilent.funecomp.artist.ArtistArt
 import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Tile
+import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.gen.Enums
@@ -198,6 +200,15 @@ private val TILE_CAPTIONS = listOf(Sources.DISCOGS to "dnb, Jump up") +
 private fun browsed(n: Int, end: Boolean?): (SimControl) -> Unit = { c ->
     c.tiles = TILE_CAPTIONS.take(n).mapIndexed { i, (src, cap) -> BrowseTile(Tile(src, cap, ByteArray(0), "https://example.org/$i.jpg", "$i", null), tileImage(i)) }
     c.browsed = end
+    c.browseOrder = BROWSE_ORDER
+    c.browseSection = { if (it.tile.source == Sources.YOUTUBE) ArtistArt.YOUTUBE_SEARCH else it.tile.source }
+}
+
+private val BROWSE_ORDER = listOf(Sources.THE_AUDIO_DB, Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DISCOGS, Wikimedia.SOURCE, Sources.DEEZER)
+
+private fun browsedSearch(end: Boolean?): (SimControl) -> Unit = { c ->
+    browsed(TILE_CAPTIONS.size, end)(c)
+    c.tiles = c.tiles.filter { it.tile.source == Sources.YOUTUBE }
 }
 
 private val PICK_OFFER = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ=s900-c-k-c0x00ffffff-no-rj", "https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ", null, null, "月-Tsuki-", null)
@@ -866,11 +877,13 @@ val SHOTS = listOf(
     Shot("pick-browse-more", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(5, null)),
     Shot("pick-browse", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)),
     Shot("pick-browse-wide", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true), cols = WIDE),
-    Shot("pick-browse-focus", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)) { rule.onNodeWithTag("pick.tile.4").performClick() },
-    Shot("pick-confirm-browse", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.taken = Previewed.Ok(listOf(shown(PICK_OFFER, photo(1200, 1200, 0.58f)))) }) { rule.onNodeWithTag("pick.tile.4").performClick() },
+    Shot("pick-browse-focus", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)) { rule.onNodeWithTag("pick.tile.${ArtistArt.YOUTUBE_SEARCH}.4").performClick() },
+    Shot("pick-confirm-browse", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.taken = Previewed.Ok(listOf(shown(PICK_OFFER, photo(1200, 1200, 0.58f)))) }) { rule.onNodeWithTag("pick.tile.${ArtistArt.YOUTUBE_SEARCH}.4").performClick() },
     Shot("pick-browse-empty", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, true)),
     Shot("pick-browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, false)),
     Shot("pick-browse-unavailable-tiles", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(11, false)),
+    Shot("pick-browse-search-only", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsedSearch(true)),
+    Shot("pick-browse-arriving", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, null)(c); c.tiles = c.tiles.filter { it.tile.source == Sources.DEEZER } }),
     Shot("connection-gated", pages = listOf(Page.Connection), link = GATED, gated = true),
     Shot("online-art", pages = ONLINE),
     Shot("online-art-ordered", pages = ONLINE, sources = ORDERED),

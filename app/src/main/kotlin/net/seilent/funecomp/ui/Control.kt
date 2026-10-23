@@ -107,6 +107,7 @@ interface Control {
     fun pickGallery(done: (Previewed) -> Unit): () -> Unit = {}
     fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}
     fun takeTile(t: Tile, done: (Previewed) -> Unit): () -> Unit = {}
+    fun browseShown(section: String) {}
     fun pick(target: PickFor, offer: Offer) {}
     fun undoPick(p: ArtPicks.Pick) {}
     fun tryAgain(p: ArtPicks.Pick) {}

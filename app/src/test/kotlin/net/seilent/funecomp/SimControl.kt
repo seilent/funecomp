@@ -277,14 +277,16 @@ class SimControl(
 
     var tiles: List<BrowseTile> = emptyList()
     var browsed: Boolean? = null
+    var browseOrder: List<String>? = null
+    var browseSection: (BrowseTile) -> String = { it.tile.source }
     var previewed: Previewed? = null
     var gallery: Previewed? = null
     var taken: Previewed? = null
 
     override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
-        val order = tiles.map { it.tile.source }.distinct()
+        val order = browseOrder ?: tiles.map(browseSection).distinct()
         sections(order)
-        tiles.forEach { tile(it.tile.source, it) }
+        tiles.forEach { tile(browseSection(it), it) }
         if (browsed != null) order.forEach(sectionDone)
         browsed?.let(done)
         return {}

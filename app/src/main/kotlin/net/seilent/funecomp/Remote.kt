@@ -123,6 +123,7 @@ object Remote : Control {
     internal var faced: (ByteArray, (() -> Pair<Double, Double>?) -> Pair<Double, Double>?) -> Pair<Bitmap, Pair<Double, Double>?>? =
         { src, face -> codec.faced(src, BACKDROP_SIDE, face) }
 
+    @Volatile private var browseStart = 0L
     internal var browseDecode: (ByteArray, Int) -> ImageBitmap? = { b, px -> codec.faced(b, px) { null }?.first?.asImageBitmap() }
 
     var device by mutableStateOf(DeviceState())
@@ -618,8 +619,9 @@ object Remote : Control {
             override fun done(ok: Boolean) = done(ok)
         }
         val feed = BrowseFeed({ browseDecode(it, px) }, { main.post(it) }, Clock.SYSTEM, run, { r -> Thread(r, "art-browse-decode").apply { isDaemon = true } }, out, log)
+        val t0 = SystemClock.elapsedRealtime()
+        browseStart = t0
         Thread({
-            val t0 = SystemClock.elapsedRealtime()
             Log.i(TAG, "art browse start $name")
             var ended = true
             try {
@@ -637,6 +639,10 @@ object Remote : Control {
             }
         }, "art-browse").apply { isDaemon = true }.start()
         return { run.cancel() }
+    }
+
+    override fun browseShown(section: String) {
+        Log.i(TAG, "art browse shown $section +${SystemClock.elapsedRealtime() - browseStart}")
     }
 
     override fun pick(target: PickFor, offer: Offer) {

@@ -82,6 +82,7 @@ object Roles {
     val homeSubtitle = Role(Tok.type_homeSubtitle_size, weight(Tok.type_homeSubtitle_style), case(Tok.type_homeSubtitle_case), Tok.type_homeSubtitle_alpha)
     val pivotActive = Role(Tok.type_pivotActive_size, weight(Tok.type_pivotActive_style), case(Tok.type_pivotActive_case), Tok.type_pivotActive_alpha)
     val pivotInactive = Role(Tok.type_pivotInactive_size, weight(Tok.type_pivotInactive_style), case(Tok.type_pivotInactive_case), Tok.type_pivotInactive_alpha)
+    val quickplayHeader = Role(Tok.type_quickplayHeader_size, weight(Tok.type_quickplayHeader_style), case(Tok.type_quickplayHeader_case), Tok.type_quickplayHeader_alpha)
     val sectionLabel = Role(Tok.type_sectionLabel_size, weight(Tok.type_sectionLabel_style), case(Tok.type_sectionLabel_case), Tok.type_sectionLabel_alpha)
     val listPrimary = Role(Tok.type_listPrimary_size, weight(Tok.type_listPrimary_style), case(Tok.type_listPrimary_case), Tok.type_listPrimary_alpha, Tok.type_listPrimary_alphaDim)
     val listPlaylist = Role(Tok.type_listPlaylist_size, weight(Tok.type_listPlaylist_style), case(Tok.type_listPlaylist_case), Tok.type_listPlaylist_alpha, Tok.type_listPlaylist_alphaDim)

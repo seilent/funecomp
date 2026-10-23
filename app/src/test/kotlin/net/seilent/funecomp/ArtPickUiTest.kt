@@ -14,6 +14,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
@@ -24,10 +26,12 @@ import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
+import net.seilent.funecomp.artist.ArtistArt
 import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Tile
+import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
@@ -38,6 +42,7 @@ import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
+import net.seilent.funecomp.ui.LOADING
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -70,6 +75,8 @@ class ArtPickUiTest {
     private var galleried: Previewed? = null
     private val late = ArrayList<(Previewed) -> Unit>()
     private var tile: ((String, BrowseTile) -> Unit)? = null
+    private var sections: ((List<String>) -> Unit)? = null
+    private var sectionDone: ((String) -> Unit)? = null
     private var ended: ((Boolean) -> Unit)? = null
     private val offer = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", null, null, "月-Tsuki-", ByteArray(1))
     private val lib = Library(listOf(Track(1, "TSUKI, Other", listOf("TSUKI", "Other"), "A", "TSUKI", "Song", 200_000, "a", "a.flac", listOf("", dj))))
@@ -95,6 +102,8 @@ class ArtPickUiTest {
             override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name $mbid"
                 this@ArtPickUiTest.tile = tile
+                this@ArtPickUiTest.sections = sections
+                this@ArtPickUiTest.sectionDone = sectionDone
                 ended = done
                 return { calls += "cancel $name" }
             }
@@ -148,7 +157,12 @@ class ArtPickUiTest {
     private fun pick(name: String, kind: String = ArtPicks.IMAGE, failedAt: Long? = null, at: Long = 1) =
         ArtPicks.Pick("name:${name.lowercase()}", null, name, kind, Sources.YOUTUBE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", "", null, null, at, failedAt)
 
-    private fun tiles(n: Int) = (0 until n).map { BrowseTile(Tile(if (it % 2 == 0) Sources.DEEZER else Sources.YOUTUBE, "tile $it", ByteArray(1), "https://e/$it.jpg", "$it", null), ImageBitmap(8, 8)) }
+    private fun tiles(n: Int, source: String = Sources.DEEZER, from: Int = 0) = (from until from + n).map { BrowseTile(Tile(source, "$source $it", ByteArray(1), "https://e/$source/$it.jpg", "$source$it", null), ImageBitmap(8, 8)) }
+
+    private fun deliver(b: BrowseTile, section: String = b.tile.source, order: List<String> = listOf(Sources.DEEZER)) {
+        sections!!(order)
+        tile!!(section, b)
+    }
 
     @Test
     fun aChainImageSheetAddsPickImageAndOpensThePickSheet() {
@@ -437,7 +451,7 @@ class ArtPickUiTest {
     private fun browseFilled(n: Int = 12): Pair<Shell, PickFor> {
         val target = PickFor("TSUKI")
         val (shell, _) = start(listOf(Page.Home, Page.NowPlaying, Page.Browse(target)))
-        tiles(n).forEach { tile!!(it.tile.source, it) }
+        tiles(n).forEach { deliver(it) }
         settle(500)
         return shell to target
     }
@@ -446,16 +460,16 @@ class ArtPickUiTest {
     fun aBrowseTileTapIsPreviewedThenPicked() {
         val (shell, target) = browseFilled()
         rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("pick.tile.10"))
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("pick.tile.deezer.10"))
         rule.mainClock.autoAdvance = false
         settle(300)
-        val at = bounds("pick.tile.10")
+        val at = bounds("pick.tile.deezer.10")
         taken = Previewed.Refused("image too small")
-        tap("pick.tile.9")
+        tap("pick.tile.deezer.9")
         assertEquals("image too small", shell.toast.title)
         assertEquals(Page.Browse(target), shell.nav.top)
         taken = null
-        tap("pick.tile.10")
+        tap("pick.tile.deezer.10")
         loading(shell)
         assertEquals(null, shell.sheet.keep)
         late.removeAt(0)(ok(offer))
@@ -463,25 +477,25 @@ class ArtPickUiTest {
         val p = previewing(shell)
         assertTrue(p.fromBrowse)
         assertTrue(picked.isEmpty())
-        tiles(14).drop(12).forEach { tile!!(it.tile.source, it) }
+        tiles(14).drop(12).forEach { deliver(it) }
         settle(300)
         tap("back")
         settle(1500)
         assertEquals(Page.Browse(target), shell.nav.top)
-        assertEquals(at, bounds("pick.tile.10"))
-        focusedOn("pick.tile.10")
+        assertEquals(at, bounds("pick.tile.deezer.10"))
+        focusedOn("pick.tile.deezer.10")
         assertTrue("cancel TSUKI" !in calls)
         assertEquals(1, calls.count { it == "browse TSUKI null" })
         rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("pick.tile.13"))
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("pick.tile.deezer.13"))
         rule.mainClock.autoAdvance = false
-        rule.onNodeWithTag("pick.tile.13").assertExists()
+        rule.onNodeWithTag("pick.tile.deezer.13").assertExists()
         rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("pick.tile.10"))
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("pick.tile.deezer.10"))
         rule.mainClock.autoAdvance = false
         settle(300)
         taken = ok(offer)
-        tap("pick.tile.10")
+        tap("pick.tile.deezer.10")
         settle(1500)
         tap("pick.label")
         settle(1500)
@@ -511,7 +525,7 @@ class ArtPickUiTest {
     fun everyWayOutOfABrowseCancelsItOnce() {
         val (shell, target) = browseFilled()
         taken = ok(offer)
-        tap("pick.tile.2")
+        tap("pick.tile.deezer.2")
         settle(1500)
         shell.nav.reset(listOf(Page.Home, Page.NowPlaying))
         settle(1500)
@@ -531,7 +545,7 @@ class ArtPickUiTest {
     fun aSecondBrowseUnderThePreviewStopsTheFirstAndItRestartsOnReturn() {
         val (shell, target) = browseFilled()
         taken = ok(offer)
-        tap("pick.tile.2")
+        tap("pick.tile.deezer.2")
         settle(1500)
         val other = PickFor("Other")
         shell.nav.push(Page.Browse(other))
@@ -541,12 +555,12 @@ class ArtPickUiTest {
         settle(1500)
         assertTrue(shell.nav.top is Page.PickPreview)
         assertEquals(2, calls.count { it == "browse TSUKI null" })
-        tiles(1).single().let { tile!!(it.tile.source, it) }
+        deliver(tiles(1).single())
         shell.nav.pop()
         settle(1500)
         assertEquals(Page.Browse(target), shell.nav.top)
         assertEquals(2, calls.count { it == "browse TSUKI null" })
-        rule.onNodeWithTag("pick.tile.0").assertExists()
+        rule.onNodeWithTag("pick.tile.deezer.0").assertExists()
     }
 
     @Test
@@ -588,6 +602,7 @@ class ArtPickUiTest {
             override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name"
                 this@ArtPickUiTest.tile = tile
+                this@ArtPickUiTest.sections = sections
                 return { calls += "cancel $name" }
             }
 
@@ -603,9 +618,9 @@ class ArtPickUiTest {
             }
         }
         settle(1000)
-        tiles(6).forEach { tile!!(it.tile.source, it) }
+        tiles(6).forEach { deliver(it) }
         settle(500)
-        tap("pick.tile.4")
+        tap("pick.tile.deezer.4")
         settle(1500)
         assertTrue(shell.nav.top is Page.PickPreview)
         w = 380
@@ -613,8 +628,8 @@ class ArtPickUiTest {
         tap("back")
         settle(1500)
         assertEquals(listOf("browse TSUKI"), calls)
-        rule.onNodeWithTag("pick.tile.5").assertExists()
-        focusedOn("pick.tile.4")
+        rule.onNodeWithTag("pick.tile.deezer.5").assertExists()
+        focusedOn("pick.tile.deezer.4")
     }
 
     @Test
@@ -623,10 +638,186 @@ class ArtPickUiTest {
         ended!!(false)
         settle(300)
         rule.onNodeWithTag("pick.state").assertExists()
-        tiles(1).forEach { tile!!(it.tile.source, it) }
+        tiles(1).forEach { deliver(it, order = listOf(Sources.DEEZER, Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH)) }
+        ended!!(false)
         settle(300)
-        rule.onNodeWithTag("pick.tile.0").assertExists()
+        rule.onNodeWithTag("pick.tile.deezer.0").assertExists()
         rule.onNodeWithTag("pick.state").assertExists()
+    }
+
+    private fun browsePage(order: List<String>): Pair<Shell, PickFor> {
+        val target = PickFor("TSUKI")
+        val (shell, _) = start(listOf(Page.Home, Page.NowPlaying, Page.Browse(target)))
+        sections!!(order)
+        settle(300)
+        return shell to target
+    }
+
+    private fun put(section: String, n: Int, from: Int = 0) {
+        tiles(n, section, from).forEach { tile!!(section, it) }
+        settle(300)
+    }
+
+    private fun top(tag: String) = bounds(tag).top
+
+    private fun scrollTo(tag: String) {
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag(tag))
+        rule.mainClock.autoAdvance = false
+        settle(300)
+    }
+
+    @Test
+    fun aSectionDrawsAtOnceAndAnEarlierOneLandsAboveIt() {
+        browsePage(listOf(Wikimedia.SOURCE, Sources.DEEZER))
+        put(Sources.DEEZER, 3)
+        rule.onNodeWithTag("pick.head.deezer").assertExists()
+        rule.onNodeWithTag("pick.head.commons").assertDoesNotExist()
+        put(Wikimedia.SOURCE, 2)
+        assertTrue(top("pick.head.commons") < top("pick.head.deezer"))
+        assertTrue(top("pick.tile.commons.1") < top("pick.tile.deezer.0"))
+    }
+
+    @Test
+    fun untouchedThePageKeepsTheFirstSectionOnTopAcrossInserts() {
+        browsePage(listOf(Wikimedia.SOURCE, Sources.DISCOGS, Sources.DEEZER))
+        put(Sources.DEEZER, 30)
+        val first = top("pick.head.deezer")
+        put(Sources.DISCOGS, 3)
+        assertEquals(first, top("pick.head.discogs"), 0.5f)
+        put(Wikimedia.SOURCE, 3)
+        assertEquals(first, top("pick.head.commons"), 0.5f)
+    }
+
+    @Test
+    fun aTileTouchedWhileAnEarlierSectionLandsIsTheOneTaken() {
+        val (shell, _) = browsePage(listOf(Wikimedia.SOURCE, Sources.DEEZER))
+        put(Sources.DEEZER, 6)
+        taken = null
+        val c = bounds("pick.tile.deezer.4").center
+        rule.onRoot().performTouchInput { down(c) }
+        settle(100)
+        put(Wikimedia.SOURCE, 3)
+        rule.onRoot().performTouchInput { up() }
+        settle(500)
+        assertEquals(listOf("take deezer 4"), calls.filter { it.startsWith("take") })
+        late.removeAt(0)(ok(offer))
+        settle(300)
+        previewing(shell)
+        assertTrue(picked.isEmpty())
+    }
+
+    @Test
+    fun aTileTouchedWhileASectionLandsBetweenIsThatTileOrNone() {
+        browsePage(listOf(Wikimedia.SOURCE, Sources.DISCOGS, Sources.DEEZER))
+        put(Wikimedia.SOURCE, 3)
+        put(Sources.DEEZER, 3)
+        taken = null
+        val c = bounds("pick.tile.deezer.1").center
+        rule.onRoot().performTouchInput { down(c) }
+        settle(100)
+        put(Sources.DISCOGS, 6)
+        rule.onRoot().performTouchInput { up() }
+        settle(500)
+        val took = calls.filter { it.startsWith("take") }
+        assertTrue("$took", took.isEmpty() || took == listOf("take deezer 1"))
+    }
+
+    @Test
+    fun aPlainTapEngagesThePageAndStillReachesTheTile() {
+        val (shell, _) = browsePage(listOf(Wikimedia.SOURCE, Sources.DEEZER))
+        put(Sources.DEEZER, 30)
+        taken = null
+        tap("pick.tile.deezer.2")
+        assertEquals(listOf("take deezer 2"), calls.filter { it.startsWith("take") })
+        shell.sheet.close()
+        settle(500)
+        val at = bounds("pick.tile.deezer.2")
+        put(Wikimedia.SOURCE, 3)
+        assertEquals(at, bounds("pick.tile.deezer.2"))
+        focusedOn("pick.tile.deezer.2")
+    }
+
+    @Test
+    fun onceScrolledTheFirstVisibleTileStaysPut() {
+        browsePage(listOf(Wikimedia.SOURCE, Sources.DEEZER))
+        put(Sources.DEEZER, 30)
+        scrollTo("pick.tile.deezer.24")
+        val at = bounds("pick.tile.deezer.24")
+        put(Wikimedia.SOURCE, 6)
+        assertEquals(at, bounds("pick.tile.deezer.24"))
+    }
+
+    @Test
+    fun theWayBackFromAPreviewKeepsTheTileWhileSectionsLanded() {
+        val (shell, target) = browsePage(listOf(Wikimedia.SOURCE, Sources.DISCOGS, Sources.DEEZER))
+        put(Sources.DEEZER, 30)
+        scrollTo("pick.tile.deezer.24")
+        val at = bounds("pick.tile.deezer.24")
+        taken = ok(offer)
+        tap("pick.tile.deezer.24")
+        settle(1500)
+        previewing(shell)
+        put(Wikimedia.SOURCE, 6)
+        put(Sources.DISCOGS, 3)
+        tap("back")
+        settle(1500)
+        assertEquals(Page.Browse(target), shell.nav.top)
+        assertEquals(at, bounds("pick.tile.deezer.24"))
+        focusedOn("pick.tile.deezer.24")
+    }
+
+    @Test
+    fun aRestartOpensAtTheTopUntouched() {
+        val (shell, target) = browsePage(listOf(Wikimedia.SOURCE, Sources.DEEZER))
+        put(Sources.DEEZER, 30)
+        scrollTo("pick.tile.deezer.24")
+        shell.nav.pop()
+        settle(1500)
+        shell.nav.push(Page.Browse(target))
+        settle(1500)
+        sections!!(listOf(Wikimedia.SOURCE, Sources.DEEZER))
+        put(Sources.DEEZER, 30)
+        val first = top("pick.head.deezer")
+        put(Wikimedia.SOURCE, 3)
+        assertEquals(first, top("pick.head.commons"), 0.5f)
+        rule.onNodeWithTag("pick.focus", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun theSearchSitsUnderTheOneYouTubeHeadingWithItsLine() {
+        browsePage(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DEEZER))
+        put(ArtistArt.YOUTUBE_SEARCH, 2)
+        rule.onNodeWithTag("pick.head.youtube").assertExists()
+        rule.onNodeWithTag("pick.head.${ArtistArt.YOUTUBE_SEARCH}").assertDoesNotExist()
+        assertTrue(top("pick.head.youtube") < top("pick.tile.${ArtistArt.YOUTUBE_SEARCH}.0"))
+        put(Sources.YOUTUBE, 1)
+        assertTrue(top("pick.tile.youtube.0") < top("pick.tile.${ArtistArt.YOUTUBE_SEARCH}.0"))
+    }
+
+    @Test
+    fun aFailedSearchPutsItsLineUnderTheYouTubeHeading() {
+        browsePage(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DEEZER))
+        put(Sources.DEEZER, 3)
+        ended!!(false)
+        settle(300)
+        rule.onNodeWithTag("pick.head.youtube").assertExists()
+        val line = top("pick.state")
+        assertTrue(top("pick.head.youtube") < line && line < top("pick.head.deezer"))
+    }
+
+    @Test
+    fun noImagesShowsOnlyAfterTheEndAndEmptySectionsStayHidden() {
+        browsePage(listOf(Wikimedia.SOURCE, Sources.DEEZER))
+        rule.onNodeWithText(LOADING, useUnmergedTree = true).assertExists()
+        sectionDone!!(Wikimedia.SOURCE)
+        sectionDone!!(Sources.DEEZER)
+        settle(300)
+        rule.onNodeWithText("no images", useUnmergedTree = true).assertDoesNotExist()
+        ended!!(true)
+        settle(300)
+        rule.onNodeWithText("no images", useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("pick.head.commons").assertDoesNotExist()
     }
 
     @Test
