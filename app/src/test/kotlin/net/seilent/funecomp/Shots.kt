@@ -153,6 +153,12 @@ private fun noBond(c: SimControl) {
     c.bonds = listOf(Bonded("WH-1000XM4", "00:00:00:00:00:02"))
 }
 
+private fun cardBusy(phone: Boolean = false): (SimControl) -> Unit = { c ->
+    c.queuePage(0)
+    val s = c.device.playback.state
+    c.push(Msg.STATE, if (phone) s.copy(source = Enums.Source.phone).encode() else s.copy(card = Enums.Card.busy).encode())
+}
+
 private fun playing(c: SimControl) {
     c.transport(Enums.TransportCmd.next)
     c.transport(Enums.TransportCmd.shuffle, on = true)
@@ -693,6 +699,18 @@ val SHOTS = listOf(
     Shot("music-artists", pages = HOME + Page.Music),
     Shot("music-albums", pages = HOME + Page.Music) { rule.onNodeWithTag("pivot.albums").performClick() },
     Shot("music-songs", pages = HOME + Page.Music, prep = ::playing) { rule.onNodeWithTag("pivot.songs").performClick() },
+    Shot("cardtoast-list", pages = HOME + Page.Music, prep = cardBusy(), after = 300) {
+        rule.onNodeWithTag("pivot.songs").performClick()
+        settle(1000)
+        rule.onNodeWithTag("row.0").performClick()
+    },
+    Shot("cardtoast-queue", pages = NP + Page.Queue, prep = cardBusy(), after = 300) { rule.onNodeWithTag("queue.1").performClick() },
+    Shot("cardtoast-home", pages = HOME, prep = cardBusy(), after = 300) { rule.onNodeWithTag("home.ring").performClick() },
+    Shot("cardtoast-receiver", pages = HOME + Page.Music, prep = cardBusy(phone = true), after = 300) {
+        rule.onNodeWithTag("pivot.songs").performClick()
+        settle(1000)
+        rule.onNodeWithTag("row.0").performClick()
+    },
     Shot("music-folders", pages = HOME + Page.Music) {
         for (p in listOf("albums", "songs", "genres", "playlists", "folders")) {
             rule.onNodeWithTag("pivot.$p").performClick()

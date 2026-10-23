@@ -226,4 +226,28 @@ class GenresTest {
             assertTrue(logs.contains(line))
         }
     }
+
+    @Test
+    fun belowMinor15ABusyOnTheSheetQueueItemsLogsAndOnly14Toasts() {
+        val c = start()
+        c.device = c.device.copy(hello = c.device.hello!!.copy(minor = 14))
+        settle()
+        val items = listOf("albums" to 1, "albums" to 2, "songs" to 2)
+        for ((p, item) in items) {
+            pivot(p)
+            val shows = shell.toast.shows
+            answer = null to Err.busy
+            hold("row.0")
+            shell.sheet.accept(item)
+            settle()
+            assertEquals("$p $item", shows, shell.toast.shows)
+            assertTrue(logs.remove("queue add error 3"))
+            answer = null to Err.noCard
+            hold("row.0")
+            shell.sheet.accept(item)
+            settle()
+            assertEquals("$p $item", shows + 1, shell.toast.shows)
+            assertEquals(Heart.CARD, shell.toast.artist)
+        }
+    }
 }

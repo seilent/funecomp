@@ -19,6 +19,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -114,7 +115,8 @@ fun App(
         ) {
             val nav = shell.nav
             val browse = remember(nav) { BrowseSessions() }
-            val ctx = Ctx(device, control, nav, shell.sheet, shell.toast, browse)
+            val current by rememberUpdatedState(device)
+            val ctx = Ctx(device, control, nav, shell.sheet, shell.toast, browse) { current }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             DisposableEffect(control, shell.toast, lifecycle) {
                 val sink: (String, String) -> Unit = { line, title -> shell.toast.show(line, title) }
@@ -166,7 +168,7 @@ fun App(
             Stack(nav, browse) { page ->
                 when (page) {
                     Page.NowPlaying -> NowPlaying(device, control, shell.toast, shell.overlay, { nav.pop() }, { nav.push(Page.Queue) }, nav.top == Page.NowPlaying, art, lyrics, liveDevice, shell) { held -> artSheet(ctx, held, picks) }
-                    Page.Home -> Home(homeItems(device, link), { control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
+                    Page.Home -> Home(homeItems(device, link), { if (!playRefused(device, shell.toast)) control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)
                     Page.Playlists -> Playlists(ctx)

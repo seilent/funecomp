@@ -92,8 +92,6 @@ class Heart(private val windowMs: Long = WINDOW_MS) {
         private val COPY = setOf(CARD, UNREADABLE)
         const val CARD_MINOR = 15
 
-        fun cardToast(code: Int?, minor: Int) = code == Err.noCard || code == Err.busy && minor < CARD_MINOR
-
         fun shown(hello: HelloReply?, s: State) = hello?.snapRev != null && s.track != null && s.source != Enums.Source.phone
 
         fun lit(s: State) = s.favorite == true

@@ -55,7 +55,7 @@ fun LibList.row(i: Int, control: Control, view: Int, parent: String): LibRow? {
     return r
 }
 
-class Ctx(val device: DeviceState, val control: Control, val nav: Nav, val sheet: SheetState, val toast: ToastState, val browse: BrowseSessions)
+class Ctx(val device: DeviceState, val control: Control, val nav: Nav, val sheet: SheetState, val toast: ToastState, val browse: BrowseSessions, val live: () -> DeviceState = { device })
 
 const val ADD_TO_QUEUE = "add to queue"
 private const val PLAY_NEXT = "play next"
@@ -139,7 +139,18 @@ fun sourceStart(count: Long?, shuffle: Boolean, random: Random = startRandom): L
     else -> 0L
 }
 
+internal fun playRefused(device: DeviceState, toast: ToastState): Boolean = refusal(device.playRefusal, toast)
+
+private fun queueRefused(device: DeviceState, toast: ToastState): Boolean = refusal(device.queueRefusal, toast)
+
+private fun refusal(line: String?, toast: ToastState): Boolean {
+    line ?: return false
+    toast.show(line, "")
+    return true
+}
+
 private fun playAndShow(ctx: Ctx, view: Int, parent: String, start: Long, shuffle: Boolean = false) {
+    if (playRefused(ctx.live(), ctx.toast)) return
     ctx.control.play(view, parent, start, shuffle)
     ctx.nav.popTo(Page.NowPlaying)
 }
@@ -154,13 +165,15 @@ private fun queued(ctx: Ctx, title: String, added: Long?, code: Int?) {
     when {
         code == null && added != null -> ctx.toast.show("added ${songs(added)}", title)
         code == null -> ctx.control.log("queue add reply with no count")
-        Heart.cardToast(code, ctx.device.hello?.minor ?: 0) -> ctx.toast.show(Heart.CARD, "")
-        code != null -> ctx.control.log("queue add error $code")
+        code == Err.noCard -> ctx.toast.show(Heart.CARD, "")
+        else -> ctx.control.log("queue add error $code")
     }
 }
 
-private fun queueAdd(ctx: Ctx, cmd: Int, title: String, view: Int?, parent: String?, tracks: List<Long> = emptyList()) =
+private fun queueAdd(ctx: Ctx, cmd: Int, title: String, view: Int?, parent: String?, tracks: List<Long> = emptyList()) {
+    if (queueRefused(ctx.live(), ctx.toast)) return
     ctx.control.queueAdd(cmd, view, parent, tracks) { added, code -> queued(ctx, title, added, code) }
+}
 
 private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
     val items = listOf("play", PLAY_NEXT) + if (ctx.device.has("queueAdd")) listOf(ADD_TO_QUEUE) else emptyList()
@@ -168,6 +181,7 @@ private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
         when (it) {
             0 -> play()
             1 -> r.first?.let { id ->
+                if (queueRefused(ctx.live(), ctx.toast)) return@let
                 ctx.control.queueOp(Enums.QueueCmd.playNext, tracks = listOf(id))
                 ctx.toast.show("added 1 song", r.name ?: "")
             }
@@ -365,7 +379,7 @@ fun Queue(ctx: Ctx) {
                     title, Modifier.enter { i - state.firstVisibleItemIndex }.testTag("queue.$i"), number = "${i + 1}", playing = i == current, focused = focus == i,
                     onTap = {
                         focus = i
-                        ctx.control.queueOp(Enums.QueueCmd.playAt, slot = i.toLong())
+                        if (!playRefused(ctx.live(), ctx.toast)) ctx.control.queueOp(Enums.QueueCmd.playAt, slot = i.toLong())
                     },
                     onLong = {
                         focus = i

@@ -72,6 +72,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.ClockSync
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
@@ -99,7 +100,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 object Remote : Control {
     const val TAG = "Funecomp"
-    const val RECEIVER = "bluetooth receiver"
+    const val RECEIVER = DeviceState.RECEIVER
     private val REFUSALS = setOf(RECEIVER)
     private const val BACKDROP_SIDE = 2048
     private const val BACKDROP_MAX = 4096
@@ -1082,7 +1083,7 @@ object Remote : Control {
         val lib = device.lib.takeIf { tracks.isEmpty() }
         send(Msg.PLAY, Req.play(view, parent, lib?.libRev(view), start, shuffle, tracks, lib?.snapRev(view)), "play view=$view parent=$parent start=$start", failed = { code ->
             if (code == Err.badValue && start > 0 && tracks.isEmpty()) play(view, parent, 0, shuffle, tracks)
-        }, done = ::refused)
+        }, done = ::playRefused)
     }
 
     override fun queuePage(offset: Long) {
@@ -1093,7 +1094,7 @@ object Remote : Control {
 
     override fun queueOp(cmd: Int, slot: Long?, to: Long?, tracks: List<Long>) {
         val rev = device.queue.rev ?: device.playback.state.queueRev
-        send(Msg.QUEUE_OP, Req.queueOp(cmd, rev, slot = slot, to = to, tracks = tracks), "queue ${Enums.QueueCmd.names[cmd]} slot=$slot to=$to", done = ::refused)
+        send(Msg.QUEUE_OP, Req.queueOp(cmd, rev, slot = slot, to = to, tracks = tracks), "queue ${Enums.QueueCmd.names[cmd]} slot=$slot to=$to", done = if (cmd == Enums.QueueCmd.playAt || cmd == Enums.QueueCmd.playNext) ::playRefused else ::refused)
     }
 
     override fun queueAdd(cmd: Int, view: Int?, parent: String?, tracks: List<Long>, done: (Long?, Int?) -> Unit) {
@@ -1136,12 +1137,17 @@ object Remote : Control {
 
     override fun action(cmd: Int, track: Long?, done: (Int?, String?) -> Unit) =
         send(Msg.ACTION, Req.action(cmd, track), "action ${Enums.ActionCmd.names[cmd]}", done = { code, text ->
-            refused(code, text)
+            if (cmd == Enums.ActionCmd.shuffleLibrary) playRefused(code, text) else refused(code, text)
             done(code, text)
         })
 
     override fun refusals(show: ((String, String) -> Unit)?, owner: ((String, String) -> Unit)?) {
         if (owner == null) refusalToast.set(show) else refusalToast.compareAndSet(owner, show)
+    }
+
+    private fun playRefused(code: Int?, text: String?) {
+        if (code == Err.noCard) main.post { refusalToast.get()?.invoke(CardView.REFUSED, "") }
+        refused(code, text)
     }
 
     private fun refused(code: Int?, text: String?) {

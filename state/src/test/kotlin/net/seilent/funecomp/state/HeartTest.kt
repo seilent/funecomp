@@ -110,14 +110,4 @@ class HeartTest {
         for (text in listOf(Heart.CARD, "busy", null)) assertEquals(Heart.Toast(Heart.CARD, ""), Heart().let { h -> h.replied(h.tap(a)!!, Err.busy, text, 0, 14) })
         assertNull(Heart().let { h -> h.replied(h.tap(a)!!, Err.staleRev, null, 0, 15) })
     }
-
-    @Test
-    fun theQueueAddCardToastIs14AtAnyMinorAndBusyBelow15() {
-        assertTrue(Heart.cardToast(Err.noCard, 15))
-        assertTrue(Heart.cardToast(Err.noCard, 14))
-        assertTrue(Heart.cardToast(Err.busy, 14))
-        assertFalse(Heart.cardToast(Err.busy, 15))
-        assertFalse(Heart.cardToast(Err.staleRev, 14))
-        assertFalse(Heart.cardToast(null, 14))
-    }
 }

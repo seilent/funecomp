@@ -94,6 +94,14 @@ data class DeviceState(
 ) {
     val cardDown: Boolean get() = card.down
 
+    val playRefusal: String? get() = when {
+        cardDown -> CardView.REFUSED
+        playback.state.source == Enums.Source.phone -> RECEIVER
+        else -> null
+    }
+
+    val queueRefusal: String? get() = if (cardDown) CardView.REFUSED else null
+
     fun has(group: String) = hello?.has(group) ?: false
 
     fun positionMs(now: Long): Long = Position.at(playback, rttMs, now)
@@ -178,6 +186,10 @@ data class DeviceState(
         val old = base.pages[key] ?: LibList()
         val rows = old.rows + l.rows.mapIndexed { i, r -> l.page.offset + i to r }
         return copy(lib = base.copy(pages = base.pages + (key to LibList(l.page.total, rows))))
+    }
+
+    companion object {
+        const val RECEIVER = "bluetooth receiver"
     }
 }
 
