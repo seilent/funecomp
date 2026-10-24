@@ -23,7 +23,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
-import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.zip.CRC32
@@ -35,7 +34,7 @@ class DapLyricsTest {
     private val lib = Library.synthetic()
     private val track = lib.tracks.first().id
     private val id = java.lang.Long.toUnsignedString(track)
-    private val logs: MutableList<Pair<Long, String>> = Collections.synchronizedList(ArrayList())
+    private val logs: MutableList<Pair<Long, String>> = java.util.concurrent.CopyOnWriteArrayList()
     private var onLog: (String) -> Unit = {}
     private val sims = ArrayList<Sim>()
     private val sessions = ArrayList<Session>()

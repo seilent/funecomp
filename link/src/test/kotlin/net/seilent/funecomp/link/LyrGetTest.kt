@@ -20,7 +20,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
-import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -32,7 +31,7 @@ class LyrGetTest {
         private val inbound = LinkedBlockingQueue<ByteArray>()
         private val reader = FrameReader()
         private var pending: ByteArray? = null
-        val asks: MutableList<Ask> = Collections.synchronizedList(ArrayList())
+        val asks: MutableList<Ask> = java.util.concurrent.CopyOnWriteArrayList()
         @Volatile private var closed = false
 
         override fun open() {}

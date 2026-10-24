@@ -83,7 +83,7 @@ class VirtualClockTest {
     fun timeMovesToTheEarliestDeadline() {
         val clock = VirtualClock()
         val start = clock.now()
-        val order = java.util.Collections.synchronizedList(ArrayList<Int>())
+        val order = java.util.concurrent.CopyOnWriteArrayList<Int>()
         val ra = clock.task { clock.park(start + 300); order += 3 }
         val rb = clock.task { clock.park(start + 100); order += 1 }
         val a = Thread(ra).apply { start() }

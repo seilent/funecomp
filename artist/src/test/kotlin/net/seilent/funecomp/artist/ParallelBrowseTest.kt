@@ -23,7 +23,7 @@ class ParallelBrowseTest {
         it.now = { clock.now() }
     }
     private var sources = Sources(fanartTvKey = "")
-    private val lines = java.util.Collections.synchronizedList(ArrayList<String>())
+    private val lines = java.util.concurrent.CopyOnWriteArrayList<String>()
     private val pool = clock.executor(ArtistArt.BROWSE_WORKERS)
     private val art by lazy {
         ArtistArt(http, AwtCodec(), ArtCache(tmp.newFolder()), { sources }, "0.1.0", { 0L }, clock, log = { lines += it }, browseLog = { lines += it })

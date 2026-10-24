@@ -418,9 +418,9 @@ class AwtCodec(var face: ((Int, Int) -> Pair<Double, Double>?)? = null) : Codec 
 }
 
 class Collected : BrowseSink {
-    val order = java.util.Collections.synchronizedList(ArrayList<String>())
-    val tiles = java.util.Collections.synchronizedList(ArrayList<Pair<String, Tile>>())
-    val done = java.util.Collections.synchronizedList(ArrayList<String>())
+    val order = java.util.concurrent.CopyOnWriteArrayList<String>()
+    val tiles = java.util.concurrent.CopyOnWriteArrayList<Pair<String, Tile>>()
+    val done = java.util.concurrent.CopyOnWriteArrayList<String>()
     @Volatile var search: Boolean? = null
     var onTile: (Pair<String, Tile>) -> Unit = {}
 

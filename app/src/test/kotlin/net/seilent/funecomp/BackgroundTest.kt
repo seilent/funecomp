@@ -280,7 +280,7 @@ class BackgroundTest {
     @Test
     fun lyricsArePutOncePerTrackAcrossADrop() {
         val dir = kotlin.io.path.createTempDirectory("lrc").toFile()
-        val calls = java.util.Collections.synchronizedList(ArrayList<String>())
+        val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
         Lyrics.init(app, net.seilent.funecomp.artist.Http { url, _ ->
             calls += url
             net.seilent.funecomp.artist.Response(200, "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}".toByteArray())
@@ -351,7 +351,7 @@ class BackgroundTest {
 
     private fun lyricsFrom(body: String): MutableList<String> {
         java.io.File(app.filesDir, "lyrics").deleteRecursively()
-        val calls = java.util.Collections.synchronizedList(ArrayList<String>())
+        val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
         Lyrics.init(app, net.seilent.funecomp.artist.Http { url, _ ->
             calls += url
             net.seilent.funecomp.artist.Response(200, body.toByteArray())
@@ -401,8 +401,8 @@ class BackgroundTest {
 
     @Test
     fun aNeteaseSyncedIsPutWhenLrclibMisses() {
-        val gets = java.util.Collections.synchronizedList(ArrayList<String>())
-        val posts = java.util.Collections.synchronizedList(ArrayList<String>())
+        val gets = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val posts = java.util.concurrent.CopyOnWriteArrayList<String>()
         neteaseFor({ net.seilent.funecomp.artist.Response(404, ByteArray(0)) }, gets, posts)
         val c = live(sim())
         waitFor(30_000) { stored().size >= 3 }
@@ -416,8 +416,8 @@ class BackgroundTest {
 
     @Test
     fun turningASourceOnAsksItForTracksAlreadyDone() {
-        val gets = java.util.Collections.synchronizedList(ArrayList<String>())
-        val posts = java.util.Collections.synchronizedList(ArrayList<String>())
+        val gets = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val posts = java.util.concurrent.CopyOnWriteArrayList<String>()
         neteaseFor({ net.seilent.funecomp.artist.Response(404, ByteArray(0)) }, gets, posts)
         Lyrics.set(LyricSources.NETEASE, false)
         val c = live(sim())
@@ -434,8 +434,8 @@ class BackgroundTest {
 
     @Test
     fun aFailingLrclibTripsOnlyItsOwnBreakerAndNeteaseStillPuts() {
-        val gets = java.util.Collections.synchronizedList(ArrayList<String>())
-        val posts = java.util.Collections.synchronizedList(ArrayList<String>())
+        val gets = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val posts = java.util.concurrent.CopyOnWriteArrayList<String>()
         neteaseFor({ net.seilent.funecomp.artist.Response(500, ByteArray(0)) }, gets, posts)
         val c = live(sim())
         waitFor(60_000) { stored().size >= 1 + LyricsPlan.AHEAD }

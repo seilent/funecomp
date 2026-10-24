@@ -15,7 +15,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.IOException
-import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
@@ -25,7 +24,7 @@ class ImagePushTest {
         private val inbound = LinkedBlockingQueue<ByteArray>()
         private val reader = FrameReader()
         private var pending: ByteArray? = null
-        val got: MutableList<Int> = Collections.synchronizedList(ArrayList())
+        val got: MutableList<Int> = java.util.concurrent.CopyOnWriteArrayList()
         @Volatile private var closed = false
         @Volatile private var abortRead = false
         @Volatile private var abortBuf: ByteArray? = null

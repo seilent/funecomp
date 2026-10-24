@@ -7,7 +7,6 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.Timeout
 import java.io.IOException
-import java.util.Collections
 
 class BrowseFeedTest {
     @get:Rule
@@ -15,8 +14,8 @@ class BrowseFeedTest {
 
     private val clock = VirtualClock(strict = false)
     private val run = HttpRun()
-    private val events = Collections.synchronizedList(ArrayList<String>())
-    private val lines = Collections.synchronizedList(ArrayList<String>())
+    private val events = java.util.concurrent.CopyOnWriteArrayList<String>()
+    private val lines = java.util.concurrent.CopyOnWriteArrayList<String>()
     private val gate = clock.condition()
     @Volatile private var open = true
     private var decoded = 0

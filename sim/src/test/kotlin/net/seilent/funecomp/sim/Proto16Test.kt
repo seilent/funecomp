@@ -21,7 +21,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.net.Socket
-import java.util.Collections
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.zip.CRC32
@@ -30,7 +29,7 @@ import javax.imageio.ImageIO
 class Proto16Test {
     private val sims = ArrayList<Sim>()
     private val apps = ArrayList<App>()
-    private val logs: MutableList<String> = Collections.synchronizedList(ArrayList())
+    private val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
 
     @After
     fun tearDown() {

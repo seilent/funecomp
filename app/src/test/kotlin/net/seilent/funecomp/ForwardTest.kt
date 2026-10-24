@@ -41,7 +41,7 @@ class ForwardTest {
 
     private val sims = ArrayList<Sim>()
     private val sessions = ArrayList<Session>()
-    private val lines: MutableList<String> = Collections.synchronizedList(ArrayList())
+    private val lines: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
     @Volatile private var device = DeviceState()
 
     @After
@@ -92,7 +92,7 @@ class ForwardTest {
     }
 
     private class Lookups {
-        val names: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val names: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         var gates = 0
     }
 
@@ -144,7 +144,7 @@ class ForwardTest {
     )
 
     private class Ups(@Volatile var open: Boolean, val due: List<String>, val replace: Set<String> = emptySet()) : Forward.Upgrades {
-        val ran: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val ran: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val done = Collections.synchronizedSet(HashSet<String>())
         override fun due() = due.filter { it !in done }.map { it to null }
         val ats = java.util.concurrent.ConcurrentHashMap<String, Long>()
@@ -177,7 +177,7 @@ class ForwardTest {
     fun theCurrentAndQueueArtistsUpgradeOnAnyNetworkAndTheRestOnlyWhenOpen() {
         val (_, port) = sim(30)
         val s = session(port)
-        val logged: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val logged: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val ups = Ups(false, (1..30).map { "Artist %03d".format(it) })
         assertEquals(ArtPusher.Stop.DONE, forward(Lookups(), upgrades = ups, log = { logged += it }).run(s) { true }.stop)
         assertEquals((1..6).map { "Artist %03d".format(it) }, ups.ran.sorted())
@@ -322,7 +322,7 @@ class ForwardTest {
     fun theRestUpgradesRunWhenTheSweepIsKept() {
         val (_, port) = sim(30)
         val s = session(port)
-        val logged: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val logged: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val ups = Ups(false, listOf("Artist 025"))
         val f = forward(Lookups(), marks = Kept(), upgrades = ups, log = { logged += it })
         f.run(s) { true }
@@ -375,7 +375,7 @@ class ForwardTest {
     fun trackChangesAfterAFinishedSweepDoNoSweepWork() {
         val (_, port) = sim(30)
         val s = session(port)
-        val logged: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val logged: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val looked = Lookups()
         val f = forward(looked, missing = { it > "Artist 020" }, marks = Kept(), log = { logged += it })
         assertEquals(ArtPusher.Stop.DONE, f.run(s) { true }.stop)
@@ -406,7 +406,7 @@ class ForwardTest {
         for (minor in listOf(Proto.minor, 3, 2)) {
             val (_, port) = sim(30, minor)
             val s = session(port)
-            val logged: MutableList<String> = Collections.synchronizedList(ArrayList())
+            val logged: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
             val f = forward(Lookups(), marks = Kept(), log = { logged += it })
             assertEquals(ArtPusher.Stop.DONE, f.run(s) { true }.stop)
             favorite(s)
@@ -427,7 +427,7 @@ class ForwardTest {
         val (_, port) = sim(30)
         val s = session(port)
         val kept = Kept()
-        val logged: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val logged: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val f = forward(Lookups(), marks = kept, log = { logged += it })
         f.run(s) { true }
         next(s)
@@ -793,7 +793,7 @@ class ForwardTest {
         val records = ArtBlocks()
         records.addPush("Nobody", null)
         records.addPush("Somebody", null, phone)
-        val logs: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val r = forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A"), log = { logs += it }).run(s) { true }
         assertEquals(ArtPusher.Stop.DONE, r.stop)
         assertTrue("art unblock rows failed" in logs)
@@ -826,7 +826,7 @@ class ForwardTest {
         listOf("gemma", "むﾄ", "ＢｏＡ", "Stranger", " Lead").forEach { seed(s, it) }
         seed(s, "Phoned", phone)
         seed(s, "Libbed", library)
-        val logs: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         assertEquals(ArtPusher.Stop.DONE, forward(Lookups(), log = { logs += it }).run(s) { true }.stop)
         assertEquals(setOf("gemma origin=library", " Lead origin=library"), tags().toSet())
         assertEquals(2, tags().size)
@@ -840,7 +840,7 @@ class ForwardTest {
         val (sim, s) = tagSim(tagLib("Gemma"))
         seed(s, "Gemma")
         var deleted = false
-        val logs: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val f = forward(Lookups(), log = { logs += it }, onLibGet = { ss ->
             if (!deleted) {
                 deleted = true
@@ -858,7 +858,7 @@ class ForwardTest {
     fun aBusyTagEndsThePassWithoutTheKeptMarkAndTheNextRunTags() {
         val (_, s) = tagSim(tagLib("Gemma"), Proto.minor, "busy=IMG_TAG:1")
         seed(s, "gemma")
-        val logs: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val f = forward(Lookups(), marks = Kept(), log = { logs += it })
         f.run(s) { true }
         assertTrue(logs.none { it.startsWith("art tag tagged") })

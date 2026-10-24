@@ -25,7 +25,6 @@ import org.junit.Test
 import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
-import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
@@ -53,10 +52,10 @@ class LinkTest {
         @Volatile var state = DeviceState()
         val hello = CountDownLatch(1)
         val closed = CountDownLatch(1)
-        val byes: MutableList<Bye> = Collections.synchronizedList(ArrayList())
-        val attempts: MutableList<Long> = Collections.synchronizedList(ArrayList())
-        val stops: MutableList<Reconnect.Stop> = Collections.synchronizedList(ArrayList())
-        val pushes: MutableList<Int> = Collections.synchronizedList(ArrayList())
+        val byes: MutableList<Bye> = java.util.concurrent.CopyOnWriteArrayList()
+        val attempts: MutableList<Long> = java.util.concurrent.CopyOnWriteArrayList()
+        val stops: MutableList<Reconnect.Stop> = java.util.concurrent.CopyOnWriteArrayList()
+        val pushes: MutableList<Int> = java.util.concurrent.CopyOnWriteArrayList()
         @Volatile var reason: String? = null
         @Volatile var helloAt = 0L
         @Volatile var closedAt = 0L

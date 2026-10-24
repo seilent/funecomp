@@ -17,7 +17,6 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.ByteArrayOutputStream
-import java.util.Collections
 import java.util.zip.CRC32
 import javax.imageio.ImageIO
 
@@ -26,7 +25,7 @@ class Proto19Test {
         override fun push(type: Int, payload: ByteArray) {}
     }
 
-    private val logs: MutableList<String> = Collections.synchronizedList(ArrayList())
+    private val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
     private val lib = Library(
         listOf(
             Library.track("Gemma, Hal", "Duets", "One", 1, 200_000, albumArtist = ""),
