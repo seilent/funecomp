@@ -702,7 +702,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                                 ringFocus = kind
                                 when (kind) {
                                     SHUFFLE -> {
-                                        swaps++
+                                        if (liveNow().transportRefusal(Enums.TransportCmd.shuffle) == null) swaps++
                                         control.transport(Enums.TransportCmd.shuffle, on = s.shuffle != true)
                                     }
                                     REPEAT -> {

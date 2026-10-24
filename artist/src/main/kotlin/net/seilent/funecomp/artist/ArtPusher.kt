@@ -37,7 +37,11 @@ class ArtPusher(
 
     fun stored(): Set<String>? = listing()?.names
 
+    var listFailed: Int? = null
+        private set
+
     fun listing(): Listing? {
+        listFailed = null
         val out = HashSet<String>()
         val entries = ArrayList<ImgEntry>()
         var offset = 0L
@@ -46,7 +50,10 @@ class ArtPusher(
         while (true) {
             if (!keep()) return null
             val r = session.call(Msg.IMG_LIST, Req.imgList(offset, 100))
-            if (r !is Session.Result.Ok) return null
+            if (r !is Session.Result.Ok) {
+                listFailed = (r as? Session.Result.Failed)?.error?.code
+                return null
+            }
             val page = ImgListReply.from(r.body)
             if (offset == 0L) {
                 bytes = page.bytes

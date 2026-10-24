@@ -1058,8 +1058,11 @@ object Remote : Control {
         Thread({ old.stop() }, "link-stop").apply { isDaemon = true }.start()
     }
 
-    override fun transport(cmd: Int, seekMs: Long?, on: Boolean?, repeat: Int?) =
-        send(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat), "transport ${Enums.TransportCmd.names[cmd]}", done = ::refused)
+    override fun transport(cmd: Int, seekMs: Long?, on: Boolean?, repeat: Int?) {
+        if (preRefused(device.transportRefusal(cmd))) return
+        val refusable = cmd != Enums.TransportCmd.pause && cmd != Enums.TransportCmd.repeat
+        send(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat), "transport ${Enums.TransportCmd.names[cmd]}", done = if (refusable) ::playRefused else ::refused)
+    }
 
     override fun volume(detents: Int) = send(Msg.VOLUME, Req.volume(step = detents), "volume step $detents")
 
@@ -1150,11 +1153,20 @@ object Remote : Control {
         )
     }
 
-    override fun action(cmd: Int, track: Long?, done: (Int?, String?) -> Unit) =
+    override fun action(cmd: Int, track: Long?, done: (Int?, String?) -> Unit) {
+        if (cmd == Enums.ActionCmd.rescan && preRefused(CardView.REFUSED.takeIf { device.cardDown })) return done(Err.noCard, CardView.REFUSED)
         send(Msg.ACTION, Req.action(cmd, track), "action ${Enums.ActionCmd.names[cmd]}", done = { code, text ->
-            if (cmd == Enums.ActionCmd.shuffleLibrary) playRefused(code, text) else refused(code, text)
+            if (cmd == Enums.ActionCmd.shuffleLibrary || cmd == Enums.ActionCmd.rescan) playRefused(code, text) else refused(code, text)
             done(code, text)
         })
+    }
+
+    private fun preRefused(line: String?): Boolean {
+        line ?: return false
+        Log.i(TAG, "refused before send, $line")
+        main.post { refusalToast.get()?.invoke(line, "") }
+        return true
+    }
 
     override fun refusals(show: ((String, String) -> Unit)?, owner: ((String, String) -> Unit)?) {
         if (owner == null) refusalToast.set(show) else refusalToast.compareAndSet(owner, show)

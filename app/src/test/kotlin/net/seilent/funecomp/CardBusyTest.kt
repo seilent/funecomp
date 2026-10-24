@@ -132,13 +132,17 @@ class CardBusyTest {
 
     private fun edges() = ShadowLog.getLogsForTag(Remote.TAG).count { it.msg.startsWith("card ready edge") }
 
-    private fun artRun(faults: List<String>): Pair<Int, Int> {
+    private fun artRun(faults: List<String>, lyrics: Boolean = false): Pair<Int, Int> {
         cache(*cached.toTypedArray())
         Remote.resetArtist()
         Remote.artist(app, http)
-        val s = sim(lib(names), faults)
+        val s = sim(lib(names), faults, if (lyrics) kotlin.io.path.createTempDirectory("lrc").toFile() else null)
         val c = link(s)
-        waitFor(30_000) { stored(s).containsAll(cached) }
+        if (lyrics) {
+            waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
+            Remote.queuePage(0)
+        }
+        waitFor(30_000) { stored(s).containsAll(cached) && (!lyrics || lines.any { it.startsWith("stored lrc") }) }
         val busy = index("card gate busy")
         val ready = index("card gate ready", busy)
         assertTrue("$busy $ready", busy in 0 until ready)
@@ -152,6 +156,32 @@ class CardBusyTest {
         assertTrue(between(busy, ready, img).size <= 1)
         assertTrue(lookups(busy, ready).size <= 1)
         assertEquals(1, lines.count { it.startsWith("card stop img") })
+    }
+
+    @Test
+    fun anImageEndRefusedByARunEndsAbortedAndPushesAfterTheEdge() {
+        val (busy, ready) = artRun(listOf("card-run=3000+1000@end"))
+        assertTrue(ShadowLog.getLogsForTag(Remote.TAG).any { it.msg.startsWith("art ABORTED") })
+        assertEquals(1, between(busy, ready, Regex(" tx IMG_END flags=0x03 ")).size)
+        assertEquals(emptyList<String>(), lines.filter { " tx IMG_ABORT " in it })
+    }
+
+    @Test
+    fun anArtHoldKeepsTheCardDownUntilItEndsThenArtAndLyricsResumeWithNoRefusalAfterReady() {
+        Lyrics.init(app, Http { url, _ ->
+            lines += "http $url"
+            Response(200, "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}".toByteArray())
+        })
+        Lyrics.set(LyricSources.NETEASE, false)
+        Lyrics.set(LyricSources.LRCLIB, true)
+        val (busy, ready) = artRun(listOf("card-run=2000+1000@hello", "art-hold=3000"), lyrics = true)
+        Lyrics.set(LyricSources.LRCLIB, false)
+        assertEquals(emptyList<String>(), between(0, ready, img))
+        assertEquals(emptyList<String>(), between(0, ready, Regex("rx LRC_PUT ")))
+        assertTrue(lines.toList().subList(ready, lines.size).any { it.startsWith("stored lrc") })
+        assertEquals(emptyList<String>(), between(ready, lines.size, Regex(" tx (IMG_\\w+|LYR_GET|LRC_PUT) flags=0x03 ")))
+        assertTrue(busy >= 0)
+        assertEquals(1, edges())
     }
 
     @Test
@@ -402,6 +432,22 @@ class CardBusyTest {
 
     @Test
     fun aBusyStopMidUpdatePausesKeepsThePickAndResumesAtMinor14() = updStop(14)
+
+    @Test
+    fun anUpdateEndRefusedByARunPausesKeepsThePickAndResumes() {
+        val u = upd()
+        val c = link(sim(Library.synthetic(), listOf("card-run=4000+1000@end"), updDir = u.card))
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        Firmwares.send(u.image)
+        waitFor(30_000) { Firmwares.view.info == Heart.CARD }
+        assertTrue(Firmwares.view.send, Firmwares.view.send.startsWith("paused"))
+        stored(u)
+        assertEquals(1, lines.count { " tx UPD_END flags=0x03 " in it })
+        val begins = lines.filter { it.startsWith("upd begin") }
+        assertEquals(400_000L, begins.last().substringAfter("offset=").toLong())
+        assertTrue(index("card gate ready") < lines.indexOf(begins.last()))
+        c.destroy()
+    }
 
     @Test
     fun anUpdateTappedDuringTheRunIsNotSentUntilReady() {

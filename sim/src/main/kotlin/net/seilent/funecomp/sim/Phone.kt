@@ -196,6 +196,10 @@ class Phone(private val opts: Options, private val clock: () -> Long) {
         val cmd = b.int(Tags.Transport.cmd)
         val c = current()
         if (c == null) {
+            if (receiver && line() != null && (cmd == Enums.TransportCmd.next || cmd == Enums.TransportCmd.prev)) {
+                step(if (cmd == Enums.TransportCmd.next) 1 else -1, auto = false)
+                return Answer.Ok(state = true)
+            }
             if (!receiver || (cmd != Enums.TransportCmd.toggle && cmd != Enums.TransportCmd.play)) return null
             val l = line() ?: return Answer.Fail(Err.refused, RECEIVER_TEXT)
             mark(l)
@@ -220,6 +224,8 @@ class Phone(private val opts: Options, private val clock: () -> Long) {
         }
         return Answer.Ok(state = true)
     }
+
+    fun player(): Boolean = receiver && line() != null
 
     fun refuse(): Answer? = if (receiver) Answer.Fail(Err.refused, RECEIVER_TEXT) else null
 }

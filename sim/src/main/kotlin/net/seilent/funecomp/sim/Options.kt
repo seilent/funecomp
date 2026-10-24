@@ -39,6 +39,7 @@ class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
         data object Play : Start
         data object Manual : Start
         data object Queue : Start
+        data object End : Start
     }
 
     companion object {
@@ -52,6 +53,7 @@ class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
                 at == "play" -> Start.Play
                 at == "manual" -> Start.Manual
                 at == "queue" -> Start.Queue
+                at == "end" -> Start.End
                 at.startsWith("img:") -> Start.Img(at.removePrefix("img:").toLongOrNull() ?: throw IllegalArgumentException("card-run: bad bytes in $v"))
                 at.startsWith("upd:") -> Start.Upd(at.removePrefix("upd:").toLongOrNull() ?: throw IllegalArgumentException("card-run: bad bytes in $v"))
                 else -> Start.Delay(at.toLongOrNull() ?: throw IllegalArgumentException("card-run: bad start in $v"))
@@ -108,6 +110,8 @@ class Faults(specs: List<String>) {
     var playDrop = false
     var cardCoalesce = false
     var cardPage = false
+    var artHold = 0L
+    var snapLate = 0L
     var phoneLateMeta: Long? = null
     var phoneStaleDuration = false
     var phoneSeek: Pair<Long, Long>? = null
@@ -193,6 +197,8 @@ class Faults(specs: List<String>) {
                 "play-drop" -> playDrop = true
                 "card-coalesce" -> cardCoalesce = true
                 "card-page" -> cardPage = true
+                "art-hold" -> artHold = v.toLong()
+                "snap-late" -> snapLate = v.toLong()
                 "phone-late-meta" -> phoneLateMeta = v.toLong()
                 "phone-stale-duration" -> phoneStaleDuration = true
                 "phone-seek" -> phoneSeek = (v.substringBefore(':').toLongOrNull() ?: throw IllegalArgumentException("phone-seek: at missing in $v")) to

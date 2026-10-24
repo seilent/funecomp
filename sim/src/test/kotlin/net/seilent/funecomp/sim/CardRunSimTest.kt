@@ -81,11 +81,26 @@ class CardRunSimTest {
         "ART_GET" to { d -> req(d, Msg.ART_GET, Req.artGet(track, 128)) },
         "UPD_BEGIN" to { d -> req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 1000, "0".repeat(32))) },
         "TRANSPORT" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.pause)) },
+        "TRANSPORT repeat" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.repeat, repeat = Enums.Repeat.all)) },
+        "TRANSPORT play" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.play)) },
+        "TRANSPORT toggle" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.toggle)) },
+        "TRANSPORT next" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.next)) },
+        "TRANSPORT prev" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.prev)) },
+        "TRANSPORT seek" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.seek, seekMs = 1000)) },
+        "TRANSPORT shuffle" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.shuffle, on = true)) },
+        "ACTION rescan" to { d -> req(d, Msg.ACTION, Req.action(Enums.ActionCmd.rescan)) },
+        "LRC_DEL" to { d -> req(d, Msg.LRC_DEL, Req.lrcDel(track)) },
+        "IMG_END" to { d -> req(d, Msg.IMG_END, Req.imgEnd(1)) },
+        "UPD_END" to { d -> req(d, Msg.UPD_END, Req.updEnd("0".repeat(32))) },
         "LYR_OFFSET" to { d -> req(d, Msg.LYR_OFFSET, Req.lyrOffset(track)) },
         "PLAYLOG_GET" to { d -> req(d, Msg.PLAYLOG_GET, Req.playLogGet(0, 10)) },
     )
 
-    private val landedRefuses = setOf("PLAY", "QUEUE_OP playAt", "ACTION shuffleLibrary", "ACTION favorite", "LYR_GET", "LRC_PUT", "IMG_BEGIN", "IMG_DEL", "IMG_TAG", "UPD_BEGIN")
+    private val landedRefuses = setOf(
+        "PLAY", "QUEUE_OP playAt", "ACTION shuffleLibrary", "ACTION favorite", "ACTION rescan", "LYR_GET", "LYR_OFFSET", "LRC_PUT", "LRC_DEL",
+        "IMG_BEGIN", "IMG_END", "IMG_DEL", "IMG_TAG", "UPD_BEGIN", "UPD_END",
+        "TRANSPORT play", "TRANSPORT toggle", "TRANSPORT next", "TRANSPORT prev", "TRANSPORT seek", "TRANSPORT shuffle",
+    )
 
     private fun answers(minor: Int, vararg faults: String, phase: Long): Map<String, Answer> {
         val dir = tmp.newFolder()
@@ -210,7 +225,7 @@ class CardRunSimTest {
         for (phase in listOf(1500L, 6000L)) {
             val got = answers(15, "card-run=5000+3000@1000", phase = phase)
             for ((k, a) in got) {
-                if (k in landedRefuses) {
+                if (k in landedRefuses || k == "IMG_LIST" && phase < 5000) {
                     assertEquals("$k at $phase", Err.noCard, code(a))
                     assertEquals("$k at $phase", "card not available", text(a))
                 } else {
@@ -252,7 +267,7 @@ class CardRunSimTest {
             assertEquals(k, "busy", text(hold.getValue(k)))
         }
         for (k in listOf("ACTION shuffleLibrary", "ACTION favorite")) assertEquals(k, "card not available", text(hold.getValue(k)))
-        for (k in listOf("LIB_GET", "TRANSPORT", "LYR_OFFSET", "PLAYLOG_GET")) assertEquals(k, null, code(hold.getValue(k)))
+        for (k in listOf("LIB_GET", "TRANSPORT", "TRANSPORT next", "LYR_OFFSET", "PLAYLOG_GET")) assertEquals(k, null, code(hold.getValue(k)))
         val index = answers(15, "card-run=5000+3000@1000", "card-device=old", phase = 6500)
         for (k in listOf("PLAY", "QUEUE_OP playAt", "IMG_BEGIN", "IMG_LIST", "ACTION shuffleLibrary")) assertEquals(k, null, code(index.getValue(k)))
         assertEquals(Err.busy, code(index.getValue("UPD_BEGIN")))
@@ -261,12 +276,119 @@ class CardRunSimTest {
     }
 
     @Test
-    fun anEmptyLibraryAnswersNoLibraryFirst() {
-        val empty = Device(Options(Board.of("v1"), Faults(listOf("card-run=5000+0@0"))), Library(emptyList())) { t }
-        val out = Sink()
-        empty.linked(out, 0)
-        empty.greet(out)
-        assertEquals(Err.noLibrary, code(req(empty, Msg.ACTION, Req.action(Enums.ActionCmd.shuffleLibrary))))
+    fun anEmptyLibraryAnswersTheCardFirstOnLandedAndNoLibraryOnOld() {
+        for ((model, want) in listOf("landed" to Err.noCard, "old" to Err.noLibrary)) {
+            val empty = Device(Options(Board.of("v1"), Faults(listOf("card-run=5000+0@0", "card-device=$model"))), Library(emptyList())) { t }
+            val out = Sink()
+            empty.linked(out, 0)
+            empty.greet(out)
+            assertEquals(model, want, code(req(empty, Msg.ACTION, Req.action(Enums.ActionCmd.shuffleLibrary))))
+        }
+    }
+
+    @Test
+    fun theLagPathRefusesAnEmptyLibraryShuffleOnLandedOnly() {
+        for ((model, want) in listOf("landed" to Err.noCard, "old" to null)) {
+            val empty = Device(Options(Board.of("v1"), Faults(listOf("card-run=500+0@0", "play-lag=2000", "card-device=$model"))), Library(emptyList())) { t }
+            val out = Sink()
+            empty.linked(out, 0)
+            empty.greet(out)
+            at(empty, out, 600)
+            assertEquals(Enums.Card.ready, state(empty).card)
+            val got = code(req(empty, Msg.ACTION, Req.action(Enums.ActionCmd.shuffleLibrary)))
+            if (want == null) assertEquals(model, Err.noLibrary, got) else assertEquals(model, want, got)
+        }
+    }
+
+    @Test
+    fun aToggleOrPlayWhilePlayingPassesAndPauseAndRepeatAlwaysPass() {
+        val d = device(15, null, "card-run=5000+3000@1000")
+        val out = linked(d)
+        assertEquals(null, code(requests.getValue("TRANSPORT play")(d)))
+        at(d, out, 1500)
+        assertEquals(Enums.Card.busy, state(d).card)
+        assertEquals(null, code(requests.getValue("TRANSPORT play")(d)))
+        assertEquals(null, code(requests.getValue("TRANSPORT toggle")(d)))
+        assertEquals(false, state(d).playing)
+        assertEquals(Err.noCard, code(requests.getValue("TRANSPORT toggle")(d)))
+        assertEquals(null, code(requests.getValue("TRANSPORT repeat")(d)))
+        assertEquals(null, code(requests.getValue("TRANSPORT")(d)))
+        assertEquals(Err.noCard, code(requests.getValue("TRANSPORT next")(d)))
+    }
+
+    @Test
+    fun playLagRefusesTheCardTransportCommandsAfterTheReadyState() {
+        val d = device(15, null, "card-run=1000+0@0", "play-lag=1000")
+        val out = linked(d)
+        at(d, out, 1000)
+        assertEquals(Enums.Card.ready, out.states().last().card)
+        assertEquals(Err.noCard, code(requests.getValue("TRANSPORT next")(d)))
+        assertEquals(Err.noCard, code(requests.getValue("ACTION rescan")(d)))
+        assertEquals(null, code(requests.getValue("TRANSPORT")(d)))
+        at(d, out, 1000)
+        assertEquals(null, code(requests.getValue("TRANSPORT next")(d)))
+    }
+
+    @Test
+    fun anArtHoldKeepsTheStateBusyAndRefusesTheListingUntilItEnds() {
+        val d = device(15, null, "card-run=1000+1000@0", "art-hold=2000")
+        val out = linked(d)
+        at(d, out, 500)
+        assertEquals(Err.noCard, code(requests.getValue("IMG_LIST")(d)))
+        at(d, out, 1000)
+        assertEquals(Enums.Card.busy, state(d).card)
+        assertEquals(null, code(requests.getValue("IMG_LIST")(d)))
+        at(d, out, 1000)
+        assertEquals(Enums.Card.busy, state(d).card)
+        assertEquals(Err.noCard, code(requests.getValue("IMG_LIST")(d)))
+        assertEquals(Err.noCard, code(requests.getValue("IMG_BEGIN")(d)))
+        at(d, out, 2000)
+        assertEquals(Enums.Card.ready, out.states().last().card)
+        assertEquals(null, code(requests.getValue("IMG_LIST")(d)))
+    }
+
+    @Test
+    fun anEndStartRefusesTheImageEndWithNoAbort() {
+        val d = device(15, null, "card-run=2000+1000@end")
+        val out = linked(d)
+        val bytes = ByteArray(2000)
+        val crc = java.util.zip.CRC32().apply { update(bytes) }.value
+        assertEquals(null, code(req(d, Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, "A", null, 2000, crc, 240, 320), out)))
+        d.imgData(Node.decode("IMG_DATA", Req.imgData(0, bytes)), out)
+        val end = req(d, Msg.IMG_END, Req.imgEnd(crc), out)
+        assertEquals(Err.noCard, code(end))
+        assertTrue(out.of(Msg.IMG_ABORT).isEmpty())
+        assertEquals(Enums.Card.busy, out.states().last().card)
+    }
+
+    @Test
+    fun anEndStartRefusesTheUpdateEndAndKeepsThePart() {
+        val dir = tmp.newFolder()
+        val d = device(15, dir, "card-run=2000+1000@end")
+        val out = linked(d)
+        assertEquals(null, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 2000, "0".repeat(32)), out)))
+        for (i in 0 until 2) d.updData(Node.decode("UPD_DATA", Req.updData(i * 1000L, ByteArray(1000))), out)
+        assertEquals(Err.noCard, code(req(d, Msg.UPD_END, Req.updEnd("0".repeat(32)), out)))
+        assertTrue(out.of(Msg.UPD_ABORT).isEmpty())
+        assertEquals(2000L, File(dir, "v1.upt.part").length())
+        at(d, out, 3000)
+        assertEquals(Enums.Card.ready, out.states().last().card)
+        assertEquals(null, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 2000, "0".repeat(32)), out)))
+    }
+
+    @Test
+    fun aLateSnapshotMovesTheRevsAfterTheReadyState() {
+        val d = device(15, null, "card-run=1000+1000@0", "snap-late=3000")
+        val out = linked(d)
+        val before = state(d)
+        at(d, out, 2500)
+        assertEquals(Enums.Card.ready, out.states().last().card)
+        assertEquals(before.snapRev, out.states().last().snapRev)
+        at(d, out, 3000)
+        val after = out.states().last()
+        assertEquals(before.snapRev!! + 1, after.snapRev)
+        assertEquals(before.libRev!! + 1, after.libRev)
+        assertTrue(logs.any { it.startsWith("snap late") })
     }
 
     private fun pushImg(d: Device, out: Sink, chunks: Int) {
@@ -434,6 +556,10 @@ class CardRunSimTest {
         assertTrue(Faults(listOf("card-run=1+2@queue")).cardRun!!.start == CardRun.Start.Queue)
         assertEquals(7L, (Faults(listOf("card-run=1+2@upd:7")).cardRun!!.start as CardRun.Start.Upd).bytes)
         assertEquals(0L, (Faults(listOf("card-run=1+2")).cardRun!!.start as CardRun.Start.Delay).ms)
+        assertTrue(Faults(listOf("card-run=1+2@end")).cardRun!!.start == CardRun.Start.End)
+        val f2 = Faults(listOf("card-run=1+2,art-hold=300,snap-late=400"))
+        assertEquals(300L, f2.artHold)
+        assertEquals(400L, f2.snapLate)
         for (bad in listOf("card-run=5000", "card-run=a+1", "card-seq=nope:1,ready", "card-seq=busy,ready", "card-device=new", "card-run=1+1,card-seq=ready")) {
             try {
                 Faults(listOf(bad))

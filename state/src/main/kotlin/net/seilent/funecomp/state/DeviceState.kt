@@ -102,6 +102,19 @@ data class DeviceState(
 
     val queueRefusal: String? get() = if (cardDown) CardView.REFUSED else null
 
+    fun transportRefusal(cmd: Int): String? {
+        val s = playback.state
+        if (!cardDown || s.source == Enums.Source.phone) return null
+        val playing = s.playing == true
+        val receiver = s.receiver == true
+        return when (cmd) {
+            Enums.TransportCmd.toggle, Enums.TransportCmd.play -> CardView.REFUSED.takeUnless { playing || receiver }
+            Enums.TransportCmd.next, Enums.TransportCmd.prev -> CardView.REFUSED.takeUnless { receiver && !playing }
+            Enums.TransportCmd.seek, Enums.TransportCmd.shuffle -> CardView.REFUSED
+            else -> null
+        }
+    }
+
     fun has(group: String) = hello?.has(group) ?: false
 
     fun positionMs(now: Long): Long = Position.at(playback, rttMs, now)

@@ -694,6 +694,42 @@ class ForwardTest {
     }
 
     @Test
+    fun aCardRefusedListingAtTheDeletesStopsWithGateAndNoFailedLine() {
+        val (_, port) = sim(30, 1, Options.IMG_CAP, "fail=IMG_LIST:14:1")
+        val s = session(port)
+        val records = ArtBlocks()
+        records.add(ArtBlocks.Block("x", "x", "test", "x", "", "Nobody", 1))
+        val logs = ArrayList<String>()
+        val looked = Lookups()
+        val r = forward(looked, sweeping = { false }, blocks = blocks(records, "tcp:A"), log = { logs += it }).run(s) { true }
+        assertEquals(ArtPusher.Stop.GATE, r.stop)
+        assertTrue("art del list failed" !in logs)
+        assertTrue(looked.names.isEmpty())
+        assertEquals(1, records.pending("tcp:A").size)
+        forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertTrue(records.pending("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun aCardRefusedListingAtTheRetagStopsWithGate() {
+        val (_, s) = tagSim(tagLib("Gemma"), Proto.minor, "fail=IMG_LIST:14:1")
+        seed(s, "gemma")
+        assertEquals(ArtPusher.Stop.GATE, forward(Lookups(), sweeping = { false }, missing = ::fill).run(s) { true }.stop)
+        assertTrue(tags().isEmpty())
+        forward(Lookups(), sweeping = { false }, missing = ::fill).run(s) { true }
+        assertEquals(listOf("gemma origin=library"), tags())
+    }
+
+    @Test
+    fun aCardRefusedListingAtTheSweepStopsWithGateAndABusyOneKeepsPreempted() {
+        for ((fault, stop) in listOf("fail=IMG_LIST:14:1" to ArtPusher.Stop.GATE, "busy=IMG_LIST:1" to ArtPusher.Stop.PREEMPTED)) {
+            val (_, port) = sim(30, 1, Options.IMG_CAP, fault)
+            val s = session(port)
+            assertEquals(fault, stop, forward(Lookups(), retagging = { false }).run(s) { true }.stop)
+        }
+    }
+
+    @Test
     fun aRejectDeletesOnlyItsNameOnTheMbid() {
         val s0 = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = tmp.newFolder()), Library(listOf(
             Library.track("Muto", "A", "One", 1, 200_000, mbids = listOf("mb-m")),
@@ -1340,6 +1376,24 @@ class ForwardTest {
         val first = after.indexOfFirst { l -> held.any { l.startsWith("stored name=$it ") } }
         assertTrue("$current $first", current >= 0 && first > current)
         assertTrue(held.all { n -> after.any { it.startsWith("stored name=$n ") } })
+        assertTrue(records.held("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun aCardRefusedListingAtTheHeldPushesStopsWithGateAndKeepsThem() {
+        val held = listOf("Ha", "Hb")
+        val s0 = Sim(Options(Board.of("v1"), Faults(listOf("fail=IMG_LIST:14:1")), log = { lines += it }, imgDir = tmp.newFolder()), Library(
+            (1..7).map { Library.track("Artist %03d".format(it), "Album $it", "Song $it", 1, 200_000) } +
+                held.mapIndexed { i, n -> Library.track(n, "Other $i", "Tune $i", 1, 200_000) },
+        ))
+        sims += s0
+        val s = session(s0.listen(0))
+        val records = ArtBlocks()
+        for (n in held) records.hold(n, null, "tcp:A")
+        val r = forward(Lookups(), blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertEquals(ArtPusher.Stop.GATE, r.stop)
+        assertEquals(held, records.held("tcp:A").map { it.name })
+        forward(Lookups(), blocks = blocks(records, "tcp:A")).run(s) { true }
         assertTrue(records.held("tcp:A").isEmpty())
     }
 

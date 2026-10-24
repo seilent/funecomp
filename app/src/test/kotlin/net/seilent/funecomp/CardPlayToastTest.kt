@@ -169,8 +169,6 @@ class CardPlayToastTest {
         answered("QUEUE_OP", 4)
         Remote.action(Enums.ActionCmd.favorite, Remote.device.playback.state.track)
         answered("ACTION", 1)
-        Remote.action(Enums.ActionCmd.rescan)
-        answered("ACTION", 2)
         quiet()
         assertEquals(3, refused("QUEUE_OP"))
         assertEquals(1, refused("ACTION"))
