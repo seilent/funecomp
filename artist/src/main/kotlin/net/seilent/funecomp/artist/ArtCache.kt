@@ -16,6 +16,9 @@ class ArtCache(private val dir: File) {
         val id: String = "",
         val sha: String = "",
         val resolvedBy: String = "",
+        val w: Int = 0,
+        val h: Int = 0,
+        val base: String = "",
     )
     class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false)
     class Looked(val mbid: String?, val at: Long)
@@ -50,6 +53,7 @@ class ArtCache(private val dir: File) {
         return Entry(
             key, p.getProperty("name", ""), p.getProperty("mbid"), p.getProperty("source", ""), credit, p.getProperty("url", ""),
             p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("id", ""), p.getProperty("sha", ""), p.getProperty("resolvedBy", ""),
+            p.getProperty("w")?.toIntOrNull() ?: 0, p.getProperty("h")?.toIntOrNull() ?: 0, p.getProperty("base", ""),
         )
     }
 
@@ -65,6 +69,17 @@ class ArtCache(private val dir: File) {
             save(f, p)
         }
         return sha
+    }
+
+    @Synchronized
+    fun putSize(key: String, at: Long, s: Size) {
+        val f = meta(key)
+        val p = load(f)
+        if (p.getProperty("state") != "hit" || p.getProperty("at")?.toLongOrNull() != at) return
+        p.setProperty("w", s.w.toString())
+        p.setProperty("h", s.h.toString())
+        save(f, p)
+        listed = null
     }
 
     @Synchronized
@@ -116,6 +131,11 @@ class ArtCache(private val dir: File) {
         p.setProperty("id", e.id)
         p.setProperty("sha", e.sha.ifEmpty { sha256(source) })
         if (e.resolvedBy.isNotEmpty()) p.setProperty("resolvedBy", e.resolvedBy)
+        if (e.w > 0 && e.h > 0) {
+            p.setProperty("w", e.w.toString())
+            p.setProperty("h", e.h.toString())
+        }
+        if (e.base.isNotEmpty()) p.setProperty("base", e.base)
         e.credit?.let {
             p.setProperty("author", it.author)
             p.setProperty("license", it.license)

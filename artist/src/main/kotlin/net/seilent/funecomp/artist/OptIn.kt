@@ -100,7 +100,9 @@ class FanartTv(private val api: Api, private val key: () -> String, private val 
 }
 
 class Discogs(private val api: Api, private val base: String = "https://api.discogs.com") {
-    fun candidates(a: MbArtist): List<Candidate> = images(a).mapNotNull { it["uri"].str?.takeIf { u -> u.startsWith("http") } }.map { Candidate(it, Sources.DISCOGS) }
+    fun candidates(a: MbArtist): List<Candidate> = images(a).mapNotNull { i ->
+        i["uri"].str?.takeIf { it.startsWith("http") }?.let { Candidate(it, Sources.DISCOGS, w = i["width"].long?.toInt() ?: 0, h = i["height"].long?.toInt() ?: 0, group = if (i["type"].str == "primary") 0 else 1) }
+    }
 
     fun previews(a: MbArtist): List<Pair<String, String>> = images(a).mapNotNull { i ->
         val full = i["uri"].str?.takeIf { it.startsWith("http") } ?: return@mapNotNull null

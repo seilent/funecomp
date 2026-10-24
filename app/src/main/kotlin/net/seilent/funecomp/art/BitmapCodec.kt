@@ -7,9 +7,16 @@ import android.media.FaceDetector
 import net.seilent.funecomp.artist.Codec
 import net.seilent.funecomp.artist.Picture
 import net.seilent.funecomp.artist.Rect
+import net.seilent.funecomp.artist.Size
 import java.io.ByteArrayOutputStream
 
 class BitmapCodec(private val log: (String) -> Unit = {}) : Codec {
+    override fun bounds(bytes: ByteArray): Size? {
+        val o = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, o)
+        return if (o.outWidth > 0 && o.outHeight > 0) Size(o.outWidth, o.outHeight) else null
+    }
+
     override fun decode(bytes: ByteArray, maxSide: Int): Picture? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)

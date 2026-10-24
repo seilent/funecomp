@@ -4,7 +4,7 @@ import java.net.URLDecoder
 
 data class Credit(val author: String, val license: String, val page: String, val licenseUrl: String = "")
 
-class Candidate(val url: String, val source: String, val credit: Credit? = null, val id: String = ImageIds.of(source, url), val w: Int = 0, val h: Int = 0, val alt: String? = null)
+class Candidate(val url: String, val source: String, val credit: Credit? = null, val id: String = ImageIds.of(source, url), val w: Int = 0, val h: Int = 0, val alt: String? = null, val group: Int = 0)
 
 object ImageIds {
     private val DEEZER = Regex("/images/artist/([0-9a-f]{32})/")

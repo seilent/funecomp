@@ -44,9 +44,9 @@ class ArtistArt(
     private val pruneSafe = picks.skipped == 0 && (picks.read || gallery?.any() != true)
     private val missingLogged = HashSet<String>()
 
-    private class Found(val c: Candidate, val url: String, val src: ByteArray, val jpeg: ByteArray, val mbid: String?, val by: String)
+    private class Found(val c: Candidate, val url: String, val src: ByteArray, val size: Size, val jpeg: ByteArray, val mbid: String?, val by: String, val base: String)
 
-    private class Hit(val c: Candidate, val url: String, val src: ByteArray, val jpeg: ByteArray)
+    private class Hit(val c: Candidate, val url: String, val src: ByteArray, val size: Size, val jpeg: ByteArray, val base: String = "")
 
     @Throws(IOException::class)
     fun get(name: String, mbid: String?, w: Int, h: Int): Art? {
@@ -65,12 +65,7 @@ class ArtistArt(
             cache.drop(key)
         } else if (hit != null) {
             val wrong = tag == null && wrongArtistOffered(hit, name)
-            cache.rendered(key, w, h)?.let { return Art(it, w, h, hit.name, hit.mbid, hit.source, hit.credit, wrong) }
-            val jpeg = cache.source(key)?.let { Backdrop.render(codec, it, w, h) }
-            if (jpeg != null) {
-                cache.putRendered(key, w, h, jpeg)
-                return Art(jpeg, w, h, hit.name, hit.mbid, hit.source, hit.credit, wrong)
-            }
+            render(hit, w, h)?.let { return Art(it, w, h, hit.name, hit.mbid, hit.source, hit.credit, wrong) }
         }
         val keyHash = keyHash(on)
         cache.miss(key)?.let { m ->
@@ -108,20 +103,27 @@ class ArtistArt(
         return if (found == null) get(name, mbid, w, h) else keep(name, tag, key, found, w, h, now)
     }
 
+    fun render(e: ArtCache.Entry, w: Int, h: Int): ByteArray? {
+        cache.rendered(e.key, w, h)?.let { return it }
+        val jpeg = cache.source(e.key)?.let { Backdrop.render(codec, it, w, h) } ?: return null
+        cache.putRendered(e.key, w, h, jpeg)
+        return jpeg
+    }
+
+    fun size(e: ArtCache.Entry): Size? {
+        if (e.w > 0 && e.h > 0) return Size(e.w, e.h)
+        val s = cache.source(e.key)?.let { codec.bounds(it) } ?: return null
+        cache.putSize(e.key, e.at, s)
+        return s
+    }
+
     private fun tag(p: ArtPicks.Pick?, mbid: String?): String? = p?.takeIf { it.kind == ArtPicks.ARTIST }?.mbid ?: Names.mbid(mbid)
 
     private fun picked(p: ArtPicks.Pick, name: String, mbid: String?, w: Int, h: Int): Art? {
         val key = p.cacheKey
         val tag = Names.mbid(mbid)
         val e = cache.hit(key)
-        if (e != null) {
-            cache.rendered(key, w, h)?.let { return Art(it, w, h, name.trim(), tag, e.source, e.credit) }
-            val jpeg = cache.source(key)?.let { Backdrop.render(codec, it, w, h) }
-            if (jpeg != null) {
-                cache.putRendered(key, w, h, jpeg)
-                return Art(jpeg, w, h, name.trim(), tag, e.source, e.credit)
-            }
-        }
+        if (e != null) render(e, w, h)?.let { return Art(it, w, h, name.trim(), tag, e.source, e.credit) }
         if (p.source == Sources.GALLERY) return gallery(p, name, tag, w, h)
         val now = clock()
         p.failedAt?.let { at ->
@@ -396,18 +398,18 @@ class ArtistArt(
     }
 
     private fun find(name: String, tag: String?, id: String?, key: String, w: Int, h: Int, on: Set<String>, now: Long, skipped: AtomicBoolean): Found? {
-        lookup(name, name, id, w, h, on, key, skipped)?.let { return Found(it.c, it.url, it.src, it.jpeg, id, if (tag == null && id != null) name.trim() else "") }
+        lookup(name, name, id, w, h, on, key, skipped)?.let { return Found(it.c, it.url, it.src, it.size, it.jpeg, id, if (tag == null && id != null) name.trim() else "", it.base) }
         if (tag != null) return null
         for (v in Names.variants(name)) {
             val vid = resolve(v, now)
             val f = lookup(v, name, vid, w, h, on, key, skipped) ?: continue
-            return Found(f.c, f.url, f.src, f.jpeg, vid, if (vid != null) v else "")
+            return Found(f.c, f.url, f.src, f.size, f.jpeg, vid, if (vid != null) v else "", f.base)
         }
         return null
     }
 
     private fun keep(name: String, tag: String?, key: String, f: Found, w: Int, h: Int, now: Long): Art {
-        val e = ArtCache.Entry(key, name.trim(), f.mbid, f.c.source, f.c.credit, f.url, now, f.c.id, ArtCache.sha256(f.src), f.by)
+        val e = ArtCache.Entry(key, name.trim(), f.mbid, f.c.source, f.c.credit, f.url, now, f.c.id, ArtCache.sha256(f.src), f.by, f.size.w, f.size.h, f.base)
         cache.putHit(e, f.src)
         cache.putRendered(key, w, h, f.jpeg)
         return Art(f.jpeg, w, h, name.trim(), f.mbid, f.c.source, f.c.credit, tag == null && wrongArtistOffered(e, name))
@@ -415,7 +417,7 @@ class ArtistArt(
 
     fun blocked(e: ArtCache.Entry): Boolean = !picked(e) && (blocks.blocked(e.key, e.source, ImageIds.of(e), cache.sha(e), e.name) || placeholder(e))
 
-    private fun placeholder(e: ArtCache.Entry) = e.source == Sources.DEEZER && cache.sha(e) in placeholders
+    private fun placeholder(e: ArtCache.Entry) = e.source == Sources.DEEZER && (cache.sha(e) in placeholders || e.base in placeholders)
 
     @Synchronized
     fun scanPlaceholders(): Int {
@@ -546,11 +548,12 @@ class ArtistArt(
             Sources.YOUTUBE to a?.takeIf { Sources.YOUTUBE in on }?.let { { youtube.candidates(it) } },
             Sources.DEEZER to if (Sources.DEEZER in on) ({ deezer.candidates(name).asSequence() }) else null,
         )
-        for (step in sources().order.mapNotNull { steps[it] }) {
-            val candidates = attempt { step().filterNot { blocks.blocked(key, it.source, it.id, name = display) }.take(MAX_TRIES).iterator() } ?: continue
+        for ((source, step) in sources().order.mapNotNull { o -> steps[o]?.let { o to it } }) {
+            val candidates = attempt { ranked(source, step().filterNot { blocks.blocked(key, it.source, it.id, name = display) }.take(MAX_TRIES), t).iterator() } ?: continue
             while (attempt { candidates.hasNext() } == true) {
                 val c = candidates.next()
                 var (url, src) = attempt { fetch(c, t.side) } ?: continue
+                var base = ""
                 if (c.source == Sources.DEEZER) {
                     if (deezer.placeholder(src)) {
                         skipped.set(true)
@@ -562,17 +565,26 @@ class ArtistArt(
                         continue
                     }
                     if (big != null) {
+                        base = ArtCache.sha256(src)
                         url = big.first
                         src = big.second
                     }
                 }
                 if (blocks.blocked(key, c.source, "", ArtCache.sha256(src), display)) continue
+                val size = codec.bounds(src)?.takeIf { Backdrop.fits(it, w, h) } ?: continue
                 val jpeg = Backdrop.render(codec, src, w, h) ?: continue
-                return Hit(c, url, src, jpeg)
+                return Hit(c, url, src, size, jpeg, base)
             }
         }
         error?.let { throw it }
         return null
+    }
+
+    private fun ranked(source: String, c: Sequence<Candidate>, t: Targets): Sequence<Candidate> {
+        if (t.sizes.isEmpty() || source !in SIZED) return c
+        val list = c.toList()
+        if (list.any { it.w <= 0 || it.h <= 0 }) return list.asSequence()
+        return list.sortedWith(compareBy<Candidate> { it.group }.thenByDescending { t.score(it.w, it.h) }).asSequence()
     }
 
     private fun fetch(c: Candidate, side: Int): Pair<String, ByteArray>? {
@@ -619,5 +631,6 @@ class ArtistArt(
         const val KEEP_BYTES = 4 shl 20
         const val YOUTUBE_SEARCH = "youtube search"
         val BROWSE_WORKERS = Sources.ORDER.size + 2
+        private val SIZED = setOf(Sources.DISCOGS, Wikimedia.SOURCE)
     }
 }

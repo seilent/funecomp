@@ -230,15 +230,187 @@ class SizeTest {
     }
 
     private var kinds = mapOf<String, Pair<String, Long>>()
+    private val pages = HashMap<String, Response>()
+    private var info = ""
+
+    init {
+        http.answer = { u -> if (u.startsWith("https://commons.wikimedia.org/w/api.php")) Response(200, info.toByteArray()) else pages[u] }
+    }
+
+    private fun page(url: String, body: String) {
+        pages[url] = Response(200, body.toByteArray())
+    }
+
+    private fun thumb(f: String, side: Int = 1280) = "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/$f/${side}px-$f"
+
+    private fun infoOf(vararg files: Triple<String, Int, Int>) {
+        info = files.joinToString(",", "{\"query\":{\"pages\":{", "}}}") { (f, w, h) ->
+            "\"$f\":{\"title\":\"File:$f\",\"imageinfo\":[{\"width\":$w,\"height\":$h,\"thumbwidth\":1280,\"thumbheight\":${1280L * h / w},\"mime\":\"${kinds[f]?.first ?: "image/jpeg"}\",\"size\":${kinds[f]?.second ?: 100000}," +
+                "\"thumburl\":\"${thumb(f)}\",\"url\":\"https://upload.wikimedia.org/wikipedia/commons/a/ab/$f\",\"descriptionurl\":\"https://commons.wikimedia.org/wiki/File:$f\",\"extmetadata\":{}}]}"
+        }
+    }
+
+    private val artist = "8d8d8d8d-0000-4000-8000-00000000a512"
+
+    private fun mbArtist(vararg rels: Pair<String, String>) = page(
+        "https://musicbrainz.org/ws/2/artist/$artist?inc=url-rels&fmt=json",
+        rels.joinToString(",", "{\"name\":\"$name\",\"relations\":[", "]}") { (t, u) -> "{\"type\":\"$t\",\"url\":{\"resource\":\"$u\"}}" },
+    )
+
+    private fun discogs(vararg images: Triple<String, Int, Int>) {
+        mbArtist("discogs" to "https://www.discogs.com/artist/77")
+        page("https://api.discogs.com/artists/77", images.joinToString(",", "{\"images\":[", "]}") { (u, w, h) -> "{\"type\":\"${if (u in primary) "primary" else "secondary"}\",\"uri\":\"$u\",\"width\":$w,\"height\":$h}" })
+    }
+
+    private var primary = setOf<String>()
+
+    private fun dc(n: Int) = "https://i.discogs.com/k$n/rs:fit/g:sm/q:90/h:600/w:600/" +
+        java.util.Base64.getUrlEncoder().withoutPadding().encodeToString("s3://discogs-images/A-77-$n.jpeg".toByteArray()) + ".jpeg"
+
+    @Test
+    fun theLargestDiscogsImageIsTriedFirstWithinTheSource() {
+        sources = Sources.NONE.copy(discogs = true)
+        discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600))
+        serve(dc(1), "400x400@5")
+        serve(dc(2), "600x600@5")
+        art().get(name, artist, 240, 320)!!
+        val e = cache.hit(artist)!!
+        assertEquals(dc(2), e.url)
+        assertEquals(600 to 600, e.w to e.h)
+        assertFalse(dc(1) in http.calls)
+    }
+
+    @Test
+    fun theDiscogsPrimaryImageStaysFirstAndSizeRanksWithinEachType() {
+        sources = Sources.NONE.copy(discogs = true)
+        primary = setOf(dc(3))
+        discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600), Triple(dc(3), 300, 400))
+        serve(dc(3), "300x400@5")
+        art().get(name, artist, 240, 320)!!
+        assertEquals(dc(3), cache.hit(artist)!!.url)
+        assertFalse(http.calls.any { it == dc(1) || it == dc(2) })
+    }
+
+    @Test
+    fun aRescanFindsAPlaceholderStoredAtTheLargerForm() {
+        deezer(one)
+        val xl = Fixtures.gen("1000x1000@5")
+        serve(dz(one), xl)
+        serve(dz(one, 1680), "1680x1680@5")
+        art().get(name, null, 360, 480)!!
+        assertEquals(ArtCache.sha256(xl), cache.hit("name:sztest")!!.base)
+        placeholders = setOf(ArtCache.sha256(xl))
+        assertEquals(1, art().scanPlaceholders())
+        assertNull(cache.hit("name:sztest"))
+    }
+
+    @Test
+    fun withNoTargetDiscogsKeepsItsOrder() {
+        targets = Targets.NONE
+        sources = Sources.NONE.copy(discogs = true)
+        discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600))
+        serve(dc(1), "400x400@5")
+        art().get(name, artist, 240, 320)!!
+        assertEquals(dc(1), cache.hit(artist)!!.url)
+        assertFalse(dc(2) in http.calls)
+    }
+
+    @Test
+    fun aLargerDiscogsImageThatDoesNotFitMovesOnToTheNext() {
+        sources = Sources.NONE.copy(discogs = true)
+        discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600))
+        serve(dc(1), "400x400@5")
+        serve(dc(2), "200x200@5")
+        art().get(name, artist, 240, 320)!!
+        assertEquals(dc(1), cache.hit(artist)!!.url)
+    }
+
+    @Test
+    fun aBlockedLargerImageIsSkipped() {
+        sources = Sources.NONE.copy(discogs = true)
+        discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600))
+        blocks.add(ArtBlocks.Block(artist, artist, Sources.DISCOGS, ImageIds.of(Sources.DISCOGS, dc(2)), "", name, 1))
+        serve(dc(1), "400x400@5")
+        art().get(name, artist, 240, 320)!!
+        assertEquals(dc(1), cache.hit(artist)!!.url)
+        assertFalse(dc(2) in http.calls)
+    }
+
+    @Test
+    fun aLargerImageOfALaterSourceNeverWins() {
+        sources = Sources.NONE.copy(discogs = true, deezer = true)
+        discogs(Triple(dc(1), 400, 400))
+        serve(dc(1), "400x400@5")
+        http.queued.getOrPut(dzSearch) { ArrayDeque() } += Response(200, "{\"data\":[{\"name\":\"$name\",\"nb_fan\":1,\"picture_xl\":\"${dz(one)}\"}]}".toByteArray())
+        serve(dz(one), "1000x1000@5")
+        assertEquals(Sources.DISCOGS, art().get(name, artist, 240, 320)!!.source)
+        assertFalse(dz(one) in http.calls)
+    }
+
+    @Test
+    fun commonsRanksByTheOriginalSizeNotTheServedThumb() {
+        mbArtist("image" to "https://commons.wikimedia.org/wiki/File:Small.jpg", "image" to "https://commons.wikimedia.org/wiki/File:Big.jpg")
+        infoOf(Triple("Small.jpg", 1300, 1733), Triple("Big.jpg", 3000, 4000))
+        serve(thumb("Small.jpg"), "1280x1706@5")
+        serve(thumb("Big.jpg", 1920), "1920x2560@5")
+        art().get(name, artist, 240, 320)!!
+        val e = cache.hit(artist)!!
+        assertEquals(thumb("Big.jpg", 1920), e.url)
+        assertEquals("File:Big.jpg", e.id)
+        assertFalse(http.calls.any { it.startsWith("https://upload.wikimedia.org/") && it.contains("Small.jpg") })
+    }
+
+    @Test
+    fun aCommonsLargerUrlThatFailsFallsBackToThe1280Thumb() {
+        mbArtist("image" to "https://commons.wikimedia.org/wiki/File:Big.jpg")
+        infoOf(Triple("Big.jpg", 3000, 4000))
+        http.queued[thumb("Big.jpg", 1920)] = ArrayDeque(listOf(Response(404, ByteArray(0))))
+        serve(thumb("Big.jpg"), "1280x1706@5")
+        art().get(name, artist, 240, 320)!!
+        assertEquals(thumb("Big.jpg"), cache.hit(artist)!!.url)
+    }
+
+    @Test
+    fun variantsNeverRunWhenThePlainNameFits() {
+        val tagged = "$name【ch】"
+        sources = Sources.NONE.copy(deezer = true)
+        http.queued.getOrPut("https://musicbrainz.org/ws/2/artist/?query=${Api.enc(tagged)}&fmt=json&limit=10") { ArrayDeque() } += Response(404, ByteArray(0))
+        http.queued.getOrPut("https://api.deezer.com/search/artist?q=${Api.enc(tagged)}") { ArrayDeque() } +=
+            Response(200, "{\"data\":[{\"name\":\"$tagged\",\"nb_fan\":1,\"picture_xl\":\"${dz(one)}\"}]}".toByteArray())
+        serve(dz(one), "1000x1000@5")
+        assertEquals(Sources.DEEZER, art().get(tagged, null, 240, 320)!!.source)
+        assertFalse(http.calls.any { it == dzSearch || it == mbSearch })
+    }
+
+    @Test
+    fun deezerKeepsTheSameNameRankingWhenALaterEntryIsLarger() {
+        sources = Sources.NONE.copy(deezer = true)
+        http.queued.getOrPut(mbSearch) { ArrayDeque() } += Response(404, ByteArray(0))
+        http.queued.getOrPut(dzSearch) { ArrayDeque() } += Response(
+            200,
+            ("{\"data\":[{\"name\":\"SZTEST\",\"nb_fan\":900,\"picture_xl\":\"${dz(two)}\"}," +
+                "{\"name\":\"$name\",\"nb_fan\":1,\"picture_xl\":\"${dz(one)}\"}]}").toByteArray(),
+        )
+        serve(dz(one), "1000x1000@5")
+        serve(dz(two), "1000x1000@6")
+        serve(dz(two, 1680), "1800x1800@6")
+        art().get(name, null, 240, 320)!!
+        assertEquals(one, cache.hit("name:sztest")!!.id)
+        assertFalse(dz(two) in http.calls)
+    }
+
+    @Test
+    fun anOldEntryWithNoSizeIsReadOnceAndRewritten() {
+        val src = Fixtures.gen("900x900@5")
+        cache.putHit(ArtCache.Entry("name:sztest", name, null, Sources.DEEZER, null, dz(one), 5, one, ArtCache.sha256(src)), src)
+        val e = cache.hit("name:sztest")!!
+        assertEquals(0 to 0, e.w to e.h)
+        assertEquals(Size(900, 900), art().size(e))
+        assertEquals(900 to 900, cache.hit("name:sztest")!!.let { it.w to it.h })
+    }
 
     private fun commons(vararg files: Triple<String, Int, Int>): List<Candidate> {
-        http.answer = { u ->
-            if (!u.startsWith("https://commons.wikimedia.org/w/api.php")) null else Response(200, files.joinToString(",", "{\"query\":{\"pages\":{", "}}}") { (f, w, h) ->
-                "\"$f\":{\"title\":\"File:$f\",\"imageinfo\":[{\"width\":$w,\"height\":$h,\"mime\":\"${kinds[f]?.first ?: "image/jpeg"}\",\"size\":${kinds[f]?.second ?: 100000}," +
-                    "\"thumburl\":\"https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/$f/1280px-$f\"," +
-                    "\"url\":\"https://upload.wikimedia.org/wikipedia/commons/a/ab/$f\",\"descriptionurl\":\"https://commons.wikimedia.org/wiki/File:$f\",\"extmetadata\":{}}]}"
-            }.toByteArray())
-        }
+        infoOf(*files)
         val a = MbArtist("x", "x", null, files.map { Rel("image", "https://commons.wikimedia.org/wiki/File:${it.first}", false) })
         return Wikimedia(Api(http, "ua", RateLimiter(0) { 0 }, {})).candidates(a, 360, 480, targets = targets)
     }
