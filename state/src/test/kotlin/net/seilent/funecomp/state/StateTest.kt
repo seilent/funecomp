@@ -151,9 +151,19 @@ class StateTest {
     }
 
     @Test
+    fun theFirstStateIsNoOutputChange() {
+        val d = DeviceState().withState(State(output = Enums.Output.wired, playing = false), 5_000)
+        assertNull(d.playback.gateAt)
+        assertTrue(PushGate.open(d, 5_000))
+        val playing = DeviceState().withState(State(output = Enums.Output.wired, playing = true), 5_000)
+        assertFalse(PushGate.open(playing, 5_500))
+        assertTrue(PushGate.open(playing, 6_000))
+    }
+
+    @Test
     fun pushGateClosedForStreamsUnknownOutputAndJustAfterPlay() {
         val wired = State(output = Enums.Output.wired, playing = false)
-        var d = DeviceState().withState(wired, 0)
+        var d = DeviceState().withState(wired, 0).withState(wired.copy(output = Enums.Output.btHeadset), 0).withState(wired, 0)
         assertFalse(PushGate.open(d, 500))
         assertTrue(PushGate.open(d, 1_000))
         d = d.withState(wired.copy(playing = true), 10_000)

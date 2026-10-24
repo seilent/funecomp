@@ -97,7 +97,7 @@ data class DeviceState(
     fun withState(s: State, now: Long): DeviceState {
         val old = playback.state
         val started = s.playing == true && old.playing != true
-        val gateAt = if (started || s.output != old.output) now else playback.gateAt
+        val gateAt = if (started || (old.output != null && s.output != old.output)) now else playback.gateAt
         val q = if (s.queueRev != null && s.queueRev != queue.rev) QueueMirror(s.queueRev) else queue
         val rev = s.libRev
         val l = when {
