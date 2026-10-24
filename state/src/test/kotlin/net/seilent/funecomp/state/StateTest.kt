@@ -14,6 +14,7 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -202,6 +203,33 @@ class StateTest {
         assertFalse(PushGate.phoneArt(DeviceState().withState(playing.copy(output = Enums.Output.wired), 0)))
         assertFalse(PushGate.phoneArt(DeviceState().withState(playing.copy(source = Enums.Source.local), 0)))
         assertFalse(PushGate.phoneArt(DeviceState().withState(State(source = Enums.Source.local, output = Enums.Output.phoneReceiver, playing = false), 0), PushGate.PhoneArtRule.PausedOnly))
+    }
+
+    @Test
+    fun receiverHoldsOnlyForAPhoneTrackOnThePhoneReceiver() {
+        val rx = State(source = Enums.Source.phone, output = Enums.Output.phoneReceiver, playing = true)
+        assertTrue(PushGate.receiver(DeviceState().withState(rx, 0)))
+        for (s in listOf(rx.copy(output = Enums.Output.wired), rx.copy(output = Enums.Output.btHeadset), rx.copy(source = Enums.Source.local), rx.copy(output = null))) {
+            val d = DeviceState().withState(s, 0)
+            assertFalse(PushGate.receiver(d))
+            assertFalse(PushGate.phoneArt(d, PushGate.PhoneArtRule.Any))
+            assertFalse(PushGate.phoneArt(d.withState(s.copy(playing = false), 0), PushGate.PhoneArtRule.PausedOnly))
+        }
+    }
+
+    @Test
+    fun theArtKeyMovesOnAPhonePauseOnlyUnderPausedOnly() {
+        val rx = State(source = Enums.Source.phone, output = Enums.Output.phoneReceiver, artists = listOf("YOASOBI"), playing = true)
+        val playing = DeviceState().withState(rx, 0)
+        val paused = DeviceState().withState(rx.copy(playing = false), 0)
+        assertNotEquals(PushGate.artKey(playing, PushGate.PhoneArtRule.PausedOnly), PushGate.artKey(paused, PushGate.PhoneArtRule.PausedOnly))
+        assertEquals(PushGate.artKey(playing, PushGate.PhoneArtRule.Any), PushGate.artKey(paused, PushGate.PhoneArtRule.Any))
+        assertEquals(PushGate.artKey(playing), PushGate.artKey(paused))
+        val local = State(source = Enums.Source.local, output = Enums.Output.wired, artists = listOf("YOASOBI"), playing = true)
+        for (rule in PushGate.PhoneArtRule.values()) {
+            assertEquals(PushGate.artKey(DeviceState().withState(local, 0), rule), PushGate.artKey(DeviceState().withState(local.copy(playing = false), 0), rule))
+            assertNotEquals(PushGate.artKey(DeviceState().withState(local, 0), rule), PushGate.artKey(playing, rule))
+        }
     }
 
     @Test

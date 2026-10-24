@@ -10,6 +10,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.PushGate
 import java.util.Locale
 
 private const val NO_UPDATER = "device has no updater"
@@ -58,7 +60,9 @@ fun FirmwarePage(ctx: Ctx, view: FirmwareView) {
     fun keep(i: Int) = Keep(list, i, ui.px(ui.contentTop))
     val items = buildList {
         add(FwItem("check", view.status, "check") { ctx.control.firmwareCheck() })
-        if (view.info.isNotEmpty()) add(FwItem(view.info, "", "info", info = true))
+        val live = view.send.startsWith("firmware ") && PushGate.receiver(ctx.device) && !ctx.device.cardDown
+        val line = view.info.ifEmpty { if (live) DeviceState.RECEIVER else "" }
+        if (line.isNotEmpty()) add(FwItem(line, "", "info", info = true))
         if (view.info == READY) add(FwItem(PATH, "", "path", info = true))
         if (view.send.isNotEmpty()) add(FwItem("firmware", view.send.removePrefix("firmware "), "send") {
             ctx.sheet.open("firmware", listOf(CANCEL)) { ctx.control.firmwareStopSend() }

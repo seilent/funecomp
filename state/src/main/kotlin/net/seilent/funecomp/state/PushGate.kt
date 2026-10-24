@@ -15,13 +15,22 @@ object PushGate {
         return now - start >= Proto.pushGateMs
     }
 
-    fun phoneArt(d: DeviceState, rule: PhoneArtRule = PHONE_ART_RULE): Boolean {
+    fun receiver(d: DeviceState): Boolean {
         val s = d.playback.state
-        if (s.source != Enums.Source.phone || s.output != Enums.Output.phoneReceiver) return false
+        return s.source == Enums.Source.phone && s.output == Enums.Output.phoneReceiver
+    }
+
+    fun phoneArt(d: DeviceState, rule: PhoneArtRule = PHONE_ART_RULE): Boolean {
+        if (!receiver(d)) return false
         return when (rule) {
             PhoneArtRule.Any -> true
-            PhoneArtRule.PausedOnly -> s.playing != true
+            PhoneArtRule.PausedOnly -> d.playback.state.playing != true
         }
+    }
+
+    fun artKey(d: DeviceState, rule: PhoneArtRule = PHONE_ART_RULE): List<Any?> {
+        val s = d.playback.state
+        return listOf(s.artists, s.output, s.queueRev, s.slot, phoneArt(d, rule))
     }
 
     fun card(d: DeviceState): Boolean = d.cardDown

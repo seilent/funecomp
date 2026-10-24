@@ -70,6 +70,7 @@ class PhoneArtLinkTest {
     @After
     fun tearDown() {
         release.countDown()
+        Firmwares.reset()
         service?.destroy()
         Remote.stop()
         sims.forEach { it.stop() }
@@ -97,9 +98,9 @@ class PhoneArtLinkTest {
 
     private fun pendingFile() = File(app.filesDir, "art/pending.txt")
 
-    private fun live(vararg faults: String): Sim {
+    private fun live(vararg faults: String, updDir: File? = null): Sim {
         Remote.artist(app, http)
-        val s = Sim(Options(Board.of("v1"), Faults(faults.toList()), log = { logs += it }, phone = stream, receiver = true))
+        val s = Sim(Options(Board.of("v1"), Faults(faults.toList()), log = { logs += it }, phone = stream, receiver = true, updDir = updDir))
         sims += s
         service = Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:${s.listen(0)}")).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.source == Enums.Source.phone }
@@ -131,6 +132,30 @@ class PhoneArtLinkTest {
         Thread.sleep(2000)
         assertTrue(Remote.device.cardDown)
         assertFalse(logs.drop(from).any { "rx IMG_BEGIN" in it })
+        waitFor(15_000) { s.device.begins.any { it.first == old && it.second == Enums.ImgOrigin.phone } }
+    }
+
+    @Test
+    fun aPendingPhoneArtistWaitsForAFirmwareSendAndGoesAfterIt() {
+        val old = "Old One"
+        ArtCache(File(app.filesDir, "art")).putHit(ArtCache.Entry("name:${Names.fold(old)}", old, null, Wikimedia.SOURCE, null, "https://upload.wikimedia.org/a.jpg", 1, "File:A.jpg"), jpeg())
+        pendingFile().apply { parentFile.mkdirs() }.writeText("$old\t\n")
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        val card = File(kotlin.io.path.createTempDirectory("upd").toFile(), "card")
+        val s = live(updDir = card)
+        assertTrue(entered.await(10, TimeUnit.SECONDS))
+        waitFor { Remote.device.playback.state.battery != null }
+        val bytes = ByteArray(300_000) { (it * 17 + 3).toByte() }
+        val held = HeldSource(bytes, 150_000)
+        Firmwares.send(held.source())
+        assertTrue(held.reached.await(10, TimeUnit.SECONDS))
+        assertTrue(Firmwares.sending)
+        release.countDown()
+        Thread.sleep(3000)
+        assertFalse(s.device.begins.any { it.first == old })
+        held.go.countDown()
+        waitFor(20_000) { File(card, "v1.upt").exists() && !Firmwares.sending }
         waitFor(15_000) { s.device.begins.any { it.first == old && it.second == Enums.ImgOrigin.phone } }
     }
 }

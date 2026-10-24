@@ -522,7 +522,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
             }
         }.testTag("np"),
     ) {
-        val photo = art?.takeIf { !onPhone || device.settings.values[ARTIST_PHOTO] != "off" }
+        val photo = art?.takeIf { device.settings.values[ARTIST_PHOTO] != "off" }
         Backdrop(photo)
         if (photo != null && shaded) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).graphicsLayer { alpha = frame().shade * (swap()?.shade ?: 1f) }.background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha)).testTag("np.shade"))
         val held = photo?.takeIf { it.entry != null }

@@ -143,6 +143,29 @@ class RxNowPlayingTest {
     }
 
     @Test
+    fun artistPhotoOffDrawsNoPhotoOnALocalTrack() {
+        val shell = start(LyricsFetch.Show.Phone(idol, false, null), art = BackdropArt(ImageBitmap(8, 8), null, yoasobi), photo = "off")
+        local()
+        settle(2000)
+        assertFalse(exists("backdrop.photo"))
+        assertFalse("block image" in longPress(shell))
+    }
+
+    private fun localPhoto(photo: String?) {
+        val shell = start(LyricsFetch.Show.Phone(idol, false, null), art = BackdropArt(ImageBitmap(8, 8), null, yoasobi), photo = photo)
+        local()
+        settle(2000)
+        assertTrue(exists("backdrop.photo"))
+        assertEquals("block image", longPress(shell).first())
+    }
+
+    @Test
+    fun aLocalTrackDrawsThePhotoWithTheRowOn() = localPhoto("on")
+
+    @Test
+    fun aLocalTrackDrawsThePhotoBeforeSettingsArrive() = localPhoto(null)
+
+    @Test
     fun aPhoneTrackDrawsTheBluetoothVariant() {
         start(LyricsFetch.Show.Phone(idol, false, null))
         assertTrue(exists("np.from"))

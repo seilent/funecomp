@@ -20,9 +20,12 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.sim.Battery
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Options
+import net.seilent.funecomp.sim.PhoneLine
 import net.seilent.funecomp.sim.Sim
+import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LyricsPlan
+import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import org.junit.After
@@ -39,10 +42,12 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
+import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowNetwork
 import org.robolectric.shadows.ShadowNetworkCapabilities
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -73,8 +78,9 @@ class BackgroundTest {
 
     private val logs = java.util.concurrent.CopyOnWriteArrayList<String>()
 
-    private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList(), updDir: java.io.File? = null, minor: Int = Proto.minor): String {
-        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, updDir = updDir, minor = minor, log = { logs += it }))
+    private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList(), updDir: java.io.File? = null, minor: Int = Proto.minor, phone: List<PhoneLine> = emptyList(), receiver: Boolean = false, output: Int? = null): String {
+        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, updDir = updDir, minor = minor, log = { logs += it }, phone = phone, receiver = receiver))
+        output?.let { s.device.output(it) }
         sims += s
         return "tcp:127.0.0.1:${s.listen(0)}"
     }
@@ -842,6 +848,77 @@ class BackgroundTest {
         val begins = logs.filter { it.startsWith("upd begin") }
         assertTrue("$begins", begins.last().substringAfter("offset=").toLong() >= 150_000)
         waitFor { Firmwares.view.info == "ready on the dap" }
+        c.destroy()
+    }
+
+    private val idol = listOf(PhoneLine("Idol", "YOASOBI", "THE BOOK 3", 213_000, 0, true))
+
+    private fun upd(faults: List<String> = emptyList(), phone: List<PhoneLine> = idol, output: Int? = null): Pair<ServiceController<LinkService>, java.io.File> {
+        val card = java.io.File(kotlin.io.path.createTempDirectory("upd").toFile(), "card")
+        shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
+        Firmwares.init(app)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = faults, updDir = card, phone = phone, receiver = phone.isNotEmpty(), output = output))).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
+        return c to java.io.File(card, "v1.upt")
+    }
+
+    private fun image(n: Int) = ByteArray(n) { (it * 17 + 3).toByte() }
+
+    private fun landed(done: java.io.File, bytes: ByteArray) {
+        val end = System.currentTimeMillis() + 30_000
+        while (!done.exists()) {
+            check(System.currentTimeMillis() < end) { "timed out: ${logs.filter { it.startsWith("upd") }} ${Firmwares.view}" }
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(200))
+            Thread.sleep(50)
+        }
+        assertArrayEquals(bytes, done.readBytes())
+        waitFor(10_000) { Firmwares.view.info == "ready on the dap" }
+    }
+
+    @Test
+    fun aFirmwareSendRunsWhileThePhoneStreams() {
+        val (c, done) = upd()
+        assertTrue(PushGate.receiver(Remote.device))
+        val bytes = image(300_000)
+        Firmwares.send(HeldSource(bytes, Int.MAX_VALUE).source())
+        landed(done, bytes)
+        assertFalse(logs.any { it.startsWith("upd begin") && !it.endsWith("offset=0") })
+        c.destroy()
+    }
+
+    @Test
+    fun aCardRunDuringAStreamSendPausesWithCardNotAvailable() {
+        val (c, done) = upd(listOf("card-run=3000+1000@upd:150000"))
+        val bytes = image(400_000)
+        Firmwares.send(HeldSource(bytes, Int.MAX_VALUE).source())
+        waitFor(10_000) { Firmwares.view.info == CardView.REFUSED }
+        landed(done, bytes)
+        c.destroy()
+    }
+
+    @Test
+    fun thePageExitMidSendPausesThenResumes() {
+        val (c, done) = upd(listOf("phone-exit=4000"))
+        val bytes = image(400_000)
+        val held = HeldSource(bytes, 150_000)
+        Firmwares.send(held.source())
+        assertTrue(held.reached.await(10, TimeUnit.SECONDS))
+        assertEquals(Enums.Source.phone, Remote.device.playback.state.source)
+        waitFor(10_000) { Remote.device.playback.state.source == Enums.Source.local && Remote.device.playback.state.output == Enums.Output.wired }
+        held.go.countDown()
+        waitFor(10_000) { Firmwares.view.info == "waiting for playback to settle" }
+        landed(done, bytes)
+        assertTrue(logs.filter { it.startsWith("upd begin") }.last().substringAfter("offset=").toLong() >= 150_000)
+        c.destroy()
+    }
+
+    @Test
+    fun aFirmwareSendStaysRefusedOnBluetoothHeadphones() {
+        val (c, _) = upd(phone = emptyList(), output = Enums.Output.btHeadset)
+        Firmwares.send(HeldSource(image(1000), Int.MAX_VALUE).source())
+        waitFor { Firmwares.view.info == "dap on bluetooth output" }
+        assertFalse(Firmwares.sending)
+        assertFalse(logs.any { it.startsWith("upd begin") })
         c.destroy()
     }
 

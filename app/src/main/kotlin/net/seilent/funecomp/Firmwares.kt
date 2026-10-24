@@ -135,7 +135,7 @@ object Firmwares {
         if (Remote.phase != Phase.LIVE) return "not connected"
         if (!d.has("update")) return "device has no updater"
         val st = d.playback.state
-        if (st.output != null && st.output != Enums.Output.wired) return "dap on bluetooth output"
+        if (st.output != null && st.output != Enums.Output.wired && !PushGate.receiver(d)) return "dap on bluetooth output"
         if (PushGate.card(d)) return CardView.REFUSED
         if ((st.battery ?: 0) < DAP_MIN && st.charging != true) return "dap battery under $DAP_MIN%"
         val bm = c.getSystemService(BatteryManager::class.java)
@@ -185,6 +185,8 @@ object Firmwares {
         view = FirmwareView()
     }
 
+    private fun open() = PushGate.open(Remote.device, SystemClock.elapsedRealtime()) || PushGate.receiver(Remote.device)
+
     private fun paused(send: String) = "paused ${send.removePrefix("paused ").removePrefix("firmware ")}"
 
     private fun cardRefused() {
@@ -198,7 +200,7 @@ object Firmwares {
         val sum = src.md5 ?: md5(src).also { src.md5 = it }
         val b = board ?: return upd { it.copy(send = paused(it.send), info = "not connected") }
         val r = UpdPush(s, b, src.size, sum, src.open, gate = {
-            !stopSend && Remote.phase == Phase.LIVE && refusal() == null && PushGate.open(Remote.device, SystemClock.elapsedRealtime())
+            !stopSend && Remote.phase == Phase.LIVE && refusal() == null && open()
         }) { at ->
             Remote.holdWake(WAKE, WAKE_MS)
             val t = "firmware ${if (src.size > 0) at * 100 / src.size else 0}%"
@@ -215,7 +217,7 @@ object Firmwares {
                 upd { it.copy(send = "", info = "ready on the dap") }
             }
             is UpdPush.Outcome.Paused -> {
-                val why = refusal() ?: if (!PushGate.open(Remote.device, SystemClock.elapsedRealtime())) "waiting for playback to settle" else ""
+                val why = refusal() ?: if (!open()) "waiting for playback to settle" else ""
                 upd { it.copy(send = paused(it.send), info = why) }
             }
             is UpdPush.Outcome.Aborted -> if (r.abort.code == Enums.AbortCode.busy || r.abort.code == Enums.AbortCode.noCard) {

@@ -58,6 +58,7 @@ import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.PhoneKey
+import net.seilent.funecomp.state.SettingsMirror
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Battery
@@ -188,6 +189,11 @@ private fun held(c: SimControl) {
     playing(c)
     val p = c.device.playback
     c.device = c.device.copy(playback = p.copy(state = p.state.copy(title = "Reckoner", artist = HELD.name, artists = listOf(HELD.name), mbids = emptyList(), album = "In Rainbows")))
+}
+
+private fun photo(on: Boolean): (SimControl) -> Unit = { c ->
+    held(c)
+    c.device = c.device.copy(settings = SettingsMirror(1, "artistPhoto=${if (on) "on" else "off"}\n"))
 }
 
 private fun tsuki(vararg artists: String): (SimControl) -> Unit = { c ->
@@ -953,6 +959,7 @@ val SHOTS = listOf(
     Shot("firmware-ready", board = "v1", pages = FW, firmware = FOUND.copy(ready = true)) { rule.onNodeWithTag("fw.release").performClick() },
     Shot("firmware-picked", board = "v1", pages = FW) { rule.onNodeWithTag("fw.pick").performClick() },
     Shot("firmware-sending", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%")),
+    Shot("firmware-receiver", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%"), prep = phoneTrack()),
     Shot("firmware-sent", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, info = "ready on the dap")),
     Shot("firmware-autocheck-sheet", board = "v1", pages = FW) { tapRow("fw.daily") },
     Shot("firmware-prereleases-sheet", board = "v1", pages = FW) { tapRow("fw.pre") },
@@ -972,6 +979,8 @@ val SHOTS = listOf(
     Shot("connection-reconnect-sheet", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.UNRESTRICTED, reconnect = true)) { tapRow("conn.reconnect") },
     Shot("connection-media-sheet", board = "v1", pages = HOME + Page.Connection, link = LinkView(Phase.LIVE, "V1", everLive = true, battery = Battery.UNRESTRICTED)) { tapRow("conn.media") },
     Shot("np-block", pages = NP, prep = ::held, artEntry = HELD) { holdBackdrop() },
+    Shot("artphoto-on", pages = NP, prep = photo(true), artEntry = HELD),
+    Shot("artphoto-off", pages = NP, prep = photo(false), artEntry = HELD),
     Shot("np-block-wrong", pages = NP, prep = ::held, artEntry = HELD, wrong = true) { holdBackdrop() },
     Shot("lyr-mark", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))),
     Shot("lyr-mark-nonext", pages = NP, prep = ::lyricsLast, artEntry = HELD, lyrics = shown(stamped(SUNG))),
