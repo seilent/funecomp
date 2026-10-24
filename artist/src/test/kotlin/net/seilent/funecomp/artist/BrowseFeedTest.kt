@@ -71,12 +71,12 @@ class BrowseFeedTest {
         assertEquals(listOf("sections [a, b]"), events.toList())
         open = true
         gate.signalAll()
-        f.thread.join(10_000)
+        clock.join(f.thread)
         clock.check()
         assertEquals(listOf("sections [a, b]", "tile a 1 0", "tile b 2 0", "done a", "tile a 3 0", "done b", "end false"), events.toList())
         assertEquals(listOf("tile a", "tile b", "source a done n=1", "tile a", "source b done n=1"), lines.map { it.removePrefix("art browse ").substringBeforeLast(" +") })
         assertEquals(0, f.live)
-        assertEquals(0, clock.alive())
+        assertEquals(0, clock.drained())
     }
 
     @Test
@@ -89,7 +89,7 @@ class BrowseFeedTest {
         }
         f.sectionDone("a")
         f.finish()
-        f.thread.join(10_000)
+        clock.join(f.thread)
         clock.check()
         assertEquals(listOf("sections [a]", "tile a 0 0", "tile a 2 0", "done a", "end true"), events.toList())
         assertTrue(lines.contains(lines.first { it.startsWith("art browse source a done n=2 ") }))
@@ -106,7 +106,7 @@ class BrowseFeedTest {
         }
         f.sectionDone("a")
         f.finish()
-        f.thread.join(10_000)
+        clock.join(f.thread)
         assertEquals(listOf("sections [a]", "tile a 0 0", "tile a 2 0", "done a", "end true"), events.toList())
         assertTrue(lines.any { it == "art browse decode a: java.lang.OutOfMemoryError: bitmap" })
         assertEquals(0, f.live)
@@ -118,7 +118,7 @@ class BrowseFeedTest {
         f.sections(listOf("a"))
         f.permit()
         f.tile("a", tile("0", 7))
-        f.thread.join(10_000)
+        clock.join(f.thread)
         assertFalse(f.thread.isAlive)
         assertEquals(listOf("sections [a]", "end false"), events.toList())
     }
@@ -141,9 +141,9 @@ class BrowseFeedTest {
         assertEquals(BrowseFeed.PERMITS, f.live)
         open = true
         gate.signalAll()
-        workers.forEach { it.join(10_000) }
+        clock.join(workers)
         f.finish()
-        f.thread.join(10_000)
+        clock.join(f.thread)
         clock.check()
         assertEquals(BrowseFeed.PERMITS, f.peak)
         assertEquals(0, f.live)
@@ -171,10 +171,10 @@ class BrowseFeedTest {
         clock.awaitIdle()
         val at = clock.now()
         run.cancel()
-        w.join(10_000)
+        clock.join(w)
         open = true
         gate.signalAll()
-        f.thread.join(10_000)
+        clock.join(f.thread)
         f.tile("a", tile("late"))
         f.sectionDone("a")
         f.finish()
@@ -183,7 +183,7 @@ class BrowseFeedTest {
         assertEquals(listOf("sections [a]"), events.toList())
         assertEquals(at, clock.now())
         assertFalse(f.thread.isAlive)
-        assertEquals(0, clock.alive())
+        assertEquals(0, clock.drained())
     }
 
     @Test
@@ -191,7 +191,7 @@ class BrowseFeedTest {
         val f = feed()
         clock.awaitIdle()
         run.cancel()
-        f.thread.join(10_000)
+        clock.join(f.thread)
         clock.check()
         assertFalse(f.thread.isAlive)
         assertTrue(events.isEmpty())
@@ -215,10 +215,10 @@ class BrowseFeedTest {
         }
         clock.awaitIdle()
         w.interrupt()
-        w.join(10_000)
+        clock.join(w)
         assertTrue("$thrown", thrown is InterruptedException)
         f.thread.interrupt()
-        f.thread.join(10_000)
+        clock.join(f.thread)
         assertFalse(f.thread.isAlive)
     }
 }

@@ -43,7 +43,7 @@ class ParallelBrowseTest {
             } catch (e: IOException) {
             }
         }
-        t.join(30_000)
+        clock.join(t)
         clock.check()
         return sink
     }
@@ -69,7 +69,7 @@ class ParallelBrowseTest {
         }
         assertEquals(setOf(Wikimedia.SOURCE, Sources.THE_AUDIO_DB, Sources.DISCOGS, Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DEEZER), covered)
         assertTrue("missing ${http.missing}", http.missing.isEmpty())
-        assertEquals(0, clock.alive())
+        assertEquals(0, clock.drained())
     }
 
     @Test
@@ -171,7 +171,7 @@ class ParallelBrowseTest {
         }
         val art2 = ArtistArt(http2, AwtCodec(), ArtCache(tmp.newFolder()), { sources }, "0.1.0", { 0L }, clock)
         val c2 = Collected()
-        clock.thread("b2") { art2.browse("TSUKI", null, 53, c2, pool) }.join(30_000)
+        clock.join(clock.thread("b2") { art2.browse("TSUKI", null, 53, c2, pool) })
         clock.check()
         assertEquals(listOf("twin"), c2.of(Sources.DISCOGS).map { it.caption })
         assertEquals(2, http2.calls.count { it == preview.single() })
@@ -195,7 +195,7 @@ class ParallelBrowseTest {
         assertTrue(ArtistArt.YOUTUBE_SEARCH in c.done)
         assertTrue(c.of(Sources.YOUTUBE).isEmpty())
         h.release()
-        t.join(30_000)
+        clock.join(t)
         clock.check()
         assertEquals(expected("宇多田ヒカル").getValue(ArtistArt.YOUTUBE_SEARCH), seen(c)[ArtistArt.YOUTUBE_SEARCH])
         assertEquals(expected("宇多田ヒカル").getValue(Sources.YOUTUBE), seen(c)[Sources.YOUTUBE])
@@ -212,7 +212,7 @@ class ParallelBrowseTest {
         assertTrue(early.any { it.startsWith("https://www.youtube.com/results") })
         assertTrue(early.none { it.contains("theaudiodb") || it.contains("discogs") })
         h.release()
-        t.join(30_000)
+        clock.join(t)
         clock.check()
         val all = http.snapshot().map { it.second }
         val reads = all.withIndex().filter { (_, u) -> u.startsWith("https://musicbrainz.org/ws/2/artist/") && "query=" !in u }.map { it.index }
@@ -259,7 +259,7 @@ class ParallelBrowseTest {
         val calls = http.snapshot().size
         val tiles = c.tiles.size
         run.cancel()
-        t.join(30_000)
+        clock.join(t)
         pool.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
         h.release()
         clock.check()
@@ -267,7 +267,7 @@ class ParallelBrowseTest {
         assertEquals(at, clock.now())
         assertEquals(calls, http.snapshot().size)
         assertEquals(tiles, c.tiles.size)
-        assertEquals(0, clock.alive())
+        assertEquals(0, clock.drained())
         assertTrue(pool.isTerminated)
     }
 
@@ -286,7 +286,7 @@ class ParallelBrowseTest {
         }
         clock.awaitIdle()
         run.cancel()
-        t.join(30_000)
+        clock.join(t)
         old.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
         clock.auto = true
         val before = clock.now()
@@ -302,7 +302,7 @@ class ParallelBrowseTest {
         browse("Radiohead")
         pool.shutdown()
         assertTrue(pool.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS))
-        assertEquals(0, clock.alive())
+        assertEquals(0, clock.drained())
     }
 
     @Test
@@ -320,7 +320,7 @@ class ParallelBrowseTest {
         clock.awaitIdle()
         pool.shutdownNow()
         h.release()
-        t.join(30_000)
+        clock.join(t)
         clock.check()
         assertEquals(null, thrown)
         assertEquals(c.order.toSet(), c.done.toSet())
@@ -348,9 +348,9 @@ class ParallelBrowseTest {
         val t = runs[0]
         val bg = runs[1]
         val take = runs[2]
-        bg.join(30_000)
-        take.join(30_000)
-        t.join(30_000)
+        clock.join(bg)
+        clock.join(take)
+        clock.join(t)
         clock.check()
         val after = http.snapshot().filter { it.first >= asked }
         val mb = after.first { it.second.contains("query=TSUKI") }.first

@@ -131,9 +131,10 @@ class ParkCond(private val clock: Clock) : Cond {
     override fun signalAll() {}
 }
 
-class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true, private val strict: Boolean = true) : Clock {
+class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true, private val strict: Boolean = true, private val stallNs: Long = STALL_NS, private val quietNs: Long = QUIET_NS) : Clock {
     private val lock = Object()
     private var t = start
+    private var moved = System.nanoTime()
     private var pending = 0
     private var seq = 0L
     private var failure: AssertionError? = null
@@ -155,6 +156,7 @@ class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true, private v
 
         override fun signalAll() = synchronized(lock) {
             waiters.forEach { it.runnable = true }
+            moved = System.nanoTime()
             lock.notifyAll()
         }
     }
@@ -172,7 +174,7 @@ class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true, private v
             val me = enter(Thread.currentThread())
             run?.enter(c)
             try {
-                val cap = System.nanoTime() + WALL_CAP_NS
+                val start = System.nanoTime()
                 while (true) {
                     failure?.let { throw it }
                     if (ready()) return
@@ -188,7 +190,7 @@ class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true, private v
                         step()
                         while (!me.runnable) {
                             failure?.let { throw it }
-                            if (System.nanoTime() > cap) fail("wall clock cap")
+                            stuck(start)?.let { fail(it) }
                             lock.wait(50)
                         }
                     } finally {
@@ -209,12 +211,14 @@ class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true, private v
     private fun enter(th: Thread): St {
         val s = states.getOrPut(th) { St(seq++) }
         s.depth++
+        moved = System.nanoTime()
         return s
     }
 
     private fun leave(th: Thread) {
         val s = states[th] ?: return
         if (--s.depth <= 0) states.remove(th)
+        moved = System.nanoTime()
         step()
     }
 
@@ -230,8 +234,19 @@ class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true, private v
             return
         }
         if (next > t) t = next
+        moved = System.nanoTime()
         all.filter { it.deadline != null && it.deadline!! <= t }.sortedBy { it.order }.forEach { it.runnable = true }
         lock.notifyAll()
+    }
+
+    private fun idle() = pending == 0 && states.values.all { it.parked && !it.runnable }
+
+    private fun stuck(start: Long): String? {
+        val now = System.nanoTime()
+        if (now - start > BACKSTOP_NS) return "wall clock backstop"
+        if (idle() && now - moved > stallNs) return "stalled: every registered thread waits and nothing moved"
+        if (now - moved > quietNs) return "stalled: nothing moved, a registered thread is blocked outside the clock"
+        return null
     }
 
     private fun fail(why: String): Nothing {
@@ -289,30 +304,49 @@ class VirtualClock(start: Long = 1_000_000L, var auto: Boolean = true, private v
     }
 
     fun awaitIdle() = synchronized(lock) {
-        val cap = System.nanoTime() + WALL_CAP_NS
+        val start = System.nanoTime()
         while (true) {
             failure?.let { throw it }
             val all = states.values
             if (pending == 0 && all.all { it.parked && !it.runnable } && (!auto || all.none { it.deadline != null })) return
-            if (System.nanoTime() > cap) fail("awaitIdle wall clock cap")
+            stuck(start)?.let { fail("awaitIdle $it") }
             lock.wait(20)
         }
     }
 
     fun advance(to: Long) = synchronized(lock) {
         if (to > t) t = to
+        moved = System.nanoTime()
         states.values.filter { it.deadline != null && it.deadline!! <= t }.forEach { it.runnable = true }
         lock.notifyAll()
     }
 
     fun alive(): Int = synchronized(lock) { states.size + pending }
 
+    fun drained(): Int = synchronized(lock) {
+        val start = System.nanoTime()
+        while (states.size + pending > 0 && stuck(start) == null) lock.wait(20)
+        states.size + pending
+    }
+
+    fun join(vararg threads: Thread) = synchronized(lock) {
+        val start = System.nanoTime()
+        while (threads.any { it.isAlive }) {
+            stuck(start)?.let { fail("join $it") }
+            lock.wait(20)
+        }
+    }
+
+    fun join(threads: Iterable<Thread>) = join(*threads.toList().toTypedArray())
+
     fun parked(): Int = synchronized(lock) { states.values.count { it.parked } }
 
     fun check() = synchronized(lock) { failure?.let { throw it } }
 
     companion object {
-        private const val WALL_CAP_NS = 30_000_000_000L
+        private const val STALL_NS = 30_000_000_000L
+        private const val QUIET_NS = 180_000_000_000L
+        private const val BACKSTOP_NS = 600_000_000_000L
     }
 }
 

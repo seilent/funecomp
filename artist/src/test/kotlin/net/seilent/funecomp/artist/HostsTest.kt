@@ -60,9 +60,9 @@ class HostsTest {
                 clock.thread("sweep") { art.get("TSUKI", null, 360, 480) },
             )
         }
-        run.forEach { it.join(30_000) }
+        clock.join(run)
         clock.check()
-        assertEquals(0, clock.alive())
+        assertEquals(0, clock.drained())
         val spacing = mapOf(
             "musicbrainz.org" to 1000L,
             "commons.wikimedia.org" to 300L,
@@ -93,8 +93,8 @@ class HostsTest {
             clock.thread("deezer") { api.get("https://api.deezer.com/search/artist?q=x") } to
                 clock.thread("mb") { repeat(5) { api.get("https://musicbrainz.org/ws/2/artist/?query=Radiohead&fmt=json&limit=10") } }
         }
-        t.join(10_000)
-        m.join(10_000)
+        clock.join(t)
+        clock.join(m)
         clock.check()
         val dz = http.snapshot().filter { it.second.contains("deezer") }.map { it.first }
         val mb = http.snapshot().filter { it.second.contains("musicbrainz") }.map { it.first }
@@ -131,7 +131,7 @@ class HostsTest {
         assertEquals(3, inFlight.get())
         open = true
         busy.signalAll()
-        threads.forEach { it.join(10_000) }
+        clock.join(threads)
         clock.check()
         assertEquals(3, peak.get())
         assertEquals(8, http.calls.count { it.startsWith(url) })
@@ -154,12 +154,12 @@ class HostsTest {
         clock.awaitIdle()
         val at = clock.now()
         run.cancel()
-        t.join(10_000)
+        clock.join(t)
         clock.check()
         assertEquals("cancelled", (thrown as IOException).message)
         assertEquals(1, http.calls.size)
         assertEquals(at, clock.now())
-        assertEquals(0, clock.alive())
+        assertEquals(0, clock.drained())
     }
 
     @Test
@@ -182,11 +182,11 @@ class HostsTest {
         }
         clock.awaitIdle()
         run.cancel()
-        waiting.join(10_000)
+        clock.join(waiting)
         assertEquals("cancelled", (thrown as IOException).message)
         open = true
         busy.signalAll()
-        held.forEach { it.join(10_000) }
+        clock.join(held)
         clock.check()
         assertEquals(3, http.calls.size)
     }
@@ -206,7 +206,7 @@ class HostsTest {
         }
         clock.awaitIdle()
         a.interrupt()
-        a.join(10_000)
+        clock.join(a)
         assertTrue(pause.toString(), pause is InterruptedException)
         clock.auto = true
         val busy = clock.condition()
@@ -225,11 +225,11 @@ class HostsTest {
         }
         clock.awaitIdle()
         b.interrupt()
-        b.join(10_000)
+        clock.join(b)
         assertTrue(permit.toString(), permit is InterruptedException)
         open = true
         busy.signalAll()
-        held.forEach { it.join(10_000) }
+        clock.join(held)
         clock.check()
     }
 
@@ -251,7 +251,7 @@ class HostsTest {
         }
         clock.awaitIdle()
         run.cancel()
-        t.join(10_000)
+        clock.join(t)
         if (thrown !is IOException) fail("$thrown")
     }
 }
