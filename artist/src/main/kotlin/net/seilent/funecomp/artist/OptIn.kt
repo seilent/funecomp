@@ -191,6 +191,8 @@ class YouTube(private val api: Api) {
 
         fun sized(url: String, side: Int): String = url.replace(SIDE, "=s$side")
 
+        fun resizable(url: String): Boolean = SIDE.containsMatchIn(url.substringAfterLast('/'))
+
         fun full(url: String): String {
             val i = url.lastIndexOf('=')
             return if (i > url.lastIndexOf('/')) url.substring(0, i) + MUSIC_SIZE else url + MUSIC_SIZE
@@ -218,6 +220,13 @@ class Deezer(private val api: Api, val placeholders: Set<String> = PLACEHOLDERS,
             "5caf39f825879e7982065e4402d7dde41be7ffcee984a0e1d273a7efb2b78f00",
         )
         private const val EMPTY = "d41d8cd98f00b204e9800998ecf8427e"
+        const val XL = 1000
+        const val REAL = 1500
+        private val SIDE = Regex("/\\d+x\\d+-")
+
+        fun resizable(url: String): Boolean = SIDE.containsMatchIn(url)
+
+        fun sized(url: String, side: Int): String = url.replace(SIDE, "/${side}x$side-")
 
         fun picture(a: J, size: String): String? = a[size].str?.takeIf { u -> u.startsWith("http") && !u.contains("/artist//") && !u.contains("/artist/$EMPTY/") }
     }

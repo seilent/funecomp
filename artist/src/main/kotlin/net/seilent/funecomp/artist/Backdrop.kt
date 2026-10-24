@@ -10,6 +10,14 @@ interface Picture {
 
 fun interface Codec {
     fun decode(bytes: ByteArray, maxSide: Int): Picture?
+
+    fun bounds(bytes: ByteArray): Size? = decode(bytes, Int.MAX_VALUE)?.let { p ->
+        try {
+            Size(p.w, p.h)
+        } finally {
+            p.release()
+        }
+    }
 }
 
 object Backdrop {

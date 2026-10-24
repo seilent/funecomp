@@ -4,7 +4,7 @@ import java.net.URLDecoder
 
 data class Credit(val author: String, val license: String, val page: String, val licenseUrl: String = "")
 
-class Candidate(val url: String, val source: String, val credit: Credit? = null, val id: String = ImageIds.of(source, url))
+class Candidate(val url: String, val source: String, val credit: Credit? = null, val id: String = ImageIds.of(source, url), val w: Int = 0, val h: Int = 0, val alt: String? = null)
 
 object ImageIds {
     private val DEEZER = Regex("/images/artist/([0-9a-f]{32})/")
@@ -41,7 +41,7 @@ class Wikimedia(
     private val commons: String = "https://commons.wikimedia.org",
     private val wikipedia: (String) -> String = { "https://$it.wikipedia.org" },
 ) {
-    fun candidates(a: MbArtist, minW: Int, minH: Int, thumbW: Int = THUMB_W): List<Candidate> {
+    fun candidates(a: MbArtist, minW: Int, minH: Int, thumbW: Int = THUMB_W, targets: Targets = Targets.NONE): List<Candidate> {
         val files = LinkedHashSet<String>()
         val qid = a.rels("wikidata").firstNotNullOfOrNull { Regex("/(Q\\d+)$").find(it.url)?.groupValues?.get(1) }
         if (qid != null) {
@@ -52,7 +52,10 @@ class Wikimedia(
         }
         a.rels("image").mapNotNullTo(files) { commonsFile(it.url) }
         if (files.isEmpty()) return emptyList()
-        return info(files.toList(), thumbW).filter { usable(it, minW, minH) }.map { Candidate(it.url, SOURCE, it.credit, it.title) }
+        return info(files.toList(), thumbW).filter { usable(it, minW, minH) }.map { i ->
+            val url = sized(i, targets)
+            Candidate(url, SOURCE, i.credit, i.title, i.w, i.h, i.url.takeIf { it != url })
+        }
     }
 
     fun file(name: String): Candidate? = info(listOf(name), THUMB_W).firstOrNull()?.let { Candidate(it.url, SOURCE, it.credit, it.title) }
@@ -75,7 +78,23 @@ class Wikimedia(
         return uploadFile(r["originalimage"]["source"].str ?: return null)
     }
 
-    private class Info(val url: String, val w: Int, val h: Int, val mime: String, val title: String, val credit: Credit)
+    private class Info(val url: String, val w: Int, val h: Int, val mime: String, val title: String, val credit: Credit, val original: String?, val bytes: Long)
+
+    private fun sized(i: Info, t: Targets): String {
+        val want = minOf(t.width(i.w, i.h), i.w)
+        if (want <= THUMB_W) return i.url
+        val step = STEPS.firstOrNull { it >= want } ?: STEPS.last()
+        if (step < i.w) return i.url.replace(THUMB_PX, "/${step}px-")
+        if (whole(i)) return i.original ?: i.url
+        val below = STEPS.lastOrNull { it < i.w } ?: return i.url
+        return i.url.replace(THUMB_PX, "/${below}px-")
+    }
+
+    private fun whole(i: Info): Boolean = when (i.mime) {
+        "image/jpeg" -> true
+        "image/png" -> i.bytes in 1..PNG_BYTES
+        else -> false
+    }
 
     private fun info(files: List<String>, thumbW: Int): List<Info> {
         val titles = files.map { "File:" + it.replace('_', ' ') }
@@ -110,6 +129,8 @@ class Wikimedia(
                         page,
                         meta["LicenseUrl"]["value"].str?.trim() ?: "",
                     ),
+                    ii["url"].str,
+                    ii["size"].long ?: 0,
                 )
             }
         }
@@ -127,6 +148,9 @@ class Wikimedia(
     companion object {
         const val SOURCE = "commons"
         const val THUMB_W = 1280
+        val STEPS = listOf(1920, 3840)
+        const val PNG_BYTES = 4L shl 20
+        private val THUMB_PX = Regex("/\\d+px-")
         const val MAX_ASPECT = 2
         private val SKIP = listOf("logo", "signature", "wordmark", "autograph")
         private val LANGS = mapOf(
