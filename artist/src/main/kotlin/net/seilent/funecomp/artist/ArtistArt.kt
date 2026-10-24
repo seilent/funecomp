@@ -61,11 +61,19 @@ class ArtistArt(
         val id = tag ?: resolve(name, now)
         val key = id ?: "name:${Names.fold(name)}"
         val hit = cache.hit(key)?.takeIf { it.source in on }
-        if (hit != null && blocked(hit)) {
+        val kept = if (hit != null && blocked(hit)) {
             cache.drop(key)
+            false
         } else if (hit != null) {
             val wrong = tag == null && wrongArtistOffered(hit, name)
             render(hit, w, h)?.let { return Art(it, w, h, hit.name, hit.mbid, hit.source, hit.credit, wrong) }
+            if (now - hit.failed < TTL_MS) {
+                due(hit.failed)
+                return null
+            }
+            true
+        } else {
+            false
         }
         val keyHash = keyHash(on)
         cache.miss(key)?.let { m ->
@@ -78,8 +86,12 @@ class ArtistArt(
         val skipped = AtomicBoolean(false)
         val found = find(name, tag, id, key, w, h, on, now, skipped)
         if (found == null) {
-            cache.putMiss(key, now, on, keyHash)
-            if (skipped.get() && blocks.drop(key, id, name.trim(), now)) blocks.save()
+            if (!kept) {
+                cache.putMiss(key, now, on, keyHash)
+                if (skipped.get() && blocks.drop(key, id, name.trim(), now)) blocks.save()
+            } else if (hit != null) {
+                cache.putFailed(key, hit.at, now)
+            }
             due(now)
             return null
         }
@@ -105,7 +117,7 @@ class ArtistArt(
 
     fun render(e: ArtCache.Entry, w: Int, h: Int): ByteArray? {
         cache.rendered(e.key, w, h)?.let { return it }
-        val jpeg = cache.source(e.key)?.let { Backdrop.render(codec, it, w, h) } ?: return null
+        val jpeg = cache.source(e.key)?.let { Backdrop.render(codec, it, w, h, upscale = true) } ?: return null
         cache.putRendered(e.key, w, h, jpeg)
         return jpeg
     }
@@ -134,7 +146,7 @@ class ArtistArt(
         }
         if (!online()) throw IOException("offline")
         val src = api.get(p.url)?.body
-        val jpeg = src?.takeIf { check(it) == null }?.let { Backdrop.render(codec, it, w, h) }
+        val jpeg = src?.takeIf { check(it) == null }?.let { Backdrop.render(codec, it, w, h, upscale = true) }
         if (src == null || jpeg == null) {
             picks.failed(p, now)
             picks.save()
@@ -154,7 +166,7 @@ class ArtistArt(
 
     private fun gallery(p: ArtPicks.Pick, name: String, tag: String?, w: Int, h: Int): Art? {
         val src = gallery?.get(p.sha)
-        val jpeg = src?.let { Backdrop.render(codec, it, w, h) }
+        val jpeg = src?.let { Backdrop.render(codec, it, w, h, upscale = true) }
         if (src == null || jpeg == null) {
             if (synchronized(missingLogged) { missingLogged.add(p.sha) }) log("art pick gallery missing ${p.name}")
             return null

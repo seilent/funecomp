@@ -16,6 +16,8 @@ class Board(
     val backdropH: Int,
     val schema: String,
 ) {
+    fun withBackdrop(w: Int, h: Int) = Board(name, screenW, screenH, w, h, schema)
+
     companion object {
         fun of(name: String) = when (name) {
             "ap80" -> Board("ap80", 360, 480, 360, 480, "schema-ap80.txt")

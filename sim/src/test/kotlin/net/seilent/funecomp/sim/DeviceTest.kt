@@ -310,8 +310,8 @@ class DeviceTest {
         assertEquals(true, s.shuffle)
     }
 
-    private fun jpeg(size: Int): ByteArray {
-        val head = byteArrayOf(-1, -40, -1, -64, 0, 17, 8, 1, -32, 1, 104, 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1)
+    private fun jpeg(size: Int, w: Int = 360, h: Int = 480): ByteArray {
+        val head = byteArrayOf(-1, -40, -1, -64, 0, 17, 8, (h shr 8).toByte(), h.toByte(), (w shr 8).toByte(), w.toByte(), 3, 1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1)
         return ByteArray(size).also { head.copyInto(it); it[size - 2] = -1; it[size - 1] = -39 }
     }
 
@@ -364,6 +364,18 @@ class DeviceTest {
             off += n
         }
         ok(req(d, Msg.IMG_END, Req.imgEnd(crc(img))))
+    }
+
+    @Test
+    fun aBackdropOverrideSetsTheHelloSizeAndTheImageSizeCheck() {
+        val d = Device(Options(Board.of("v1").withBackdrop(480, 800), Faults(emptyList())), Library.synthetic()) { t }
+        val hello = d.helloReply()
+        assertEquals(480 to 800, hello.backdropW to hello.backdropH)
+        assertEquals(240 to 320, hello.screenW to hello.screenH)
+        val img = jpeg(5_000, 480, 800)
+        assertEquals(Err.badValue, fail(req(d, Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, "Mili", null, img.size.toLong(), crc(img), 240, 320))).code)
+        store(d, "Mili", img, 480, 800)
+        assertEquals(listOf("Mili"), ImgListReply.from(Node.decode("IMG_LIST.reply", ok(req(d, Msg.IMG_LIST, Req.imgList(0, 10))))).entries.map { it.name })
     }
 
     private fun mbidLib() = Library(listOf(

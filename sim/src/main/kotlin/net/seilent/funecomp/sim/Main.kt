@@ -8,10 +8,11 @@ import kotlin.system.exitProcess
 private const val USAGE = "usage: sim --board ap80|v1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
-    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--quiet]"
+    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
+    var backdrop: String? = null
     var listen: Int? = null
     var connect: String? = null
     var lib: String? = null
@@ -57,6 +58,7 @@ fun main(args: Array<String>) {
             "--card" -> card = value()
             "--curve" -> curve = value()
             "--max-pct" -> maxPct = value()
+            "--backdrop" -> backdrop = value()
             "--card-eq" -> cardEq += value().split(',').filter { it.isNotEmpty() }
             "--source" -> source = value()
             "--rescan-lib" -> rescanLib = value()
@@ -74,7 +76,11 @@ fun main(args: Array<String>) {
         exitProcess(2)
     }
     val base = Options()
-    val b = Board.of(board)
+    val b = backdrop?.let { v ->
+        val wh = v.split('x').mapNotNull { it.toIntOrNull() }.takeIf { it.size == 2 && it.all { n -> n > 0 } }
+            ?: throw IllegalArgumentException("backdrop must be <w>x<h>, not $v")
+        Board.of(board).withBackdrop(wh[0], wh[1])
+    } ?: Board.of(board)
     val opts = Options(
         b,
         Faults(faults),

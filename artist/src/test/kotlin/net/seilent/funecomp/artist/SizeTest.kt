@@ -31,7 +31,9 @@ class SizeTest {
     private var targets = Targets(Size(720, 1680))
     private var placeholders = Deezer.PLACEHOLDERS
 
-    private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, blocks = blocks, placeholders = placeholders, targets = { targets })
+    private val picks by lazy { ArtPicks(tmp.root.resolve("artpick.tsv")) }
+
+    private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, blocks = blocks, picks = picks, placeholders = placeholders, targets = { targets })
 
     private fun serve(url: String, bytes: ByteArray) {
         http.queued.getOrPut(url) { ArrayDeque() } += Response(200, bytes)
@@ -407,6 +409,97 @@ class SizeTest {
         assertEquals(0 to 0, e.w to e.h)
         assertEquals(Size(900, 900), art().size(e))
         assertEquals(900 to 900, cache.hit("name:sztest")!!.let { it.w to it.h })
+    }
+
+    private fun searches(vararg found: String) {
+        sources = Sources.NONE.copy(deezer = true)
+        http.queued.getOrPut(mbSearch) { ArrayDeque() } += Response(404, ByteArray(0))
+        for (h in found) http.queued.getOrPut(dzSearch) { ArrayDeque() } += Response(200, "{\"data\":[{\"name\":\"$name\",\"nb_fan\":1,\"picture_xl\":\"${dz(h)}\"}]}".toByteArray())
+    }
+
+    @Test
+    fun aLargerDeviceKeepsTheSmallHitAndGetsItUpscaled() {
+        targets = Targets.NONE
+        val silhouette = Fixtures.gen("1000x1000@3")
+        placeholders = setOf(ArtCache.sha256(silhouette))
+        searches(one, two)
+        serve(dz(one), "300x400@5")
+        serve(dz(two), silhouette)
+        val key = "name:sztest"
+        assertEquals(240 to 320, Images.size(art().get(name, null, 240, 320)!!.jpeg))
+        val big = art().get(name, null, 480, 800)
+        assertEquals(480 to 800, big?.let { Images.size(it.jpeg) })
+        assertTrue(cache.hasSource(key))
+        assertEquals(Size(300, 400), stored(key))
+        assertTrue(cache.rendered(key, 240, 320) != null)
+        assertTrue(cache.rendered(key, 480, 800) != null)
+        assertNull(cache.miss(key))
+        assertTrue(blocks.drops().isEmpty())
+    }
+
+    @Test
+    fun aHitThatCannotRenderIsNeverReplacedByAMissOrADropRecord() {
+        targets = Targets.NONE
+        val silhouette = Fixtures.gen("1000x1000@3")
+        placeholders = setOf(ArtCache.sha256(silhouette))
+        searches(two)
+        serve(dz(two), silhouette)
+        val key = "name:sztest"
+        val bad = "not an image".toByteArray()
+        cache.putHit(ArtCache.Entry(key, name, null, Sources.DEEZER, null, dz(one), 5, one, ArtCache.sha256(bad)), bad)
+        assertNull(art().get(name, null, 480, 800))
+        assertTrue(cache.hasSource(key))
+        assertNull(cache.miss(key))
+        assertTrue(blocks.drops().isEmpty())
+        val calls = http.calls.size
+        assertNull(art().get(name, null, 480, 800))
+        assertEquals(calls, http.calls.size)
+        time.now += ArtistArt.TTL_MS
+        searches(two)
+        serve(dz(two), silhouette)
+        assertNull(art().get(name, null, 480, 800))
+        assertTrue(http.calls.size > calls)
+        assertTrue(cache.hasSource(key))
+    }
+
+    @Test
+    fun aNewCandidateIsNeverAcceptedUpscaled() {
+        targets = Targets.NONE
+        searches(one)
+        serve(dz(one), "300x400@5")
+        assertNull(art().get(name, null, 480, 800))
+        assertTrue(cache.miss("name:sztest") != null)
+    }
+
+    @Test
+    fun aLinkPickIsNotFailedForSizeOnALargerDevice() {
+        val url = "https://e.example/pick.jpg"
+        val (k, k2) = ArtPicks.keys(name, null, false)
+        picks.add(ArtPicks.Pick(k, k2, name, ArtPicks.IMAGE, Sources.LINK, url, url, "", null, null, 1))
+        serve(url, "360x480@5")
+        val a = art().get(name, null, 480, 800)
+        assertEquals(480 to 800, a?.let { Images.size(it.jpeg) })
+        assertNull(picks.list().single().failedAt)
+    }
+
+    @Test
+    fun aGalleryPickIsNotMissingForSizeOnALargerDevice() {
+        val g = GalleryStore(tmp.newFolder("pickimg"))
+        val src = Fixtures.gen("360x480@5")
+        val sha = ArtCache.sha256(src)
+        g.put(src)
+        val (k, k2) = ArtPicks.keys(name, null, false)
+        picks.add(ArtPicks.Pick(k, k2, name, ArtPicks.IMAGE, Sources.GALLERY, "", GalleryStore.ID_PREFIX + sha, sha, null, null, 1))
+        val logs = ArrayList<String>()
+        val a = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time, blocks = blocks, picks = picks, gallery = g, log = { logs += it }, targets = { targets })
+            .get(name, null, 480, 800)
+        assertEquals(480 to 800, a?.let { Images.size(it.jpeg) })
+        assertTrue(logs.isEmpty())
+    }
+
+    @Test
+    fun aPickBelow360x480IsStillRefused() {
+        assertEquals(PickLink.TOO_SMALL, art().check(Fixtures.gen("300x400@5")))
     }
 
     private fun commons(vararg files: Triple<String, Int, Int>): List<Candidate> {

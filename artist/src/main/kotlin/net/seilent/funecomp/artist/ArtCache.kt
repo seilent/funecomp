@@ -19,6 +19,7 @@ class ArtCache(private val dir: File) {
         val w: Int = 0,
         val h: Int = 0,
         val base: String = "",
+        val failed: Long = 0,
     )
     class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false)
     class Looked(val mbid: String?, val at: Long)
@@ -54,6 +55,7 @@ class ArtCache(private val dir: File) {
             key, p.getProperty("name", ""), p.getProperty("mbid"), p.getProperty("source", ""), credit, p.getProperty("url", ""),
             p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("id", ""), p.getProperty("sha", ""), p.getProperty("resolvedBy", ""),
             p.getProperty("w")?.toIntOrNull() ?: 0, p.getProperty("h")?.toIntOrNull() ?: 0, p.getProperty("base", ""),
+            p.getProperty("failed")?.toLongOrNull() ?: 0,
         )
     }
 
@@ -69,6 +71,16 @@ class ArtCache(private val dir: File) {
             save(f, p)
         }
         return sha
+    }
+
+    @Synchronized
+    fun putFailed(key: String, at: Long, failed: Long) {
+        val f = meta(key)
+        val p = load(f)
+        if (p.getProperty("state") != "hit" || p.getProperty("at")?.toLongOrNull() != at) return
+        p.setProperty("failed", failed.toString())
+        save(f, p)
+        listed = null
     }
 
     @Synchronized
