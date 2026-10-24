@@ -218,9 +218,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private var playLogged = false
 
     data class Meta(val wrong: Boolean?, val source: String?, val credit: String?)
-    class Stored(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, var at: Long, var meta: Meta, var origins: Int = 0)
+    class Stored(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, var at: Long, var meta: Meta, var origins: Int = 0, val shownS: Long = 0)
     class Partial(val name: String, val total: Long, val crc: Long, val w: Int, val h: Int, val data: ByteArrayOutputStream = ByteArrayOutputStream(), var origins: Int = 0, val full: Boolean = false, var focus: Pair<Int, Int>? = null)
-    class Src(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, val w: Int, val h: Int, var aside: Boolean, var meta: Meta, var focus: Pair<Int, Int>?, var shownS: Long, var origins: Int = 0)
+    class Src(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, val w: Int, val h: Int, var aside: Boolean, var meta: Meta, var focus: Pair<Int, Int>?, var shownS: Long, var origins: Int = 0, val failed: Boolean = false)
 
     private val images = LinkedHashMap<String, Stored>()
     private val partials = HashMap<String, Partial>()
@@ -304,7 +304,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun drawn(name: String): Triple<String, String?, Long>? = synchronized(lock) {
         val k = fold(name)
-        srcs[k]?.takeIf { !it.aside }?.let { Triple(it.name, it.mbid, it.crc) } ?: images[k]?.let { Triple(it.name, it.mbid, it.crc) }
+        srcs[k]?.takeIf { !it.aside && !it.failed }?.let { Triple(it.name, it.mbid, it.crc) } ?: images[k]?.let { Triple(it.name, it.mbid, it.crc) }
     }
 
     val pushing: String? get() = synchronized(lock) { push?.name }
@@ -1425,8 +1425,10 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             return Answer.Fail(Err.badValue, "bad value")
         }
         partials.remove(key)
-        val old = images.remove(key)
-        srcs[key] = Src(p.name, pushMbid, p.crc, bytes, p.w, p.h, false, pushMeta, p.focus, opts.wall() / 1000, (srcs[key]?.origins ?: old?.origins ?: 0) or p.origins)
+        val old = images[key]
+        val failed = key in faults.srcFail
+        if (!failed) images.remove(key)
+        srcs[key] = Src(p.name, pushMbid, p.crc, bytes, p.w, p.h, false, pushMeta, p.focus, opts.wall() / 1000, (srcs[key]?.origins ?: old?.origins ?: 0) or p.origins, failed)
         opts.log("stored source name=${p.name} ${p.w}x${p.h} bytes=${bytes.size} focus=${p.focus?.let { "${it.first},${it.second}" } ?: "none"}")
         return Answer.Ok()
     }
@@ -1453,7 +1455,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             s.aside = true
             opts.log("source aside name=${s.name}")
         } }
-        images[key] = Stored(p.name, pushMbid, p.crc, bytes, ++storeClock, pushMeta, (images[key]?.origins ?: 0) or p.origins)
+        images[key] = Stored(p.name, pushMbid, p.crc, bytes, ++storeClock, pushMeta, (images[key]?.origins ?: 0) or p.origins, opts.wall() / 1000)
         evict(key)
         opts.imgDir?.let { dir ->
             val f = File(dir.apply { mkdirs() }, "%08x.jpg".format(p.crc))
@@ -1484,10 +1486,10 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         } else (images.keys + srcs.keys).map { k ->
             val i = images[k]
             val s = srcs[k]
-            val shows = s != null && !s.aside
+            val shows = s != null && !s.aside && !s.failed
             ImgEntry(
                 s?.name ?: i!!.name, s?.mbid ?: i?.mbid, origins((i?.origins ?: 0) or (s?.origins ?: 0)),
-                shows, s?.shownS ?: (opts.wall() / 1000), if (shows) s!!.crc else i?.crc, s?.takeIf { it.aside }?.crc,
+                shows, s?.shownS ?: i?.shownS, if (shows) s!!.crc else i?.crc, s?.takeIf { it.aside || it.failed }?.crc,
             )
         }
         val offset = n(b.long(Tags.ImgList.offset), 0).coerceAtMost(all.size)

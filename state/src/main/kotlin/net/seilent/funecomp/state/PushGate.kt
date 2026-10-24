@@ -35,6 +35,15 @@ object PushGate {
 
     fun card(d: DeviceState): Boolean = d.cardDown
 
+    fun rearm(d: DeviceState): Boolean = !d.cardDown && d.playback.state.imgHold != true
+
+    fun refetch(d: DeviceState, now: Long): Boolean {
+        if (!rearm(d)) return false
+        if (open(d, now)) return true
+        val at = d.playback.stoppedAt ?: return false
+        return now - at >= Proto.imgRefetchIdleMs
+    }
+
     fun bluetooth(d: DeviceState): Boolean {
         val s = d.playback.state
         return s.playing == true && (s.output == Enums.Output.btHeadset || s.output == Enums.Output.phoneReceiver)

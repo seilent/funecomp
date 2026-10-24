@@ -12,6 +12,21 @@ class FullPush(
     constructor(s: FullSource, bluetooth: () -> Boolean = { false }, log: (String) -> Unit = {}) : this(s::of, s::refused, bluetooth, log)
 
     private var low: Session? = null
+    private val sent = HashMap<String, Pair<Long, String>>()
+
+    @Synchronized
+    fun sent(name: String, crc: Long, key: String) {
+        sent[Names.fold(name)] = crc to key
+    }
+
+    @Synchronized
+    fun sentAs(name: String, srcCrc: Long): String? {
+        val k = Names.fold(name)
+        val (crc, key) = sent[k] ?: return null
+        if (crc != srcCrc) return null
+        sent.remove(k)
+        return key
+    }
 
     fun of(key: String): Full? = source(key)
 

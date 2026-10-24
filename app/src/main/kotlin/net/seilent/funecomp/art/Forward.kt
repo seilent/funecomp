@@ -39,6 +39,7 @@ class Forward(
     private val upgrades: Upgrades? = null,
     private val looking: () -> Boolean = { true },
     private val full: FullPush? = null,
+    private val refetch: Refetch? = null,
     private val log: (String) -> Unit = {},
 ) {
     interface Upgrades {
@@ -49,6 +50,29 @@ class Forward(
     }
 
     class Upgraded(val replaced: Boolean, val bytes: Long, val key: String = "", val at: Long = 0)
+
+    class Refetch(
+        val data: () -> Boolean,
+        val rearm: () -> Boolean,
+        val unmetered: () -> Boolean,
+        val epoch: () -> Int,
+        val playing: () -> Boolean,
+        val gapMs: Long = Proto.imgRefetchGapMs.toLong(),
+        val clock: () -> Long = { System.nanoTime() / 1_000_000 },
+        val sleep: (Long) -> Unit = { Thread.sleep(it) },
+    )
+
+    private class Item(val name: String, val mbid: String?, val entry: ImgEntry)
+
+    private class Queue(val session: Session, val epoch: Int, val items: MutableList<Item>, val room: Long?) {
+        val total = items.size
+        var done = 0
+        var bytes = 0L
+        var lastAt: Long? = null
+        var lastLen = 0L
+        var ladder = 0
+        val tries = HashMap<String, Int>()
+    }
 
     class Blocks(
         val records: ArtBlocks,
@@ -72,6 +96,7 @@ class Forward(
     private class Listed(val session: Session, val listing: ArtPusher.Listing, val records: Set<Pair<String, Long>>)
 
     private var known: Known? = null
+    private var queue: Queue? = null
     private var listed: Listed? = null
     private var libSet: Triple<Session, Long?, Set<String>?>? = null
     private var absent: Pair<Session, MutableSet<String>>? = null
@@ -87,29 +112,37 @@ class Forward(
         val st = device().playback.state
         val listed = cachedLib(s)
         val front = { n: String -> listed?.let { if (ArtKey.fold(n) in it) Enums.ImgOrigin.library else Enums.ImgOrigin.phone } }
-        val cur = { n: String -> if (st.source == Enums.Source.local) front(n) else ArtPusher.origin(st.source) }
-        val now = pusher.run(ArtPusher.order(st).filter { real(it.first) }, originOf = cur)
-        claim(s, now, cur)
-        note(s, "current", now)
-        if (now.stop != ArtPusher.Stop.DONE) return now
-        val up = upcoming(s, st, keep).filter { real(it.first) }
-        if (up.isNotEmpty()) {
-            val q = pusher.run(up, originOf = front)
-            claim(s, q, front)
-            note(s, "queue", q)
-            if (q.stop != ArtPusher.Stop.DONE) return q
+        val curOrigin = { n: String -> if (st.source == Enums.Source.local) front(n) else ArtPusher.origin(st.source) }
+        var now: ArtPusher.Report? = null
+        val stop = run {
+            val cur = pusher.run(ArtPusher.order(st).filter { real(it.first) }, originOf = curOrigin)
+            claim(s, cur, curOrigin)
+            note(s, "current", cur)
+            now = cur
+            if (cur.stop != ArtPusher.Stop.DONE) return@run cur
+            val up = upcoming(s, st, keep).filter { real(it.first) }
+            if (up.isNotEmpty()) {
+                val q = pusher.run(up, originOf = front)
+                claim(s, q, front)
+                note(s, "queue", q)
+                if (q.stop != ArtPusher.Stop.DONE) return@run q
+            }
+            val playing = ArtPusher.order(st).filter { real(it.first) }
+            upgrade(s, pusher, keep, playing.map { Triple(it.first, it.second, curOrigin(it.first)) } + up.map { Triple(it.first, it.second, front(it.first)) }, null)?.let { return@run it }
+            if (retagging() && s.hello?.has("imgOrigin") == true) retag(s, library, keep)?.let { return@run it }
+            if (holding()) held(s, library, keep)?.let { return@run it }
+            if (!looking()) return now!!
+            upgrades?.takeIf { it.open() }?.let { u ->
+                val seen = (playing + up).mapTo(HashSet()) { it.first }
+                pending(s, library, keep, u, seen)?.let { return@run it }
+                upgrade(s, library, keep, u.due().filter { real(it.first) && it.first !in seen }.map { Triple(it.first, it.second, libOrigin(s, keep, it.first)) }, u::open)?.let { return@run it }
+            }
+            null
         }
-        val playing = ArtPusher.order(st).filter { real(it.first) }
-        upgrade(s, pusher, keep, playing.map { Triple(it.first, it.second, cur(it.first)) } + up.map { Triple(it.first, it.second, front(it.first)) }, null)?.let { return it }
-        if (retagging() && s.hello?.has("imgOrigin") == true) retag(s, library, keep)?.let { return it }
-        if (holding()) held(s, library, keep)?.let { return it }
-        if (!looking()) return now
-        upgrades?.takeIf { it.open() }?.let { u ->
-            val seen = (playing + up).mapTo(HashSet()) { it.first }
-            pending(s, library, keep, u, seen)?.let { return it }
-            upgrade(s, library, keep, u.due().filter { real(it.first) && it.first !in seen }.map { Triple(it.first, it.second, libOrigin(s, keep, it.first)) }, u::open)?.let { return it }
-        }
-        if (!sweeping()) return now
+        if (stop != null && stop.stop != ArtPusher.Stop.GATE) return stop
+        repush(s, library, keep)?.let { return it }
+        if (stop != null) return stop
+        if (!sweeping()) return now!!
         return sweep(s, library, keep)
     }
 
@@ -256,7 +289,7 @@ class Forward(
         val k = known?.takeIf { it.session === s && it.rev == rev } ?: run {
             val l = pusher.listing() ?: return stopped(s)
             val cap = l.cap ?: return null
-            Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l), orphans(l), libOnly(l)).also { known = it }
+            Known(s, rev, l.names, budget(pusher, l, cap), untagged(l), orphans(l), libOnly(l)).also { known = it }
         }
         var dirty = false
         try {
@@ -346,6 +379,136 @@ class Forward(
         }
         report(ArtPusher.Stop.DONE)
         return null
+    }
+
+    private fun repush(s: Session, pusher: ArtPusher, keep: () -> Boolean): ArtPusher.Report? {
+        if (!looking()) return null
+        val rf = refetch ?: return null
+        val fp = full ?: return null
+        if (!pusher.sources) return null
+        val epoch = rf.epoch()
+        val q = queue?.takeIf { it.session === s && it.epoch == epoch } ?: run {
+            val l = pusher.listing() ?: return if (s.closedReason != null || !keep()) stopped(s) else if (carded(pusher)) ArtPusher.Report(ArtPusher.Stop.GATE) else null
+            val blocked = deleted(s, l, keep) ?: return stopped(s)
+            failed(fp, l)
+            Queue(s, epoch, order(s, l, blocked, keep), l.srcRoom).also {
+                queue = it
+                log("art repush list ${it.total} of ${l.entries.size} room=${l.srcRoom}")
+            }
+        }
+        var i = 0
+        while (i < q.items.size) {
+            if (!keep()) return ArtPusher.Report(ArtPusher.Stop.PREEMPTED)
+            if (s.closedReason != null) return ArtPusher.Report(ArtPusher.Stop.CLOSED)
+            if (cardDown()) return ArtPusher.Report(ArtPusher.Stop.GATE)
+            val it = q.items[i]
+            val noData = (q.room ?: 0) <= 0 || fp.low(s)
+            if (!cached(it.name, it.mbid) && (!rf.unmetered() || breaker.open || !online() || noData || !rf.data())) {
+                i++
+                continue
+            }
+            val a = try {
+                lookup(it.name, it.mbid, ArtPusher.FIT_W, ArtPusher.FIT_H, true)
+            } catch (e: IOException) {
+                null
+            }
+            val f = a?.key?.let { k -> fp.of(k) }
+            if (f == null) {
+                q.items.removeAt(i)
+                continue
+            }
+            val rearm = it.entry.srcCrc != null && it.entry.srcCrc == f.crc
+            if (rearm && !rf.rearm()) return ArtPusher.Report(ArtPusher.Stop.GATE)
+            if (!rearm && noData) {
+                i++
+                continue
+            }
+            if (!paced(q, rf, keep)) return ArtPusher.Report(ArtPusher.Stop.PREEMPTED)
+            val t0 = rf.clock()
+            val one = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, true) }, fp, keep) { if (rearm) rf.rearm() else rf.data() }
+            val origin = it.entry.origins.firstOrNull() ?: if (holding()) libOrigin(s, keep, it.name) else cachedLib(s)?.let { lib -> if (ArtKey.fold(it.name) in lib) Enums.ImgOrigin.library else Enums.ImgOrigin.phone }
+            val r = one.run(listOf(it.name to it.mbid), origin = origin, rearm = rearm)
+            claim(s, r) { origin }
+            q.lastAt = rf.clock()
+            q.lastLen = q.lastAt!! - t0
+            when {
+                it.name in r.pushed || it.name in r.stored || it.name in r.missing -> {
+                    q.items.removeAt(i)
+                    q.done++
+                    q.ladder = 0
+                    if (it.name in r.pushed) q.bytes += f.bytes.size
+                    log("art repush ${q.done} of ${q.total} ${q.bytes}")
+                }
+                r.stop == ArtPusher.Stop.ABORTED && r.code == Err.busy && !r.aborted -> {
+                    val wait = Proto.backoffMs[minOf(q.ladder++, Proto.backoffMs.size - 1)]
+                    if (!pause(wait, rf, keep)) return ArtPusher.Report(ArtPusher.Stop.PREEMPTED)
+                }
+                r.stop != ArtPusher.Stop.DONE -> return r
+                else -> {
+                    val n = (q.tries[it.name] ?: 0) + 1
+                    q.tries[it.name] = n
+                    if (n >= Proto.imgRefetchTries) q.items.removeAt(i)
+                }
+            }
+        }
+        return null
+    }
+
+    private fun paced(q: Queue, rf: Refetch, keep: () -> Boolean): Boolean {
+        val last = q.lastAt ?: return true
+        val gap = if (rf.playing()) maxOf(rf.gapMs, q.lastLen) else rf.gapMs
+        return pause(last + gap - rf.clock(), rf, keep)
+    }
+
+    private fun pause(ms: Long, rf: Refetch, keep: () -> Boolean): Boolean {
+        val end = rf.clock() + ms
+        while (rf.clock() < end) {
+            if (!keep()) return false
+            rf.sleep(minOf(PAUSE_STEP_MS, end - rf.clock()).coerceAtLeast(1))
+        }
+        return true
+    }
+
+    private fun failed(fp: FullPush, l: ArtPusher.Listing) {
+        for (e in l.entries) {
+            if (e.full == true) continue
+            val key = e.srcCrc?.let { fp.sentAs(e.name, it) } ?: continue
+            fp.refused(key)
+            log("art repush render failed or set aside ${e.name}")
+        }
+    }
+
+    private fun order(s: Session, l: ArtPusher.Listing, blocked: Set<Long>, keep: () -> Boolean): MutableList<Item> {
+        val recorded = { e: ImgEntry -> blocks?.let { b -> b.records.records().any { r -> matches(r, e, b) } } == true }
+        val open = l.entries.filter { it.full != true && it.name in l.names && it.name.isNotBlank() && real(it.name) && !recorded(it) && it.srcCrc !in blocked }
+        val st = device().playback.state
+        val first = ArtPusher.order(st).map { it.first } + upcoming(s, st, keep).map { it.first }
+        val rank = HashMap<String, Int>()
+        first.forEachIndexed { i, n -> rank.putIfAbsent(Names.fold(n), i) }
+        return open.sortedWith(compareBy<ImgEntry> { rank[Names.fold(it.name)] ?: Int.MAX_VALUE }.thenByDescending { it.shownS ?: 0 })
+            .mapTo(ArrayList()) { Item(it.name, it.mbid, it) }
+    }
+
+    private fun deleted(s: Session, l: ArtPusher.Listing, keep: () -> Boolean): Set<Long>? {
+        val b = blocks ?: return emptySet()
+        val crcs = b.records.records().mapNotNull {
+            when (it) {
+                is ArtBlocks.Block -> it.crc
+                is ArtBlocks.Reject -> it.crc
+                else -> null
+            }
+        }.toSet()
+        if (crcs.isEmpty()) return crcs
+        for (e in l.entries) {
+            if (e.crc !in crcs) continue
+            if (!keep()) return null
+            if (!b.open()) return crcs
+            val r = s.call(Msg.IMG_DEL, Req.imgDel(e.name))
+            log("art repush del ${e.name} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
+            if (r is Session.Result.Closed) return null
+            if (r is Session.Result.Ok) l.names.remove(e.name)
+        }
+        return crcs
     }
 
     private fun untagged(l: ArtPusher.Listing): MutableSet<String> =
@@ -638,6 +801,7 @@ class Forward(
         val PLACEHOLDERS = setOf("unknown artist", "null")
         const val CREDITS_EVERY = 20
         private const val MAX_RESTARTS = 3
+        private const val PAUSE_STEP_MS = 100L
 
         private fun real(name: String) = name.trim().lowercase() !in PLACEHOLDERS
 

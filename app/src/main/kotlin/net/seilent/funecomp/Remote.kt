@@ -106,6 +106,7 @@ object Remote : Control {
     private val REFUSALS = setOf(RECEIVER)
     private const val BACKDROP_SIDE = 2048
     private const val BACKDROP_MAX = 4096
+    private const val REFETCH_SLACK_MS = 200L
     private const val FETCH_W = 360
     private const val FETCH_H = 480
     private const val FACES = 64
@@ -942,6 +943,17 @@ object Remote : Control {
 
     private fun bluetooth(): Boolean = PushGate.bluetooth(device) || phoneA2dp()
 
+    internal fun refetchData(): Boolean = held(!Firmwares.sending && !phoneA2dp() && PushGate.refetch(device, SystemClock.elapsedRealtime()))
+
+    internal fun refetchRearm(): Boolean = held(!Firmwares.sending && PushGate.rearm(device))
+
+    private fun held(open: Boolean): Boolean {
+        if (open) wake?.hold(ART, ART_WAKE_MS)
+        return open
+    }
+
+    internal val wakeHeld: Set<String> get() = wake?.held ?: emptySet()
+
     private fun phoneGate(): Boolean {
         val open = PushGate.phoneArt(device) && !Firmwares.sending && !PushGate.card(device)
         if (open) wake?.hold(ART, ART_WAKE_MS)
@@ -996,6 +1008,13 @@ object Remote : Control {
             },
             { Main.sources(context).anyOn },
             FullPush(a.full, ::bluetooth) { Log.i(TAG, it) },
+            Forward.Refetch(
+                ::refetchData,
+                ::refetchRearm,
+                { unmetered },
+                { device.card.epoch },
+                { device.playback.state.playing == true },
+            ),
         ) { Log.i(TAG, it) }
         return ArtWorker(
             { l.session },
@@ -1369,6 +1388,7 @@ object Remote : Control {
                 trigger.incrementAndGet()
                 art?.want()
             }
+            if (old.playing == true && s.playing != true && device.has("imgSource")) main.postDelayed({ art?.want() }, Proto.imgRefetchIdleMs + REFETCH_SLACK_MS)
         }
 
         override fun onRefused(code: Int, abort: Boolean) {

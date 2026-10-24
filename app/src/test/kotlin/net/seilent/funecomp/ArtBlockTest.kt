@@ -327,6 +327,20 @@ class ArtBlockTest {
     }
 
     @Test
+    fun theRepushGatesHoldTheArtWakeWhenOpen() {
+        val (_, port) = chainSim(listOf("img-source"))
+        val c = link(port)
+        waitFor(10_000) { Remote.phase == Phase.LIVE && Remote.device.playback.state.output != null }
+        Remote.dropWake("art")
+        assertTrue(Remote.refetchRearm())
+        assertTrue("art" in Remote.wakeHeld)
+        Remote.dropWake("art")
+        waitFor(10_000) { Remote.refetchData() }
+        assertTrue("art" in Remote.wakeHeld)
+        c.destroy()
+    }
+
+    @Test
     fun noRenderedFileIsNotFoundAndANewImageIsStale() {
         val (s, port) = chainSim()
         Remote.shown(true)

@@ -29,6 +29,8 @@ class ArtPusher(
         val missing: List<String> = emptyList(),
         val failed: List<String> = emptyList(),
         val complete: Boolean = false,
+        val code: Int? = null,
+        val aborted: Boolean = false,
     ) {
         fun counts(): String {
             val names = (pushed.keys + failed + missing).take(NAMES)
@@ -94,8 +96,9 @@ class ArtPusher(
         return art(name, mbid, w, h)?.let { Form.Crop(it) } ?: Form.Missing
     }
 
-    private fun form(fp: FullPush, name: String, mbid: String?, w: Int, h: Int, a: Art): Form {
+    private fun form(fp: FullPush, name: String, mbid: String?, w: Int, h: Int, a: Art, rearm: Boolean = false): Form {
         val key = a.key ?: return crop(name, mbid, w, h, a)
+        if (rearm) return fp.of(key)?.let { Form.Source(it, key, true) } ?: Form.Missing
         val f = fp.of(key) ?: return crop(name, mbid, w, h, a)
         if (!fp.low(session) && !fp.bluetooth()) return Form.Source(f, key, false)
         val e = entry(name)
@@ -104,7 +107,7 @@ class ArtPusher(
         return crop(name, mbid, w, h, a)
     }
 
-    fun run(artists: List<Pair<String, String?>>, have: Set<String> = emptySet(), origin: Int? = null, originOf: (String) -> Int? = { origin }): Report {
+    fun run(artists: List<Pair<String, String?>>, have: Set<String> = emptySet(), origin: Int? = null, originOf: (String) -> Int? = { origin }, rearm: Boolean = false): Report {
         val hello = session.hello
         val w = hello?.backdropW
         val h = hello?.backdropH
@@ -116,7 +119,7 @@ class ArtPusher(
         val stored = ArrayList<String>()
         val missing = ArrayList<String>()
         val failed = ArrayList<String>()
-        fun report(stop: Stop) = Report(stop, pushed, stored, missing, failed)
+        fun report(stop: Stop, code: Int? = null, aborted: Boolean = false) = Report(stop, pushed, stored, missing, failed, code = code, aborted = aborted)
         val seen = HashSet<String>()
         val tags = hello.has("imgOrigin")
         var gated = false
@@ -149,7 +152,7 @@ class ArtPusher(
             val meta = if (hello.has("artBlock")) ImgMeta(a.wrongArtist, Sources.label(a.source), a.credit?.author?.takeIf { it.isNotBlank() }) else null
             var tries = 0
             var forms = 0
-            var form: Form = if (fp != null) form(fp, name, mbid, w, h, a) else Form.Crop(a)
+            var form: Form = if (fp != null) form(fp, name, mbid, w, h, a, rearm) else Form.Crop(a)
             while (true) {
                 val f = form
                 val push = when (f) {
@@ -168,10 +171,10 @@ class ArtPusher(
                 if (fp != null && f is Form.Source && forms++ < MAX_FORMS) {
                     val code = (o as? ImagePush.Outcome.Failed)?.error?.code ?: (o as? ImagePush.Outcome.Aborted)?.abort?.code?.let { ABORT_ERRORS[it] }
                     val next = when {
-                        f.rearm && o is ImagePush.Outcome.Gated -> crop(name, mbid, w, h, a)
+                        f.rearm && o is ImagePush.Outcome.Gated -> if (rearm) Form.Missing else crop(name, mbid, w, h, a)
                         code == Err.badValue || code == Err.tooBig -> {
                             fp.refused(f.key)
-                            form(fp, name, mbid, w, h, a)
+                            form(fp, name, mbid, w, h, a, rearm)
                         }
                         code == Err.noSpace -> {
                             fp.noSpace(session)
@@ -184,19 +187,20 @@ class ArtPusher(
                         continue
                     }
                 }
+                if (f is Form.Source && (o is ImagePush.Outcome.Done || o is ImagePush.Outcome.Have)) fp?.sent(name, f.f.crc, f.key)
                 when (o) {
                     is ImagePush.Outcome.Done -> pushed[name] = o.from
                     is ImagePush.Outcome.Have -> stored += name
                     is ImagePush.Outcome.Gated -> gated = true
                     is ImagePush.Outcome.Aborted -> {
                         if (session.closedReason != null) return report(Stop.CLOSED)
-                        if (o.abort.code in finalAborts) return report(Stop.ABORTED)
+                        if (o.abort.code in finalAborts) return report(Stop.ABORTED, o.abort.code, true)
                         if (++tries <= 1) continue
                         failed += name
                     }
                     is ImagePush.Outcome.Failed -> {
                         if (session.closedReason != null) return report(Stop.CLOSED)
-                        if (o.error?.code in finalErrors) return report(Stop.ABORTED)
+                        if (o.error?.code in finalErrors) return report(Stop.ABORTED, o.error?.code)
                         failed += name
                     }
                 }

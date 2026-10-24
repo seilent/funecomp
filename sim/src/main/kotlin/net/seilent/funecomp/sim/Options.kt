@@ -122,6 +122,7 @@ class Faults(specs: List<String>) {
     var srcRoom = 6_442_450_944L
     var srcRefuse = 0
     var srcNoSpace = false
+    val srcFail = HashSet<String>()
 
     init {
         val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
@@ -171,6 +172,7 @@ class Faults(specs: List<String>) {
                 "src-room" -> srcRoom = v.toLong()
                 "src-refuse" -> srcRefuse = v.toInt()
                 "src-nospace" -> srcNoSpace = true
+                "src-fail" -> srcFail += v.trim().lowercase()
                 "abort-at" -> abortAt = v.toLong()
                 "upd-abort-at" -> updAbortAt = v.toLong()
                 "features" -> features = v.toLong()
