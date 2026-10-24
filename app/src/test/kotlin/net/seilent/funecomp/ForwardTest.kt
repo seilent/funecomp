@@ -115,12 +115,14 @@ class ForwardTest {
         onLibGet: (Session) -> Unit = {},
         known: (String, String?) -> Boolean = { _, _ -> true },
         gate: () -> Boolean = { true },
+        upgrades: Forward.Upgrades? = null,
+        version: (String) -> Int = { 0 },
     ) = Forward(
         { device },
         { n, m, w, h ->
             looked.names += n
             if (fail) throw IOException("http 403: x")
-            if (missing(n)) null else Art(jpeg(w, h), w, h, n, m, "test", null)
+            if (missing(n)) null else Art(jpeg(w, h, 2000 + version(n)), w, h, n, m, "test", null)
         },
         {
             looked.gates++
@@ -137,8 +139,24 @@ class ForwardTest {
         marks = marks,
         blocks = blocks,
         cached = known,
+        upgrades = upgrades,
         log = log,
     )
+
+    private class Ups(@Volatile var open: Boolean, val due: List<String>, val replace: Set<String> = emptySet()) : Forward.Upgrades {
+        val ran: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val done = Collections.synchronizedSet(HashSet<String>())
+        override fun due() = due.filter { it !in done }.map { it to null }
+        val ats = java.util.concurrent.ConcurrentHashMap<String, Long>()
+        override fun run(name: String, mbid: String?, w: Int, h: Int): Forward.Upgraded? {
+            if (!done.add(name)) return null
+            ran += name
+            if (name in replace) ats[name] = 1
+            return Forward.Upgraded(name in replace, 1000, name, 1)
+        }
+        override fun open() = open
+        override fun at(key: String) = ats[key]
+    }
 
     private fun stores() = synchronized(lines) { lines.filter { it.startsWith("stored name=") } }.map { it.removePrefix("stored name=").substringBefore(" mbid=") }
 
@@ -153,6 +171,169 @@ class ForwardTest {
         assertEquals(200, stores().size)
         assertEquals(200, stores().toSet().size)
         assertTrue(lines.any { it.startsWith("stored name=Artist 002 mbid=mb-002") })
+    }
+
+    @Test
+    fun theCurrentAndQueueArtistsUpgradeOnAnyNetworkAndTheRestOnlyWhenOpen() {
+        val (_, port) = sim(30)
+        val s = session(port)
+        val logged: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val ups = Ups(false, (1..30).map { "Artist %03d".format(it) })
+        assertEquals(ArtPusher.Stop.DONE, forward(Lookups(), upgrades = ups, log = { logged += it }).run(s) { true }.stop)
+        assertEquals((1..6).map { "Artist %03d".format(it) }, ups.ran.sorted())
+        assertTrue(logged.contains("art upgrade 6 of 6 6000"))
+        ups.open = true
+        forward(Lookups(), upgrades = ups).run(s) { true }
+        assertEquals((1..30).map { "Artist %03d".format(it) }, ups.ran.sorted())
+    }
+
+    @Test
+    fun aReplacedPhotoIsPushedAgain() {
+        val (sim, port) = sim(30)
+        val s = session(port)
+        val versions = HashMap<String, Int>()
+        val ups = Ups(true, listOf("Artist 001", "Artist 020"), setOf("Artist 001", "Artist 020"))
+        val f = forward(Lookups(), upgrades = object : Forward.Upgrades by ups {
+            override fun run(name: String, mbid: String?, w: Int, h: Int) = ups.run(name, mbid, w, h)?.also { if (it.replaced) synchronized(versions) { versions[name] = 1 } }
+        }, version = { synchronized(versions) { versions[it] ?: 0 } })
+        f.run(s) { true }
+        assertEquals((1..6).map { "Artist %03d".format(it) } + "Artist 020", ups.ran.sorted())
+        assertEquals(2, stores().count { it == "Artist 001" })
+        assertEquals(1, stores().count { it == "Artist 002" })
+        assertEquals(1, stores().count { it == "Artist 020" })
+        assertEquals(1, stores().count { it == "Artist 019" })
+        assertEquals(30, sim.device.stored.size)
+    }
+
+    private class Versioned(private val ups: Ups) : Forward.Upgrades by ups {
+        val versions = java.util.concurrent.ConcurrentHashMap<String, Int>()
+        override fun run(name: String, mbid: String?, w: Int, h: Int) = ups.run(name, mbid, w, h)?.also { if (it.replaced) versions[name] = 1 }
+    }
+
+    @Test
+    fun anInterruptedRestUpgradeStillReachesTheDeviceOnTheNextRun() {
+        val (_, port) = sim(30)
+        val s = session(port)
+        val ups = Ups(false, listOf("Artist 020", "Artist 021"), setOf("Artist 020", "Artist 021"))
+        val v = Versioned(ups)
+        val f = forward(Lookups(), upgrades = v, version = { v.versions[it] ?: 0 }, blocks = blocks(ArtBlocks(), "tcp:A"))
+        f.run(s) { true }
+        assertEquals(1, stores().count { it == "Artist 020" })
+        ups.open = true
+        f.run(s) { "Artist 020" !in ups.ran }
+        assertFalse("Artist 021" in ups.ran)
+        f.run(s) { true }
+        assertEquals(2, stores().count { it == "Artist 020" })
+        assertEquals(2, stores().count { it == "Artist 021" })
+    }
+
+    @Test
+    fun aReplacedPhotoIsQueuedForEveryOtherDevice() {
+        val (_, port) = sim(30)
+        val s = session(port)
+        val records = ArtBlocks()
+        records.upgrades("tcp:B")
+        val ups = Ups(false, listOf("Artist 020"), setOf("Artist 020"))
+        val v = Versioned(ups)
+        val f = forward(Lookups(), upgrades = v, version = { v.versions[it] ?: 0 }, blocks = blocks(records, "tcp:A"))
+        f.run(s) { true }
+        ups.open = true
+        f.run(s) { true }
+        assertEquals(2, stores().count { it == "Artist 020" })
+        assertEquals(listOf("Artist 020"), records.upgrades("tcp:B").map { it.name })
+        assertTrue(records.upgrades("tcp:A").isEmpty())
+        assertTrue(records.pushes("tcp:B").isEmpty())
+    }
+
+    private fun begins() = synchronized(lines) { lines.filter { it.startsWith("begin name=") } }.map { it.removePrefix("begin name=").substringBefore(" origin=") }
+
+    @Test
+    fun anotherDeviceGetsAPendingUpgradeOnlyAfterTheCurrentArtistAndOnlyWhenItHoldsTheName() {
+        val records = ArtBlocks()
+        var dev = "tcp:A"
+        val ups = Ups(false, emptyList())
+        val bd = Forward.Blocks(records, { dev }, { n, m -> m ?: "name:$n" })
+        val (_, portB) = sim(30)
+        val b = session(portB)
+        dev = "tcp:B"
+        forward(Lookups(), upgrades = ups, blocks = bd).run(b) { true }
+        records.upgraded("Artist 020", "Artist 020", null, 1, "tcp:A")
+        records.upgraded("Artist 025", "Artist 025", null, 1, "tcp:A")
+        records.upgraded("Artist 026", "Artist 026", null, 1, "tcp:A")
+        ups.ats["Artist 020"] = 1
+        ups.ats["Artist 025"] = 2
+        ups.open = true
+        synchronized(lines) { lines.clear() }
+        forward(Lookups(), upgrades = ups, blocks = bd, version = { if (it == "Artist 020") 1 else 0 }).run(b) { true }
+        val order = begins()
+        assertEquals("Artist 001", order.first())
+        assertTrue(order.indexOf("Artist 020") > order.indexOf("Artist 006"))
+        assertEquals(listOf("Artist 020"), stores().filter { it == "Artist 020" })
+        assertTrue(records.upgrades("tcp:B").isEmpty())
+        assertTrue(records.upgrades("tcp:C").none { it.name == "Artist 025" || it.name == "Artist 026" })
+
+        val (_, portC) = sim(10)
+        val c = session(portC)
+        dev = "tcp:C"
+        synchronized(lines) { lines.clear() }
+        forward(Lookups(), sweeping = { false }, upgrades = ups, blocks = bd).run(c) { true }
+        assertFalse("Artist 020" in begins())
+        assertTrue(records.upgrades("tcp:C").isEmpty())
+    }
+
+    @Test
+    fun aPendingUpgradeKeepsThePhoneOrigin() {
+        val records = ArtBlocks()
+        val ups = Ups(false, emptyList())
+        val (_, port) = sim(30, minor = Proto.minor)
+        val s = session(port)
+        val bd = Forward.Blocks(records, { "tcp:B" }, { n, m -> m ?: "name:$n" })
+        forward(Lookups(), upgrades = ups, blocks = bd).run(s) { true }
+        records.upgraded("Artist 020", "Artist 020", null, 1, "tcp:A", Enums.ImgOrigin.phone)
+        ups.ats["Artist 020"] = 1
+        ups.open = true
+        synchronized(lines) { lines.clear() }
+        forward(Lookups(), upgrades = ups, blocks = bd, version = { if (it == "Artist 020") 1 else 0 }).run(s) { true }
+        assertTrue(synchronized(lines) { lines.toList() }.any { it == "begin name=Artist 020 origin=phone" })
+    }
+
+    @Test
+    fun pendingUpgradesStopWhenTheUnmeteredGateCloses() {
+        val records = ArtBlocks()
+        val ups = Ups(false, emptyList())
+        val (_, port) = sim(30)
+        val s = session(port)
+        val bd = Forward.Blocks(records, { "tcp:B" }, { n, m -> m ?: "name:$n" })
+        forward(Lookups(), upgrades = ups, blocks = bd).run(s) { true }
+        records.upgraded("Artist 020", "Artist 020", null, 1, "tcp:A")
+        records.upgraded("Artist 021", "Artist 021", null, 1, "tcp:A")
+        ups.ats["Artist 020"] = 1
+        ups.ats["Artist 021"] = 1
+        val gated = object : Forward.Upgrades by ups {
+            override fun open() = stores().count { it == "Artist 020" } < 2
+        }
+        forward(Lookups(), upgrades = gated, blocks = bd, version = { if (it == "Artist 020" || it == "Artist 021") 1 else 0 }).run(s) { true }
+        assertEquals(2, stores().count { it == "Artist 020" })
+        assertEquals(1, stores().count { it == "Artist 021" })
+        assertEquals(listOf("Artist 021"), records.upgrades("tcp:B").map { it.name })
+    }
+
+    @Test
+    fun theRestUpgradesRunWhenTheSweepIsKept() {
+        val (_, port) = sim(30)
+        val s = session(port)
+        val logged: MutableList<String> = Collections.synchronizedList(ArrayList())
+        val ups = Ups(false, listOf("Artist 025"))
+        val f = forward(Lookups(), marks = Kept(), upgrades = ups, log = { logged += it })
+        f.run(s) { true }
+        f.run(s) { true }
+        assertTrue(logged.contains("art sweep kept"))
+        assertFalse("Artist 025" in ups.ran)
+        logged.clear()
+        ups.open = true
+        f.run(s) { true }
+        assertTrue(logged.contains("art sweep kept"))
+        assertTrue("Artist 025" in ups.ran)
     }
 
     @Test

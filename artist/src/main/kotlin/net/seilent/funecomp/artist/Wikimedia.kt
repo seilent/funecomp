@@ -58,7 +58,10 @@ class Wikimedia(
         }
     }
 
-    fun file(name: String): Candidate? = info(listOf(name), THUMB_W).firstOrNull()?.let { Candidate(it.url, SOURCE, it.credit, it.title) }
+    fun file(name: String, targets: Targets = Targets.NONE): Candidate? = info(listOf(name), THUMB_W).firstOrNull()?.let { i ->
+        val url = sized(i, targets)
+        Candidate(url, SOURCE, i.credit, i.title, i.w, i.h, i.url.takeIf { it != url })
+    }
 
     private fun p18(qid: String): List<String> =
         api.json("$wikidata/w/api.php?action=wbgetclaims&entity=$qid&property=P18&format=json")

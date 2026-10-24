@@ -502,6 +502,226 @@ class SizeTest {
         assertEquals(PickLink.TOO_SMALL, art().check(Fixtures.gen("300x400@5")))
     }
 
+    private fun hit(key: String, source: String, url: String, spec: String, mbid: String? = null): ArtCache.Entry {
+        val src = Fixtures.gen(spec)
+        cache.putHit(ArtCache.Entry(key, name, mbid, source, null, url, 5, ImageIds.of(source, url), ArtCache.sha256(src)), src)
+        return cache.hit(key)!!
+    }
+
+    @Test
+    fun theUpgradeTriesTheSameImageLargerFirst() {
+        val e = hit(kobasolo, Sources.YOUTUBE, og, "900x900@5", kobasolo)
+        serve(yt(0), "3000x3000@5")
+        val a = art()
+        assertTrue(a.upgradable(e))
+        assertEquals(listOf(kobasolo), a.upgrades().map { it.key })
+        assertTrue(a.upgrade(e, 240, 320).replaced)
+        val n = cache.hit(kobasolo)!!
+        assertEquals(yt(0), n.url)
+        assertEquals(e.id, n.id)
+        assertEquals(3000 to 3000, n.w to n.h)
+        assertTrue(cache.rendered(kobasolo, 240, 320) != null)
+        assertEquals(listOf(yt(0)), http.calls)
+        assertFalse(a.upgradable(n))
+    }
+
+    @Test
+    fun theUpgradeTakesAnotherImageOfTheSameSourceThatFitsTheTarget() {
+        sources = Sources.NONE.copy(discogs = true)
+        discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600), Triple(dc(3), 1700, 1700))
+        val e = hit(artist, Sources.DISCOGS, dc(1), "400x400@5", artist)
+        serve(dc(3), "1700x1700@5")
+        assertTrue(art().upgrade(e, 240, 320).replaced)
+        assertEquals(dc(3), cache.hit(artist)!!.url)
+        assertFalse(dc(2) in http.calls)
+    }
+
+    @Test
+    fun anUpgradeNeverUndoesAChangeMadeWhileItDownloaded() {
+        val e = hit(kobasolo, Sources.YOUTUBE, og, "900x900@5", kobasolo)
+        val before = http.answer
+        http.answer = { u ->
+            if (u == yt(0)) {
+                cache.drop(kobasolo)
+                Response(200, Fixtures.gen("1600x1600@5"))
+            } else {
+                before(u)
+            }
+        }
+        assertFalse(art().upgrade(e, 240, 320).replaced)
+        assertNull(cache.hit(kobasolo))
+    }
+
+    @Test
+    fun anUpgradeRecordIsReplacedByTheNextUpgradeAndDroppedByABlockOrADrop() {
+        val f = tmp.root.resolve("up.tsv")
+        val r = ArtBlocks(f)
+        r.upgrades("tcp:B")
+        r.upgraded("k1", "One", null, 1, "tcp:A")
+        r.upgraded("k1", "One", null, 2, null)
+        r.upgraded("k2", "Two", null, 1, null)
+        r.upgraded("k3", "Three", null, 1, null)
+        r.save()
+        val back = ArtBlocks(f)
+        assertEquals(listOf("k1" to 2L, "k2" to 1L, "k3" to 1L), back.upgrades("tcp:A").map { it.key to it.at })
+        back.upgradeDone(back.upgrades("tcp:A").first(), "tcp:A")
+        assertEquals(listOf("k2", "k3"), back.upgrades("tcp:A").map { it.key })
+        back.add(ArtBlocks.Block("k2", null, Sources.DEEZER, "x", "", "Two", 5))
+        back.drop("k3", null, "Three", 5)
+        assertEquals(listOf("k1"), back.upgrades("tcp:B").map { it.key })
+        back.upgradeDone(back.upgrades("tcp:B").single(), "tcp:B")
+        assertTrue(back.upgrades("tcp:C").isEmpty())
+    }
+
+    @Test
+    fun anUpgradeRecordKeepsItsOriginAndIsDroppedOnceEveryKnownDeviceHasIt() {
+        val f = tmp.root.resolve("up2.tsv")
+        val r = ArtBlocks(f)
+        r.upgrades("tcp:A")
+        r.upgrades("tcp:B")
+        r.upgraded("k1", "One", null, 1, null, net.seilent.funecomp.proto.gen.Enums.ImgOrigin.phone)
+        r.save()
+        val back = ArtBlocks(f)
+        val u = back.upgrades("tcp:A").single()
+        assertEquals(net.seilent.funecomp.proto.gen.Enums.ImgOrigin.phone, u.origin)
+        back.upgradeDone(u, "tcp:A")
+        assertEquals(listOf("k1"), back.upgrades("tcp:B").map { it.key })
+        back.upgradeDone(back.upgrades("tcp:B").single(), "tcp:B")
+        back.save()
+        assertFalse(f.readText().contains("upgrade\tk1"))
+    }
+
+    @Test
+    fun aDifferentImageBelowTheTargetNeverReplacesTheHit() {
+        sources = Sources.NONE.copy(theAudioDb = true)
+        val thumb = "https://r2.theaudiodb.com/images/media/artist/thumb/sz.jpg"
+        val fanart = "https://r2.theaudiodb.com/images/media/artist/fanart/sz.jpg"
+        page("https://www.theaudiodb.com/api/v1/json/123/artist-mb.php?i=$artist", "{\"artists\":[{\"strArtistThumb\":\"$thumb\",\"strArtistFanart\":\"$fanart\"}]}")
+        val e = hit(artist, Sources.THE_AUDIO_DB, thumb, "700x700@5", artist)
+        serve(fanart, "1280x720@5")
+        assertFalse(art().upgrade(e, 240, 320).replaced)
+        assertEquals(thumb, cache.hit(artist)!!.url)
+        assertFalse(fanart in http.calls)
+    }
+
+    @Test
+    fun aLargerDifferentDiscogsImageBelowTheTargetNeverReplacesTheHit() {
+        sources = Sources.NONE.copy(discogs = true)
+        discogs(Triple(dc(1), 400, 400), Triple(dc(2), 1700, 1700))
+        val e = hit(artist, Sources.DISCOGS, dc(1), "400x400@5", artist)
+        serve(dc(2), "900x900@5")
+        assertFalse(art().upgrade(e, 240, 320).replaced)
+        assertEquals(dc(1), cache.hit(artist)!!.url)
+        assertTrue(dc(2) in http.calls)
+    }
+
+    @Test
+    fun aSmallerOrEqualCandidateNeverReplacesTheHit() {
+        sources = Sources.NONE.copy(discogs = true)
+        discogs(Triple(dc(1), 600, 600), Triple(dc(2), 1700, 1700), Triple(dc(3), 500, 500))
+        val e = hit(artist, Sources.DISCOGS, dc(1), "600x600@5", artist)
+        serve(dc(2), "450x450@5")
+        serve(dc(3), "600x600@6")
+        assertFalse(art().upgrade(e, 240, 320).replaced)
+        assertEquals(dc(1), cache.hit(artist)!!.url)
+    }
+
+    @Test
+    fun theUpgradeNeverTakesAnotherSource() {
+        sources = Sources.NONE.copy(discogs = true, deezer = true)
+        discogs(Triple(dc(1), 400, 400))
+        val e = hit(artist, Sources.DISCOGS, dc(1), "400x400@5", artist)
+        serve(dz(one), "1000x1000@5")
+        assertFalse(art().upgrade(e, 240, 320).replaced)
+        assertEquals(dc(1), cache.hit(artist)!!.url)
+        assertFalse(http.calls.any { it.contains("deezer") })
+    }
+
+    @Test
+    fun aDeezerUpgradeIsOnlyTheSameHashLarger() {
+        deezer(one, two)
+        val e = hit("name:sztest", Sources.DEEZER, dz(one), "1000x1000@5")
+        http.queued[dz(one, 1680)] = ArrayDeque(listOf(Response(403, ByteArray(0))))
+        serve(dz(two), "1000x1000@6")
+        serve(dz(two, 1680), "1800x1800@6")
+        assertFalse(art().upgrade(e, 240, 320).replaced)
+        assertEquals(one, cache.hit("name:sztest")!!.id)
+        assertFalse(dzSearch in http.calls)
+    }
+
+    @Test
+    fun aBlockedLargerCandidateIsNotTakenByTheUpgrade() {
+        sources = Sources.NONE.copy(discogs = true)
+        discogs(Triple(dc(1), 400, 400), Triple(dc(2), 1700, 1700))
+        val e = hit(artist, Sources.DISCOGS, dc(1), "400x400@5", artist)
+        blocks.add(ArtBlocks.Block(artist, artist, Sources.DISCOGS, ImageIds.of(Sources.DISCOGS, dc(2)), "", name, 1))
+        serve(dc(2), "1700x1700@5")
+        assertFalse(art().upgrade(e, 240, 320).replaced)
+        assertFalse(dc(2) in http.calls)
+    }
+
+    @Test
+    fun aDoneRecordHoldsUntilTheTargetsGrow() {
+        sources = Sources.NONE.copy(discogs = true)
+        discogs(Triple(dc(1), 400, 400))
+        val e = hit(artist, Sources.DISCOGS, dc(1), "400x400@5", artist)
+        val a = art()
+        assertFalse(a.upgrade(e, 240, 320).replaced)
+        val done = cache.hit(artist)!!
+        assertFalse(a.upgradable(done))
+        assertTrue(a.upgrades().isEmpty())
+        val calls = http.calls.size
+        assertFalse(a.upgrade(done, 240, 320).replaced)
+        assertEquals(calls, http.calls.size)
+        targets = Targets(Targets.grow(Size(720, 1680), Size(360, 400)))
+        assertFalse(a.upgradable(done))
+        targets = Targets(Size(720, 1680), listOf(Size(480, 800)))
+        assertTrue(a.upgradable(done))
+        assertFalse(a.upgrade(done, 240, 320).replaced)
+        val again = cache.hit(artist)!!
+        targets = Targets(Size(720, 1680), listOf(Size(480, 800), Size(240, 320)))
+        assertFalse(a.upgradable(again))
+        targets = Targets(Size(720, 1680), listOf(Size(600, 800)))
+        assertTrue(a.upgradable(again))
+    }
+
+    @Test
+    fun aPhotoThatCoversTheTargetsOrAPickIsNotUpgraded() {
+        val big = hit("name:sztest", Sources.DEEZER, dz(one, 1680), "1680x1680@5")
+        assertFalse(art().upgradable(big))
+        val p = hit(ArtPicks.PREFIX + "name:x", Sources.LINK, "https://e.example/p.jpg", "400x400@5")
+        assertFalse(art().upgradable(p))
+        targets = Targets.NONE
+        assertFalse(art().upgradable(hit("name:y", Sources.DEEZER, dz(two), "400x400@5")))
+    }
+
+    @Test
+    fun theSweepMarkChangesWithTheTargets() {
+        val a = art()
+        a.beginMark()
+        val m = a.mark()
+        assertTrue(a.holds(m))
+        targets = Targets(Size(720, 1680), listOf(Size(480, 800)))
+        assertFalse(a.holds(m))
+    }
+
+    @Test
+    fun theTargetsKeepTheLargestWindowEverSeenAndTheLargestBackdropPerBoard() {
+        assertEquals(Size(720, 1680), Targets.phone(1080, 2520))
+        assertEquals(Size(720, 1680), Targets.phone(2520, 1080))
+        val main = Targets.phone(1080, 2520)
+        val cover = Targets.phone(948, 748)
+        assertEquals(main, Targets.grow(main, cover))
+        assertEquals(main, Targets.grow(cover, main))
+        assertEquals(main, Targets.grow(null, main))
+        val d = Targets.devices("v1=240x320,ap80=360x480,bad,x=0x1")
+        assertEquals(mapOf("v1" to Size(240, 320), "ap80" to Size(360, 480)), d)
+        assertEquals("ap80=360x480,v1=240x320", Targets.devices(d))
+        val t = Targets.of("720x1680", "v1=240x320,r1=480x800")
+        assertEquals(listOf(Size(480, 800), Size(240, 320)), t.devices)
+        assertEquals(Size(720, 1680), t.phone)
+    }
+
     private fun commons(vararg files: Triple<String, Int, Int>): List<Candidate> {
         infoOf(*files)
         val a = MbArtist("x", "x", null, files.map { Rel("image", "https://commons.wikimedia.org/wiki/File:${it.first}", false) })

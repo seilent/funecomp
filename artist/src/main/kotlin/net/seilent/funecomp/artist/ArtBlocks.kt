@@ -45,11 +45,15 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
 
     data class Push(val name: String, val mbid: String?, val done: Set<String> = emptySet(), val origin: Int? = null)
 
+    data class Upgrade(val key: String, val name: String, val mbid: String?, val at: Long, val done: Set<String> = emptySet(), val origin: Int? = null)
+
     private val blocks = ArrayList<Block>()
     private val rejects = ArrayList<Reject>()
     private val pushes = ArrayList<Push>()
     private val drops = ArrayList<Drop>()
     private val held = ArrayList<Held>()
+    private val upgrades = ArrayList<Upgrade>()
+    private val upgradeDevices = LinkedHashSet<String>()
 
     init {
         load()
@@ -67,10 +71,37 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         }
         pushes.removeAll { Names.fold(it.name) == Names.fold(r.name) }
         held.removeAll { Names.fold(it.name) == Names.fold(r.name) }
+        upgrades.removeAll { it.key == r.key || Names.fold(it.name) == Names.fold(r.name) }
+    }
+
+    @Synchronized
+    fun upgraded(key: String, name: String, mbid: String?, at: Long, device: String?, origin: Int? = null) {
+        upgrades.removeAll { it.key == key }
+        device?.let { upgradeDevices += it }
+        upgrades += Upgrade(key, name, Names.mbid(mbid), at, setOfNotNull(device), origin)
+    }
+
+    @Synchronized
+    fun upgrades(device: String): List<Upgrade> {
+        upgradeDevices += device
+        return upgrades.filter { device !in it.done }
+    }
+
+    @Synchronized
+    fun upgradeDone(u: Upgrade, device: String) {
+        upgradeDevices += device
+        upgrades.replaceAll { if (it.key == u.key && it.at == u.at) it.copy(done = it.done + device) else it }
+        upgrades.removeAll { it.done.containsAll(upgradeDevices) }
+    }
+
+    @Synchronized
+    fun dropUpgrade(u: Upgrade) {
+        upgrades.removeAll { it.key == u.key && it.at == u.at }
     }
 
     @Synchronized
     fun drop(key: String, mbid: String?, name: String, at: Long): Boolean {
+        upgrades.removeAll { it.key == key }
         if (drops.any { it.key == key }) return false
         drops += Drop(key, Names.mbid(mbid), name, at)
         return true
@@ -175,6 +206,8 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         for (d in drops) line("drop", d.key, d.mbid ?: "", d.name, d.at.toString(), d.applied.joinToString(","))
         for (r in rejects) line("reject", r.key, r.mbid ?: "", r.resolvedBy, r.name, r.at.toString(), r.applied.joinToString(","), *listOfNotNull(r.crc?.toString()).toTypedArray())
         for (h in held) line("held", h.name, h.mbid ?: "", h.device)
+        for (d in upgradeDevices) line("upgradedevice", d)
+        for (u in upgrades) line("upgrade", u.key, u.name, u.mbid ?: "", u.at.toString(), u.done.joinToString(","), u.origin?.let { Enums.ImgOrigin.names[it] } ?: "")
         for (p in pushes) {
             line("push", p.name, p.mbid ?: "", p.done.joinToString(","))
             p.origin?.let { o -> Enums.ImgOrigin.names[o]?.let { line("origin", p.name, p.mbid ?: "", it) } }
@@ -206,6 +239,9 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
                 "reject" -> (p.size == 7 || p.size == 8) && p[5].toLongOrNull() != null && rejects.add(Reject(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5].toLong(), set(p[6]), p.getOrNull(7)?.toLongOrNull()))
                 "drop" -> p.size == 6 && p[4].toLongOrNull() != null && drops.none { it.key == p[1] } && drops.add(Drop(p[1], p[2].ifEmpty { null }, p[3], p[4].toLong(), set(p[5])))
                 "held" -> p.size == 4 && held.add(Held(p[1], p[2].ifEmpty { null }, p[3]))
+                "upgradedevice" -> p.size == 2 && upgradeDevices.add(p[1])
+                "upgrade" -> p.size == 7 && p[4].toLongOrNull() != null && upgrades.none { it.key == p[1] } &&
+                    upgrades.add(Upgrade(p[1], p[2], p[3].ifEmpty { null }, p[4].toLong(), set(p[5]), Enums.ImgOrigin.names.entries.firstOrNull { it.value == p[6] }?.key))
                 "push" -> p.size == 4 && pushes.add(Push(p[1], p[2].ifEmpty { null }, set(p[3])))
                 "origin" -> p.size == 4 && origin(p[1], p[2].ifEmpty { null }, p[3])
                 else -> false

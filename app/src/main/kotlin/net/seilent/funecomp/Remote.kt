@@ -41,8 +41,10 @@ import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Offered
 import net.seilent.funecomp.artist.PickLink
+import net.seilent.funecomp.artist.Size
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Sweep
+import net.seilent.funecomp.artist.Targets
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.link.Link
@@ -99,6 +101,8 @@ object Remote : Control {
     private const val ART_WAKE_MS = 60_000L
     private const val SWEEP = "sweep"
     private const val SWEPT = 2
+    private const val PHONE_TARGET = "phoneTarget"
+    private const val DEVICE_TARGETS = "deviceTargets"
     private const val TRANSITION_PAD_MS = 1_000L
     private const val OPEN_APP = "open the phone app"
     private val SECRET = Regex("(api_key|key|token|secret)=[^&]*")
@@ -187,6 +191,7 @@ object Remote : Control {
     private val trigger = AtomicInteger()
     @Volatile private var online = true
     @Volatile private var unmetered = false
+    @Volatile private var targets = Targets.NONE
     private val tracked = HashMap<Network, Boolean>()
     private val breaker = Sweep.Breaker(SystemClock::elapsedRealtime)
     private var wake: Wake? = null
@@ -329,6 +334,36 @@ object Remote : Control {
         if (now) art?.want()
     }
 
+    private fun targets(c: Context): Targets {
+        val p = c.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE)
+        return Targets.of(p.getString(PHONE_TARGET, null), p.getString(DEVICE_TARGETS, null)).also { targets = it }
+    }
+
+    fun window(context: Context, w: Int, h: Int) = synchronized(lock) {
+        if (w <= 0 || h <= 0) return@synchronized
+        val p = context.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE)
+        val old = Size.parse(p.getString(PHONE_TARGET, null))
+        val now = Targets.grow(old, Targets.phone(w, h))
+        if (now != old) {
+            p.edit().putString(PHONE_TARGET, now.toString()).apply()
+            Log.i(TAG, "art target $now")
+        }
+        targets(context)
+    }
+
+    private fun backdropSeen(hello: HelloReply) {
+        val c = app ?: return
+        val board = hello.board?.takeIf { it.isNotBlank() } ?: return
+        val size = Size(hello.backdropW ?: return, hello.backdropH ?: return)
+        synchronized(lock) {
+            val p = c.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE)
+            val all = Targets.devices(p.getString(DEVICE_TARGETS, null))
+            val now = Targets.grow(all[board], size)
+            if (now != all[board]) p.edit().putString(DEVICE_TARGETS, Targets.devices(all + (board to now))).apply()
+            targets(c)
+        }
+    }
+
     private fun swept(context: Context) = context.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE).getInt(SWEEP, 0) >= SWEPT
 
     private fun wake(context: Context) {
@@ -380,7 +415,8 @@ object Remote : Control {
             network(c)
             val blocks = ArtBlocks(File(c.filesDir, "artblock.tsv")) { Log.w(TAG, it) }
             val picks = ArtPicks(File(c.filesDir, "artpick.tsv")) { Log.w(TAG, it) }
-            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks, gallery = GalleryStore(File(c.filesDir, "pickimg")), log = { Log.w(TAG, it.replace(SECRET, "$1=x")) }, browseLog = { Log.i(TAG, it.replace(SECRET, "$1=x")) }).also {
+            targets(c)
+            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks, gallery = GalleryStore(File(c.filesDir, "pickimg")), log = { Log.w(TAG, it.replace(SECRET, "$1=x")) }, browseLog = { Log.i(TAG, it.replace(SECRET, "$1=x")) }, targets = { targets }).also {
                 artist = it
                 showBlocked { blocks.records() }
                 showPicks { picks.list() }
@@ -803,6 +839,13 @@ object Remote : Control {
             Forward.Blocks(a.blocks, { spec }, a::keyOf, a::hasHit) { !Firmwares.sending },
             a::known,
             { !shown },
+            object : Forward.Upgrades {
+                override fun due() = a.upgrades().map { it.name to it.mbid }
+                override fun run(name: String, mbid: String?, w: Int, h: Int) =
+                    a.cachedEntry(name, mbid)?.takeIf { a.upgradable(it) }?.let { e -> a.upgrade(e, w, h).let { Forward.Upgraded(it.replaced, it.bytes, e.key, it.at) } }
+                override fun open() = !shown && online && !breaker.open && unmetered
+                override fun at(key: String) = a.hitAt(key)
+            },
         ) { Log.i(TAG, it) }
         return ArtWorker(
             { l.session },
@@ -1068,6 +1111,7 @@ object Remote : Control {
                 t.session()
             }
             update { it.withHello(hello) }
+            backdropSeen(hello)
             synchronized(asked) { asked.clear() }
             bye = null
             everLive = true

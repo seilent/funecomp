@@ -451,6 +451,8 @@ class ArtistArt(
 
     fun hasHit(key: String): Boolean = cache.hit(key) != null
 
+    fun hitAt(key: String): Long? = cache.hit(key)?.at
+
     fun known(name: String, mbid: String?): Boolean = keyOf(name, mbid).let { cache.hit(it) != null || cache.miss(it) != null }
 
     fun forget(key: String) = cache.drop(key)
@@ -502,7 +504,7 @@ class ArtistArt(
 
     private fun signature(): String {
         val on = sources().enabled
-        return on.sorted().joinToString(",") + " " + keyHash(on)
+        return on.sorted().joinToString(",") + " " + keyHash(on) + " " + targets().key
     }
 
     private fun keyHash(on: Set<String>) = if (Sources.FANART_TV in on) cache.keyHash(sources().fanartTvKey.trim()) else ""
@@ -552,14 +554,7 @@ class ArtistArt(
         }
         val t = targets()
         val a = id?.let { attempt { mb.artist(it) } }
-        val steps = mapOf<String, (() -> Sequence<Candidate>)?>(
-            Wikimedia.SOURCE to a?.let { { wikimedia.candidates(it, w, h, targets = t).asSequence() } },
-            Sources.THE_AUDIO_DB to id?.takeIf { Sources.THE_AUDIO_DB in on }?.let { { audioDb.candidates(it).asSequence() } },
-            Sources.FANART_TV to id?.takeIf { Sources.FANART_TV in on }?.let { { fanartTv.candidates(it).asSequence() } },
-            Sources.DISCOGS to a?.takeIf { Sources.DISCOGS in on }?.let { { discogs.candidates(it).asSequence() } },
-            Sources.YOUTUBE to a?.takeIf { Sources.YOUTUBE in on }?.let { { youtube.candidates(it) } },
-            Sources.DEEZER to if (Sources.DEEZER in on) ({ deezer.candidates(name).asSequence() }) else null,
-        )
+        val steps = steps(name, id, a, w, h, on, t)
         for ((source, step) in sources().order.mapNotNull { o -> steps[o]?.let { o to it } }) {
             val candidates = attempt { ranked(source, step().filterNot { blocks.blocked(key, it.source, it.id, name = display) }.take(MAX_TRIES), t).iterator() } ?: continue
             while (attempt { candidates.hasNext() } == true) {
@@ -590,6 +585,104 @@ class ArtistArt(
         }
         error?.let { throw it }
         return null
+    }
+
+    private fun steps(name: String, id: String?, a: MbArtist?, w: Int, h: Int, on: Set<String>, t: Targets) = mapOf<String, (() -> Sequence<Candidate>)?>(
+        Wikimedia.SOURCE to a?.let { { wikimedia.candidates(it, w, h, targets = t).asSequence() } },
+        Sources.THE_AUDIO_DB to id?.takeIf { Sources.THE_AUDIO_DB in on }?.let { { audioDb.candidates(it).asSequence() } },
+        Sources.FANART_TV to id?.takeIf { Sources.FANART_TV in on }?.let { { fanartTv.candidates(it).asSequence() } },
+        Sources.DISCOGS to a?.takeIf { Sources.DISCOGS in on }?.let { { discogs.candidates(it).asSequence() } },
+        Sources.YOUTUBE to a?.takeIf { Sources.YOUTUBE in on }?.let { { youtube.candidates(it) } },
+        Sources.DEEZER to if (Sources.DEEZER in on) ({ deezer.candidates(name).asSequence() }) else null,
+    )
+
+    fun upgradable(e: ArtCache.Entry): Boolean {
+        val t = targets()
+        if (t.sizes.isEmpty() || picked(e) || e.source !in sources().enabled || done(e.sized, t)) return false
+        val s = size(e) ?: return false
+        return t.score(s.w, s.h) < 1.0 && !blocked(e)
+    }
+
+    fun upgrades(): List<ArtCache.Entry> = cache.entries().filter { upgradable(it) }
+
+    @Throws(IOException::class)
+    fun upgrade(e: ArtCache.Entry, w: Int, h: Int): Upgrade {
+        if (!upgradable(e)) return Upgrade.SKIPPED
+        if (!online()) throw IOException("offline")
+        val t = targets()
+        val have = size(e) ?: return Upgrade.SKIPPED
+        var best: Hit? = null
+        var top = t.score(have.w, have.h)
+        var bytes = 0L
+        fun offer(c: Candidate, url: String, src: ByteArray) {
+            bytes += src.size
+            if (blocks.blocked(e.key, c.source, "", ArtCache.sha256(src), e.name)) return
+            if (c.source == Sources.DEEZER && deezer.placeholder(src)) return
+            val s = codec.bounds(src)?.takeIf { Backdrop.fits(it, w, h) } ?: return
+            val score = t.score(s.w, s.h)
+            if (score <= top || (c.id != e.id && score < 1.0)) return
+            val jpeg = Backdrop.render(codec, src, w, h) ?: return
+            best = Hit(c, url, src, s, jpeg)
+            top = score
+        }
+        same(e, t)?.let { (c, url, src) -> offer(c, url, src) }
+        if (top < 1.0 && e.source in SIZED) {
+            val a = e.mbid?.let { mb.artist(it) }
+            val step = steps(e.name, e.mbid, a, w, h, setOf(e.source), t)[e.source]
+            val others = step?.invoke()?.filter { it.id != e.id && !blocks.blocked(e.key, it.source, it.id, name = e.name) }?.take(MAX_TRIES)
+            var tries = 0
+            for (c in ranked(e.source, others ?: emptySequence(), t)) {
+                if (top >= 1.0 || tries >= MAX_TRIES - 1) break
+                if (c.w > 0 && c.h > 0 && t.score(c.w, c.h) < 1.0) continue
+                tries++
+                val (url, src) = optional { fetch(c, t.side) } ?: continue
+                offer(c, url, src)
+            }
+        }
+        val b = best
+        if (b == null) {
+            cache.putSized(e.key, e.at, sizedKey(t))
+            return Upgrade(false, bytes)
+        }
+        val xl = if (b.c.source == Sources.DEEZER && b.c.id == e.id) e.base.ifEmpty { cache.sha(e) } else ""
+        val n = ArtCache.Entry(e.key, e.name, e.mbid, b.c.source, b.c.credit ?: e.credit.takeIf { b.c.id == e.id }, b.url, clock(), b.c.id, ArtCache.sha256(b.src), e.resolvedBy, b.size.w, b.size.h, xl)
+        if (!cache.replaceHit(e.at, n, b.src)) return Upgrade(false, bytes)
+        cache.putRendered(e.key, w, h, b.jpeg)
+        return Upgrade(true, bytes, n.at)
+    }
+
+    class Upgrade(val replaced: Boolean, val bytes: Long, val at: Long = 0) {
+        companion object {
+            val SKIPPED = Upgrade(false, 0)
+        }
+    }
+
+    private fun same(e: ArtCache.Entry, t: Targets): Triple<Candidate, String, ByteArray>? {
+        val c = Candidate(e.url, e.source, e.credit, e.id)
+        return when {
+            e.source == Sources.YOUTUBE && YouTube.resizable(e.url) && !e.url.contains("=s0") -> optional { fetch(c, t.side) }?.takeIf { it.first != e.url }?.let { Triple(c, it.first, it.second) }
+            e.source == Sources.DEEZER -> {
+                val src = cache.source(e.key) ?: return null
+                larger(c, src, t.side)?.let { Triple(c, it.first, it.second) }
+            }
+            e.source == Wikimedia.SOURCE && e.id.startsWith("File:") -> {
+                val f = optional { wikimedia.file(e.id.removePrefix("File:"), t) } ?: return null
+                if (f.url == e.url) return null
+                optional { fetch(f, t.side) }?.let { Triple(f, it.first, it.second) }
+            }
+            else -> null
+        }
+    }
+
+    private fun sizedKey(t: Targets) = "$SIZED_RULES ${t.phone ?: Size(0, 0)} ${t.device}"
+
+    private fun done(sized: String, t: Targets): Boolean {
+        val p = sized.split(' ')
+        if (p.size != 3 || p[0] != SIZED_RULES.toString()) return false
+        val phone = Size.parse(p[1]) ?: Size(0, 0)
+        val dev = Size.parse(p[2]) ?: Size(0, 0)
+        val want = t.phone ?: Size(0, 0)
+        return phone.w >= want.w && phone.h >= want.h && dev.w >= t.device.w && dev.h >= t.device.h
     }
 
     private fun ranked(source: String, c: Sequence<Candidate>, t: Targets): Sequence<Candidate> {
@@ -644,5 +737,6 @@ class ArtistArt(
         const val YOUTUBE_SEARCH = "youtube search"
         val BROWSE_WORKERS = Sources.ORDER.size + 2
         private val SIZED = setOf(Sources.DISCOGS, Wikimedia.SOURCE)
+        const val SIZED_RULES = 1
     }
 }

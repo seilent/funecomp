@@ -20,6 +20,7 @@ class ArtCache(private val dir: File) {
         val h: Int = 0,
         val base: String = "",
         val failed: Long = 0,
+        val sized: String = "",
     )
     class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false)
     class Looked(val mbid: String?, val at: Long)
@@ -55,7 +56,7 @@ class ArtCache(private val dir: File) {
             key, p.getProperty("name", ""), p.getProperty("mbid"), p.getProperty("source", ""), credit, p.getProperty("url", ""),
             p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("id", ""), p.getProperty("sha", ""), p.getProperty("resolvedBy", ""),
             p.getProperty("w")?.toIntOrNull() ?: 0, p.getProperty("h")?.toIntOrNull() ?: 0, p.getProperty("base", ""),
-            p.getProperty("failed")?.toLongOrNull() ?: 0,
+            p.getProperty("failed")?.toLongOrNull() ?: 0, p.getProperty("sized", ""),
         )
     }
 
@@ -79,6 +80,16 @@ class ArtCache(private val dir: File) {
         val p = load(f)
         if (p.getProperty("state") != "hit" || p.getProperty("at")?.toLongOrNull() != at) return
         p.setProperty("failed", failed.toString())
+        save(f, p)
+        listed = null
+    }
+
+    @Synchronized
+    fun putSized(key: String, at: Long, sized: String) {
+        val f = meta(key)
+        val p = load(f)
+        if (p.getProperty("state") != "hit" || p.getProperty("at")?.toLongOrNull() != at) return
+        p.setProperty("sized", sized)
         save(f, p)
         listed = null
     }
@@ -155,6 +166,14 @@ class ArtCache(private val dir: File) {
             p.setProperty("licenseUrl", it.licenseUrl)
         }
         save(meta(e.key), p)
+    }
+
+    @Synchronized
+    fun replaceHit(at: Long, e: Entry, source: ByteArray): Boolean {
+        val p = load(meta(e.key))
+        if (p.getProperty("state") != "hit" || p.getProperty("at")?.toLongOrNull() != at) return false
+        putHit(e, source)
+        return true
     }
 
     @Synchronized

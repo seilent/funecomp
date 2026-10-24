@@ -31,8 +31,18 @@ class Forward(
     private val blocks: Blocks? = null,
     private val cached: (String, String?) -> Boolean = { _, _ -> true },
     private val holding: () -> Boolean = { true },
+    private val upgrades: Upgrades? = null,
     private val log: (String) -> Unit = {},
 ) {
+    interface Upgrades {
+        fun due(): List<Pair<String, String?>>
+        fun run(name: String, mbid: String?, w: Int, h: Int): Upgraded?
+        fun open(): Boolean
+        fun at(key: String): Long?
+    }
+
+    class Upgraded(val replaced: Boolean, val bytes: Long, val key: String = "", val at: Long = 0)
+
     class Blocks(
         val records: ArtBlocks,
         val device: () -> String?,
@@ -71,8 +81,15 @@ class Forward(
             note(s, "queue", q)
             if (q.stop != ArtPusher.Stop.DONE) return q
         }
+        val playing = ArtPusher.order(st).filter { real(it.first) }
+        upgrade(s, pusher, keep, playing.map { Triple(it.first, it.second, ArtPusher.origin(st.source)) } + up.map { Triple(it.first, it.second, Enums.ImgOrigin.library) }, null)?.let { return it }
         if (retagging() && s.hello?.has("imgOrigin") == true) retag(s, pusher, keep)?.let { return it }
         if (holding()) held(s, pusher, keep)?.let { return it }
+        upgrades?.takeIf { it.open() }?.let { u ->
+            val seen = (playing + up).mapTo(HashSet()) { it.first }
+            pending(s, pusher, keep, u, seen)?.let { return it }
+            upgrade(s, pusher, keep, u.due().filter { real(it.first) && it.first !in seen }.map { Triple(it.first, it.second, Enums.ImgOrigin.library) }, u::open)?.let { return it }
+        }
         if (!sweeping()) return now
         return sweep(s, pusher, keep)
     }
@@ -143,6 +160,94 @@ class Forward(
             }
         }
         if (pushes.isNotEmpty()) b.records.save()
+        return null
+    }
+
+    private fun upgrade(s: Session, pusher: ArtPusher, keep: () -> Boolean, names: List<Triple<String, String?, Int?>>, gate: (() -> Boolean)?): ArtPusher.Report? {
+        val u = upgrades ?: return null
+        val w = s.hello?.backdropW ?: return null
+        val h = s.hello?.backdropH ?: return null
+        val todo = names.distinctBy { it.first }
+        if (todo.isEmpty() || !online()) return null
+        var n = 0
+        var bytes = 0L
+        var have: Set<String>? = null
+        try {
+            for ((name, mbid, origin) in todo) {
+                if (!keep()) return ArtPusher.Report(ArtPusher.Stop.PREEMPTED)
+                if (gate?.invoke() == false || breaker.open) break
+                val r = try {
+                    u.run(name, mbid, w, h).also { if (it != null) breaker.result(false) }
+                } catch (e: IOException) {
+                    if (online()) breaker.result(true)
+                    log("art upgrade $name: $e")
+                    null
+                } ?: continue
+                n++
+                bytes += r.bytes
+                if (!r.replaced) continue
+                val dev = blocks?.device()
+                blocks?.records?.let { b ->
+                    b.upgraded(r.key, name, mbid, r.at, null, origin)
+                    b.save()
+                }
+                if (gate != null) {
+                    val names = have ?: known?.takeIf { it.session === s }?.names ?: pusher.listing()?.names ?: return stopped(s)
+                    have = names
+                    if (name !in names) continue
+                }
+                val p = pusher.run(listOf(name to mbid), origin = origin)
+                note(s, "upgrade", p)
+                if (p.stop != ArtPusher.Stop.DONE) return p
+                if (dev != null && (name in p.pushed || name in p.stored)) blocks?.records?.let { b ->
+                    b.upgrades(dev).firstOrNull { it.key == r.key }?.let { b.upgradeDone(it, dev) }
+                    b.save()
+                }
+            }
+        } finally {
+            if (n > 0) log("art upgrade $n of ${todo.size} $bytes")
+        }
+        return null
+    }
+
+    private fun pending(s: Session, pusher: ArtPusher, keep: () -> Boolean, u: Upgrades, seen: Set<String>): ArtPusher.Report? {
+        val b = blocks ?: return null
+        val dev = b.device() ?: return null
+        val list = b.records.upgrades(dev)
+        if (list.isEmpty()) return null
+        val rev = device().lib.dataRev
+        val k = known?.takeIf { it.session === s && it.rev == rev } ?: run {
+            val l = pusher.listing() ?: return stopped(s)
+            val cap = l.cap ?: return null
+            Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l), orphans(l)).also { known = it }
+        }
+        var dirty = false
+        try {
+            for (r in list) {
+                if (!keep()) return ArtPusher.Report(ArtPusher.Stop.PREEMPTED)
+                if (!u.open()) break
+                if (u.at(r.key) != r.at) {
+                    b.records.dropUpgrade(r)
+                    dirty = true
+                    continue
+                }
+                if (r.name in seen || r.name !in k.names) {
+                    b.records.upgradeDone(r, dev)
+                    dirty = true
+                    continue
+                }
+                if (!k.budget.room) break
+                val p = pusher.run(listOf(r.name to r.mbid), origin = r.origin ?: Enums.ImgOrigin.library)
+                note(s, "upgrade", p)
+                if (r.name in p.pushed || r.name in p.stored) {
+                    b.records.upgradeDone(r, dev)
+                    dirty = true
+                }
+                if (p.stop != ArtPusher.Stop.DONE) return p
+            }
+        } finally {
+            if (dirty) b.records.save()
+        }
         return null
     }
 

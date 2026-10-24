@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothManager
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.net.Uri
@@ -238,6 +239,7 @@ class Main : ComponentActivity() {
         super.onCreate(savedInstanceState)
         sources = sources(this)
         init(this)
+        windowManager.maximumWindowMetrics.bounds.let { Remote.window(this, it.width(), it.height()) }
         batteryAsked = prefs().getBoolean(BATTERY_ASKED, false)
         mediaControls = MediaLink.controls(this)
         lyricsMode = LyricsMode.on(this)
@@ -256,6 +258,11 @@ class Main : ComponentActivity() {
                 }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing, liveDevice = { Remote.device })
             }
         }
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        windowManager.maximumWindowMetrics.bounds.let { Remote.window(this, it.width(), it.height()) }
     }
 
     override fun onNewIntent(intent: Intent) {
