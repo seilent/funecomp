@@ -26,6 +26,16 @@ object Backdrop {
 
     fun fits(s: Size, w: Int, h: Int): Boolean = crop(s.w, s.h, w, h, null) != null
 
+    fun side(src: Size, window: Size, floor: Int, cap: Int): Int {
+        val long = maxOf(src.w, src.h)
+        val f = listOf(window, Size(window.h, window.w)).maxOf { t ->
+            val r = Crop.rect(src.w, src.h, t.w, t.h)
+            maxOf(t.w.toDouble() / r.w, t.h.toDouble() / r.h)
+        }
+        if (f >= 1.0) return minOf(long, cap)
+        return minOf(long, maxOf(floor, minOf(cap, kotlin.math.ceil(long * f).toInt())))
+    }
+
     fun crop(srcW: Int, srcH: Int, w: Int, h: Int, face: Pair<Double, Double>?): Rect? =
         Crop.rect(srcW, srcH, w, h, face?.first, face?.second).takeIf { it.w >= w && it.h >= h }
 

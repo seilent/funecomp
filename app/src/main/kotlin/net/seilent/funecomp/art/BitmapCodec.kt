@@ -23,6 +23,8 @@ class BitmapCodec(private val log: (String) -> Unit = {}) : Codec {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
         var sample = 1
         while (maxOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= maxSide) sample *= 2
+        val budget = maxSide.toLong() * maxSide
+        while ((bounds.outWidth / sample).toLong() * (bounds.outHeight / sample) > budget) sample *= 2
         val opts = BitmapFactory.Options().apply {
             inSampleSize = sample
             inPreferredConfig = Bitmap.Config.ARGB_8888

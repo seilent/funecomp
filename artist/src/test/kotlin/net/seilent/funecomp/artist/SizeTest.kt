@@ -722,6 +722,19 @@ class SizeTest {
         assertEquals(Size(720, 1680), t.phone)
     }
 
+    @Test
+    fun thePhoneDecodeKeepsTheCropAtTheWindowWhenTheSourceIsLarger() {
+        val flip = Size(1080, 2520)
+        assertEquals(3361, Backdrop.side(Size(3840, 2880), flip, 2048, 4096))
+        assertEquals(3781, Backdrop.side(Size(6000, 4000), flip, 2048, 4096))
+        assertEquals(4096, Backdrop.side(Size(12000, 3000), flip, 2048, 4096))
+        assertEquals(1680, Backdrop.side(Size(1680, 1680), flip, 2048, 4096))
+        assertEquals(900, Backdrop.side(Size(900, 900), flip, 2048, 4096))
+        assertEquals(4096, Backdrop.side(Size(1080, 20000), flip, 2048, 4096))
+        assertEquals(2048, Backdrop.side(Size(3840, 2880), Size(720, 1280), 2048, 4096))
+        assertEquals(2048, Backdrop.side(Size(4000, 4000), Size(360, 640), 2048, 4096))
+    }
+
     private fun commons(vararg files: Triple<String, Int, Int>): List<Candidate> {
         infoOf(*files)
         val a = MbArtist("x", "x", null, files.map { Rel("image", "https://commons.wikimedia.org/wiki/File:${it.first}", false) })

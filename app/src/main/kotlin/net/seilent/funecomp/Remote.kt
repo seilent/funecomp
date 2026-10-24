@@ -92,6 +92,7 @@ import java.util.concurrent.atomic.AtomicInteger
 object Remote : Control {
     const val TAG = "Funecomp"
     private const val BACKDROP_SIDE = 2048
+    private const val BACKDROP_MAX = 4096
     private const val FETCH_W = 360
     private const val FETCH_H = 480
     private const val FACES = 64
@@ -125,7 +126,7 @@ object Remote : Control {
     @Volatile private var app: Context? = null
 
     internal var faced: (ByteArray, (() -> Pair<Double, Double>?) -> Pair<Double, Double>?) -> Pair<Bitmap, Pair<Double, Double>?>? =
-        { src, face -> codec.faced(src, BACKDROP_SIDE, face) }
+        { src, face -> codec.faced(src, decodeSide(src), face) }
 
     @Volatile private var browseStart = 0L
     internal var browseDecode: (ByteArray, Int) -> ImageBitmap? = { b, px -> codec.faced(b, px) { null }?.first?.asImageBitmap() }
@@ -192,6 +193,7 @@ object Remote : Control {
     @Volatile private var online = true
     @Volatile private var unmetered = false
     @Volatile private var targets = Targets.NONE
+    @Volatile private var window: Size? = null
     private val tracked = HashMap<Network, Boolean>()
     private val breaker = Sweep.Breaker(SystemClock::elapsedRealtime)
     private var wake: Wake? = null
@@ -339,8 +341,15 @@ object Remote : Control {
         return Targets.of(p.getString(PHONE_TARGET, null), p.getString(DEVICE_TARGETS, null)).also { targets = it }
     }
 
+    internal fun decodeSide(src: ByteArray): Int {
+        val win = window ?: return BACKDROP_SIDE
+        val s = codec.bounds(src) ?: return BACKDROP_SIDE
+        return Backdrop.side(s, win, BACKDROP_SIDE, BACKDROP_MAX)
+    }
+
     fun window(context: Context, w: Int, h: Int) = synchronized(lock) {
         if (w <= 0 || h <= 0) return@synchronized
+        window = Targets.grow(window, Size(w, h))
         val p = context.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE)
         val old = Size.parse(p.getString(PHONE_TARGET, null))
         val now = Targets.grow(old, Targets.phone(w, h))
