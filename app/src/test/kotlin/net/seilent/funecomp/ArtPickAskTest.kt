@@ -181,7 +181,8 @@ class ArtPickAskTest {
         waitFor { Remote.device.playback.state.source == Enums.Source.phone }
         s.device.begins.clear()
         Remote.pick(target, offer())
-        waitFor { s.device.begins.size >= 2 }
+        val want = setOf(target.name to Enums.ImgOrigin.library, target.name to Enums.ImgOrigin.phone)
+        waitFor { synchronized(s.device.begins) { s.device.begins.toSet() }.containsAll(want) }
         return synchronized(s.device.begins) { s.device.begins.toSet() }
     }
 
