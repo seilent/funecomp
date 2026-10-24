@@ -435,7 +435,7 @@ class LookupTest {
     }
 
     @Test
-    fun cropCentersOnTheDetectedFace() {
+    fun theRenderIsCentredAcrossWhereverTheFaceIs() {
         val src = Images.photo(1600, 900)
         val seen = ArrayList<Rect>()
         val c = object : Codec {
@@ -450,7 +450,7 @@ class LookupTest {
             }
         }
         Backdrop.render(c, Images.jpeg(src, 90), 384, 480)!!
-        assertEquals(Rect(880, 0, 720, 900), seen.first())
+        assertEquals(Rect(440, 0, 720, 900), seen.first())
     }
 
     @Test

@@ -336,11 +336,11 @@ class ArtPickTest {
         File(app.filesDir, n).walkTopDown().filter { it.isFile }.map { it.relativeTo(app.filesDir).path to crc(it.readBytes()) }.toList()
     }.toMap()
 
-    private fun structured(): ByteArray {
-        val img = java.awt.image.BufferedImage(1600, 1200, java.awt.image.BufferedImage.TYPE_INT_RGB)
+    private fun structured(w: Int = 1600, h: Int = 1200): ByteArray {
+        val img = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB)
         val g = img.createGraphics()
-        g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(240, 30, 30), 1600f, 1200f, java.awt.Color(20, 40, 230))
-        g.fillRect(0, 0, 1600, 1200)
+        g.paint = java.awt.GradientPaint(0f, 0f, java.awt.Color(240, 30, 30), w.toFloat(), h.toFloat(), java.awt.Color(20, 40, 230))
+        g.fillRect(0, 0, w, h)
         g.color = java.awt.Color.WHITE
         for (i in 0 until 16) g.fillRect(i * 100, (i * 73) % 1100, 40, 90)
         g.dispose()
@@ -402,7 +402,7 @@ class ArtPickTest {
 
     @Test
     fun thePreviewFramesThePhotoAsTheDeviceDoes() {
-        val src = structured()
+        val src = structured(1200, 2000)
         val at = { w: Int, h: Int -> w * 0.3 to h * 0.45 }
         val shown = Remote.preview(src, 240, 320) { b, _ -> BitmapCodec().faced(b, 2048) { null }?.let { (bmp, _) -> bmp to at(bmp.width, bmp.height) } }!!.asAndroidBitmap()
         val faced = Codec { b, side -> BitmapCodec().decode(b, side)?.let { p -> object : Picture by p { override fun face() = at(p.w, p.h) } } }

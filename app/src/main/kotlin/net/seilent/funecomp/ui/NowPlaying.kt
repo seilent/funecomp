@@ -164,7 +164,7 @@ private fun BackdropLayer(art: BackdropArt, alpha: Float) {
     val h = ui.px(ui.h) + b.top + b.bottom
     val img = art.image
     val painter = remember(art, w.roundToInt(), h.roundToInt()) {
-        val r = Crop.rect(img.width, img.height, w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1), art.face?.let { it.first * img.width }, art.face?.let { it.second * img.height })
+        val r = Crop.rect(img.width, img.height, w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1), art.face?.let { it.second * img.height })
         BitmapPainter(img, IntOffset(r.x, r.y), IntSize(r.w, r.h))
     }
     Image(

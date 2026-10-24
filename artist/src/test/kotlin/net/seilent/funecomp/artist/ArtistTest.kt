@@ -25,11 +25,34 @@ class ArtistTest {
     }
 
     @Test
-    fun cropCentersOnTheFaceAndClamps() {
-        assertEquals(Rect(0, 0, 640, 800), Crop.rect(1200, 800, 384, 480, faceX = 100.0, faceY = 400.0))
-        assertEquals(Rect(560, 0, 640, 800), Crop.rect(1200, 800, 384, 480, faceX = 1150.0, faceY = 400.0))
-        val top = Crop.rect(800, 2000, 384, 480, faceX = 400.0, faceY = 50.0)
-        assertEquals(0, top.y)
+    fun cropIsCentredAcrossAndTheFaceOnlySetsTheHeight() {
+        assertEquals(Rect(280, 0, 640, 800), Crop.rect(1200, 800, 384, 480, faceY = 400.0))
+        assertEquals(Rect(280, 0, 640, 800), Crop.rect(1200, 800, 384, 480))
+        val top = Crop.rect(800, 2000, 384, 480, faceY = 50.0)
+        assertEquals(0 to 0, top.x to top.y)
+        assertEquals(1000, Crop.rect(800, 2000, 384, 480, faceY = 1950.0).y)
+        assertEquals(1200, Crop.rect(800, 2000, 384, 480, faceY = 1200.0).let { it.y + it.h / 2 })
+    }
+
+    @Test
+    fun aFaceAtTheLeftEdgeGivesACentredWindow() {
+        val face = 26.4 / 640 * 1680 to 593.8 / 640 * 1680
+        val r = Backdrop.crop(1680, 1680, 240, 320, face)!!
+        assertEquals((1680 - r.w) / 2, r.x)
+        assertEquals(0, Backdrop.crop(800, 2000, 384, 480, 700.0 to 50.0)!!.y)
+        assertEquals(1000, Backdrop.crop(800, 2000, 384, 480, 10.0 to 1950.0)!!.y)
+        val phone = Crop.rect(1680, 1680, 1080, 2520, face.second)
+        assertEquals(Rect(480, 0, 720, 1680), phone)
+        val upscaled = Backdrop.render(object : Picture {
+            override val w = 300
+            override val h = 300
+            override fun face() = 2.0 to 150.0
+            override fun jpeg(crop: Rect, w: Int, h: Int, quality: Int): ByteArray {
+                assertEquals((300 - crop.w) / 2, crop.x)
+                return ByteArray(10)
+            }
+        }, 480, 800, upscale = true)
+        assertEquals(10, upscaled?.size)
     }
 
     @Test
