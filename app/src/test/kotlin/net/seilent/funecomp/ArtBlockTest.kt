@@ -81,6 +81,7 @@ class ArtBlockTest {
         Remote.forgetting = {}
         Remote.queuedAsk = {}
         Remote.asking = {}
+        Remote.phoneA2dp = Remote::a2dpPlaying
         scrobblesReset()
     }
 
@@ -180,10 +181,10 @@ class ArtBlockTest {
 
     private fun deleted() = lines.filter { it == "deleted name=Utada Hikaru" }
 
-    private fun chainSim(): Pair<Sim, Int> {
+    private fun chainSim(faults: List<String> = emptyList()): Pair<Sim, Int> {
         app.getSharedPreferences(Main.ART_PREFS, android.content.Context.MODE_PRIVATE).edit().putInt("defaults", 2).putString("order", "commons,theaudiodb,fanarttv,discogs,youtube,deezer").putBoolean("theaudiodb", true).putBoolean("discogs", false).putBoolean("fanarttv", false).putBoolean("deezer", false).putBoolean("youtube", false).commit()
         Remote.artist(app, chain)
-        val s = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }))
+        val s = Sim(Options(Board.of("v1"), Faults(faults), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }))
         sims += s
         return s to s.listen(0)
     }
@@ -291,6 +292,37 @@ class ArtBlockTest {
         waitFor(10_000) { deleted().isNotEmpty() && stored().size >= 2 }
         assertTrue(stored()[1] != stored()[0])
         assertTrue(File(app.filesDir, "artblock.tsv").readText().contains("\t${q.crc}\n"))
+        c.destroy()
+    }
+
+    @Test
+    fun aDeviceBlockOfAFullSourceMatchesThePushedBytes() {
+        val (s, port) = chainSim(listOf("img-source"))
+        Remote.shown(true)
+        val c = link(port)
+        waitFor(10_000) { s.device.sources.isNotEmpty() }
+        val q = s.block(block, utadaEn)
+        assertEquals(s.device.sources.values.single().crc, q.crc)
+        assertEquals("ok", s.askBlock(q))
+        assertEquals(q.crc, (blocks().single() as ArtBlocks.Block).crc)
+        waitFor(10_000) { lines.count { it.startsWith("stored source name=Utada Hikaru ") } >= 2 }
+        assertTrue(lines.contains("deleted name=Utada Hikaru"))
+        c.destroy()
+    }
+
+    @Test
+    fun phoneBluetoothAudioPushesACropAndItsEndBringsTheSource() {
+        val playing = java.util.concurrent.atomic.AtomicBoolean(true)
+        Remote.phoneA2dp = { playing.get() }
+        val (s, port) = chainSim(listOf("img-source"))
+        Remote.shown(true)
+        val c = link(port)
+        waitFor(10_000) { stored().isNotEmpty() }
+        assertTrue(s.device.sources.isEmpty())
+        assertTrue(s.device.fulls.isEmpty())
+        playing.set(false)
+        Remote.phoneAudio(false)
+        waitFor(10_000) { s.device.sources.isNotEmpty() }
         c.destroy()
     }
 

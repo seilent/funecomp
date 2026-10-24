@@ -23,6 +23,9 @@ class ImagePush(
     private val h: Int,
     private val meta: ImgMeta? = null,
     private val origin: Int? = null,
+    private val full: Boolean = false,
+    private val focus: Pair<Int, Int>? = null,
+    private val rearm: Boolean = false,
     private val gate: () -> Boolean = { true },
 ) {
     sealed class Outcome {
@@ -44,7 +47,7 @@ class ImagePush(
             val crc = crc32(jpeg.size)
             val latch = CountDownLatch(1)
             val result = AtomicReference<Session.Result>(Session.Result.Closed)
-            session.request(Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, name, mbid, total, crc, w, h, meta?.wrongArtist, meta?.source, meta?.credit, origin)) {
+            session.request(Msg.IMG_BEGIN, Req.imgBegin(Enums.ImgKind.artist, name, mbid, total, crc, w, h, meta?.wrongArtist, meta?.source, meta?.credit, origin, focus.takeIf { full }, full.takeIf { it })) {
                 armed.set(true)
                 result.set(it)
                 latch.countDown()
@@ -54,6 +57,7 @@ class ImagePush(
             if (begin !is Session.Result.Ok) return Outcome.Failed((begin as? Session.Result.Failed)?.error)
             val reply = ImgBeginReply.from(begin.body)
             if (reply.offset == total) return Outcome.Have
+            if (rearm) return Outcome.Gated(0)
             val from = if (reply.offset in 1 until total && crc32(reply.offset.toInt()) == reply.crc) reply.offset else 0L
             val chunk = (session.hello?.maxPayload ?: Proto.maxPayload) - Proto.imgDataReserve
             var off = from

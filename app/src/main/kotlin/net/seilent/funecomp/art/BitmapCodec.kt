@@ -2,6 +2,8 @@ package net.seilent.funecomp.art
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.ColorSpace
+import android.graphics.Matrix
 import android.graphics.PointF
 import android.media.FaceDetector
 import net.seilent.funecomp.artist.Codec
@@ -17,7 +19,9 @@ class BitmapCodec(private val log: (String) -> Unit = {}) : Codec {
         return if (o.outWidth > 0 && o.outHeight > 0) Size(o.outWidth, o.outHeight) else null
     }
 
-    override fun decode(bytes: ByteArray, maxSide: Int): Picture? {
+    override fun decode(bytes: ByteArray, maxSide: Int): Picture? = decode(bytes, maxSide, false)
+
+    private fun decode(bytes: ByteArray, maxSide: Int, srgb: Boolean): Picture? {
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
@@ -28,6 +32,7 @@ class BitmapCodec(private val log: (String) -> Unit = {}) : Codec {
         val opts = BitmapFactory.Options().apply {
             inSampleSize = sample
             inPreferredConfig = Bitmap.Config.ARGB_8888
+            if (srgb) inPreferredColorSpace = ColorSpace.get(ColorSpace.Named.SRGB)
         }
         val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, opts) ?: return null
         val side = maxOf(decoded.width, decoded.height)
@@ -35,6 +40,31 @@ class BitmapCodec(private val log: (String) -> Unit = {}) : Codec {
         val scaled = Bitmap.createScaledBitmap(decoded, maxOf(1, decoded.width * maxSide / side), maxOf(1, decoded.height * maxSide / side), true)
         if (scaled !== decoded) decoded.recycle()
         return BitmapPicture(scaled, log)
+    }
+
+    override fun upright(bytes: ByteArray, maxSide: Int, orientation: Int): Picture? {
+        val p = decode(bytes, maxSide, true) as? BitmapPicture ?: return null
+        if (orientation <= 1 || orientation > 8) return p
+        val m = Matrix()
+        when (orientation) {
+            2 -> m.postScale(-1f, 1f)
+            3 -> m.postRotate(180f)
+            4 -> m.postScale(1f, -1f)
+            5 -> {
+                m.postRotate(90f)
+                m.postScale(-1f, 1f)
+            }
+            6 -> m.postRotate(90f)
+            7 -> {
+                m.postRotate(-90f)
+                m.postScale(-1f, 1f)
+            }
+            8 -> m.postRotate(-90f)
+        }
+        val turned = Bitmap.createBitmap(p.bmp, 0, 0, p.w, p.h, m, true)
+        if (turned === p.bmp) return p
+        p.release()
+        return BitmapPicture(turned, log)
     }
 
     fun faced(bytes: ByteArray, maxSide: Int, face: (() -> Pair<Double, Double>?) -> Pair<Double, Double>? = { it() }): Pair<Bitmap, Pair<Double, Double>?>? {

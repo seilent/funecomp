@@ -18,6 +18,8 @@ fun interface Codec {
             p.release()
         }
     }
+
+    fun upright(bytes: ByteArray, maxSide: Int, orientation: Int): Picture? = if (orientation <= 1) decode(bytes, maxSide) else null
 }
 
 object Backdrop {

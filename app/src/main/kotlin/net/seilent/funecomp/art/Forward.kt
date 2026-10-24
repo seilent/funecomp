@@ -3,6 +3,7 @@ package net.seilent.funecomp.art
 import net.seilent.funecomp.artist.Art
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtPusher
+import net.seilent.funecomp.artist.FullPush
 import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.link.Session
@@ -37,6 +38,7 @@ class Forward(
     private val phoneGate: () -> Boolean = { false },
     private val upgrades: Upgrades? = null,
     private val looking: () -> Boolean = { true },
+    private val full: FullPush? = null,
     private val log: (String) -> Unit = {},
 ) {
     interface Upgrades {
@@ -79,8 +81,8 @@ class Forward(
         libSet = null
         if (cardDown()) return ArtPusher.Report(ArtPusher.Stop.GATE)
         pending?.let { p -> phone(s, keep, p)?.let { return it } }
-        val pusher = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, false) }, keep, gate)
-        val library = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, true) }, keep, gate)
+        val pusher = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, false) }, full, keep, gate)
+        val library = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, true) }, full, keep, gate)
         blocks?.let { b -> b.device()?.let { dev -> unblocked(s, library, keep, b, dev)?.let { return it } } }
         val st = device().playback.state
         val listed = cachedLib(s)
@@ -120,7 +122,7 @@ class Forward(
         val first = now.mapTo(HashSet()) { it.first }
         val list = p.list().filter { b == null || b.keyOf(it.name, it.mbid) !in held }.sortedBy { it.name !in first }
         if (list.isEmpty()) return null
-        val r = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, false) }, keep) { gate() || phoneGate() }.run(list.map { it.name to it.mbid }, origin = Enums.ImgOrigin.phone)
+        val r = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, false) }, full, keep) { gate() || phoneGate() }.run(list.map { it.name to it.mbid }, origin = Enums.ImgOrigin.phone)
         note(s, "phone", r)
         p.remove(r.pushed.keys + r.stored + r.missing)
         return r.takeIf { it.stop == ArtPusher.Stop.CLOSED || it.stop == ArtPusher.Stop.PREEMPTED || it.stop == ArtPusher.Stop.UNSUPPORTED }
@@ -132,7 +134,7 @@ class Forward(
         val l = if (todo.isEmpty()) null else listed?.takeIf { it.session === s && it.records.containsAll(ids) }?.listing ?: pusher.listing()?.also { l ->
             listed = Listed(s, l, ids)
             val cap = l.cap
-            if (cap != null && known?.session !== s) known = Known(s, device().lib.dataRev, HashSet(l.names), Sweep.Budget(l.bytes ?: 0, cap), untagged(l), orphans(l), libOnly(l))
+            if (cap != null && known?.session !== s) known = Known(s, device().lib.dataRev, HashSet(l.names), budget(pusher, l, cap), untagged(l), orphans(l), libOnly(l))
         }
         if (todo.isNotEmpty() && l == null) {
             if (s.closedReason != null) return ArtPusher.Report(ArtPusher.Stop.CLOSED)
@@ -301,7 +303,7 @@ class Forward(
             val l = pusher.listing() ?: return if (s.closedReason != null || !keep()) stopped(s) else if (carded(pusher)) ArtPusher.Report(ArtPusher.Stop.GATE) else null
             log("art list names=${l.names.size} bytes=${l.bytes} cap=${l.cap}")
             val cap = l.cap ?: return null
-            Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l), orphans(l), libOnly(l)).also { known = it }
+            Known(s, rev, l.names, budget(pusher, l, cap), untagged(l), orphans(l), libOnly(l)).also { known = it }
         }
         val pushed = LinkedHashMap<String, Long>()
         val stored = ArrayList<String>()
@@ -352,6 +354,8 @@ class Forward(
     private fun libOnly(l: ArtPusher.Listing): MutableSet<String> =
         l.entries.filter { it.origins == listOf(Enums.ImgOrigin.library) && it.name.isNotBlank() }.mapTo(LinkedHashSet()) { it.name }
 
+    private fun budget(pusher: ArtPusher, l: ArtPusher.Listing, cap: Long) = if (pusher.sources) Sweep.Budget(0, Long.MAX_VALUE / 10) else Sweep.Budget(l.bytes ?: 0, cap)
+
     private fun carded(pusher: ArtPusher) = pusher.listFailed == Err.noCard || cardDown()
 
     private fun stopped(s: Session) = ArtPusher.Report(if (s.closedReason != null) ArtPusher.Stop.CLOSED else ArtPusher.Stop.PREEMPTED)
@@ -362,7 +366,7 @@ class Forward(
             val l = pusher.listing() ?: return if (s.closedReason != null || !keep()) stopped(s) else if (carded(pusher)) ArtPusher.Report(ArtPusher.Stop.GATE) else null
             log("art list names=${l.names.size} bytes=${l.bytes} cap=${l.cap}")
             val cap = l.cap ?: return null
-            Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l), orphans(l), libOnly(l)).also { known = it }
+            Known(s, rev, l.names, budget(pusher, l, cap), untagged(l), orphans(l), libOnly(l)).also { known = it }
         }
         if (k.tagged) return null
         val lib = when (val got = rows(s, rev, keep)) {
@@ -502,7 +506,7 @@ class Forward(
                 val l = pusher.listing() ?: return if (s.closedReason == null && keep() && carded(pusher)) ArtPusher.Report(ArtPusher.Stop.GATE) else ArtPusher.Report(if (s.closedReason != null) ArtPusher.Stop.CLOSED else ArtPusher.Stop.PREEMPTED)
                 log("art list names=${l.names.size} bytes=${l.bytes} cap=${l.cap}")
                 val cap = l.cap ?: return ArtPusher.Report(ArtPusher.Stop.DONE)
-                Known(s, rev, l.names, Sweep.Budget(l.bytes ?: 0, cap), untagged(l), orphans(l), libOnly(l)).also { known = it }
+                Known(s, rev, l.names, budget(pusher, l, cap), untagged(l), orphans(l), libOnly(l)).also { known = it }
             }
             if (k.swept?.let { marks?.holds(it) } == true) {
                 log("art sweep kept")

@@ -27,6 +27,7 @@ class ArtCache(private val dir: File) {
     class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false, val yt: Long? = null, val ytFailed: Long? = null)
     class Looked(val mbid: String?, val at: Long)
     class Usage(val photos: Int, val bytes: Long)
+    class Full(val crc: Long, val w: Int, val h: Int, val encode: String, val focus: Pair<Int, Int>?, val copy: Boolean)
 
     private val names = File(dir, "names.properties")
     private var nameMap: Properties? = null
@@ -163,6 +164,7 @@ class ArtCache(private val dir: File) {
     @Synchronized
     fun putHit(e: Entry, source: ByteArray) {
         listed = null
+        val old = load(meta(e.key))
         dropFiles(e.key)
         write(src(e.key), source)
         val p = Properties()
@@ -183,6 +185,10 @@ class ArtCache(private val dir: File) {
         if (e.base.isNotEmpty()) p.setProperty("base", e.base)
         if (e.bare) p.setProperty("bare", "1")
         if (e.channel.isNotEmpty()) p.setProperty("channel", e.channel)
+        if (old.getProperty("refusedSha") == p.getProperty("sha")) {
+            p.setProperty("refusedSha", old.getProperty("refusedSha"))
+            old.getProperty("refusals")?.let { p.setProperty("refusals", it) }
+        }
         e.credit?.let {
             p.setProperty("author", it.author)
             p.setProperty("license", it.license)
@@ -202,6 +208,58 @@ class ArtCache(private val dir: File) {
 
     @Synchronized
     fun putRendered(key: String, w: Int, h: Int, jpeg: ByteArray) = write(jpg(key, w, h), jpeg)
+
+    @Synchronized
+    fun full(key: String): Full? {
+        val p = load(meta(key))
+        if (p.getProperty("state") != "hit") return null
+        val crc = p.getProperty("pushCrc")?.toLongOrNull() ?: return null
+        val w = p.getProperty("pushW")?.toIntOrNull() ?: return null
+        val h = p.getProperty("pushH")?.toIntOrNull() ?: return null
+        val copy = p.getProperty("pushCopy") == "1"
+        if (!copy && !encoded(key).isFile) return null
+        val focus = p.getProperty("focus")?.takeIf { it != NO_FOCUS }?.split(',')?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
+        return Full(crc, w, h, p.getProperty("pushEnc", ""), focus, copy)
+    }
+
+    @Synchronized
+    fun fullBytes(key: String): ByteArray? {
+        val f = full(key) ?: return null
+        return if (f.copy) source(key) else encoded(key).readBytes()
+    }
+
+    @Synchronized
+    fun putFull(key: String, f: Full, bytes: ByteArray?) {
+        val m = meta(key)
+        val p = load(m)
+        if (p.getProperty("state") != "hit") return
+        if (bytes != null) write(encoded(key), bytes) else encoded(key).delete()
+        p.setProperty("pushCrc", f.crc.toString())
+        p.setProperty("pushW", f.w.toString())
+        p.setProperty("pushH", f.h.toString())
+        p.setProperty("pushEnc", f.encode)
+        p.setProperty("pushCopy", if (f.copy) "1" else "0")
+        p.setProperty("focus", f.focus?.let { "${it.first},${it.second}" } ?: NO_FOCUS)
+        save(m, p)
+    }
+
+    @Synchronized
+    fun refusals(key: String, sha: String): Int {
+        val p = load(meta(key))
+        return if (p.getProperty("refusedSha") == sha) p.getProperty("refusals")?.toIntOrNull() ?: 0 else 0
+    }
+
+    @Synchronized
+    fun refused(key: String, sha: String): Int {
+        val m = meta(key)
+        val p = load(m)
+        if (p.getProperty("state") != "hit") return 0
+        val n = (if (p.getProperty("refusedSha") == sha) p.getProperty("refusals")?.toIntOrNull() ?: 0 else 0) + 1
+        p.setProperty("refusedSha", sha)
+        p.setProperty("refusals", n.toString())
+        save(m, p)
+        return n
+    }
 
     @Synchronized
     fun putMiss(key: String, at: Long, sources: Set<String>, keyHash: String = "", yt: Long? = null, ytFailed: Long? = null) {
@@ -316,6 +374,7 @@ class ArtCache(private val dir: File) {
     private fun missFile(key: String) = File(dir, "${hash(key)}.miss")
     private fun src(key: String) = File(dir, "${hash(key)}.src")
     private fun jpg(key: String, w: Int, h: Int) = File(dir, "${hash(key)}.${w}x$h.jpg")
+    private fun encoded(key: String) = File(dir, "${hash(key)}.full.jpg")
 
     fun keyHash(key: String) = if (key.isEmpty()) "" else hash("key:$key")
 
@@ -354,6 +413,7 @@ class ArtCache(private val dir: File) {
     companion object {
         private const val KANA = ".kana"
         private const val CLEANED = "3"
+        private const val NO_FOCUS = "none"
 
         fun sha256(b: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
     }

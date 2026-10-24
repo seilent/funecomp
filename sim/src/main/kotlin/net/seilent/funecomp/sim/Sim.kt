@@ -84,8 +84,8 @@ class Sim(private val opts: Options, lib: Library = Library.synthetic()) {
     }
 
     fun block(cmd: Int, name: String): ArtBlock {
-        val s = device.stored[device.fold(name)] ?: error("$name not stored")
-        return ArtBlock(cmd, s.name, s.mbid?.takeIf { it.isNotEmpty() }, s.crc)
+        val (n, mbid, crc) = device.drawn(name) ?: error("$name not stored")
+        return ArtBlock(cmd, n, mbid?.takeIf { it.isNotEmpty() }, crc)
     }
 
     fun askBlock(cmd: Int, name: String): String = askBlock(block(cmd, name))

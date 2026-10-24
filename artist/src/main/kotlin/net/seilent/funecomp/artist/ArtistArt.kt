@@ -6,7 +6,7 @@ import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.zip.CRC32
 
-class Art(val jpeg: ByteArray, val w: Int, val h: Int, val name: String, val mbid: String?, val source: String, val credit: Credit?, val wrongArtist: Boolean = false)
+class Art(val jpeg: ByteArray, val w: Int, val h: Int, val name: String, val mbid: String?, val source: String, val credit: Credit?, val wrongArtist: Boolean = false, val key: String? = null)
 
 class ArtistArt(
     private val http: Http,
@@ -74,7 +74,7 @@ class ArtistArt(
             false
         } else if (hit != null) {
             val wrong = tag == null && wrongArtistOffered(hit, name)
-            render(hit, w, h)?.let { return Art(it, w, h, hit.name, hit.mbid, hit.source, hit.credit, wrong) }
+            render(hit, w, h)?.let { return Art(it, w, h, hit.name, hit.mbid, hit.source, hit.credit, wrong, key) }
             if (now - hit.failed < TTL_MS) {
                 due(hit.failed)
                 return null
@@ -163,7 +163,7 @@ class ArtistArt(
         val key = p.cacheKey
         val tag = Names.mbid(mbid)
         val e = cache.hit(key)
-        if (e != null) render(e, w, h)?.let { return Art(it, w, h, name.trim(), tag, e.source, e.credit) }
+        if (e != null) render(e, w, h)?.let { return Art(it, w, h, name.trim(), tag, e.source, e.credit, key = key) }
         if (p.source == Sources.GALLERY) return gallery(p, name, tag, w, h)
         val now = clock()
         p.failedAt?.let { at ->
@@ -189,7 +189,7 @@ class ArtistArt(
             picks.retry(p)
             picks.save()
         }
-        return Art(jpeg, w, h, name.trim(), tag, p.source, p.credit)
+        return Art(jpeg, w, h, name.trim(), tag, p.source, p.credit, key = key)
     }
 
     private fun gallery(p: ArtPicks.Pick, name: String, tag: String?, w: Int, h: Int): Art? {
@@ -203,7 +203,7 @@ class ArtistArt(
             store(p, src)
             cache.putRendered(p.cacheKey, w, h, jpeg)
         } ?: return null
-        return Art(jpeg, w, h, name.trim(), tag, p.source, p.credit)
+        return Art(jpeg, w, h, name.trim(), tag, p.source, p.credit, key = p.cacheKey)
     }
 
     @Throws(IOException::class)
@@ -515,7 +515,7 @@ class ArtistArt(
         val e = ArtCache.Entry(key, name.trim(), f.mbid, f.c.source, f.c.credit, f.url, now, f.c.id, ArtCache.sha256(f.src), f.by, f.size.w, f.size.h, f.base, bare = f.bare, channel = f.channel)
         cache.putHit(e, f.src)
         cache.putRendered(key, w, h, f.jpeg)
-        return Art(f.jpeg, w, h, name.trim(), f.mbid, f.c.source, f.c.credit, tag == null && wrongArtistOffered(e, name))
+        return Art(f.jpeg, w, h, name.trim(), f.mbid, f.c.source, f.c.credit, tag == null && wrongArtistOffered(e, name), key)
     }
 
     fun blocked(e: ArtCache.Entry): Boolean = !picked(e) && (blocks.blocked(e.key, e.source, ImageIds.of(e), cache.sha(e), e.name) || placeholder(e))
@@ -586,6 +586,10 @@ class ArtistArt(
     }
 
     fun renderedCrc(e: ArtCache.Entry, w: Int, h: Int): Long? = cache.rendered(e.key, w, h)?.let { CRC32().apply { update(it) }.value }
+
+    fun pushCrc(e: ArtCache.Entry): Long? = cache.full(e.key)?.crc
+
+    val full: FullSource = FullSource(cache, codec, log = log)
 
     fun forgetName(name: String) = cache.forgetName(name)
 

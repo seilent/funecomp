@@ -389,21 +389,90 @@ object Images {
     fun png(img: BufferedImage): ByteArray = ByteArrayOutputStream().also { ImageIO.write(img, "png", it) }.toByteArray()
 
     fun size(jpeg: ByteArray): Pair<Int, Int> = ImageIO.read(ByteArrayInputStream(jpeg)).let { it.width to it.height }
+
+    fun orient(img: BufferedImage, orientation: Int): BufferedImage {
+        if (orientation <= 1 || orientation > 8) return img
+        val swap = orientation >= 5
+        val w = if (swap) img.height else img.width
+        val h = if (swap) img.width else img.height
+        val out = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+        for (y in 0 until img.height) for (x in 0 until img.width) {
+            val (nx, ny) = when (orientation) {
+                2 -> img.width - 1 - x to y
+                3 -> img.width - 1 - x to img.height - 1 - y
+                4 -> x to img.height - 1 - y
+                5 -> y to x
+                6 -> img.height - 1 - y to x
+                7 -> img.height - 1 - y to img.width - 1 - x
+                else -> y to img.width - 1 - x
+            }
+            out.setRGB(nx, ny, img.getRGB(x, y))
+        }
+        return out
+    }
+
+    fun progressive(img: BufferedImage, quality: Int = 90): ByteArray {
+        val writer = ImageIO.getImageWritersByFormatName("jpeg").next()
+        val out = ByteArrayOutputStream()
+        ImageIO.createImageOutputStream(out).use { ios ->
+            writer.output = ios
+            val p = writer.defaultWriteParam
+            p.progressiveMode = ImageWriteParam.MODE_DEFAULT
+            writer.write(null, IIOImage(img, null, null), p)
+        }
+        writer.dispose()
+        return out.toByteArray()
+    }
+
+    fun exif(jpeg: ByteArray, orientation: Int): ByteArray {
+        val tiff = byteArrayOf(
+            'M'.code.toByte(), 'M'.code.toByte(), 0, 42, 0, 0, 0, 8,
+            0, 1,
+            0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, orientation.toByte(), 0, 0,
+            0, 0, 0, 0,
+        )
+        val body = "Exif".toByteArray() + byteArrayOf(0, 0) + tiff
+        val len = body.size + 2
+        val app1 = byteArrayOf(0xFF.toByte(), 0xE1.toByte(), (len shr 8).toByte(), len.toByte()) + body
+        val at = if ((jpeg[3].toInt() and 0xFF) == 0xE0) 4 + (((jpeg[4].toInt() and 0xFF) shl 8) or (jpeg[5].toInt() and 0xFF)) else 2
+        return jpeg.copyOfRange(0, at) + app1 + jpeg.copyOfRange(at, jpeg.size)
+    }
 }
 
 class AwtCodec(var face: ((Int, Int) -> Pair<Double, Double>?)? = null) : Codec {
     val qualities = ArrayList<Int>()
+    var faces = 0
 
-    override fun decode(bytes: ByteArray, maxSide: Int): Picture? {
-        val img = try {
-            ImageIO.read(ByteArrayInputStream(bytes))
-        } catch (e: Exception) {
-            null
-        } ?: return null
+    override fun bounds(bytes: ByteArray): Size? = read(bytes)?.let { Size(it.width, it.height) }
+
+    override fun decode(bytes: ByteArray, maxSide: Int): Picture? = read(bytes)?.let { picture(it) }
+
+    override fun upright(bytes: ByteArray, maxSide: Int, orientation: Int): Picture? = read(bytes)?.let { picture(fit(Images.orient(it, orientation), maxSide)) }
+
+    private fun read(bytes: ByteArray): BufferedImage? = try {
+        ImageIO.read(ByteArrayInputStream(bytes))
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun fit(img: BufferedImage, maxSide: Int): BufferedImage {
+        val side = maxOf(img.width, img.height)
+        if (side <= maxSide) return img
+        val w = maxOf(1, (img.width.toLong() * maxSide / side).toInt())
+        val h = maxOf(1, (img.height.toLong() * maxSide / side).toInt())
+        val out = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)
+        val g = out.createGraphics()
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR)
+        g.drawImage(img, 0, 0, w, h, null)
+        g.dispose()
+        return out
+    }
+
+    private fun picture(img: BufferedImage): Picture {
         return object : Picture {
             override val w = img.width
             override val h = img.height
-            override fun face() = face?.invoke(w, h)
+            override fun face() = face?.invoke(w, h).also { faces++ }
             override fun jpeg(crop: Rect, w: Int, h: Int, quality: Int): ByteArray {
                 qualities += quality
                 val out = BufferedImage(w, h, BufferedImage.TYPE_INT_RGB)

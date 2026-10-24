@@ -34,4 +34,9 @@ object PushGate {
     }
 
     fun card(d: DeviceState): Boolean = d.cardDown
+
+    fun bluetooth(d: DeviceState): Boolean {
+        val s = d.playback.state
+        return s.playing == true && (s.output == Enums.Output.btHeadset || s.output == Enums.Output.phoneReceiver)
+    }
 }

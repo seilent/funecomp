@@ -42,6 +42,8 @@ class LinkService : Service() {
         Remote.mediaArt(track, MediaLink.ART_PX)
     }, { open() }) { stop() } }
 
+    private var a2dpProxy: BluetoothA2dp? = null
+
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
@@ -53,6 +55,7 @@ class LinkService : Service() {
                 Intent.ACTION_TIME_CHANGED -> Remote.clockChanged("time")
                 Intent.ACTION_TIMEZONE_CHANGED -> Remote.clockChanged("zone")
                 ACTION_ALARM -> Remote.kick("alarm")
+                BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED -> Remote.phoneAudio(intent.getIntExtra(BluetoothProfile.EXTRA_STATE, -1) == BluetoothA2dp.STATE_PLAYING)
                 BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED -> {
                     val d = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
@@ -78,6 +81,7 @@ class LinkService : Service() {
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(ACTION_ALARM)
             addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
+            addAction(BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED)
             addAction(Intent.ACTION_TIME_CHANGED)
             addAction(Intent.ACTION_TIMEZONE_CHANGED)
         }
@@ -92,6 +96,23 @@ class LinkService : Service() {
             }
         }
         Remote.onTail = { at -> main.post { arm(at) } }
+        a2dp()
+    }
+
+    private fun a2dp() {
+        val adapter = getSystemService(BluetoothManager::class.java)?.adapter ?: return
+        adapter.getProfileProxy(this, object : BluetoothProfile.ServiceListener {
+            override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
+                val p = proxy as? BluetoothA2dp ?: return
+                a2dpProxy = p
+                Remote.a2dp = p
+            }
+
+            override fun onServiceDisconnected(profile: Int) {
+                a2dpProxy = null
+                Remote.a2dp = null
+            }
+        }, BluetoothProfile.A2DP)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -141,6 +162,9 @@ class LinkService : Service() {
         Remote.onDrop = null
         Remote.onMediaArt(null)
         unregisterReceiver(receiver)
+        Remote.a2dp = null
+        a2dpProxy?.let { getSystemService(BluetoothManager::class.java)?.adapter?.closeProfileProxy(BluetoothProfile.A2DP, it) }
+        a2dpProxy = null
         getSystemService(AlarmManager::class.java)?.cancel(alarm())
         Remote.stop()
         super.onDestroy()

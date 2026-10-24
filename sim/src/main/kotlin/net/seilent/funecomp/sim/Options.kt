@@ -118,6 +118,10 @@ class Faults(specs: List<String>) {
     var phoneSuspend: Long? = null
     var phoneExit: Long? = null
     var phoneArtLate: Long? = null
+    var imgSource = false
+    var srcRoom = 6_442_450_944L
+    var srcRefuse = 0
+    var srcNoSpace = false
 
     init {
         val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
@@ -163,6 +167,10 @@ class Faults(specs: List<String>) {
                 "bye" -> bye = Enums.ByeReason.names.entries.firstOrNull { it.value == v }?.key
                     ?: throw IllegalArgumentException("bye: unknown reason $v")
                 "restart" -> restart = true
+                "img-source" -> imgSource = true
+                "src-room" -> srcRoom = v.toLong()
+                "src-refuse" -> srcRefuse = v.toInt()
+                "src-nospace" -> srcNoSpace = true
                 "abort-at" -> abortAt = v.toLong()
                 "upd-abort-at" -> updAbortAt = v.toLong()
                 "features" -> features = v.toLong()
@@ -263,6 +271,7 @@ class Options(
         if (minor < 10) faults.features = faults.features and Groups.mask("stateClock").inv()
         if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
+        if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }
 
     companion object {

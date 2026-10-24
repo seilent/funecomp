@@ -247,8 +247,8 @@ class Conn(
         if (asked || !asks) return
         asked = true
         ticker.schedule({
-            val s = device.stored.values.firstOrNull { it.name == name } ?: return@schedule log("ask-block: $name not stored")
-            ask(Msg.ART_BLOCK, ArtBlock(cmd, s.name, s.mbid?.takeIf { it.isNotEmpty() }, s.crc).encode(), Proto.requestTimeoutMs.toLong()) {}
+            val (n, mbid, crc) = device.drawn(name) ?: return@schedule log("ask-block: $name not stored")
+            ask(Msg.ART_BLOCK, ArtBlock(cmd, n, mbid?.takeIf { it.isNotEmpty() }, crc).encode(), Proto.requestTimeoutMs.toLong()) {}
         }, ms, TimeUnit.MILLISECONDS)
     }
 

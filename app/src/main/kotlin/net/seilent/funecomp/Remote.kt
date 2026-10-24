@@ -34,6 +34,7 @@ import net.seilent.funecomp.artist.ArtistArt
 import net.seilent.funecomp.artist.Backdrop
 import net.seilent.funecomp.artist.BrowseFeed
 import net.seilent.funecomp.artist.Clock
+import net.seilent.funecomp.artist.FullPush
 import net.seilent.funecomp.artist.GalleryStore
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.HttpRun
@@ -251,7 +252,7 @@ object Remote : Control {
             Log.i(TAG, "link $spec")
             wake(context)
             val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0"
-            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(version, features = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog")), SystemClock::elapsedRealtime)
+            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(version, features = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource")), SystemClock::elapsedRealtime)
             link = l
             art = worker(context, l)
             l.start()
@@ -521,6 +522,11 @@ object Remote : Control {
         art?.want()
     }
 
+    fun phoneAudio(playing: Boolean) {
+        Log.i(TAG, "phone a2dp ${if (playing) "playing" else "idle"}")
+        if (!playing) art?.want()
+    }
+
     fun reordered() {
         synchronized(refreshLock) {
             refreshFor = device.playback.state.artists
@@ -541,8 +547,13 @@ object Remote : Control {
 
     private fun shownCrc(e: ArtCache.Entry): Long? {
         val h = device.hello ?: return null
-        return artist?.renderedCrc(e, h.backdropW ?: return null, h.backdropH ?: return null)
+        val a = artist ?: return null
+        if (h.has("imgSource")) a.pushCrc(e)?.let { return it }
+        return a.renderedCrc(e, h.backdropW ?: return null, h.backdropH ?: return null)
     }
+
+    private fun crcs(a: ArtistArt, e: ArtCache.Entry, w: Int?, h: Int?): Set<Long> =
+        setOfNotNull(if (w != null && h != null) a.renderedCrc(e, w, h) else null, a.pushCrc(e))
 
     private fun blockArt(e: ArtCache.Entry, crc: Long?, after: () -> Unit = {}) {
         val a = artist ?: return
@@ -574,8 +585,8 @@ object Remote : Control {
 
     private fun artAsk(wrong: Boolean, name: String, mbid: String?, crc: Long, st: State, dev: String?, w: Int?, h: Int?): Int? {
         val a = artist ?: return Err.busy
-        val found = a.candidates(name, mbid).map { it to if (w != null && h != null) a.renderedCrc(it, w, h) else null }
-        var hits = found.filter { it.second == crc }.map { it.first }
+        val found = a.candidates(name, mbid).map { it to crcs(a, it, w, h) }
+        var hits = found.filter { crc in it.second }.map { it.first }
         if (hits.size > 1 && mbid != null) hits = hits.filter { it.mbid == mbid }.ifEmpty { hits }
         val i = st.artists.indexOfFirst { Names.fold(it) == Names.fold(name) }
         val stMbid = st.mbids.getOrNull(i)?.takeIf { it.isNotBlank() }
@@ -601,7 +612,7 @@ object Remote : Control {
         val keys = found.mapTo(HashSet()) { it.first.key } + a.keyOf(name, mbid)
         val r = a.blocks.covering(wrong, name, keys, mbid, crc, dev)
         if (r != null) return if (r is ArtBlocks.Reject && !a.resolves(r.resolvedBy, name)) Err.refused else null
-        return if (found.any { it.second != null }) Err.staleRev else Err.notFound
+        return if (found.any { it.second.isNotEmpty() }) Err.staleRev else Err.notFound
     }
 
     private fun blockPick(e: ArtCache.Entry, crc: Long?, origin: Int?) {
@@ -916,6 +927,21 @@ object Remote : Control {
         return open
     }
 
+    @Volatile var a2dp: android.bluetooth.BluetoothA2dp? = null
+
+    @Volatile var phoneA2dp: () -> Boolean = ::a2dpPlaying
+
+    internal fun a2dpPlaying(): Boolean {
+        val p = a2dp ?: return false
+        return try {
+            p.connectedDevices.any { p.isA2dpPlaying(it) }
+        } catch (_: SecurityException) {
+            false
+        }
+    }
+
+    private fun bluetooth(): Boolean = PushGate.bluetooth(device) || phoneA2dp()
+
     private fun phoneGate(): Boolean {
         val open = PushGate.phoneArt(device) && !Firmwares.sending && !PushGate.card(device)
         if (open) wake?.hold(ART, ART_WAKE_MS)
@@ -969,6 +995,7 @@ object Remote : Control {
                 override fun at(key: String) = a.hitAt(key)
             },
             { Main.sources(context).anyOn },
+            FullPush(a.full, ::bluetooth) { Log.i(TAG, it) },
         ) { Log.i(TAG, it) }
         return ArtWorker(
             { l.session },

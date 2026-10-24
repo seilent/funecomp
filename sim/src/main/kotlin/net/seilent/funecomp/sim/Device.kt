@@ -26,6 +26,7 @@ import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.Schema
 import net.seilent.funecomp.proto.SetReply
+import net.seilent.funecomp.proto.SourceJpeg
 import net.seilent.funecomp.proto.Settings
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.UpdAbort
@@ -218,10 +219,13 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     data class Meta(val wrong: Boolean?, val source: String?, val credit: String?)
     class Stored(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, var at: Long, var meta: Meta, var origins: Int = 0)
-    class Partial(val name: String, val total: Long, val crc: Long, val w: Int, val h: Int, val data: ByteArrayOutputStream = ByteArrayOutputStream(), var origins: Int = 0)
+    class Partial(val name: String, val total: Long, val crc: Long, val w: Int, val h: Int, val data: ByteArrayOutputStream = ByteArrayOutputStream(), var origins: Int = 0, val full: Boolean = false, var focus: Pair<Int, Int>? = null)
+    class Src(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, val w: Int, val h: Int, var aside: Boolean, var meta: Meta, var focus: Pair<Int, Int>?, var shownS: Long, var origins: Int = 0)
 
     private val images = LinkedHashMap<String, Stored>()
     private val partials = HashMap<String, Partial>()
+    private val srcs = LinkedHashMap<String, Src>()
+    private var srcRefused = 0
     private var push: Partial? = null
     private var pushMbid: String? = null
     private var pushMeta = Meta(null, null, null)
@@ -241,6 +245,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private var output = Enums.Output.wired
     private var rescanLib = opts.rescanLib
     val begins: MutableList<Pair<String, Int?>> = java.util.Collections.synchronizedList(ArrayList())
+    val fulls: MutableList<Triple<String, Long, Pair<Int, Int>?>> = java.util.concurrent.CopyOnWriteArrayList()
     private val started = clock()
     private var lastBattery = -1
     private val lyrs = HashMap<Long, Lyr>()
@@ -295,6 +300,12 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     val imgDuringStream: Int get() = streamFrames.get()
 
     val stored: Map<String, Stored> get() = synchronized(lock) { images.toMap() }
+    val sources: Map<String, Src> get() = synchronized(lock) { srcs.toMap() }
+
+    fun drawn(name: String): Triple<String, String?, Long>? = synchronized(lock) {
+        val k = fold(name)
+        srcs[k]?.takeIf { !it.aside }?.let { Triple(it.name, it.mbid, it.crc) } ?: images[k]?.let { Triple(it.name, it.mbid, it.crc) }
+    }
 
     val pushing: String? get() = synchronized(lock) { push?.name }
 
@@ -580,6 +591,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun tick(out: Out) = synchronized(lock) {
         follow()
+        btEdge()
         cardEdge()
         cardPush(out)
         snapAt?.let { at ->
@@ -752,7 +764,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Msg.ACTION -> action(body, out)
             Msg.IMG_BEGIN -> imgBegin(body, out).also { duringStream() }
             Msg.IMG_END -> imgEnd(body).also { duringStream() }
-            Msg.IMG_LIST -> imgList(body)
+            Msg.IMG_LIST -> imgList(body, out)
             Msg.IMG_DEL -> imgDel(body)
             Msg.IMG_TAG -> imgTag(body)
             Msg.ART_GET -> artGet(body)
@@ -1235,7 +1247,24 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun source(v: Int) = synchronized(lock) { source = v }
 
-    fun output(v: Int) = synchronized(lock) { output = v }
+    fun output(v: Int) = synchronized(lock) {
+        output = v
+        btEdge()
+    }
+
+    private fun appSource(out: Out?) = allowed(Msg.IMG_BEGIN) && (faults.features ushr Groups.bit("imgSource")!!) and 1L == 1L &&
+        out != null && ((linked[out] ?: 0L) ushr Groups.bit("imgSource")!!) and 1L == 1L
+
+    private fun btPlaying() = playing && (output == Enums.Output.btHeadset || output == Enums.Output.phoneReceiver)
+
+    private fun btEdge() {
+        val p = push ?: return
+        val o = pushOut ?: return
+        if (p.full && !pushDropped && btPlaying()) {
+            opts.log("source abort bluetooth name=${p.name} at=${p.data.size()}")
+            abort(o, p, Enums.AbortCode.busy)
+        }
+    }
 
     fun rescan(next: Library?) = synchronized(lock) {
         val old = lib
@@ -1288,17 +1317,44 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val w = b.int(Tags.ImgBegin.w)
         val h = b.int(Tags.ImgBegin.h)
         if (b.int(Tags.ImgBegin.kind) != Enums.ImgKind.artist) return Answer.Fail(Err.badValue, "bad kind")
-        if (total > Proto.imgMaxBytes) return Answer.Fail(Err.tooBig, "too big")
-        if (w != board.backdropW || h != board.backdropH) return Answer.Fail(Err.badValue, "wrong size")
-        push?.let { if (!pushDropped) abort(out, it, Enums.AbortCode.superseded) }
+        val full = b.bool(Tags.ImgBegin.full) == true
         val key = fold(name)
         val meta = Meta(b.bool(Tags.ImgBegin.wrongArtist), b.str(Tags.ImgBegin.source), b.str(Tags.ImgBegin.credit))
+        val fx = b.int(Tags.ImgBegin.focusX)
+        val fy = b.int(Tags.ImgBegin.focusY)
+        if (full) {
+            if (!appSource(out)) return Answer.Fail(Err.badValue, "bad value")
+            if (total > Proto.imgSrcMaxBytes) return Answer.Fail(Err.tooBig, "too big")
+            if (w == null || h == null || w !in 1..Proto.imgSrcMaxSide || h !in 1..Proto.imgSrcMaxSide) return Answer.Fail(Err.badValue, "bad value")
+            if ((fx == null) != (fy == null)) return Answer.Fail(Err.badValue, "bad value")
+            val focus = if (fx != null && fy != null) fx to fy else null
+            fulls += Triple(name, total, focus)
+            srcs[key]?.takeIf { it.crc == sum && it.bytes.size.toLong() == total }?.let {
+                it.aside = false
+                it.meta = meta
+                it.focus = focus
+                push?.let { q -> if (!pushDropped) abort(out, q, Enums.AbortCode.superseded) }
+                push = null
+                opts.log("source rearm name=$name")
+                return Answer.Ok(ImgBeginReply(total, sum).encode())
+            }
+            if (btPlaying()) return Answer.Fail(Err.busy, "busy")
+            if (faults.srcNoSpace) return Answer.Fail(Err.noSpace, "no space")
+        } else {
+            if (total > Proto.imgMaxBytes) return Answer.Fail(Err.tooBig, "too big")
+            if (w != board.backdropW || h != board.backdropH) return Answer.Fail(Err.badValue, "wrong size")
+        }
+        push?.let { if (!pushDropped) abort(out, it, Enums.AbortCode.superseded) }
         val bit = if (v19) originBit(b, Tags.ImgBegin.origin) else 0
         val origin = b.int(Tags.ImgBegin.origin)
         begins += name to origin
         opts.log("begin name=$name origin=${origin?.let { Enums.ImgOrigin.names[it] } ?: ""}")
         images[key]?.let { it.origins = it.origins or bit }
-        images[key]?.let { if (it.crc == sum && it.bytes.size.toLong() == total) {
+        images[key]?.takeIf { !full }?.let { if (it.crc == sum && it.bytes.size.toLong() == total) {
+            srcs[key]?.let { s -> if (!s.aside) {
+                s.aside = true
+                opts.log("source aside name=${s.name}")
+            } }
             if (it.meta != meta) {
                 it.meta = meta
                 opts.log("meta name=${it.name} ${line(meta)}")
@@ -1306,8 +1362,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             push = null
             return Answer.Ok(ImgBeginReply(total, sum).encode())
         } }
-        val kept = partials[key]?.takeIf { it.name == name && it.total == total && it.crc == sum && it.w == w && it.h == h }
-        val p = kept ?: Partial(name, total, sum, w, h).also { partials[key] = it }
+        val kept = partials[key]?.takeIf { it.name == name && it.total == total && it.crc == sum && it.w == w && it.h == h && it.full == full }
+        val p = kept ?: Partial(name, total, sum, w ?: 0, h ?: 0, full = full).also { partials[key] = it }
+        if (full) p.focus = if (fx != null && fy != null) fx to fy else null
         p.origins = p.origins or bit
         val whole = p.data.size() / chunk * chunk
         if (whole != p.data.size()) {
@@ -1354,6 +1411,26 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
     }
 
+    private fun endSource(p: Partial, key: String, bytes: ByteArray): Answer {
+        val i = SourceJpeg.read(bytes)
+        if (i == null || !i.baseline || !i.upright || i.w != p.w || i.h != p.h) {
+            partials.remove(key)
+            opts.log("source refused name=${p.name} not baseline")
+            return Answer.Fail(Err.badValue, "bad value")
+        }
+        if (srcRefused < faults.srcRefuse) {
+            srcRefused++
+            partials.remove(key)
+            opts.log("source refused name=${p.name} fault")
+            return Answer.Fail(Err.badValue, "bad value")
+        }
+        partials.remove(key)
+        val old = images.remove(key)
+        srcs[key] = Src(p.name, pushMbid, p.crc, bytes, p.w, p.h, false, pushMeta, p.focus, opts.wall() / 1000, (srcs[key]?.origins ?: old?.origins ?: 0) or p.origins)
+        opts.log("stored source name=${p.name} ${p.w}x${p.h} bytes=${bytes.size} focus=${p.focus?.let { "${it.first},${it.second}" } ?: "none"}")
+        return Answer.Ok()
+    }
+
     private fun imgEnd(b: Node): Answer {
         val p = push ?: return Answer.Fail(Err.badValue, "no push")
         if (pushDropped) return Answer.Fail(Err.refused, "aborted")
@@ -1366,11 +1443,16 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             partials.remove(key)
             return Answer.Fail(Err.crc, "crc")
         }
+        if (p.full) return endSource(p, key, bytes)
         if (!Jpeg.baseline(bytes, p.w, p.h)) {
             partials.remove(key)
             return Answer.Fail(Err.badValue, "not baseline or wrong size")
         }
         partials.remove(key)
+        srcs[key]?.let { s -> if (!s.aside) {
+            s.aside = true
+            opts.log("source aside name=${s.name}")
+        } }
         images[key] = Stored(p.name, pushMbid, p.crc, bytes, ++storeClock, pushMeta, (images[key]?.origins ?: 0) or p.origins)
         evict(key)
         opts.imgDir?.let { dir ->
@@ -1393,20 +1475,39 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
     }
 
-    private fun imgList(b: Node): Answer {
-        val all = images.values.map { ImgEntry(it.name, it.mbid, if (v19) origins(it.origins) else emptyList()) }
+    private fun imgList(b: Node, out: Out?): Answer {
+        val src = appSource(out)
+        val all = if (!src) (images.keys + srcs.keys).map { k ->
+            val i = images[k]
+            val s = srcs[k]
+            ImgEntry(i?.name ?: s!!.name, i?.mbid ?: s?.mbid, if (v19) origins((i?.origins ?: 0) or (s?.origins ?: 0)) else emptyList())
+        } else (images.keys + srcs.keys).map { k ->
+            val i = images[k]
+            val s = srcs[k]
+            val shows = s != null && !s.aside
+            ImgEntry(
+                s?.name ?: i!!.name, s?.mbid ?: i?.mbid, origins((i?.origins ?: 0) or (s?.origins ?: 0)),
+                shows, s?.shownS ?: (opts.wall() / 1000), if (shows) s!!.crc else i?.crc, s?.takeIf { it.aside }?.crc,
+            )
+        }
         val offset = n(b.long(Tags.ImgList.offset), 0).coerceAtMost(all.size)
         val count = n(b.long(Tags.ImgList.count), 100)
-        val size = if (v11) bytes() else null
-        val cap = if (v11) opts.imgCap else null
-        val fixed = ImgListReply(PageInfo(0, 0, false), emptyList(), size, cap).encode().size + 8
+        val size = if (!v11) null else if (src) bytes() + srcs.values.sumOf { it.bytes.size.toLong() } else bytes()
+        val room = if (src) faults.srcRoom else null
+        val cap = if (!v11) null else if (src) size!! + maxOf(room!!, opts.imgCap - bytes()) else opts.imgCap
+        val fixed = ImgListReply(PageInfo(0, 0, false), emptyList(), size, cap, room).encode().size + 8
         val n = PageInfo.fill(all.map { it.size }, offset, fixed, count = count)
-        return Answer.Ok(ImgListReply(PageInfo(offset.toLong(), all.size.toLong(), offset + n < all.size), all.subList(offset, offset + n), size, cap).encode())
+        return Answer.Ok(ImgListReply(PageInfo(offset.toLong(), all.size.toLong(), offset + n < all.size), all.subList(offset, offset + n), size, cap, room).encode())
     }
 
     private fun imgDel(b: Node): Answer {
         val name = b.str(Tags.ImgDel.name) ?: return Answer.Fail(Err.badValue, "no name")
+        val gone = srcs.remove(fold(name))
         val old = images.remove(fold(name))
+        if (old == null && gone != null) {
+            opts.log("deleted name=$name")
+            return Answer.Ok()
+        }
         if (old == null) {
             opts.log("absent name=$name")
             return Answer.Ok()
