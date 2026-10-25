@@ -10,12 +10,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -25,12 +21,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.artist.AutoEqList
@@ -64,7 +56,6 @@ private const val HEADER = "autoeq"
 const val LOADING = "loading"
 private const val FAILED = "search failed"
 private const val NO_RESULTS = "no results"
-private const val PLACEHOLDER = "type to search"
 private const val IME_KEY = "ime"
 private const val STATE_TAG = "aeq.state"
 
@@ -157,7 +148,7 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
                     item(IME_KEY, IME_KEY) { Spacer(Modifier.windowInsetsBottomHeight(ime)) }
                 }
             }
-            SearchField(query)
+            SearchField(query.value, { query.value = it }, "aeq.field", ImeAction.Done)
         }
         if (list != null) {
             JumpGrid(letters, grid ?: JUMP_NONE, grid != null, { letter ->
@@ -176,32 +167,6 @@ private fun DividerRow(letter: Int, onTap: () -> Unit) {
     Box(Modifier.size(ui.px(ui.w).dp(), h.dp()).press({ onTap() }).testTag("aeq.div.$l")) {
         RoleText(l, Roles.letterGlyph, Modifier.atBaseline(ui.px(Tok.hubEdge), h - ui.px(Tok.letterInsetBaseline)))
     }
-}
-
-@Composable
-private fun SearchField(query: MutableState<String>) {
-    val ui = LocalUi.current
-    val keyboard = LocalSoftwareKeyboardController.current
-    val focus = LocalFocusManager.current
-    BasicTextField(
-        query.value,
-        { query.value = it },
-        Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(ui.pivotBaseline)).width(ui.px(ui.w - 2 * Tok.hubEdge).dp()).testTag("aeq.field"),
-        textStyle = textStyle(Roles.listPrimary, white(Roles.listPrimary.alpha)),
-        singleLine = true,
-        cursorBrush = SolidColor(Accent),
-        keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Text, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = {
-            keyboard?.hide()
-            focus.clearFocus()
-        }),
-        decorationBox = { inner ->
-            Box {
-                if (query.value.isEmpty()) RoleText(PLACEHOLDER, Roles.listPrimary, Modifier, alpha = Tok.alpha_low)
-                inner()
-            }
-        },
-    )
 }
 
 fun autoEqConfirm(ctx: Ctx, output: Int, name: String, text: String?) {

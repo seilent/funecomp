@@ -26,6 +26,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActionScope
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -44,12 +48,17 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
@@ -60,6 +69,7 @@ import kotlin.math.ln
 import kotlin.math.roundToInt
 
 private const val MS_PER_S = 1000f
+private const val PLACEHOLDER = "type to search"
 private const val ROW_PRIMARY = "primary"
 private const val ROW_SECONDARY = "secondary"
 private const val ROW_NUMBER = "number"
@@ -415,4 +425,32 @@ fun SettingsRow(
             }
         }
     }
+}
+
+@Composable
+fun SearchField(text: String, onChange: (String) -> Unit, tag: String, ime: ImeAction, onAction: () -> Unit = {}) {
+    val ui = LocalUi.current
+    val keyboard = LocalSoftwareKeyboardController.current
+    val focus = LocalFocusManager.current
+    val act: KeyboardActionScope.() -> Unit = {
+        keyboard?.hide()
+        focus.clearFocus()
+        onAction()
+    }
+    BasicTextField(
+        text,
+        onChange,
+        Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(ui.pivotBaseline)).width(ui.px(ui.w - 2 * Tok.hubEdge).dp()).testTag(tag),
+        textStyle = textStyle(Roles.listPrimary, white(Roles.listPrimary.alpha)),
+        singleLine = true,
+        cursorBrush = SolidColor(Accent),
+        keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Text, imeAction = ime),
+        keyboardActions = KeyboardActions(onDone = act, onSearch = act),
+        decorationBox = { inner ->
+            Box {
+                if (text.isEmpty()) RoleText(PLACEHOLDER, Roles.listPrimary, Modifier, alpha = Tok.alpha_low)
+                inner()
+            }
+        },
+    )
 }
