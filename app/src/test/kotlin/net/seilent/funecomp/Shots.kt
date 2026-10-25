@@ -26,6 +26,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
@@ -45,6 +46,7 @@ import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.Wikimedia
+import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Row
@@ -902,6 +904,24 @@ val SHOTS = listOf(
     Shot("pick-browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, false)),
     Shot("pick-browse-unavailable-tiles", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(11, false)),
     Shot("pick-browse-search-only", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsedSearch(true)),
+    Shot("browse-name", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)),
+    Shot("browse-typed", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)) { browseType("Tsuki Nakamura", true) },
+    Shot("browse-ime", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true), ime = AEQ_IME) {
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performTouchInput { swipeUp() }
+        rule.mainClock.autoAdvance = false
+    },
+    Shot("browse-descender", pages = NP + Page.Browse(PickFor("Gypsy")), prep = browsed(TILE_CAPTIONS.size, true)),
+    Shot("browse-empty", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)) { browseType("", false) },
+    Shot("browse-long", pages = NP + Page.Browse(PickFor("Tsukimi Runa(CV: Sae Hiratsuka) Official Channel")), prep = browsed(TILE_CAPTIONS.size, true)),
+    Shot("browse-loading", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)) {
+        control!!.tiles = emptyList()
+        control!!.browsed = null
+        browseType("Tsuki Nakamura", true)
+    },
+    Shot("browse-noresults", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.tiles = c.tiles.filter { it.tile.source != Sources.YOUTUBE }; c.searched = YouTube.Search.NoResults }),
+    Shot("browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.tiles = c.tiles.filter { it.tile.source != Sources.YOUTUBE }; c.searched = YouTube.Search.Unavailable }),
+    Shot("browse-none", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(0, true)(c); c.searched = YouTube.Search.NoResults }),
     Shot("pick-browse-arriving", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, null)(c); c.tiles = c.tiles.filter { it.tile.source == Sources.DEEZER } }),
     Shot("connection-gated", pages = listOf(Page.Connection), link = GATED, gated = true),
     Shot("online-art", pages = ONLINE),
@@ -979,6 +999,13 @@ class Shots {
         rule.waitForIdle()
         rule.mainClock.advanceTimeBy(ms)
         rule.waitForIdle()
+    }
+
+    fun browseType(text: String, search: Boolean) {
+        rule.onNodeWithTag("browse.field").performClick()
+        rule.onNodeWithTag("browse.field").performTextReplacement(text)
+        if (search) rule.onNodeWithTag("browse.field").performImeAction()
+        settle(300)
     }
 
     fun type(text: String) {
