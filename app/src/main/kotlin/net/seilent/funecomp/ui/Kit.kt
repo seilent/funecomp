@@ -8,6 +8,7 @@ import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.generateDecayAnimationSpec
+import androidx.compose.animation.core.snap as snapSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.FlingBehavior
@@ -204,6 +205,8 @@ fun Rows(
     scroll: Boolean = true,
     focus: Int = -1,
     barX: Float = Tok.hubEdge - Tok.focus_barOffset,
+    focusKey: Any? = null,
+    rebuild: Any? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val ui = LocalUi.current
@@ -221,26 +224,39 @@ fun Rows(
             userScrollEnabled = scroll,
             content = content,
         )
-        ListBar(state, focus, ui.px(barX))
+        ListBar(state, focus, ui.px(barX), focusKey, rebuild)
     }
 }
 
 @Composable
-fun ListBar(state: LazyListState, focus: Int, x: Float) {
+fun ListBar(state: LazyListState, focus: Int, x: Float, focusKey: Any? = null, rebuild: Any? = null) {
     if (focus < 0) return
-    val info by remember(state, focus) { derivedStateOf { state.layoutInfo.visibleItemsInfo.firstOrNull { it.index == focus } } }
+    val info by remember(state, focus, focusKey) {
+        derivedStateOf {
+            val items = state.layoutInfo.visibleItemsInfo
+            focusKey?.let { k -> items.firstOrNull { it.key == k } } ?: items.firstOrNull { it.index == focus }
+        }
+    }
     val item = info ?: return
-    FocusBar(item.size.toFloat(), x, item.offset.toFloat())
+    val last = remember { arrayOf<Any?>(null, -1, rebuild) }
+    val moved = focusKey != null && last[0] == item.key && last[1] != item.index
+    val rebuilt = rebuild != null && last[2] != rebuild
+    SideEffect {
+        last[0] = item.key
+        last[1] = item.index
+        last[2] = rebuild
+    }
+    FocusBar(item.size.toFloat(), x, item.offset.toFloat(), snap = moved || rebuilt)
 }
 
 @Composable
-fun FocusBar(height: Float, x: Float, y: Float, alpha: () -> Float = { 1f }) {
+fun FocusBar(height: Float, x: Float, y: Float, snap: Boolean = false, alpha: () -> Float = { 1f }) {
     val ui = LocalUi.current
-    val spec = tween<Float>(Tok.motion_focusCursor.toInt(), easing = Sine)
+    val spec = if (snap) snapSpec<Float>() else tween<Float>(Tok.motion_focusCursor.toInt(), easing = Sine)
     val ay by animateFloatAsState(y, spec, label = "barY")
     val ax by animateFloatAsState(x, spec, label = "barX")
     val ah by animateFloatAsState(height, spec, label = "barH")
-    Box(Modifier.offset { IntOffset(ax.roundToInt(), ay.roundToInt()) }.size(ui.px(Tok.focus_barWidth).dp(), ah.dp()).graphicsLayer { this.alpha = alpha() }.background(white(Tok.alpha_full)))
+    Box(Modifier.offset { IntOffset(ax.roundToInt(), ay.roundToInt()) }.size(ui.px(Tok.focus_barWidth).dp(), ah.dp()).graphicsLayer { this.alpha = alpha() }.background(white(Tok.alpha_full)).testTag("bar"))
 }
 
 @Composable

@@ -21,12 +21,14 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -208,6 +210,15 @@ fun profileName(device: net.seilent.funecomp.state.DeviceState, output: Int): St
 
 private class Opened(val token: Any, val row: Row)
 
+private data class Spot(val key: String?, val index: Int)
+
+private class Drawn(var pivot: String? = null, var rows: List<Row> = emptyList())
+
+private val SpotsSaver = listSaver<Map<String, Spot>, Any>(
+    save = { m -> m.flatMap { (p, s) -> listOf(p, s.key ?: "", s.index) } },
+    restore = { l -> l.chunked(3).associate { (p, k, i) -> p as String to Spot((k as String).ifEmpty { null }, i as Int) } },
+)
+
 private fun Row.same(o: Row) = values == o.values && words == o.words && flags == o.flags && kind == o.kind && min == o.min && max == o.max
 
 fun settingsRows(rows: List<Row>): List<Row> {
@@ -243,15 +254,24 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
     val rows = settingsRows(ctx.device.schema.rows)
     val pivots = rows.mapNotNull { it.pivot }.distinct()
     val fw by rememberUpdatedState(firmware)
-    var pivot by rememberSaveable { mutableIntStateOf(0) }
+    var pivotName by rememberSaveable { mutableStateOf<String?>(null) }
+    var pivotIndex by rememberSaveable { mutableIntStateOf(0) }
+    val pivot = pivots.indexOf(pivotName).takeIf { it >= 0 } ?: pivotIndex.coerceIn(0, maxOf(0, pivots.lastIndex))
+    SideEffect {
+        pivots.getOrNull(pivot)?.let { if (it != pivotName) pivotName = it }
+        if (pivots.isNotEmpty() && pivot != pivotIndex) pivotIndex = pivot
+    }
+    var spots by rememberSaveable(stateSaver = SpotsSaver) { mutableStateOf(emptyMap<String, Spot>()) }
     val values = ctx.device.settings.values
     var edit by remember { mutableStateOf<Edit?>(null) }
     var editValue by remember { mutableStateOf<String?>(null) }
     val live by rememberUpdatedState(ctx.device)
+    val shownPivotName by rememberUpdatedState(pivots.getOrNull(pivot))
     var opened by remember { mutableStateOf<Opened?>(null) }
     var serial by remember { mutableIntStateOf(0) }
     val eqOn = ctx.device.has("eq")
     LaunchedEffect(ctx.device.schema.rows) {
+        edit?.let { e -> if (live.schema.rows.none { it.key == e.key && it.pivot == shownPivotName }) edit = null }
         val o = opened ?: return@LaunchedEffect
         val now = live.schema.rows.firstOrNull { it.key == o.row.key }
         if (now == null || !now.same(o.row)) {
@@ -305,14 +325,30 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
     }
     HubPage("settings", back, pivots, pivot, {
         revert()
-        pivot = it
+        pivotName = pivots.getOrNull(it)
+        pivotIndex = it
     }) { shown ->
-        val active = pivots.getOrNull(shown)
-        val shownRows = rows.filter { it.pivot == active }
-        var focus by rememberSaveable(active) { mutableIntStateOf(0) }
+        val drawn = remember { Drawn() }
+        val name = pivots.getOrNull(shown)
+        val active = name ?: drawn.pivot
+        val shownRows = if (name != null) rows.filter { it.pivot == name } else if (shown < 0) drawn.rows else emptyList()
+        val spot = active?.let { spots[it] }
+        val byKey = spot?.key?.let { k -> shownRows.indexOfFirst { it.key == k } } ?: -1
+        val focus = when {
+            byKey >= 0 -> byKey
+            shownRows.isEmpty() -> -1
+            else -> (spot?.index ?: 0).coerceIn(0, shownRows.lastIndex)
+        }
+        SideEffect {
+            if (name != null) {
+                drawn.pivot = name
+                drawn.rows = shownRows
+                if (focus >= 0) Spot(shownRows[focus].key, focus).let { if (spots[name] != it) spots = spots + (name to it) }
+            }
+        }
         val list = rememberLazyListState()
         Box(Modifier.fillMaxSize()) {
-            Rows(ui.contentTop, list, scroll = edit == null, focus = focus) {
+            Rows(ui.contentTop, list, scroll = edit == null, focus = focus, focusKey = shownRows.getOrNull(focus)?.key, rebuild = shownRows.map { it.key }) {
                 itemsIndexed(shownRows, key = { i, r -> r.key ?: "row$i" }) { i, r ->
                     val key = r.key ?: ""
                     val editing = edit?.key == key
@@ -339,7 +375,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                             confirm()
                             return@SettingsRow
                         }
-                        focus = i
+                        active?.let { spots = spots + (it to Spot(r.key, i)) }
                         when {
                             editing -> {
                                 val next = r.step(editValue, if (x < 0.5f) -1 else 1)

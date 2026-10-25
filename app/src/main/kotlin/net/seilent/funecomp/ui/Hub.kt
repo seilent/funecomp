@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -102,17 +103,26 @@ fun HubPage(
     var shift by remember { mutableFloatStateOf(0f) }
     val entrance = remember { Entrance() }
     var shownPivot by rememberSaveable { mutableIntStateOf(active) }
+    var shownName by rememberSaveable { mutableStateOf(pivots.getOrNull(active)) }
     val out = remember { Animatable(0f) }
     var dir by remember { mutableIntStateOf(1) }
-    LaunchedEffect(active) {
-        if (active == shownPivot) {
+    val target = pivots.getOrNull(active)
+    val named = pivots.isNotEmpty()
+    val shownAt = if (!named) shownPivot else shownName?.let { pivots.indexOf(it) } ?: active
+    SideEffect { if (named && shownAt >= 0 && shownAt != shownPivot) shownPivot = shownAt }
+    LaunchedEffect(if (named) target else active) {
+        val from = if (named) shownName?.let { pivots.indexOf(it) }?.takeIf { it >= 0 } ?: shownPivot else shownPivot
+        if (if (named) target == shownName || shownName == null else active == shownPivot) {
+            shownPivot = active
+            shownName = target
             out.snapTo(0f)
             entrance.settle()
             return@LaunchedEffect
         }
-        dir = if (active > shownPivot) 1 else -1
+        dir = if (active > from) 1 else -1
         out.animateTo(1f, tween(Tok.motion_pivotOut.toInt(), easing = Strip))
         shownPivot = active
+        shownName = target
         out.snapTo(0f)
         launch { entrance.run(dir) }
     }
@@ -127,7 +137,7 @@ fun HubPage(
                 alpha = 1f - out.value
             },
         ) {
-            CompositionLocalProvider(LocalEntrance provides entrance) { content(shownPivot) }
+            CompositionLocalProvider(LocalEntrance provides entrance) { content(shownAt) }
         }
         CroppedHeader(header, shift, onBack)
         if (pivots.isNotEmpty()) PivotStrip(pivots, active, onPivot) { shift = it }

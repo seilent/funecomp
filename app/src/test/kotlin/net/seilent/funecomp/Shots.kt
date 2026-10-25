@@ -47,6 +47,7 @@ import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.Profile
+import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tok
@@ -494,6 +495,24 @@ private fun Shots.tapRow(tag: String) {
     settle(600)
 }
 
+private fun Shots.insertAbove(shell: Shell) {
+    for (p in listOf("library", "display")) {
+        rule.onNodeWithTag("pivot.$p").performClick()
+        settle(1000)
+    }
+    tapRow("set.clock")
+    shell.sheet.close()
+    settle(600)
+    val c = control ?: return
+    val rows = c.device.schema.rows
+    val at = rows.indexOfFirst { it.key == "saverSeconds" }
+    val nav = listOf(
+        Row("navOrder", "NAV ORDER", "display", Enums.RowKind.choice, listOf("backLeft", "backRight"), words = listOf("BACK LEFT", "BACK RIGHT")),
+        Row("navButton", "NAV BUTTON", "display", Enums.RowKind.choice, listOf("play", "np", "bt", "next", "shuffle", "search", "settings"), words = listOf("PLAY/PAUSE", "NOW PLAYING", "BLUETOOTH", "NEXT", "SHUFFLE ALL", "SEARCH", "SETTINGS")),
+    )
+    c.device = c.device.copy(schema = c.device.schema.copy(rev = (c.device.schema.rev ?: 0) + 1, rows = rows.subList(0, at) + nav + rows.subList(at, rows.size)))
+}
+
 private fun Shots.about() {
     for (p in listOf("library", "display", "power", "system")) {
         rule.onNodeWithTag("pivot.$p").performClick()
@@ -927,6 +946,7 @@ val SHOTS = listOf(
     Shot("online-scrobbling-lbsheet", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { tapRow("scrobble.token") },
     Shot("online-scrobbling-entry", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT) { tapRow("scrobble.token") },
     Shot("online-scrobbling-plain", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, labels = false),
+    Shot("settings-insert-above", pages = HOME + Page.Settings) { insertAbove(it) },
     Shot("settings-about", pages = HOME + Page.Settings) { about() },
     Shot("settings-about-v1", board = "v1", pages = HOME + Page.Settings) { about() },
     Shot("settings-about-sending", board = "v1", pages = HOME + Page.Settings, firmware = FOUND.copy(ready = true, send = "firmware 42%")) { about() },
@@ -950,7 +970,8 @@ class Shots {
     val rule = createComposeRule()
 
     private var frame by mutableStateOf<Pair<Shot, Size>?>(null)
-    private var control by mutableStateOf<SimControl?>(null)
+    var control by mutableStateOf<SimControl?>(null)
+        private set
     private var shell by mutableStateOf(Shell())
     private var sources by mutableStateOf(Sources())
 
