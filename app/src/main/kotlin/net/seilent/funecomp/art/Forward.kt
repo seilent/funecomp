@@ -12,6 +12,7 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.state.ArtKey
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LibKey
@@ -75,7 +76,7 @@ class Forward(
         val now = pusher.run(ArtPusher.order(st).filter { real(it.first) }, origin = ArtPusher.origin(st.source))
         note(s, "current", now)
         if (now.stop != ArtPusher.Stop.DONE) return now
-        val up = upcoming(s, st).filter { real(it.first) }
+        val up = upcoming(s, st, keep).filter { real(it.first) }
         if (up.isNotEmpty()) {
             val q = pusher.run(up, origin = Enums.ImgOrigin.library)
             note(s, "queue", q)
@@ -400,14 +401,25 @@ class Forward(
         }
     }
 
-    private fun upcoming(s: Session, st: State): List<Pair<String, String?>> {
+    private fun upcoming(s: Session, st: State, keep: () -> Boolean): List<Pair<String, String?>> {
         val slot = st.slot ?: return emptyList()
         val slots = st.slots ?: return emptyList()
         val out = ArrayList<Pair<String, String?>>()
+        var retries = 0
         fun page(offset: Long, count: Long): Boolean {
             if (count <= 0) return true
-            val r = s.call(Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.page, offset = offset, count = count))
-            if (r !is Session.Result.Ok) return false
+            var tries = 0
+            while (true) {
+                val r = s.call(Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.page, offset = offset, count = count))
+                tries++
+                val retry = r is Session.Result.Timeout || (r is Session.Result.Failed && r.error.code == Err.busy)
+                log("art queue page $offset $count try $tries -> ${pageResult(r)}")
+                if (r is Session.Result.Ok) break
+                if (!retry || retries >= ArtWorker.GATE_WAITS || !keep() || s.closedReason != null) return false
+                retries++
+                Thread.sleep(Proto.pushGateMs.toLong())
+                if (!keep() || s.closedReason != null) return false
+            }
             val items = device().queue.items
             for (i in offset until offset + count) {
                 val item = items[i] ?: continue
@@ -420,6 +432,13 @@ class Forward(
         if (!page(from, n)) return out
         if (st.repeat == Enums.Repeat.all && n < QUEUE_AHEAD) page(0, minOf(QUEUE_AHEAD - n, slot))
         return out
+    }
+
+    private fun pageResult(r: Session.Result) = when (r) {
+        is Session.Result.Ok -> "ok"
+        is Session.Result.Timeout -> "timeout"
+        is Session.Result.Failed -> if (r.error.code == Err.busy) "busy" else "error ${r.error.code}"
+        else -> r.javaClass.simpleName.lowercase()
     }
 
     private fun sweep(s: Session, pusher: ArtPusher, keep: () -> Boolean): ArtPusher.Report {

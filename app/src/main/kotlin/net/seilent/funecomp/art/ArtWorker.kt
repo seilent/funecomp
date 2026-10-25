@@ -111,7 +111,7 @@ class ArtWorker(
         }
     }
 
-    private companion object {
+    internal companion object {
         const val GATE_WAITS = 3
     }
 }

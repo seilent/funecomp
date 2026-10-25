@@ -63,7 +63,7 @@ class ForwardTest {
         return s to s.listen(0)
     }
 
-    private fun session(port: Int, closed: CountDownLatch = CountDownLatch(1)): Session {
+    private fun session(port: Int, closed: CountDownLatch = CountDownLatch(1), config: Session.Config = Session.Config()): Session {
         val ready = CountDownLatch(1)
         device = DeviceState()
         val s = Session(TcpTransport("127.0.0.1", port), object : Session.Listener {
@@ -77,7 +77,7 @@ class ForwardTest {
             }
 
             override fun onClosed(reason: String) = closed.countDown()
-        })
+        }, config)
         sessions += s
         Thread { s.run() }.apply { isDaemon = true }.start()
         assertTrue(ready.await(5, TimeUnit.SECONDS))
@@ -159,6 +159,17 @@ class ForwardTest {
     }
 
     private fun stores() = synchronized(lines) { lines.filter { it.startsWith("stored name=") } }.map { it.removePrefix("stored name=").substringBefore(" mbid=") }
+
+    @Test
+    fun aTimedOutQueuePageIsAskedAgain() {
+        val (_, port) = sim(10, 1, Options.IMG_CAP, "mute=QUEUE_OP:1")
+        val looked = Lookups()
+        val logs = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val r = forward(looked, sweeping = { false }, log = { logs += it }).run(session(port, config = Session.Config(requestTimeoutMs = 500))) { true }
+        assertEquals(ArtPusher.Stop.DONE, r.stop)
+        assertEquals(listOf("art queue page 1 5 try 1 -> timeout", "art queue page 1 5 try 2 -> ok"), logs.filter { it.startsWith("art queue page") })
+        assertEquals((1..6).map { "Artist %03d".format(it) }, looked.names.take(6))
+    }
 
     @Test
     fun currentThenQueueThenTheLibraryEachPushedOnce() {

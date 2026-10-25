@@ -106,7 +106,7 @@ class BackgroundTest {
         for (cb in shadowOf(app.getSystemService(ConnectivityManager::class.java)).networkCallbacks) cb.onCapabilitiesChanged(wire, caps)
     }
 
-    private fun sweepLink(urls: MutableList<String>, sweep: Int?, onUrl: (String) -> Unit = {}): org.robolectric.android.controller.ServiceController<LinkService> {
+    private fun sweepLink(urls: MutableList<String>, sweep: Int?, faults: List<String> = emptyList(), onUrl: (String) -> Unit = {}): org.robolectric.android.controller.ServiceController<LinkService> {
         val e = artPrefs().edit().putInt("defaults", 2)
         for (k in listOf("theaudiodb", "discogs", "fanarttv", "deezer", "youtube")) e.putBoolean(k, false)
         if (sweep != null) e.putInt("sweep", sweep)
@@ -119,12 +119,79 @@ class BackgroundTest {
         })
         val names = listOf("Now") + List(Forward.QUEUE_AHEAD.toInt()) { "Q" } + swept
         val lib = net.seilent.funecomp.sim.Library(names.mapIndexed { i, n -> net.seilent.funecomp.sim.Track(i + 1L, n, listOf(n), "A$i", n, "T$i", 200_000, "a", "t$i.flac") })
-        val s = Sim(Options(Board.of("v1"), log = { logs += it }), lib)
+        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), log = { logs += it }), lib)
         sims += s
         return Robolectric.buildService(LinkService::class.java, startIntent("tcp:127.0.0.1:${s.listen(0)}")).create().startCommand(0, 1)
     }
 
     private fun looked(urls: List<String>, name: String) = urls.any { "query=$name&" in it }
+
+    @Test
+    fun aRefusedQueuePageIsAskedAgainForTheNextArtists() {
+        Lyrics.set(LyricSources.LRCLIB, false)
+        Lyrics.set(LyricSources.NETEASE, false)
+        val urls = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val c = sweepLink(urls, null, faults = listOf("busy=QUEUE_OP:1"))
+        waitFor { Remote.phase == Phase.LIVE }
+        network(false)
+        waitFor(15_000) { logs.any { " rx QUEUE_OP " in it } && looked(urls, "Now") }
+        waitFor(30_000) { looked(urls, "Q") }
+        c.destroy()
+    }
+
+    private fun pageTries(offset: Long? = null) = org.robolectric.shadows.ShadowLog.getLogsForTag(Remote.TAG)
+        .mapNotNull { Regex("art queue page ([0-9]+) [0-9]+ try ([0-9]+) -> (.+)").matchEntire(it.msg) }
+        .filter { offset == null || it.groupValues[1].toLong() == offset }
+        .map { it.groupValues[2].toInt() to it.groupValues[3] }
+
+    @Test
+    fun aQueuePageRefusedForGoodIsNotRetried() {
+        Lyrics.set(LyricSources.LRCLIB, false)
+        Lyrics.set(LyricSources.NETEASE, false)
+        val urls = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val c = sweepLink(urls, null, faults = listOf("fail=QUEUE_OP:${Err.noLibrary}"))
+        waitFor { Remote.phase == Phase.LIVE }
+        network(false)
+        waitFor(15_000) { pageTries().contains(1 to "error ${Err.noLibrary}") }
+        Thread.sleep(6000)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(pageTries().none { it.first >= 2 })
+        assertFalse(looked(urls, "Q"))
+        c.destroy()
+    }
+
+    @Test
+    fun aBusyQueueStillLetsTheSweepRun() {
+        Lyrics.set(LyricSources.LRCLIB, false)
+        Lyrics.set(LyricSources.NETEASE, false)
+        val urls = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val c = sweepLink(urls, null, faults = listOf("busy=QUEUE_OP:100"))
+        waitFor { Remote.phase == Phase.LIVE }
+        network(true)
+        waitFor(40_000) { artPrefs().getInt("sweep", 0) == 2 }
+        assertTrue(swept.all { looked(urls, it) })
+        assertTrue(pageTries().any { it.first == 4 })
+        assertTrue(pageTries().none { it.first >= 5 })
+        c.destroy()
+    }
+
+    @Test
+    fun namesFromAnOkPageArePushedWhenTheWrapPageStaysBusy() {
+        Lyrics.set(LyricSources.LRCLIB, false)
+        Lyrics.set(LyricSources.NETEASE, false)
+        val urls = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val c = sweepLink(urls, null, faults = listOf("busy-page=0"))
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.queueRev != null }
+        network(false)
+        Remote.transport(Enums.TransportCmd.repeat, null, null, Enums.Repeat.all)
+        waitFor { Remote.device.playback.state.repeat == Enums.Repeat.all }
+        Remote.queueOp(Enums.QueueCmd.playAt, 7, null, emptyList())
+        waitFor(30_000) { looked(urls, "Swc") }
+        waitFor(15_000) { pageTries(0).any { it.first == 4 } }
+        assertTrue(pageTries(8).contains(1 to "ok"))
+        assertTrue(pageTries(0).none { it.first >= 5 })
+        c.destroy()
+    }
 
     @Test
     fun theFirstSweepWaitsForAnUnmeteredNetworkAndThenMarksItsPass() {
