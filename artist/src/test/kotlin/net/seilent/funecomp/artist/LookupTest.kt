@@ -605,16 +605,18 @@ class LookupTest {
         fun old(all: List<J>, q: String): String? {
             val want = Names.fold(q)
             val top = all.firstOrNull()?.takeIf { it["score"].long == 100L && Names.fold(it["sort-name"].str?.replace(", ", " ")) == want }
-            return (all.firstOrNull { a ->
+            val folded = all.filter { a ->
                 Names.fold(a["name"].str) == want || Names.fold(a["sort-name"].str) == want || a["aliases"].list.any { Names.fold(it["name"].str) == want }
-            } ?: top)?.get("id")?.str
+            }
+            val same = folded.firstOrNull { a -> a["name"].str?.trim() == q.trim() || a["sort-name"].str?.trim() == q.trim() || a["aliases"].list.any { it["name"].str?.trim() == q.trim() } }
+            return (same ?: folded.firstOrNull() ?: top)?.get("id")?.str
         }
         val rows = Fixtures.text("urls.tsv").lines().filter { it.startsWith(prefix) }.map { line ->
             val q = java.net.URLDecoder.decode(line.removePrefix(prefix).substringBefore('&'), "UTF-8").replace(Regex("\\\\(.)"), "$1")
             Triple(q, old(J.parse(Fixtures.text(line.substringAfter('\t')))["artists"].list, q), mb().search(q))
         }
         assertTrue("missing ${http.missing}", http.missing.isEmpty())
-        assertEquals(32, rows.size)
+        assertEquals(44, rows.size)
         assertEquals(
             listOf(Triple("むと", null, "6ac7acd1-2720-4733-9f98-cc5163bdce21"), Triple("アイミョン", null, "908d9ac2-5187-4b9e-b281-601c6afb0791")),
             rows.filter { it.second != it.third },
@@ -684,7 +686,7 @@ class LookupTest {
         assertTrue(names.size > 600)
         val stripped = names.filter { Names.bare(it) != null }
         assertTrue("Aoi ch." in names)
-        assertEquals(setOf("DAZBEE official", "Fatz Official", "Iris Official"), stripped.toSet())
-        assertEquals(listOf("DAZBEE", "Fatz", "Iris"), stripped.mapNotNull { Names.bare(it) }.sorted())
+        assertEquals(setOf("Bruce Channel", "DAZBEE official", "Fatz Official", "Iris Official", "NÄO Official", "NÄO Official Channel", "Suisei Channel"), stripped.toSet())
+        assertEquals(listOf("Bruce", "DAZBEE", "Fatz", "Iris", "NÄO", "NÄO Official", "Suisei"), stripped.mapNotNull { Names.bare(it) }.sorted())
     }
 }

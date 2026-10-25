@@ -103,6 +103,7 @@ object Remote : Control {
     private const val ART_WAKE_MS = 60_000L
     private const val SWEEP = "sweep"
     private const val SWEPT = 2
+    private const val BARE_SCAN = "barescan"
     private const val PHONE_TARGET = "phoneTarget"
     private const val DEVICE_TARGETS = "deviceTargets"
     private const val TRANSITION_PAD_MS = 1_000L
@@ -374,6 +375,19 @@ object Remote : Control {
         }
     }
 
+    private fun scanBare(context: Context, a: ArtistArt) {
+        val prefs = context.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(BARE_SCAN, false)) return
+        try {
+            val n = a.scanBare()
+            prefs.edit().putBoolean(BARE_SCAN, true).apply()
+            Log.i(TAG, "art bare scan dropped $n")
+            if (n > 0) trigger.incrementAndGet()
+        } catch (e: IOException) {
+            Log.w(TAG, "art bare scan: $e")
+        }
+    }
+
     private fun swept(context: Context) = context.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE).getInt(SWEEP, 0) >= SWEPT
 
     private fun wake(context: Context) {
@@ -480,7 +494,7 @@ object Remote : Control {
     private fun wrongArtist(e: ArtCache.Entry, crc: Long?, after: () -> Unit = {}) {
         val a = artist ?: return
         val by = a.resolvedBy(e)
-        a.blocks.add(ArtBlocks.Reject(e.key, e.mbid, by, e.name, System.currentTimeMillis(), crc = crc))
+        a.blocks.add(ArtBlocks.Reject(e.key, e.mbid, by, e.name, System.currentTimeMillis(), crc = crc, channel = e.channel))
         after()
         Log.i(TAG, "art wrong artist ${e.name} ${e.mbid} by $by")
         blockedArt(a) { a.forget(e) }
@@ -515,7 +529,7 @@ object Remote : Control {
                     blockPick(e, crc, origin)
                     continue
                 }
-                val done = if (wrong) e.mbid in a.blocks.rejected(a.resolvedBy(e)) else a.blocked(a.withSha(e))
+                val done = if (!wrong) a.blocked(a.withSha(e)) else if (e.channel.isNotEmpty()) e.channel in a.blocks.rejectedChannels(a.resolvedBy(e)) else e.mbid in a.blocks.rejected(a.resolvedBy(e))
                 if (done) Log.i(TAG, "art ask ${e.name} already recorded")
                 else if (wrong) wrongArtist(e, crc, push)
                 else blockArt(e, crc, push)
@@ -829,11 +843,12 @@ object Remote : Control {
         val a = artist(context)
         val forward = Forward(
             { device },
-            { name, mbid, w, h ->
+            { name, mbid, w, h, library ->
+                val search = !library || unmetered
                 if (refreshing(name)) {
-                    a.refresh(name, mbid, w, h).also { synchronized(backdropLock) { backdropFor = null } }
+                    a.refresh(name, mbid, w, h, search).also { synchronized(backdropLock) { backdropFor = null } }
                 } else {
-                    a.get(name, mbid, w, h)
+                    a.get(name, mbid, w, h, search)
                 }
             },
             ::gate,
@@ -846,7 +861,7 @@ object Remote : Control {
             object : Forward.Marks {
                 override fun begin() = a.beginMark()
                 override fun mark(): Any = a.mark()
-                override fun holds(mark: Any) = mark is ArtistArt.Mark && a.holds(mark)
+                override fun holds(mark: Any) = mark is ArtistArt.Mark && a.holds(mark, unmetered)
             },
             Forward.Blocks(a.blocks, { spec }, a::keyOf, a::hasHit) { !Firmwares.sending },
             a::known,
@@ -863,6 +878,7 @@ object Remote : Control {
             { l.session },
             { s, run ->
                 a.scanPlaceholders().takeIf { it > 0 }?.let { Log.i(TAG, "art placeholders dropped $it") }
+                scanBare(context, a)
                 forward.run(s, run::live)
             },
             { final -> !shown || showBackdrop(a, final) },

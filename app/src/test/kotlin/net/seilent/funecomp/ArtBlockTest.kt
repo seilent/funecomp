@@ -390,6 +390,47 @@ class ArtBlockTest {
     }
 
     @Test
+    fun aDeviceWrongArtistOnAChannelPhotoIsCoveredByItsChannelReject() {
+        val tag = "chelly Ch."
+        val key = "name:${Names.fold(tag)}"
+        val chelly = "4dfe9c0b-7602-4189-9919-151d493d1028"
+        val channel = "UC0OvtxMEg001QRAyOk9qZ8Q"
+        val c = cache()
+        c.putMbid(tag, null, System.currentTimeMillis())
+        c.putHit(ArtCache.Entry(key, tag, chelly, Wikimedia.SOURCE, null, "https://upload.wikimedia.org/chelly.jpg", 1, "File:chelly.jpg", "", tag, channel = channel), jpeg())
+        records(ArtBlocks.Reject(key, chelly, tag, tag, 1, channel = channel))
+        val s = asking(track(tag), tag)
+        assertEquals("ok", s.askBlock(wrong, tag))
+        assertTrue(recorded(tag))
+        assertEquals(1, blocks().size)
+        assertEquals(channel, (blocks().single() as ArtBlocks.Reject).channel)
+    }
+
+    @Test
+    fun anUnblockPushAfterAReorderRefreshesWithNoSearchOnMetered() {
+        val tag = "Zz Unseen"
+        val prefs = app.getSharedPreferences(Main.ART_PREFS, android.content.Context.MODE_PRIVATE)
+        prefs.edit().putInt("defaults", 2).putString("order", "commons,theaudiodb,fanarttv,discogs,youtube,deezer").putBoolean("theaudiodb", false).putBoolean("discogs", false).putBoolean("fanarttv", false).putBoolean("deezer", false).putBoolean("youtube", false).commit()
+        val afterUnblock = CopyOnWriteArrayList<Boolean>()
+        val a = Remote.artist(app, Http { url, _ ->
+            if (url.startsWith("https://www.youtube.com/results?")) afterUnblock += ShadowLog.getLogsForTag(Remote.TAG).any { it.msg.startsWith("art unblock ") }
+            Response(404, ByteArray(0))
+        })
+        val s = Sim(Options(Board.of("v1"), log = { lines += it }), track(tag))
+        sims += s
+        Remote.shown(true)
+        link(s.listen(0))
+        waitFor(10_000) { ShadowLog.getLogsForTag(Remote.TAG).any { it.msg.startsWith("art current ") } }
+        prefs.edit().putBoolean("youtube", true).commit()
+        Remote.reordered()
+        a.blocks.addPush(tag, null)
+        a.blocks.save()
+        Remote.sourcesChanged()
+        waitFor(10_000) { afterUnblock.isNotEmpty() }
+        assertEquals(true, afterUnblock.first())
+    }
+
+    @Test
     fun aRejectUnderAnotherResolverDoesNotCoverTheAsk() {
         records(ArtBlocks.Reject(mbid, mbid, utadaJa, utadaJa, 1))
         seed(mbid, utadaJa, mbid, utadaJa, utadaJa to mbid, utadaEn to mbid)

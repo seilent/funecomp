@@ -38,18 +38,24 @@ class ArtistArt(
     private val deezer = Deezer(api, placeholders)
     private var scanned = false
 
-    class Mark(val sources: String, val until: Long)
+    class Mark(val sources: String, val until: Long, val pending: Boolean = false)
 
     @Volatile private var missDue = Long.MAX_VALUE
+    @Volatile private var pending = false
     private val pruneSafe = picks.skipped == 0 && (picks.read || gallery?.any() != true)
     private val missingLogged = HashSet<String>()
 
-    private class Found(val c: Candidate, val url: String, val src: ByteArray, val size: Size, val jpeg: ByteArray, val mbid: String?, val by: String, val base: String)
+    private class Found(val c: Candidate, val url: String, val src: ByteArray, val size: Size, val jpeg: ByteArray, val mbid: String?, val by: String, val base: String, val bare: Boolean = false, val channel: String = "")
+
+    private class Pass(val channel: Boolean) {
+        val skipped = AtomicBoolean(false)
+        var answered: Boolean? = null
+    }
 
     private class Hit(val c: Candidate, val url: String, val src: ByteArray, val size: Size, val jpeg: ByteArray, val base: String = "")
 
     @Throws(IOException::class)
-    fun get(name: String, mbid: String?, w: Int, h: Int): Art? {
+    fun get(name: String, mbid: String?, w: Int, h: Int, search: Boolean = true): Art? {
         val p = picks.of(mbid, name)
         when (p?.kind) {
             ArtPicks.IMAGE -> return picked(p, name, mbid, w, h)
@@ -58,7 +64,7 @@ class ArtistArt(
         val on = sources().enabled
         val now = clock()
         val tag = tag(p, mbid)
-        val id = tag ?: resolve(name, now)
+        val id = tag ?: identify(name, now)
         val key = id ?: "name:${Names.fold(name)}"
         val hit = cache.hit(key)?.takeIf { it.source in on }
         val kept = if (hit != null && blocked(hit)) {
@@ -76,19 +82,25 @@ class ArtistArt(
             false
         }
         val keyHash = keyHash(on)
-        cache.miss(key)?.let { m ->
-            if (now - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash && m.cleaned) {
-                due(m.at)
-                return null
-            }
+        val step = tag == null && id == null && !kept && Sources.YOUTUBE in on
+        val m = cache.miss(key)
+        val searchDue = step && searchDue(m, now)
+        if (searchDue && !search) pending = true
+        if (m != null && now - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash && m.cleaned && !(searchDue && search)) {
+            due(m.at)
+            return null
         }
         if (!online()) throw IOException("offline")
-        val skipped = AtomicBoolean(false)
-        val found = find(name, tag, id, key, w, h, on, now, skipped)
+        val pass = Pass(searchDue && search)
+        val found = find(name, tag, id, key, w, h, on, now, pass)
         if (found == null) {
             if (!kept) {
-                cache.putMiss(key, now, on, keyHash)
-                if (skipped.get() && blocks.drop(key, id, name.trim(), now)) blocks.save()
+                when (pass.answered) {
+                    true -> cache.putMiss(key, now, on, keyHash, now)
+                    false -> cache.putMiss(key, now, on, keyHash, m?.yt, now)
+                    null -> cache.putMiss(key, now, on, keyHash, m?.yt, m?.ytFailed)
+                }
+                if (pass.skipped.get() && blocks.drop(key, id, name.trim(), now)) blocks.save()
             } else if (hit != null) {
                 cache.putFailed(key, hit.at, now)
             }
@@ -99,21 +111,33 @@ class ArtistArt(
     }
 
     @Throws(IOException::class)
-    fun refresh(name: String, mbid: String?, w: Int, h: Int): Art? {
+    fun refresh(name: String, mbid: String?, w: Int, h: Int, search: Boolean = true): Art? {
         val p = picks.of(mbid, name)
-        if (p != null && p.kind != ArtPicks.ARTIST) return get(name, mbid, w, h)
+        if (p != null && p.kind != ArtPicks.ARTIST) return get(name, mbid, w, h, search)
         val on = sources().enabled
         val now = clock()
         val tag = tag(p, mbid)
-        val id = tag ?: resolve(name, now)
+        val id = tag ?: identify(name, now)
         val key = id ?: "name:${Names.fold(name)}"
         val found = try {
-            if (online()) find(name, tag, id, key, w, h, on, now, AtomicBoolean(false)) else null
+            if (online()) find(name, tag, id, key, w, h, on, now, Pass(false)) else null
         } catch (e: IOException) {
             null
         }
-        return if (found == null) get(name, mbid, w, h) else keep(name, tag, key, found, w, h, now)
+        return if (found == null) get(name, mbid, w, h, search) else keep(name, tag, key, found, w, h, now)
     }
+
+    private fun searchDue(m: ArtCache.Miss?, now: Long): Boolean {
+        val failed = m?.ytFailed
+        val ok = m?.yt
+        return when {
+            failed != null && (ok == null || failed > ok) -> now - failed >= TTL_MS
+            ok != null -> now - ok >= YT_TTL_MS
+            else -> true
+        }
+    }
+
+    private fun identify(name: String, now: Long): String? = if (YouTube.channelId(name) != null) null else resolve(name, now)
 
     fun render(e: ArtCache.Entry, w: Int, h: Int): ByteArray? {
         cache.rendered(e.key, w, h)?.let { return it }
@@ -409,19 +433,71 @@ class ArtistArt(
         }
     }
 
-    private fun find(name: String, tag: String?, id: String?, key: String, w: Int, h: Int, on: Set<String>, now: Long, skipped: AtomicBoolean): Found? {
-        lookup(name, name, id, w, h, on, key, skipped)?.let { return Found(it.c, it.url, it.src, it.size, it.jpeg, id, if (tag == null && id != null) name.trim() else "", it.base) }
-        if (tag != null) return null
-        for (v in Names.variants(name)) {
-            val vid = resolve(v, now)
-            val f = lookup(v, name, vid, w, h, on, key, skipped) ?: continue
-            return Found(f.c, f.url, f.src, f.size, f.jpeg, vid, if (vid != null) v else "", f.base)
+    private fun find(name: String, tag: String?, id: String?, key: String, w: Int, h: Int, on: Set<String>, now: Long, pass: Pass): Found? {
+        val channelTag = YouTube.channelId(name).takeIf { tag == null }
+        if (channelTag == null) {
+            lookup(name, name, id, w, h, on, key, pass.skipped)?.let { return Found(it.c, it.url, it.src, it.size, it.jpeg, id, if (tag == null && id != null) name.trim() else "", it.base) }
+            if (tag != null) return null
+            val bare = Names.bareOf(name)
+            for (v in Names.variants(name)) {
+                val isBare = v == bare
+                val vid = if (isBare) resolveBare(v, name, now) ?: continue else resolve(v, now)
+                val f = lookup(v, name, vid, w, h, on, key, pass.skipped) ?: continue
+                return Found(f.c, f.url, f.src, f.size, f.jpeg, vid, if (isBare) name.trim() else if (vid != null) v else "", f.base, bare = isBare)
+            }
         }
-        return null
+        if (!pass.channel) return null
+        return channel(name, channelTag, key, w, h, on, pass)
+    }
+
+    private fun channel(name: String, channelTag: String?, key: String, w: Int, h: Int, on: Set<String>, pass: Pass): Found? {
+        val skip = blocks.rejectedChannels(name)
+        val m = if (channelTag != null) {
+            if (channelTag in skip) {
+                pass.answered = true
+                return null
+            }
+            val url = YouTube.channelUrl(channelTag)
+            val links = mb.byUrl(url)
+            val img = YouTube.page(api, url)?.let { YouTube.ogImage(it) }
+            pass.answered = img != null
+            ChannelMatch.Match(YouTube.Channel(channelTag, name.trim(), img ?: ""), ChannelMatch.mbid(name, links)).takeIf { it.mbid != null || img != null } ?: return null
+        } else {
+            when (val r = youtube.search(name)) {
+                YouTube.Search.Unavailable -> {
+                    log("art youtube search unavailable ${name.trim()}")
+                    pass.answered = false
+                    return null
+                }
+                YouTube.Search.NoResults -> {
+                    pass.answered = true
+                    return null
+                }
+                is YouTube.Search.Channels -> {
+                    pass.answered = true
+                    val e = ChannelMatch.equal(name, r.list.filter { it.id !in skip }) ?: return null
+                    val links = ChannelMatch.lookups(e).associate { it.id to mb.byUrl(YouTube.channelUrl(it.id)) }
+                    ChannelMatch.decide(name, e, links) ?: return null
+                }
+            }
+        }
+        val f = if (m.mbid != null) lookup(name, name, m.mbid, w, h, on, key, pass.skipped) else avatar(m.channel, name, key, w, h)
+        f ?: return null
+        return Found(f.c, f.url, f.src, f.size, f.jpeg, m.mbid, name.trim(), f.base, channel = m.channel.id)
+    }
+
+    private fun avatar(ch: YouTube.Channel, display: String, key: String, w: Int, h: Int): Hit? {
+        val c = Candidate(if (YouTube.resizable(ch.thumb)) YouTube.sized(ch.thumb, YT_FULL) else ch.thumb, Sources.YOUTUBE)
+        if (c.url.isEmpty() || blocks.blocked(key, c.source, c.id, name = display)) return null
+        val (url, src) = fetch(c, targets().side) ?: return null
+        if (blocks.blocked(key, c.source, "", ArtCache.sha256(src), display)) return null
+        val size = codec.bounds(src)?.takeIf { Backdrop.fits(it, w, h) } ?: return null
+        val jpeg = Backdrop.render(codec, src, w, h) ?: return null
+        return Hit(c, url, src, size, jpeg)
     }
 
     private fun keep(name: String, tag: String?, key: String, f: Found, w: Int, h: Int, now: Long): Art {
-        val e = ArtCache.Entry(key, name.trim(), f.mbid, f.c.source, f.c.credit, f.url, now, f.c.id, ArtCache.sha256(f.src), f.by, f.size.w, f.size.h, f.base)
+        val e = ArtCache.Entry(key, name.trim(), f.mbid, f.c.source, f.c.credit, f.url, now, f.c.id, ArtCache.sha256(f.src), f.by, f.size.w, f.size.h, f.base, bare = f.bare, channel = f.channel)
         cache.putHit(e, f.src)
         cache.putRendered(key, w, h, f.jpeg)
         return Art(f.jpeg, w, h, name.trim(), f.mbid, f.c.source, f.c.credit, tag == null && wrongArtistOffered(e, name))
@@ -466,8 +542,11 @@ class ArtistArt(
 
     fun wrongArtistOffered(e: ArtCache.Entry): Boolean {
         if (picked(e)) return false
+        if (e.channel.isNotEmpty()) return true
         val by = resolvedBy(e)
-        return by.isNotEmpty() && e.mbid != null && cache.mbid(by)?.mbid == e.mbid
+        if (by.isEmpty() || e.mbid == null) return false
+        if (e.bare) return cache.bare(by)?.mbid == e.mbid
+        return cache.mbid(by)?.mbid == e.mbid
     }
 
     fun wrongArtistOffered(e: ArtCache.Entry, name: String): Boolean = wrongArtistOffered(e) && resolves(resolvedBy(e), name)
@@ -490,17 +569,18 @@ class ArtistArt(
     fun forgetName(name: String) = cache.forgetName(name)
 
     fun withSha(e: ArtCache.Entry): ArtCache.Entry =
-        if (e.sha.isNotEmpty()) e else ArtCache.Entry(e.key, e.name, e.mbid, e.source, e.credit, e.url, e.at, e.id, cache.sha(e), e.resolvedBy)
+        if (e.sha.isNotEmpty()) e else ArtCache.Entry(e.key, e.name, e.mbid, e.source, e.credit, e.url, e.at, e.id, cache.sha(e), e.resolvedBy, bare = e.bare, channel = e.channel)
 
     fun keyOf(name: String, mbid: String?): String = (tag(picks.of(mbid, name), mbid) ?: cache.mbid(name)?.mbid) ?: "name:${Names.fold(name)}"
 
     fun beginMark() {
         missDue = Long.MAX_VALUE
+        pending = false
     }
 
-    fun mark() = Mark(signature(), missDue)
+    fun mark() = Mark(signature(), missDue, pending)
 
-    fun holds(m: Mark) = m.sources == signature() && clock() < m.until
+    fun holds(m: Mark, searchAllowed: Boolean = false) = m.sources == signature() && clock() < m.until && !(m.pending && searchAllowed)
 
     private fun signature(): String {
         val on = sources().enabled
@@ -542,6 +622,46 @@ class ArtistArt(
         val id = mb.search(name, skip)
         cache.putMbid(name, id, now)
         return id
+    }
+
+    private fun resolveBare(name: String, tag: String, now: Long): String? {
+        val skip = blocks.rejected(tag)
+        cache.bare(tag)?.let { l ->
+            if (l.mbid != null && l.mbid !in skip) return l.mbid
+            if (l.mbid == null && now - l.at < TTL_MS) {
+                due(l.at)
+                return null
+            }
+        }
+        if (!online()) throw IOException("offline")
+        val id = mb.unique(name, skip)
+        cache.putBare(tag, id, now)
+        return id
+    }
+
+    @Throws(IOException::class)
+    fun scanBare(): Int {
+        var n = 0
+        for (e in cache.entries()) {
+            if (picked(e) || e.bare || e.mbid == null) continue
+            val b = Names.bareOf(e.name) ?: continue
+            if (Names.fold(e.resolvedBy) != Names.fold(b) || picks.of(null, e.name) != null || picks.of(e.mbid, e.name) != null) continue
+            val now = clock()
+            val skip = blocks.rejected(e.name)
+            val known = cache.bare(e.name)
+            val id = if (known != null) {
+                known.mbid?.takeIf { it !in skip }
+            } else {
+                if (!online()) throw IOException("offline")
+                mb.unique(b, skip).also { cache.putBare(e.name, it, now) }
+            }
+            if (id == e.mbid) continue
+            cache.drop(e.key)
+            blocks.drop(e.key, e.mbid, e.name, now)
+            n++
+        }
+        if (n > 0) blocks.save()
+        return n
     }
 
     private fun lookup(name: String, display: String, id: String?, w: Int, h: Int, on: Set<String>, key: String, skipped: AtomicBoolean): Hit? {
@@ -645,7 +765,7 @@ class ArtistArt(
             return Upgrade(false, bytes)
         }
         val xl = if (b.c.source == Sources.DEEZER && b.c.id == e.id) e.base.ifEmpty { cache.sha(e) } else ""
-        val n = ArtCache.Entry(e.key, e.name, e.mbid, b.c.source, b.c.credit ?: e.credit.takeIf { b.c.id == e.id }, b.url, clock(), b.c.id, ArtCache.sha256(b.src), e.resolvedBy, b.size.w, b.size.h, xl)
+        val n = ArtCache.Entry(e.key, e.name, e.mbid, b.c.source, b.c.credit ?: e.credit.takeIf { b.c.id == e.id }, b.url, clock(), b.c.id, ArtCache.sha256(b.src), e.resolvedBy, b.size.w, b.size.h, xl, bare = e.bare, channel = e.channel)
         if (!cache.replaceHit(e.at, n, b.src)) return Upgrade(false, bytes)
         cache.putRendered(e.key, w, h, b.jpeg)
         return Upgrade(true, bytes, n.at)
@@ -726,6 +846,7 @@ class ArtistArt(
 
     companion object {
         const val TTL_MS = 7L * 24 * 3600 * 1000
+        const val YT_TTL_MS = 30L * 24 * 3600 * 1000
         const val MAX_TRIES = 4
         const val PICK_W = 360
         const val PICK_H = 480

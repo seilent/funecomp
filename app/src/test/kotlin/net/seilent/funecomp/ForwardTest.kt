@@ -93,6 +93,7 @@ class ForwardTest {
 
     private class Lookups {
         val names: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+        val library: MutableList<Pair<String, Boolean>> = java.util.concurrent.CopyOnWriteArrayList()
         var gates = 0
     }
 
@@ -119,8 +120,9 @@ class ForwardTest {
         version: (String) -> Int = { 0 },
     ) = Forward(
         { device },
-        { n, m, w, h ->
+        { n, m, w, h, library ->
             looked.names += n
+            looked.library += n to library
             if (fail) throw IOException("http 403: x")
             if (missing(n)) null else Art(jpeg(w, h, 2000 + version(n)), w, h, n, m, "test", null)
         },
@@ -1012,7 +1014,7 @@ class ForwardTest {
         val looked = Lookups()
         val f = Forward(
             { device },
-            { n, m, w, h ->
+            { n, m, w, h, _ ->
                 looked.names += n
                 when (n) {
                     "Silhouette" -> null.also { records.drop("name:$n", null, n, 1) }
@@ -1055,6 +1057,111 @@ class ForwardTest {
         assertEquals(2, stores().count { it == "Orphan" })
         assertTrue("orphan" in sim.device.stored.keys)
         assertTrue(records.held("tcp:A").isEmpty())
+    }
+
+    @Test
+    fun currentAndQueueLookupsAreNotLibraryLookupsAndTheSweepIs() {
+        val (_, port) = sim(30)
+        val looked = Lookups()
+        forward(looked).run(session(port)) { true }
+        val first = (1..6).map { "Artist %03d".format(it) }.toSet()
+        assertEquals(30, looked.library.map { it.first }.toSet().size)
+        assertTrue(looked.library.filter { it.first in first }.none { it.second })
+        assertTrue(looked.library.filter { it.first !in first }.all { it.second })
+    }
+
+    @Test
+    fun anUnblockPushIsALibraryLookup() {
+        val (_, s) = dropSim("Ub")
+        val records = ArtBlocks()
+        records.addPush("Ub", null)
+        val looked = Lookups()
+        forward(looked, blocks = blocks(records, "tcp:A")).run(s) { true }
+        assertTrue(looked.library.any { it.first == "Ub" })
+        assertTrue(looked.library.filter { it.first == "Ub" }.all { it.second })
+    }
+
+    @Test
+    fun orphanAndHeldRowsAreLibraryLookups() {
+        val (_, s) = dropSim("Ha", "Oa")
+        seed(s, "Ha")
+        seed(s, "Oa")
+        val records = ArtBlocks()
+        records.hold("Ha", null, "tcp:A")
+        val looked = Lookups()
+        forward(looked, blocks = blocks(records, "tcp:A"), known = { n, _ -> n != "Oa" || n in looked.names }).run(s) { true }
+        assertEquals(listOf(true), looked.library.filter { it.first == "Ha" }.map { it.second }.distinct())
+        assertEquals(listOf(true), looked.library.filter { it.first == "Oa" }.map { it.second }.distinct())
+    }
+
+    private class Jump : net.seilent.funecomp.artist.Clock {
+        @Volatile var t = 1_000_000L
+        override fun now() = t
+        override fun park(until: Long) {
+            if (until > t) t = until
+        }
+        override fun condition(): net.seilent.funecomp.artist.Cond = object : net.seilent.funecomp.artist.Cond {
+            override fun await(run: net.seilent.funecomp.artist.HttpRun?, until: Long?, ready: () -> Boolean) {
+                while (!ready()) {
+                    if (until == null || t >= until) return
+                    park(until)
+                }
+            }
+            override fun signalAll() {}
+        }
+    }
+
+    @Test
+    fun aLibraryRowWithADueSearchKeepsTheSweepOnMeteredAndSearchesAtTheUnmeteredEdge() {
+        val (_, port) = sim(10)
+        val s = session(port)
+        val searched: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+        val http = net.seilent.funecomp.artist.Http { url, _ ->
+            when {
+                url.startsWith("https://musicbrainz.org/ws/2/artist/?query=") -> net.seilent.funecomp.artist.Response(200, "{\"artists\":[]}".toByteArray())
+                url.startsWith("https://www.youtube.com/results?") -> {
+                    if (!url.endsWith("&hl=en&gl=US")) searched += java.net.URLDecoder.decode(url.substringAfter("search_query=").substringBefore('&'), "UTF-8")
+                    net.seilent.funecomp.artist.Response(200, "<html><script>var ytInitialData = {\"estimatedResults\":\"0\"};</script></html>".toByteArray())
+                }
+                else -> net.seilent.funecomp.artist.Response(404, ByteArray(0))
+            }
+        }
+        var unmetered = false
+        val a = net.seilent.funecomp.artist.ArtistArt(
+            http, net.seilent.funecomp.artist.Codec { _, _ -> null }, net.seilent.funecomp.artist.ArtCache(tmp.newFolder("art")),
+            { net.seilent.funecomp.artist.Sources.NONE.copy(youtube = true) }, "0.1.0", time = Jump(),
+        )
+        val logged: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+        val f = Forward(
+            { device },
+            { n, m, w, h, library -> a.get(n, m, w, h, !library || unmetered) },
+            { true },
+            { true },
+            { true },
+            { s2, offset, rev ->
+                val snap = device.lib.keyed(Enums.View.artists)
+                s2.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", offset, LIB_PAGE, rev.takeUnless { snap }, rev.takeIf { snap }))
+            },
+            Sweep.Breaker({ 0L }),
+            marks = object : Forward.Marks {
+                override fun begin() = a.beginMark()
+                override fun mark(): Any = a.mark()
+                override fun holds(mark: Any) = mark is net.seilent.funecomp.artist.ArtistArt.Mark && a.holds(mark, unmetered)
+            },
+            log = { logged += it },
+        )
+        val first = (1..6).map { "Artist %03d".format(it) }
+        f.run(s) { true }
+        assertEquals(first, searched.sorted())
+        f.run(s) { true }
+        assertEquals(1, logged.count { it == "art sweep kept" })
+        assertEquals(first, searched.sorted())
+        unmetered = true
+        f.run(s) { true }
+        assertEquals((1..10).map { "Artist %03d".format(it) }, searched.sorted())
+        f.run(s) { true }
+        assertEquals(2, logged.count { it == "art sweep kept" })
+        assertEquals(10, searched.size)
     }
 
     @Test

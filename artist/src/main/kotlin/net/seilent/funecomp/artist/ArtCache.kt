@@ -21,12 +21,16 @@ class ArtCache(private val dir: File) {
         val base: String = "",
         val failed: Long = 0,
         val sized: String = "",
+        val bare: Boolean = false,
+        val channel: String = "",
     )
-    class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false)
+    class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false, val yt: Long? = null, val ytFailed: Long? = null)
     class Looked(val mbid: String?, val at: Long)
 
     private val names = File(dir, "names.properties")
     private var nameMap: Properties? = null
+    private val bares = File(dir, "bare.properties")
+    private var bareMap: Properties? = null
     private var listed: List<Entry>? = null
 
     @Synchronized
@@ -48,6 +52,20 @@ class ArtCache(private val dir: File) {
     }
 
     @Synchronized
+    fun bare(name: String): Looked? {
+        val v = bareMap().getProperty(Names.fold(name)) ?: return null
+        val at = v.substringBefore(' ').toLongOrNull() ?: return null
+        return Looked(Names.mbid(v.substringAfter(' ', "")), at)
+    }
+
+    @Synchronized
+    fun putBare(name: String, mbid: String?, at: Long) {
+        val p = bareMap()
+        p.setProperty(Names.fold(name), "$at ${mbid ?: ""}".trim())
+        save(bares, p)
+    }
+
+    @Synchronized
     fun hit(key: String): Entry? {
         val p = load(meta(key))
         if (p.getProperty("state") != "hit" || !src(key).isFile) return null
@@ -56,7 +74,7 @@ class ArtCache(private val dir: File) {
             key, p.getProperty("name", ""), p.getProperty("mbid"), p.getProperty("source", ""), credit, p.getProperty("url", ""),
             p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("id", ""), p.getProperty("sha", ""), p.getProperty("resolvedBy", ""),
             p.getProperty("w")?.toIntOrNull() ?: 0, p.getProperty("h")?.toIntOrNull() ?: 0, p.getProperty("base", ""),
-            p.getProperty("failed")?.toLongOrNull() ?: 0, p.getProperty("sized", ""),
+            p.getProperty("failed")?.toLongOrNull() ?: 0, p.getProperty("sized", ""), p.getProperty("bare") == "1", p.getProperty("channel", ""),
         )
     }
 
@@ -126,7 +144,10 @@ class ArtCache(private val dir: File) {
     fun miss(key: String): Miss? {
         val p = load(meta(key))
         if (p.getProperty("state") != "miss") return null
-        return Miss(p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }.toSet(), p.getProperty("keyHash", ""), p.getProperty("cleaned") == CLEANED)
+        return Miss(
+            p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }.toSet(), p.getProperty("keyHash", ""),
+            p.getProperty("cleaned") == CLEANED, p.getProperty("yt")?.toLongOrNull(), p.getProperty("ytFailed")?.toLongOrNull(),
+        )
     }
 
     @Synchronized
@@ -159,6 +180,8 @@ class ArtCache(private val dir: File) {
             p.setProperty("h", e.h.toString())
         }
         if (e.base.isNotEmpty()) p.setProperty("base", e.base)
+        if (e.bare) p.setProperty("bare", "1")
+        if (e.channel.isNotEmpty()) p.setProperty("channel", e.channel)
         e.credit?.let {
             p.setProperty("author", it.author)
             p.setProperty("license", it.license)
@@ -180,7 +203,7 @@ class ArtCache(private val dir: File) {
     fun putRendered(key: String, w: Int, h: Int, jpeg: ByteArray) = write(jpg(key, w, h), jpeg)
 
     @Synchronized
-    fun putMiss(key: String, at: Long, sources: Set<String>, keyHash: String = "") {
+    fun putMiss(key: String, at: Long, sources: Set<String>, keyHash: String = "", yt: Long? = null, ytFailed: Long? = null) {
         listed = null
         dropFiles(key)
         val p = Properties()
@@ -190,6 +213,8 @@ class ArtCache(private val dir: File) {
         p.setProperty("sources", sources.sorted().joinToString(","))
         if (keyHash.isNotEmpty()) p.setProperty("keyHash", keyHash)
         p.setProperty("cleaned", CLEANED)
+        yt?.let { p.setProperty("yt", it.toString()) }
+        ytFailed?.let { p.setProperty("ytFailed", it.toString()) }
         save(meta(key), p)
     }
 
@@ -202,6 +227,7 @@ class ArtCache(private val dir: File) {
     @Synchronized
     fun clear() {
         nameMap = null
+        bareMap = null
         listed = null
         dir.listFiles()?.forEach { it.delete() }
     }
@@ -214,6 +240,8 @@ class ArtCache(private val dir: File) {
             save(names, p)
         }
     }
+
+    private fun bareMap() = bareMap ?: load(bares).also { bareMap = it }
 
     private fun dropFiles(key: String) {
         val h = hash(key)
@@ -260,7 +288,7 @@ class ArtCache(private val dir: File) {
 
     companion object {
         private const val KANA = ".kana"
-        private const val CLEANED = "2"
+        private const val CLEANED = "3"
 
         fun sha256(b: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
     }

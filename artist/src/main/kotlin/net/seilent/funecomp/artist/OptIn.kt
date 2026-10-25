@@ -118,7 +118,7 @@ class Discogs(private val api: Api, private val base: String = "https://api.disc
 }
 
 class YouTube(private val api: Api, private val log: (String) -> Unit = {}) {
-    class Channel(val id: String, val title: String, val thumb: String)
+    class Channel(val id: String, val title: String, val thumb: String, val verified: Boolean = false)
 
     sealed interface Search {
         class Channels(val list: List<Channel>) : Search
@@ -171,6 +171,12 @@ class YouTube(private val api: Api, private val log: (String) -> Unit = {}) {
         private const val EN = "&hl=en&gl=US"
         private const val PROMO = "backgroundPromoRenderer"
         private const val SIGN_IN = "signInEndpoint"
+        private val VERIFIED = setOf("BADGE_STYLE_TYPE_VERIFIED", "BADGE_STYLE_TYPE_VERIFIED_ARTIST")
+        private val CHANNEL_ID = Regex("^UC[0-9A-Za-z_-]{22}$")
+
+        fun channelId(tag: String): String? = tag.trim().takeIf { CHANNEL_ID.matches(it) }
+
+        fun channelUrl(id: String) = "https://www.youtube.com/channel/$id"
         private const val DATA = "var ytInitialData = "
         private const val ELEMENT = "<script id=\"yt-initial-data\""
         private const val WINDOW = "window['ytInitialData']"
@@ -243,7 +249,8 @@ class YouTube(private val api: Api, private val log: (String) -> Unit = {}) {
                         val id = v["channelId"].str
                         val title = v["title"]["simpleText"].str
                         val thumb = v["thumbnail"]["thumbnails"].list.lastOrNull()?.get("url")?.str
-                        if (id != null && title != null && thumb != null) out += Channel(id, title, if (thumb.startsWith("//")) "https:$thumb" else thumb)
+                        val verified = v["ownerBadges"].list.any { it["metadataBadgeRenderer"]["style"].str in VERIFIED }
+                        if (id != null && title != null && thumb != null) out += Channel(id, title, if (thumb.startsWith("//")) "https:$thumb" else thumb, verified)
                     } else {
                         walk(v)
                     }

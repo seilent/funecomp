@@ -19,18 +19,25 @@ object Names {
     private val tagTail = Regex("\\s*(【[^【】]*】|\\[[^\\[\\]]*])\\s*$")
     private val channelTail = Regex("^(.*\\S)([\\s\u3000]+(official|Official|OFFICIAL|channel|Channel|公式|チャンネル)|/公式)$")
 
-    fun variants(name: String): List<String> {
-        val plain = name.trim()
-        var base = plain
+    private fun base(name: String): String {
+        var base = name.trim()
         while (true) {
             val m = tagTail.find(base) ?: break
             val rest = base.substring(0, m.range.first).trim()
             if (rest.isEmpty()) break
             base = rest
         }
+        return base
+    }
+
+    fun variants(name: String): List<String> {
+        val plain = name.trim()
+        val base = base(plain)
         val bare = bare(base)
         return (listOf(base) + listOfNotNull(bare) + split(bare ?: base)).map { it.trim() }.filter { it.isNotEmpty() && it != plain }.distinct()
     }
+
+    fun bareOf(name: String): String? = bare(base(name))
 
     fun bare(s: String): String? = channelTail.find(s.trim())?.groupValues?.get(1)?.trim()
 
@@ -76,6 +83,8 @@ object Names {
 
 class Rel(val type: String, val url: String, val ended: Boolean)
 
+class Linked(val id: String, val name: String, val sortName: String)
+
 class MbArtist(val id: String, val name: String, val country: String?, val rels: List<Rel>, val disambiguation: String = "") {
     fun rels(type: String) = rels.filter { it.type == type && !it.ended }
 }
@@ -92,6 +101,25 @@ class MusicBrainz(private val api: Api, private val base: String = "https://musi
         val same = folded.firstOrNull { matches(it, { s -> s?.trim() ?: "" }, name.trim()) }
         return (same ?: folded.firstOrNull() ?: top ?: all.filter { matches(it, Names::kana, kana) }.singleOrNull())
             ?.get("id")?.str?.let { Names.mbid(it) }
+    }
+
+    fun unique(name: String, skip: Set<String> = emptySet()): String? {
+        val want = Names.fold(name)
+        if (want.isEmpty()) return null
+        val r = api.json(query(name)) ?: return null
+        val all = r["artists"].list.filter { Names.mbid(it["id"].str) !in skip }
+        val folded = all.filter { matches(it, Names::fold, want) }
+        val one = if (folded.isNotEmpty()) folded.singleOrNull() else all.filter { matches(it, Names::kana, Names.kana(name)) }.singleOrNull()
+        return one?.get("id")?.str?.let { Names.mbid(it) }
+    }
+
+    fun byUrl(url: String): List<Linked> {
+        val r = api.json("$base/url?resource=${Api.enc(url)}&inc=artist-rels&fmt=json") ?: return emptyList()
+        return r["relations"].list.filter { it["ended"].bool != true }.mapNotNull { x ->
+            val a = x["artist"]
+            val id = Names.mbid(a["id"].str) ?: return@mapNotNull null
+            Linked(id, a["name"].str ?: "", a["sort-name"].str ?: "")
+        }.distinctBy { it.id }
     }
 
     fun searchAll(name: String): List<String> {

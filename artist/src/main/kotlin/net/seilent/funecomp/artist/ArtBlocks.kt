@@ -31,6 +31,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         override val at: Long,
         val applied: Set<String> = emptySet(),
         val crc: Long? = null,
+        val channel: String = "",
     ) : Record
 
     data class Drop(
@@ -153,7 +154,13 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
     @Synchronized
     fun rejected(name: String): Set<String> {
         val f = Names.fold(name)
-        return rejects.filter { Names.fold(it.resolvedBy) == f }.mapNotNullTo(HashSet()) { it.mbid }
+        return rejects.filter { Names.fold(it.resolvedBy) == f && it.channel.isEmpty() }.mapNotNullTo(HashSet()) { it.mbid }
+    }
+
+    @Synchronized
+    fun rejectedChannels(name: String): Set<String> {
+        val f = Names.fold(name)
+        return rejects.filter { Names.fold(it.resolvedBy) == f && it.channel.isNotEmpty() }.mapTo(HashSet()) { it.channel }
     }
 
     @Synchronized
@@ -204,7 +211,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
     fun encode(): String = buildString {
         for (b in blocks) line("block", b.key, b.mbid ?: "", b.source, b.id, b.sha, b.name, b.at.toString(), b.applied.joinToString(","), *listOfNotNull(b.crc?.toString()).toTypedArray())
         for (d in drops) line("drop", d.key, d.mbid ?: "", d.name, d.at.toString(), d.applied.joinToString(","))
-        for (r in rejects) line("reject", r.key, r.mbid ?: "", r.resolvedBy, r.name, r.at.toString(), r.applied.joinToString(","), *listOfNotNull(r.crc?.toString()).toTypedArray())
+        for (r in rejects) line("reject", r.key, r.mbid ?: "", r.resolvedBy, r.name, r.at.toString(), r.applied.joinToString(","), *(if (r.channel.isEmpty()) listOfNotNull(r.crc?.toString()) else listOf(r.crc?.toString() ?: "", r.channel)).toTypedArray())
         for (h in held) line("held", h.name, h.mbid ?: "", h.device)
         for (d in upgradeDevices) line("upgradedevice", d)
         for (u in upgrades) line("upgrade", u.key, u.name, u.mbid ?: "", u.at.toString(), u.done.joinToString(","), u.origin?.let { Enums.ImgOrigin.names[it] } ?: "")
@@ -236,7 +243,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
             val p = l.split('\t').map { unescape(it) }
             val ok = when (p[0]) {
                 "block" -> (p.size == 9 || p.size == 10) && p[7].toLongOrNull() != null && blocks.add(Block(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5], p[6], p[7].toLong(), set(p[8]), p.getOrNull(9)?.toLongOrNull()))
-                "reject" -> (p.size == 7 || p.size == 8) && p[5].toLongOrNull() != null && rejects.add(Reject(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5].toLong(), set(p[6]), p.getOrNull(7)?.toLongOrNull()))
+                "reject" -> p.size in 7..9 && p[5].toLongOrNull() != null && rejects.add(Reject(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5].toLong(), set(p[6]), p.getOrNull(7)?.toLongOrNull(), p.getOrNull(8) ?: ""))
                 "drop" -> p.size == 6 && p[4].toLongOrNull() != null && drops.none { it.key == p[1] } && drops.add(Drop(p[1], p[2].ifEmpty { null }, p[3], p[4].toLong(), set(p[5])))
                 "held" -> p.size == 4 && held.add(Held(p[1], p[2].ifEmpty { null }, p[3]))
                 "upgradedevice" -> p.size == 2 && upgradeDevices.add(p[1])

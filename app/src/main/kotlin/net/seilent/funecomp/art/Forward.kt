@@ -20,7 +20,7 @@ import java.io.IOException
 
 class Forward(
     private val device: () -> DeviceState,
-    private val art: (String, String?, Int, Int) -> Art?,
+    private val art: (String, String?, Int, Int, Boolean) -> Art?,
     private val gate: () -> Boolean,
     private val sweeping: () -> Boolean,
     private val retagging: () -> Boolean,
@@ -70,8 +70,9 @@ class Forward(
     private val sizes = HashMap<String, Int>()
 
     fun run(s: Session, keep: () -> Boolean): ArtPusher.Report {
-        val pusher = ArtPusher(s, ::lookup, keep, gate)
-        blocks?.let { b -> b.device()?.let { dev -> unblocked(s, pusher, keep, b, dev)?.let { return it } } }
+        val pusher = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, false) }, keep, gate)
+        val library = ArtPusher(s, { n, m, w, h -> lookup(n, m, w, h, true) }, keep, gate)
+        blocks?.let { b -> b.device()?.let { dev -> unblocked(s, library, keep, b, dev)?.let { return it } } }
         val st = device().playback.state
         val now = pusher.run(ArtPusher.order(st).filter { real(it.first) }, origin = ArtPusher.origin(st.source))
         note(s, "current", now)
@@ -84,15 +85,15 @@ class Forward(
         }
         val playing = ArtPusher.order(st).filter { real(it.first) }
         upgrade(s, pusher, keep, playing.map { Triple(it.first, it.second, ArtPusher.origin(st.source)) } + up.map { Triple(it.first, it.second, Enums.ImgOrigin.library) }, null)?.let { return it }
-        if (retagging() && s.hello?.has("imgOrigin") == true) retag(s, pusher, keep)?.let { return it }
-        if (holding()) held(s, pusher, keep)?.let { return it }
+        if (retagging() && s.hello?.has("imgOrigin") == true) retag(s, library, keep)?.let { return it }
+        if (holding()) held(s, library, keep)?.let { return it }
         upgrades?.takeIf { it.open() }?.let { u ->
             val seen = (playing + up).mapTo(HashSet()) { it.first }
-            pending(s, pusher, keep, u, seen)?.let { return it }
-            upgrade(s, pusher, keep, u.due().filter { real(it.first) && it.first !in seen }.map { Triple(it.first, it.second, Enums.ImgOrigin.library) }, u::open)?.let { return it }
+            pending(s, library, keep, u, seen)?.let { return it }
+            upgrade(s, library, keep, u.due().filter { real(it.first) && it.first !in seen }.map { Triple(it.first, it.second, Enums.ImgOrigin.library) }, u::open)?.let { return it }
         }
         if (!sweeping()) return now
-        return sweep(s, pusher, keep)
+        return sweep(s, library, keep)
     }
 
     private fun unblocked(s: Session, pusher: ArtPusher, keep: () -> Boolean, b: Blocks, dev: String): ArtPusher.Report? {
@@ -361,10 +362,10 @@ class Forward(
         return on && (r !is ArtBlocks.Reject || Names.fold(e.name) == Names.fold(r.name))
     }
 
-    private fun lookup(name: String, mbid: String?, w: Int, h: Int): Art? {
+    private fun lookup(name: String, mbid: String?, w: Int, h: Int, library: Boolean): Art? {
         val counted = online()
         try {
-            val a = art(name, mbid, w, h)
+            val a = art(name, mbid, w, h, library)
             if (counted) breaker.result(false)
             if (a != null) synchronized(sizes) { sizes[name] = a.jpeg.size }
             return a
