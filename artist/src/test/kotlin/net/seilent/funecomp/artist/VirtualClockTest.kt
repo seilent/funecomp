@@ -101,17 +101,20 @@ class VirtualClockTest {
         val c = clock.condition()
         val done = java.util.concurrent.atomic.AtomicBoolean()
         var thrown: Throwable? = null
-        val waiter = clock.thread("waiter") {
-            try {
-                c.await(null, null) { done.get() }
-            } catch (e: Throwable) {
-                thrown = e
+        val (waiter, worker) = clock.registered {
+            val w = clock.thread("waiter") {
+                try {
+                    c.await(null, null) { done.get() }
+                } catch (e: Throwable) {
+                    thrown = e
+                }
             }
-        }
-        val worker = clock.thread("worker") {
-            Thread.sleep(800)
-            done.set(true)
-            c.signalAll()
+            Thread.sleep(100)
+            w to clock.thread("worker") {
+                Thread.sleep(800)
+                done.set(true)
+                c.signalAll()
+            }
         }
         clock.join(waiter, worker)
         clock.check()
