@@ -118,6 +118,31 @@ class BrowseTest {
     }
 
     @Test
+    fun theChannelParserReadsTheElementForm() {
+        val html = Fixtures.text("yt-search-tenjin.html")
+        assertTrue(html.contains("<script id=\"yt-initial-data\"") && !html.contains("var ytInitialData = "))
+        val c = YouTube.channels(html)!!
+        assertEquals(20, c.size)
+        assertEquals("UCAr7rLi_Wn09G-XfTA07d4g", c[0].id)
+        assertEquals("天神 子兎音 Tenjin Kotone", c[0].title)
+        assertTrue(c.all { it.thumb.startsWith("https://") })
+        assertEquals(null, YouTube.channels("<script id=\"yt-initial-data\" type=\"application/json\">{bad</script>"))
+        assertEquals(emptyList<YouTube.Channel>(), YouTube.channels("<script id=\"yt-initial-data\" type=\"application/json\" nonce=\"n\">{\"a\":[]}</script>"))
+    }
+
+    @Test
+    fun anUnparsedSearchPageLogsItsMarkersOnly() {
+        val http = Fixtures()
+        val url = "https://www.youtube.com/results?search_query=Nanao%20Sakuya&sp=EgIQAg%253D%253D"
+        val page = "<html><body><script>window['ytInitialData'] = secretWord;</script></body></html>"
+        http.queued[url] = ArrayDeque(listOf(Response(200, page.toByteArray())))
+        val lines = ArrayList<String>()
+        assertEquals(null, YouTube(Api(http, "ua", Hosts(FakeTime()))) { lines += it }.search("Nanao Sakuya"))
+        assertEquals(listOf("art browse youtube search unparsed chars=${page.length} var=false element=false window=true"), lines)
+        assertTrue(lines.none { it.contains("secretWord") })
+    }
+
+    @Test
     fun theChannelParser() {
         val html = Fixtures.text("yt-search-tsuki.html")
         val c = YouTube.channels(html)!!

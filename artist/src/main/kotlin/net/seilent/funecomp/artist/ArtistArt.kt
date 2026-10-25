@@ -34,7 +34,7 @@ class ArtistArt(
     private val audioDb = TheAudioDb(api)
     private val fanartTv = FanartTv(api, { sources().fanartTvKey.trim() })
     private val discogs = Discogs(api)
-    private val youtube = YouTube(api)
+    private val youtube = YouTube(api, log)
     private val deezer = Deezer(api, placeholders)
     private var scanned = false
 

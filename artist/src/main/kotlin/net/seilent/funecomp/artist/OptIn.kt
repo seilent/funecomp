@@ -117,7 +117,7 @@ class Discogs(private val api: Api, private val base: String = "https://api.disc
     }
 }
 
-class YouTube(private val api: Api) {
+class YouTube(private val api: Api, private val log: (String) -> Unit = {}) {
     class Channel(val id: String, val title: String, val thumb: String)
 
     fun candidates(a: MbArtist): Sequence<Candidate> =
@@ -125,12 +125,17 @@ class YouTube(private val api: Api) {
             .mapNotNull { url -> page(api, url)?.let { ogImage(it) } }
             .map { Candidate(it, Sources.YOUTUBE) }
 
-    fun search(name: String): List<Channel>? =
-        api.get("https://www.youtube.com/results?search_query=${Api.enc(name.trim())}&sp=$CHANNELS")?.text?.let { channels(it) }
+    fun search(name: String): List<Channel>? {
+        val html = api.get("https://www.youtube.com/results?search_query=${Api.enc(name.trim())}&sp=$CHANNELS")?.text ?: return null
+        return channels(html) ?: null.also { log("art browse youtube search unparsed ${markers(html)}") }
+    }
 
     companion object {
         private const val CHANNELS = "EgIQAg%253D%253D"
         private const val DATA = "var ytInitialData = "
+        private const val ELEMENT = "<script id=\"yt-initial-data\""
+        private const val WINDOW = "window['ytInitialData']"
+        private const val END = "</script>"
         private val CHANNEL = Regex("^https?://(www\\.|m\\.)?youtube\\.com/(channel/|user/|c/|@)")
         private val OG = Regex("<meta\\s+property=\"og:image\"\\s+content=\"([^\"]+)\"")
         private val TITLE = Regex("<meta\\s+property=\"og:title\"\\s+content=\"([^\"]*)\"")
@@ -165,14 +170,27 @@ class YouTube(private val api: Api) {
 
         fun ogTitle(html: String): String? = TITLE.find(html)?.groupValues?.get(1)?.let { Wikimedia.text(it) }
 
-        fun channels(html: String): List<Channel>? {
-            val i = html.indexOf(DATA).takeIf { it >= 0 }?.plus(DATA.length) ?: return null
-            val j = html.indexOf(";</script>", i).takeIf { it >= 0 } ?: return null
-            val root = try {
-                J.parse(html.substring(i, j))
+        fun markers(html: String): String =
+            "chars=${html.length} var=${html.contains(DATA)} element=${html.contains(ELEMENT)} window=${html.contains(WINDOW)}"
+
+        private fun embedded(html: String, start: Int): J? {
+            if (start < 0) return null
+            val end = html.indexOf(END, start).takeIf { it >= 0 } ?: return null
+            return try {
+                J.parse(html.substring(start, end).trimEnd().removeSuffix(";"))
             } catch (e: IllegalArgumentException) {
-                return null
+                null
             }
+        }
+
+        private fun initialData(html: String): J? {
+            val v = html.indexOf(DATA)
+            val e = html.indexOf(ELEMENT).takeIf { it >= 0 }?.let { html.indexOf('>', it) }?.takeIf { it >= 0 }
+            return embedded(html, if (v >= 0) v + DATA.length else -1) ?: embedded(html, e?.plus(1) ?: -1)
+        }
+
+        fun channels(html: String): List<Channel>? {
+            val root = initialData(html) ?: return null
             val out = ArrayList<Channel>()
             fun walk(n: J) {
                 n.entries.forEach { (k, v) ->
