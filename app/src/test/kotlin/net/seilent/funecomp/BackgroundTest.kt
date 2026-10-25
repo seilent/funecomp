@@ -398,6 +398,17 @@ class BackgroundTest {
         org.robolectric.shadows.ShadowLog.clear()
     }
 
+    private fun putsMatchStored(source: String) {
+        var last = -1
+        waitFor(15_000) {
+            val n = stored().size
+            val settled = n == last && puts(source) == n
+            last = n
+            if (!settled) Thread.sleep(500)
+            settled
+        }
+    }
+
     private fun puts(source: String) = org.robolectric.shadows.ShadowLog.getLogsForTag(Remote.TAG).count { Regex("lrc put [0-9]+ [0-9]+ synced $source -> ok").matches(it.msg) }
 
     @Test
@@ -409,7 +420,7 @@ class BackgroundTest {
         waitFor(30_000) { stored().size >= 3 }
         Thread.sleep(1500)
         assertTrue(stored().all { it.endsWith("kind=synced") })
-        assertEquals(stored().size, puts("netease"))
+        putsMatchStored("netease")
         assertTrue(posts.any { it.startsWith(net.seilent.funecomp.artist.NetEase.LYRIC) })
         Lyrics.set(LyricSources.NETEASE, false)
         c.destroy()
@@ -428,7 +439,7 @@ class BackgroundTest {
         assertTrue(stored().isEmpty())
         Lyrics.set(LyricSources.NETEASE, true)
         waitFor(60_000) { stored().size >= 1 + LyricsPlan.AHEAD }
-        assertEquals(stored().size, puts("netease"))
+        putsMatchStored("netease")
         Lyrics.set(LyricSources.NETEASE, false)
         c.destroy()
     }
@@ -442,7 +453,7 @@ class BackgroundTest {
         waitFor(60_000) { stored().size >= 1 + LyricsPlan.AHEAD }
         Thread.sleep(1000)
         assertEquals(3, gets.size)
-        assertEquals(stored().size, puts("netease"))
+        putsMatchStored("netease")
         assertEquals(0, puts("lrclib"))
         Lyrics.set(LyricSources.NETEASE, false)
         c.destroy()
