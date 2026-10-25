@@ -38,6 +38,9 @@ class Faults(specs: List<String>) {
     val refuse = HashSet<Int>()
     val fail = HashMap<Int, Int>()
     val busy = HashMap<Int, AtomicInteger>()
+    val busyPages = HashSet<Long>()
+    val mute = HashMap<Int, AtomicInteger>()
+    val muteCmd = HashMap<Int, Int>()
     var bye: Int? = null
     var restart = false
     var abortAt: Long? = null
@@ -73,6 +76,18 @@ class Faults(specs: List<String>) {
                     val msg = v.substringBefore(':')
                     val n = v.substringAfter(':', "").toIntOrNull() ?: throw IllegalArgumentException("busy: count missing in $v")
                     busy[Msg.byName[msg] ?: throw IllegalArgumentException("busy: unknown msg $msg")] = AtomicInteger(n)
+                }
+                "busy-page" -> busyPages += v.toLongOrNull() ?: throw IllegalArgumentException("busy-page: offset missing in $v")
+                "mute" -> {
+                    val msg = v.substringBefore(':').substringBefore('.')
+                    val n = v.substringAfter(':', "").toIntOrNull() ?: throw IllegalArgumentException("mute: count missing in $v")
+                    val type = Msg.byName[msg] ?: throw IllegalArgumentException("mute: unknown msg $msg")
+                    mute[type] = AtomicInteger(n)
+                    val cmd = v.substringBefore(':').substringAfter('.', "")
+                    if (cmd.isNotEmpty()) {
+                        require(type == Msg.QUEUE_OP) { "mute: a cmd only for QUEUE_OP in $v" }
+                        muteCmd[type] = Enums.QueueCmd.names.entries.firstOrNull { it.value == cmd }?.key ?: throw IllegalArgumentException("mute: unknown cmd $cmd")
+                    }
                 }
                 "bye" -> bye = Enums.ByeReason.names.entries.firstOrNull { it.value == v }?.key
                     ?: throw IllegalArgumentException("bye: unknown reason $v")

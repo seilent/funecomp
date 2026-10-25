@@ -18,6 +18,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.proto.gen.Tags
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.Executors
@@ -220,8 +221,14 @@ class Conn(
         if (f.type in faults.refuse) return error(f, Err.refused, "refused")
         faults.fail[f.type]?.let { return error(f, it, "fault $it") }
         if ((faults.busy[f.type]?.getAndDecrement() ?: 0) > 0) return error(f, Err.busy, "busy")
+        if (f.type == Msg.QUEUE_OP && body.int(Tags.QueueOp.cmd) == Enums.QueueCmd.page && (body.long(Tags.QueueOp.offset) ?: 0L) in faults.busyPages) return error(f, Err.busy, "busy")
         val at = clock()
         if (faults.stallMs > 0) Thread.sleep(faults.stallMs)
+        if (faults.muteCmd[f.type]?.let { it == body.int(Tags.QueueOp.cmd) } != false && (faults.mute[f.type]?.getAndDecrement() ?: 0) > 0) {
+            device.request(f.type, body, this)
+            log("mute ${name(f.type)} seq=${f.seq}")
+            return
+        }
         val pushing = if (f.type == Msg.IMG_END) device.pushing else null
         when (val a = device.request(f.type, body, this)) {
             is Answer.Ok -> {
