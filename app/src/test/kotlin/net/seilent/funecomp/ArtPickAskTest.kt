@@ -182,7 +182,14 @@ class ArtPickAskTest {
         s.device.begins.clear()
         Remote.pick(target, offer())
         val want = setOf(target.name to Enums.ImgOrigin.library, target.name to Enums.ImgOrigin.phone)
-        waitFor { synchronized(s.device.begins) { s.device.begins.toSet() }.containsAll(want) }
+        try {
+            waitFor { synchronized(s.device.begins) { s.device.begins.toSet() }.containsAll(want) }
+        } catch (e: IllegalStateException) {
+            System.err.println("pickedOrigins begins " + synchronized(s.device.begins) { s.device.begins.toList() })
+            org.robolectric.shadows.ShadowLog.getLogsForTag(Remote.TAG).takeLast(80).forEach { System.err.println("pickedOrigins app " + it.msg) }
+            logs.takeLast(80).forEach { System.err.println("pickedOrigins sim " + it) }
+            throw e
+        }
         return synchronized(s.device.begins) { s.device.begins.toSet() }
     }
 
