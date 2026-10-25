@@ -96,6 +96,7 @@ class NowPlayingTransportTest {
         rule.onNodeWithTag(tag).captureRoboImage(file.path)
         val img = ImageIO.read(file)
         file.delete()
+        System.gc()
         val r = img.width * 0.3f
         var lit = 0
         for (y in 0 until img.height) for (x in 0 until img.width) {
