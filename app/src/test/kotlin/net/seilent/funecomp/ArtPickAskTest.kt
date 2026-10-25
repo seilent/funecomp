@@ -188,6 +188,10 @@ class ArtPickAskTest {
             System.err.println("pickedOrigins begins " + synchronized(s.device.begins) { s.device.begins.toList() })
             org.robolectric.shadows.ShadowLog.getLogsForTag(Remote.TAG).takeLast(80).forEach { System.err.println("pickedOrigins app " + it.msg) }
             logs.takeLast(80).forEach { System.err.println("pickedOrigins sim " + it) }
+            Thread.getAllStackTraces().filterKeys { it.name.startsWith("art") }.forEach { (t, stack) ->
+                System.err.println("pickedOrigins thread ${t.name} ${t.state}")
+                stack.forEach { System.err.println("pickedOrigins thread ${t.name}   at $it") }
+            }
             throw e
         }
         return synchronized(s.device.begins) { s.device.begins.toSet() }
