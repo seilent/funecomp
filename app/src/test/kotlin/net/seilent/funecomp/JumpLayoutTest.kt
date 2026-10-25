@@ -5,6 +5,7 @@ import net.seilent.funecomp.ui.JUMP_EXIT
 import net.seilent.funecomp.ui.JUMP_NONE
 import net.seilent.funecomp.ui.JUMP_SEARCH
 import net.seilent.funecomp.ui.JumpLayout
+import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.Ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -13,7 +14,7 @@ import org.junit.Test
 class JumpLayoutTest {
     private class Row(val name: String, val ui: Ui, val cols: Int, val tile: Float, val rows: Int, val content: Float, val limit: Float)
 
-    private val dap = Ui(1f, Tok.canvasW, Tok.canvasH, false)
+    private val dap = Ui(1f, Tok.canvasW, LayoutTok.canvasH, false)
 
     private val all = (0 until Tok.jumpCells.toInt()).toSet()
 
@@ -35,10 +36,10 @@ class JumpLayoutTest {
         val g = JumpLayout.of(dap)
         assertEquals(listOf(8f, 65f, 122f, 179f), (0 until 4).map { g.x(it) })
         assertEquals(53f, g.tile, 0f)
-        assertEquals(278f, g.limit(Tok.canvasH), 0f)
-        for (letter in 0 until 18) assertEquals("$letter", 0f, g.offsetFor(JumpLayout.slot(letter), Tok.canvasH), 0f)
-        for (letter in 18..21) assertEquals("$letter", 50f, g.offsetFor(JumpLayout.slot(letter), Tok.canvasH), 0f)
-        assertEquals(278f, g.offsetFor(JumpLayout.slot(37), Tok.canvasH), 0f)
+        assertEquals(278f, g.limit(LayoutTok.canvasH), 0f)
+        for (letter in 0 until 18) assertEquals("$letter", 0f, g.offsetFor(JumpLayout.slot(letter), LayoutTok.canvasH), 0f)
+        for (letter in 18..21) assertEquals("$letter", 50f, g.offsetFor(JumpLayout.slot(letter), LayoutTok.canvasH), 0f)
+        assertEquals(278f, g.offsetFor(JumpLayout.slot(37), LayoutTok.canvasH), 0f)
     }
 
     @Test

@@ -2,7 +2,6 @@ package net.seilent.funecomp.proto.gen
 
 object Tok {
     const val canvasW = 240f
-    const val canvasH = 320f
     const val capHeight = 0.70f
     const val xHeight = 0.476f
     const val tracking = -0.5f
@@ -241,7 +240,6 @@ object Tok {
     const val homeFirstBaseline = 48f
     const val homeSubtitleX = 10f
     const val homeSubtitleDrop = 8f
-    const val homeWatermarkBaseline = 304f
     const val qpPeekScale = 0.30f
     const val qpPeekY = 130f
     const val qpPeekAlpha = 0.4f
@@ -307,7 +305,7 @@ object Tok {
     const val queueRowsTop = 98f
     const val backRing = 64f
     const val backRingStroke = 4f
-    const val backRingX = 0f
+    const val backRingX = -6f
     const val backRingY = -15f
     const val touchSlop = 25f
     const val flingCap = 2000f
@@ -317,18 +315,14 @@ object Tok {
     const val npAlbumBaseline = 110f
     const val npFromBaseline = 66f
     const val npArtTop = 124f
-    const val npArt = 76f
-    const val npProgressY = 200f
     const val npProgressThick = 2f
     const val npTimeDrop = 14f
-    const val npTitleY = 238f
     const val npTextX = 16f
     const val npNextIndent = 40f
     const val npNextPitch = 18f
     const val npNextCount = 1f
     const val npRing = 32f
     const val npRingStroke = 3f
-    const val npRingY = 280f
     const val npRingX0 = 31.2f
     const val npRingX1 = 120f
     const val npRingX2 = 208.8f
@@ -347,7 +341,6 @@ object Tok {
     const val statusBatteryH = 8f
     const val saverArt = 56f
     const val saverBottomMargin = 24f
-    const val saverArtY = 240f
     const val saverTextX = 80f
     const val saverTitleDrop = 22.4f
     const val saverArtistPitch = 20f
@@ -371,7 +364,6 @@ object Tok {
     const val kb_fieldBorder = 1f
     const val kb_cursorW = 2f
     const val kb_keyW = 50.5f
-    const val kb_keyH = 59.25f
     const val kb_top = 61f
     const val glyphBox = 32f
     const val glyphStroke = 4f
@@ -379,14 +371,9 @@ object Tok {
     const val ringStrokeIdle = 3f
     const val ringArcStart = -90f
     const val overlayPlusY = 72f
-    const val overlayNumberBaseline = 106.67f
     const val overlayAnchorH = 480f
-    const val overlayAnchorScale = 0.6667f
-    const val overlayRingY = 144f
-    const val overlayMinusY = 248f
     const val overlayBottomMargin = 24f
     const val overlayTextPitch = 18f
-    const val overlayTitleBottom = 296f
     const val overlayLit = 1.0f
     const val overlayDim = 0.4f
     const val batteryLowPercent = 10f
@@ -404,7 +391,6 @@ object Tok {
     const val homeBarX = 62f
     const val homeBarTop = 23.8f
     const val homeBarH = 37.4f
-    const val focusBandBottom = 280f
     const val motion_perspectiveRatio = 2.3f
     const val motion_perspective = 552f
     const val motion_turnstileOut = 250f
@@ -458,12 +444,11 @@ object Tok {
     const val motion_dialog = 300f
     const val motion_dialogHide = 150f
     const val motion_dialogScale = 0.9f
-    const val motion_dialogScrim = 0.8f
+    const val motion_dialogScrim = 0.96f
     const val motion_swivelIn = 350f
     const val motion_swivelOut = 250f
     const val motion_swivelAngle = 30f
     const val motion_swivelDim = 0.4f
-    const val motion_swivelHingeY = 160f
     const val motion_jumpHold = 350f
     const val motion_jumpFade = 380f
     const val motion_saver = 380f
@@ -588,10 +573,7 @@ object Tok {
     const val homeRingHitBottom = 64f
     const val npSeekBandX0 = 8f
     const val npSeekBandX1 = 100f
-    const val npSeekBandBottom = 219.8f
     const val npLyricPitch = 31.2f
-    const val saverLyricBaseline = 224f
-    const val large_rowHeight = 54f
     const val large_rowTextInset = 4f
     const val large_rowRing = 28f
     const val large_songIndent = 35f
@@ -626,11 +608,13 @@ object Tok {
     const val gesture_edge = 16f
     const val gesture_edgeRight = 22f
     const val gesture_bottom = 14f
+    const val homeWatermarkGap = 36f
+    const val navH = 36f
+    const val navGlyph = 16f
 }
 
 object TokUnit {
     const val canvasW = "u"
-    const val canvasH = "u"
     const val capHeight = "em"
     const val xHeight = "em"
     const val tracking = "u"
@@ -869,7 +853,6 @@ object TokUnit {
     const val homeFirstBaseline = "u"
     const val homeSubtitleX = "u"
     const val homeSubtitleDrop = "u"
-    const val homeWatermarkBaseline = "u"
     const val qpPeekScale = "ratio"
     const val qpPeekY = "u"
     const val qpPeekAlpha = "alpha"
@@ -945,18 +928,14 @@ object TokUnit {
     const val npAlbumBaseline = "u"
     const val npFromBaseline = "u"
     const val npArtTop = "u"
-    const val npArt = "u"
-    const val npProgressY = "u"
     const val npProgressThick = "u"
     const val npTimeDrop = "u"
-    const val npTitleY = "u"
     const val npTextX = "u"
     const val npNextIndent = "u"
     const val npNextPitch = "u"
     const val npNextCount = "count"
     const val npRing = "u"
     const val npRingStroke = "u"
-    const val npRingY = "u"
     const val npRingX0 = "u"
     const val npRingX1 = "u"
     const val npRingX2 = "u"
@@ -975,7 +954,6 @@ object TokUnit {
     const val statusBatteryH = "box"
     const val saverArt = "u"
     const val saverBottomMargin = "u"
-    const val saverArtY = "u"
     const val saverTextX = "u"
     const val saverTitleDrop = "u"
     const val saverArtistPitch = "u"
@@ -999,7 +977,6 @@ object TokUnit {
     const val kb_fieldBorder = "u"
     const val kb_cursorW = "u"
     const val kb_keyW = "u"
-    const val kb_keyH = "u"
     const val kb_top = "u"
     const val glyphBox = "u"
     const val glyphStroke = "u"
@@ -1007,14 +984,9 @@ object TokUnit {
     const val ringStrokeIdle = "u"
     const val ringArcStart = "deg"
     const val overlayPlusY = "u"
-    const val overlayNumberBaseline = "u"
     const val overlayAnchorH = "u"
-    const val overlayAnchorScale = "ratio"
-    const val overlayRingY = "u"
-    const val overlayMinusY = "u"
     const val overlayBottomMargin = "u"
     const val overlayTextPitch = "u"
-    const val overlayTitleBottom = "u"
     const val overlayLit = "alpha"
     const val overlayDim = "alpha"
     const val batteryLowPercent = "pct"
@@ -1032,7 +1004,6 @@ object TokUnit {
     const val homeBarX = "u"
     const val homeBarTop = "u"
     const val homeBarH = "u"
-    const val focusBandBottom = "u"
     const val motion_perspectiveRatio = "ratio"
     const val motion_perspective = "u"
     const val motion_turnstileOut = "ms"
@@ -1091,7 +1062,6 @@ object TokUnit {
     const val motion_swivelOut = "ms"
     const val motion_swivelAngle = "deg"
     const val motion_swivelDim = "alpha"
-    const val motion_swivelHingeY = "u"
     const val motion_jumpHold = "ms"
     const val motion_jumpFade = "ms"
     const val motion_saver = "ms"
@@ -1216,10 +1186,7 @@ object TokUnit {
     const val homeRingHitBottom = "u"
     const val npSeekBandX0 = "u"
     const val npSeekBandX1 = "u"
-    const val npSeekBandBottom = "u"
     const val npLyricPitch = "u"
-    const val saverLyricBaseline = "u"
-    const val large_rowHeight = "u"
     const val large_rowTextInset = "u"
     const val large_rowRing = "u"
     const val large_songIndent = "u"
@@ -1254,4 +1221,7 @@ object TokUnit {
     const val gesture_edge = "u"
     const val gesture_edgeRight = "u"
     const val gesture_bottom = "u"
+    const val homeWatermarkGap = "u"
+    const val navH = "u"
+    const val navGlyph = "u"
 }

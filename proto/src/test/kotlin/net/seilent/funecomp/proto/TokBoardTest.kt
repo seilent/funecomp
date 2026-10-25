@@ -16,4 +16,16 @@ class TokBoardTest {
         assertSame(TokBoard.v1, TokBoard.of("v1"))
         assertSame(TokBoard.ap80, TokBoard.of("ap80"))
     }
+
+    @Test
+    fun anR1OnlyTokenIsABoardToken() {
+        assertEquals(2.0f, TokBoard.r1.u)
+        assertEquals(400f, TokBoard.r1.canvasH)
+        assertEquals(320f, TokBoard.v1.canvasH)
+        assertEquals(320f, TokBoard.ap80.canvasH)
+        assertEquals(TokBoard.ap80.npSeekBandBottom, TokBoard.v1.npSeekBandBottom)
+        assertEquals("0,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100", TokBoard.r1.settings_powerOnSteps)
+        assertEquals(4f, TokBoard.r1.settings_filterCount)
+        assertSame(TokBoard.r1, TokBoard.of("r1"))
+    }
 }

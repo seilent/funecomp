@@ -46,7 +46,7 @@ class Ui(val u: Float, val w: Float, val h: Float, val landscape: Boolean) {
     }
 }
 
-val LocalUi = staticCompositionLocalOf { Ui(1f, Tok.canvasW, Tok.canvasH, false) }
+val LocalUi = staticCompositionLocalOf { Ui(1f, Tok.canvasW, LayoutTok.canvasH, false) }
 
 @Immutable
 data class Bleed(val left: Int = 0, val top: Int = 0, val right: Int = 0, val bottom: Int = 0)

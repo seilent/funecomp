@@ -4,7 +4,8 @@ import java.security.MessageDigest
 class GenException(message: String) : Exception(message)
 
 object Gen {
-    val pinned = listOf("proto.txt", "vectors.txt", "tokens.txt", "tokens-v1.txt")
+    val pinned = listOf("proto.txt", "vectors.txt", "tokens.txt", "tokens-v1.txt", "tokens-r1.txt")
+    private val boards = listOf("ap80" to "tokens.txt", "v1" to "tokens-v1.txt", "r1" to "tokens-r1.txt")
     private val keywords = setOf(
         "as", "break", "class", "continue", "do", "else", "false", "for", "fun", "if", "in", "interface", "is",
         "null", "object", "package", "return", "super", "this", "throw", "true", "try", "typealias", "typeof",
@@ -200,7 +201,7 @@ object Gen {
         return o.toString()
     }
 
-    private class Tokens(val main: List<List<String>>, val v1: List<List<String>>, val board: Set<String>)
+    private class Tokens(val main: List<List<String>>, val boards: List<Pair<String, List<List<String>>>>, val board: Set<String>)
 
     private val number = Regex("^-?[0-9]+(\\.[0-9]+)?$")
     private val color = Regex("^#[0-9A-Fa-f]{6}$")
@@ -214,13 +215,13 @@ object Gen {
     }
 
     private fun tokens(dir: File): Tokens {
-        val main = fields(File(dir, "tokens.txt"))
-        val v1 = fields(File(dir, "tokens-v1.txt"))
-        for ((n, p) in main + v1) if (p.size != 3) throw GenException("tokens: line $n has ${p.size} fields, needs 3")
-        if (main.map { it.second[0] } != v1.map { it.second[0] })
-            throw GenException("tokens: tokens.txt and tokens-v1.txt name different tokens or order them differently")
-        val board = main.indices.filter { main[it].second != v1[it].second }.map { main[it].second[0] }.toSet()
-        return Tokens(main.map { it.second }, v1.map { it.second }, board)
+        val files = boards.map { (b, f) -> Triple(b, f, fields(File(dir, f))) }
+        for ((_, f, lines) in files) for ((n, p) in lines) if (p.size != 3) throw GenException("tokens: $f line $n has ${p.size} fields, needs 3")
+        val main = files.first().third
+        for ((_, f, lines) in files.drop(1)) if (main.map { it.second[0] } != lines.map { it.second[0] })
+            throw GenException("tokens: tokens.txt and $f name different tokens or order them differently")
+        val board = main.indices.filter { i -> files.any { it.third[i].second != main[i].second } }.map { main[it].second[0] }.toSet()
+        return Tokens(main.map { it.second }, files.map { (b, _, lines) -> b to lines.map { it.second } }, board)
     }
 
     fun boardTokens(dir: File): Set<String> = tokens(dir).board
@@ -249,8 +250,8 @@ object Gen {
     fun tokBoardKt(dir: File): String {
         val t = tokens(dir)
         val main = t.main.filter { it[0] in t.board }
-        val v1 = t.v1.filter { it[0] in t.board }
-        val types = main.indices.map { i -> lit(main[i][1]).type.takeIf { it == lit(v1[i][1]).type } ?: "String" }
+        val each = t.boards.map { (b, rows) -> b to rows.filter { it[0] in t.board } }
+        val types = main.indices.map { i -> lit(main[i][1]).type.takeIf { ty -> each.all { lit(it.second[i][1]).type == ty } } ?: "String" }
         fun board(rows: List<List<String>>) = rows.indices.joinToString("") { i ->
             val v = rows[i][1]
             "        ${tokId(rows[i][0])} = ${if (types[i] == "String") quote(v) else lit(v).text},\n"
@@ -261,11 +262,9 @@ object Gen {
         o.append("    class Board(\n")
         for (i in main.indices) o.append("        val ${tokId(main[i][0])}: ${types[i]},\n")
         o.append("    )\n\n")
-        o.append("    val ap80 = Board(\n${board(main)}    )\n\n")
-        o.append("    val v1 = Board(\n${board(v1)}    )\n\n")
+        for ((b, rows) in each) o.append("    val $b = Board(\n${board(rows)}    )\n\n")
         o.append("    fun of(board: String): Board = when (board) {\n")
-        o.append("        \"ap80\" -> ap80\n")
-        o.append("        \"v1\" -> v1\n")
+        for ((b, _) in each) o.append("        \"$b\" -> $b\n")
         o.append("        else -> throw IllegalArgumentException(\"board \$board\")\n")
         o.append("    }\n")
         o.append("}\n")

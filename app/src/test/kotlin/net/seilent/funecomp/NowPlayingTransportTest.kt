@@ -31,6 +31,7 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Control
+import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -369,7 +370,7 @@ class NowPlayingTransportTest {
             val art = bounds("np.art")
             val margin = (Tok.edge - Tok.npSeekBandX0) * ui.u
             assertEquals(s.name, line.top, band.top, 1f)
-            assertEquals(s.name, (Tok.npSeekBandBottom - Tok.npProgressY) * ui.u, band.height, 1f)
+            assertEquals(s.name, (LayoutTok.npSeekBandBottom - LayoutTok.npProgressY) * ui.u, band.height, 1f)
             assertEquals(s.name, art.left - margin, band.left, 1f)
             assertEquals(s.name, art.right + margin, band.right, 1.5f)
             if (!ui.landscape) {
@@ -522,7 +523,7 @@ class NowPlayingTransportTest {
     }
 
     private companion object {
-        const val SEEK_MID = (Tok.npSeekBandBottom - Tok.npProgressY) / 2
+        val SEEK_MID = (LayoutTok.npSeekBandBottom - LayoutTok.npProgressY) / 2
         const val DRAG_STEPS = 5
         const val HELD = 0.61f
         const val OFF_BAND = 60f

@@ -1,6 +1,7 @@
 package net.seilent.funecomp.ui
 
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.proto.gen.TokBoard
 import kotlin.math.abs
 import kotlin.math.min
 
@@ -42,6 +43,8 @@ private val NP_RING_X = listOf(0.13f, 0.5f, 0.87f)
 val Ui.pivotTop get() = if (landscape) Tok.pivotTop else PIVOT_TOP
 val Ui.pivotBottom get() = if (landscape) Tok.pivotBottom else PIVOT_BOTTOM
 val Ui.pivotBaseline get() = pivotTop + PIVOT_BASELINE_DROP
+val LayoutTok = TokBoard.v1
+
 val Ui.contentTop get() = if (landscape) Tok.contentTop else CONTENT_TOP
 
 val Ui.npTextX get() = if (landscape) NP_COLUMN_RIGHT else Tok.edge
@@ -49,7 +52,7 @@ val Ui.npArtistBaseline get() = if (landscape) NP_ARTIST_LANDSCAPE else npAlbumB
 val Ui.npAlbumBaseline get() = if (landscape) NP_ALBUM_LANDSCAPE else npArtTop - NP_ALBUM_RISE
 val Ui.npArtTop get() = if (landscape) NP_ART_TOP_LANDSCAPE else npProgressY - npArt
 val Ui.npProgressY get() = if (landscape) NP_ART_TOP_LANDSCAPE + npArt + NP_PROGRESS_GAP_LANDSCAPE else h - NP_PROGRESS_FROM_BOTTOM - npRowExtra - npLift
-val Ui.npSeekBottom get() = npProgressY + Tok.npSeekBandBottom - Tok.npProgressY
+val Ui.npSeekBottom get() = npProgressY + LayoutTok.npSeekBandBottom - LayoutTok.npProgressY
 val Ui.npArt get() = if (landscape) {
     min(NP_ART_MAX, h - NP_ART_LANDSCAPE_STACK)
 } else {

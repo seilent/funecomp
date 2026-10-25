@@ -57,6 +57,7 @@ case "${1:-}" in
         tokens=$(git -C "$funeos" rev-parse --verify "$2^{commit}")
         show "$tokens" player/ui/tokens.txt tokens.txt
         show "$tokens" player/ui/tokens-v1.txt tokens-v1.txt
+        show "$tokens" player/ui/tokens-r1.txt tokens-r1.txt
         ;;
     "")
         usage
@@ -70,13 +71,14 @@ case "${1:-}" in
         show "$spec" player/link/vectors.txt vectors.txt
         show "$tokens" player/ui/tokens.txt tokens.txt
         show "$tokens" player/ui/tokens-v1.txt tokens-v1.txt
+        show "$tokens" player/ui/tokens-r1.txt tokens-r1.txt
         ;;
 esac
 
 {
     echo "commit.spec $spec"
     echo "commit.tokens $tokens"
-    for f in proto.txt vectors.txt tokens.txt tokens-v1.txt; do
+    for f in proto.txt vectors.txt tokens.txt tokens-v1.txt tokens-r1.txt; do
         echo "$f $(sha256sum "$dst/$f" | cut -d' ' -f1)"
     done
 } > "$dst/PIN.tmp"

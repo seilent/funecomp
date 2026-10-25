@@ -306,7 +306,7 @@ queueCountBaseline 79 u
 queueRowsTop 98 u
 backRing 64 u
 backRingStroke 4 u
-backRingX 0 u
+backRingX -6 u
 backRingY -15 u
 touchSlop 25 u
 flingCap 2000 u_per_s
@@ -457,7 +457,7 @@ motion.sheetScrim 0.55 alpha
 motion.dialog 300 ms
 motion.dialogHide 150 ms
 motion.dialogScale 0.9 ratio
-motion.dialogScrim 0.8 alpha
+motion.dialogScrim 0.96 alpha
 motion.swivelIn 350 ms
 motion.swivelOut 250 ms
 motion.swivelAngle 30 deg
@@ -629,3 +629,6 @@ gesture.swipe 45 u
 gesture.edge 16 u
 gesture.edgeRight 22 u
 gesture.bottom 14 u
+homeWatermarkGap 36 u
+navH 36 u
+navGlyph 16 u
