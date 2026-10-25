@@ -132,7 +132,14 @@ class BackgroundTest {
         val c = sweepLink(urls, null)
         waitFor { Remote.phase == Phase.LIVE }
         network(false)
-        waitFor(15_000) { looked(urls, "Q") }
+        try {
+            waitFor(15_000) { looked(urls, "Q") }
+        } catch (e: IllegalStateException) {
+            System.err.println("theFirstSweep urls " + urls.toList())
+            org.robolectric.shadows.ShadowLog.getLogsForTag(Remote.TAG).takeLast(80).forEach { System.err.println("theFirstSweep app " + it.msg) }
+            logs.takeLast(60).forEach { System.err.println("theFirstSweep sim " + it) }
+            throw e
+        }
         Thread.sleep(2500)
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(swept.none { looked(urls, it) })
