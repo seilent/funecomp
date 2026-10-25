@@ -62,6 +62,7 @@ private const val FULL_VOLUME = 255
 private const val V1_SPAN = 132
 private const val ART_QUALITY = 0.85f
 private const val UPDATE_BATTERY_MIN = 50
+private const val PREV_RESTART_MS = 3000L
 private const val MIB = 1L shl 20
 private const val UPDATE_RESERVE = 64L shl 20
 private const val LIBRARY = 1
@@ -375,10 +376,10 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         } else {
             val s = slot + d
             when {
-                s < 0 -> slot = 0
-                s < queue.size -> slot = s
-                repeat == Enums.Repeat.all || !auto -> slot = 0
-                else -> playing = false
+                s in queue.indices -> slot = s
+                repeat == Enums.Repeat.all -> slot = if (s < 0) queue.size - 1 else 0
+                auto -> playing = false
+                d > 0 -> return
             }
             positionMs = 0
         }
@@ -471,7 +472,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Enums.TransportCmd.play -> playing = true
             Enums.TransportCmd.pause -> playing = false
             Enums.TransportCmd.next -> advance(1, auto = false)
-            Enums.TransportCmd.prev -> if (position() > 3000) positionMs = 0 else advance(-1, auto = false)
+            Enums.TransportCmd.prev -> if (position() >= PREV_RESTART_MS) positionMs = 0 else advance(-1, auto = false)
             Enums.TransportCmd.seek -> {
                 val ms = b.long(Tags.Transport.seekMs) ?: return Answer.Fail(Err.badValue, "no seekMs")
                 val t = lib.byId[queue.getOrNull(slot)] ?: return Answer.Fail(Err.busy, "nothing playing")

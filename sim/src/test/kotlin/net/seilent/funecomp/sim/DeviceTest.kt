@@ -44,6 +44,71 @@ class DeviceTest {
 
     private fun fail(a: Answer) = a as Answer.Fail
 
+    private fun st(d: Device) = State.from(Node.decode("STATE", d.state()))
+
+    private fun at(d: Device, slot: Long, repeat: Int) {
+        ok(req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.repeat, repeat = repeat)))
+        ok(req(d, Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.playAt, st(d).queueRev, slot = slot)))
+    }
+
+    @Test
+    fun nextAtTheEndWithRepeatOffDoesNothing() {
+        val d = device()
+        val last = st(d).slots!! - 1
+        at(d, last, Enums.Repeat.off)
+        t += 5000
+        ok(req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.next)))
+        val s = st(d)
+        assertEquals(last, s.slot)
+        assertEquals(5000L, s.positionMs)
+        assertEquals(true, s.playing)
+    }
+
+    @Test
+    fun nextAtTheEndWithRepeatAllWrapsToTheFirst() {
+        val d = device()
+        at(d, st(d).slots!! - 1, Enums.Repeat.all)
+        t += 5000
+        ok(req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.next)))
+        assertEquals(0L, st(d).slot)
+        assertEquals(0L, st(d).positionMs)
+    }
+
+    @Test
+    fun prevAtTheStartWithRepeatOffRestartsTheTrack() {
+        val d = device()
+        at(d, 0, Enums.Repeat.off)
+        t += 2000
+        ok(req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.prev)))
+        val s = st(d)
+        assertEquals(0L, s.slot)
+        assertEquals(0L, s.positionMs)
+        assertEquals(true, s.playing)
+    }
+
+    @Test
+    fun prevAtTheStartWithRepeatAllWrapsToTheLast() {
+        val d = device()
+        at(d, 0, Enums.Repeat.all)
+        t += 2000
+        ok(req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.prev)))
+        assertEquals(st(d).slots!! - 1, st(d).slot)
+        assertEquals(0L, st(d).positionMs)
+    }
+
+    @Test
+    fun prevFromThreeSecondsInRestartsTheTrack() {
+        val d = device()
+        at(d, 2, Enums.Repeat.off)
+        t += 3000
+        ok(req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.prev)))
+        assertEquals(2L, st(d).slot)
+        assertEquals(0L, st(d).positionMs)
+        t += 1000
+        ok(req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.prev)))
+        assertEquals(1L, st(d).slot)
+    }
+
     @Test
     fun schemaFilesParseForBothBoards() {
         for (b in listOf("ap80", "v1")) {
