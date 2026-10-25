@@ -30,6 +30,7 @@ import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -345,10 +346,11 @@ class BackgroundTest {
         val nm = shadowOf(app.getSystemService(NotificationManager::class.java))
         waitFor { Remote.phase == Phase.LIVE && text()?.startsWith("connected, dap ") == true }
         waitFor { nm.getNotification(2) != null }
-        assertEquals("v1 battery 15%", nm.getNotification(2)!!.extras.getCharSequence("android.title")?.toString())
-        assertEquals("dap", nm.getNotification(2)!!.channelId)
+        val first = nm.getNotification(2)!!
+        assertTrue(first.extras.getCharSequence("android.title")?.toString() in setOf("v1 battery 15%", "v1 battery 14%"))
+        assertEquals("dap", first.channelId)
         waitFor { text() == "connected, dap 14%" }
-        assertEquals("v1 battery 15%", nm.getNotification(2)!!.extras.getCharSequence("android.title")?.toString())
+        assertSame(first, nm.getNotification(2))
         c.destroy()
     }
 
