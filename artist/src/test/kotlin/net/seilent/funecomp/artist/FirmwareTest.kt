@@ -90,6 +90,17 @@ class FirmwareTest {
     }
 
     @Test
+    fun anR1TakesOnlyItsOwnAsset() {
+        assertEquals("r1.upt", Releases.assetName("r1"))
+        val ap = """[{"tag_name":"v0.3.0","draft":false,"prerelease":false,"published_at":"2026-10-10T00:00:00Z","assets":[{"name":"update.upt","size":1,"browser_download_url":"$BASE/v0.3.0/update.upt"},{"name":"v1.upt","size":1,"browser_download_url":"$BASE/v0.3.0/v1.upt"}]}]"""
+        assertEquals(Firmware.Check.NoAsset, fw(Net(Response(200, ap.toByteArray()))).check("r1", "v0.1.0", prereleases = true))
+        val r1 = """[{"tag_name":"v0.3.0","draft":false,"prerelease":false,"published_at":"2026-10-10T00:00:00Z","assets":[{"name":"update.upt","size":1,"browser_download_url":"$BASE/v0.3.0/update.upt"},{"name":"r1.upt","size":2,"browser_download_url":"$BASE/v0.3.0/r1.upt"}]}]"""
+        val r = found(fw(Net(Response(200, r1.toByteArray()))).check("r1", "v0.1.0", prereleases = true))
+        assertEquals("r1.upt", r.release.asset.name)
+        assertEquals(2L, r.release.asset.size)
+    }
+
+    @Test
     fun boardWithoutAssetAndUnknownBoard() {
         val only = """[{"tag_name":"v0.3.0","draft":false,"prerelease":false,"published_at":"2026-10-10T00:00:00Z","assets":[{"name":"update.upt","size":1,"browser_download_url":"$BASE/v0.3.0/update.upt"}]}]"""
         val f = fw(Net(Response(200, only.toByteArray())))

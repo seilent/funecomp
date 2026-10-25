@@ -18,6 +18,7 @@ object Releases {
     fun assetName(board: String?): String? = when (board) {
         "v1" -> "v1.upt"
         "ap80" -> "update.upt"
+        "r1" -> "r1.upt"
         else -> null
     }
 
