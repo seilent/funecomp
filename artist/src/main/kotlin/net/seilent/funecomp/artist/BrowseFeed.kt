@@ -15,7 +15,7 @@ interface BrowseSink {
 
     fun sectionDone(section: String)
 
-    fun youtubeSearch(ok: Boolean)
+    fun search(outcome: YouTube.Search)
 }
 
 class BrowseFeed<T : Any>(
@@ -35,6 +35,8 @@ class BrowseFeed<T : Any>(
 
         fun sectionDone(section: String)
 
+        fun search(outcome: YouTube.Search)
+
         fun done(ok: Boolean)
     }
 
@@ -42,6 +44,7 @@ class BrowseFeed<T : Any>(
         class Sections(val order: List<String>) : Ev
         class Shown(val section: String, val t: Tile) : Ev
         class Done(val section: String) : Ev
+        class Searched(val outcome: YouTube.Search) : Ev
         data object End : Ev
     }
 
@@ -101,8 +104,10 @@ class BrowseFeed<T : Any>(
 
     override fun sectionDone(section: String) = put(Ev.Done(section))
 
-    override fun youtubeSearch(ok: Boolean) {
-        result = ok
+    override fun search(outcome: YouTube.Search) = put(Ev.Searched(outcome))
+
+    fun fail() {
+        result = false
     }
 
     fun finish() = put(Ev.End)
@@ -173,6 +178,7 @@ class BrowseFeed<T : Any>(
                             }
                         }
                     }
+                    is Ev.Searched -> post { if (!run.cancelled) out.search(ev.outcome) }
                     Ev.End -> {
                         ended = true
                         val ok = result

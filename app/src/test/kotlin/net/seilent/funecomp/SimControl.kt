@@ -32,6 +32,7 @@ import net.seilent.funecomp.sim.Out
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.artist.Tile
+import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
@@ -283,16 +284,18 @@ class SimControl(
     var tiles: List<BrowseTile> = emptyList()
     var browsed: Boolean? = null
     var browseOrder: List<String>? = null
+    var searched: YouTube.Search? = null
     var browseSection: (BrowseTile) -> String = { it.tile.source }
     var previewed: Previewed? = null
     var gallery: Previewed? = null
     var taken: Previewed? = null
 
-    override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+    override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
         val order = browseOrder ?: tiles.map(browseSection).distinct()
         sections(order)
         tiles.forEach { tile(browseSection(it), it) }
         if (browsed != null) order.forEach(sectionDone)
+        searched?.let(search)
         browsed?.let(done)
         return {}
     }

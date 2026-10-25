@@ -120,18 +120,57 @@ class Discogs(private val api: Api, private val base: String = "https://api.disc
 class YouTube(private val api: Api, private val log: (String) -> Unit = {}) {
     class Channel(val id: String, val title: String, val thumb: String)
 
+    sealed interface Search {
+        class Channels(val list: List<Channel>) : Search
+
+        object NoResults : Search
+
+        object Unavailable : Search
+    }
+
     fun candidates(a: MbArtist): Sequence<Candidate> =
         channelRels(a).asSequence()
             .mapNotNull { url -> page(api, url)?.let { ogImage(it) } }
             .map { Candidate(it, Sources.YOUTUBE) }
 
-    fun search(name: String): List<Channel>? {
-        val html = api.get("https://www.youtube.com/results?search_query=${Api.enc(name.trim())}&sp=$CHANNELS")?.text ?: return null
-        return channels(html) ?: null.also { log("art browse youtube search unparsed ${markers(html)}") }
+    fun search(name: String): Search {
+        val url = "https://www.youtube.com/results?search_query=${Api.enc(name.trim())}&sp=$CHANNELS"
+        val first = read(api.get(url)?.text)
+        if (first != Read.Empty && first != Read.Gated) return first.search
+        val second = read(api.get(url + EN)?.text)
+        if (second == Read.Gated) log("art browse youtube search gated")
+        val out = second.search
+        log("art browse youtube search retry en ${if (out is Search.Channels) "channels=${out.list.size}" else if (out == Search.NoResults) "none" else "unavailable"}")
+        return out
+    }
+
+    private sealed class Read(val search: Search) {
+        class Found(list: List<Channel>) : Read(Search.Channels(list))
+
+        object Empty : Read(Search.NoResults)
+
+        object Gated : Read(Search.Unavailable)
+
+        object Failed : Read(Search.Unavailable)
+    }
+
+    private fun read(html: String?): Read {
+        html ?: return Read.Failed
+        val root = initialData(html) ?: return Read.Failed.also { log("art browse youtube search unparsed ${markers(html)}") }
+        val list = channelsOf(root)
+        if (list.isNotEmpty()) return Read.Found(list)
+        if (promos(root).any { has(it, SIGN_IN) }) return Read.Gated
+        val results = root["estimatedResults"].let { it.str ?: it.long?.toString() }
+        if (results == "0" || has(root, PROMO)) return Read.Empty
+        log("art browse youtube search drift results=${results ?: "-"}")
+        return Read.Failed
     }
 
     companion object {
         private const val CHANNELS = "EgIQAg%253D%253D"
+        private const val EN = "&hl=en&gl=US"
+        private const val PROMO = "backgroundPromoRenderer"
+        private const val SIGN_IN = "signInEndpoint"
         private const val DATA = "var ytInitialData = "
         private const val ELEMENT = "<script id=\"yt-initial-data\""
         private const val WINDOW = "window['ytInitialData']"
@@ -189,8 +228,14 @@ class YouTube(private val api: Api, private val log: (String) -> Unit = {}) {
             return embedded(html, if (v >= 0) v + DATA.length else -1) ?: embedded(html, e?.plus(1) ?: -1)
         }
 
-        fun channels(html: String): List<Channel>? {
-            val root = initialData(html) ?: return null
+        fun channels(html: String): List<Channel>? = initialData(html)?.let { channelsOf(it) }
+
+        private fun promos(n: J): List<J> =
+            n.entries.flatMap { (k, v) -> if (k == PROMO) listOf(v) else promos(v) } + n.list.flatMap { promos(it) }
+
+        private fun has(n: J, key: String): Boolean = n.entries.any { (k, v) -> k == key || has(v, key) } || n.list.any { has(it, key) }
+
+        private fun channelsOf(root: J): List<Channel> {
             val out = ArrayList<Channel>()
             fun walk(n: J) {
                 n.entries.forEach { (k, v) ->

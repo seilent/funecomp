@@ -378,9 +378,9 @@ class ArtistArt(
                         tile(section, d["name"].str ?: "", small, full)
                     }
                     YOUTUBE_SEARCH -> {
-                        val found = attempt { youtube.search(name) }?.takeIf { it.isNotEmpty() }
-                        found?.take(BROWSE_RESULTS)?.forEach { c -> tile(Sources.YOUTUBE, c.title, YouTube.sized(c.thumb, YT_PREVIEW), YouTube.sized(c.thumb, YT_FULL)) }
-                        out.youtubeSearch(found != null)
+                        val found = attempt { youtube.search(name) } ?: YouTube.Search.Unavailable
+                        (found as? YouTube.Search.Channels)?.list?.take(BROWSE_RESULTS)?.forEach { c -> tile(Sources.YOUTUBE, c.title, YouTube.sized(c.thumb, YT_PREVIEW), YouTube.sized(c.thumb, YT_FULL)) }
+                        out.search(found)
                     }
                 }
             }

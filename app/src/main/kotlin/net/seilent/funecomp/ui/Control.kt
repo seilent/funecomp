@@ -11,6 +11,7 @@ import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Tile
+import net.seilent.funecomp.artist.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.seilent.funecomp.proto.Profile
@@ -105,7 +106,7 @@ interface Control {
     fun unblock(r: ArtBlocks.Record) {}
     fun pickLink(text: String, name: String, done: (Previewed) -> Unit): () -> Unit = {}
     fun pickGallery(done: (Previewed) -> Unit): () -> Unit = {}
-    fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}
+    fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}
     fun takeTile(t: Tile, done: (Previewed) -> Unit): () -> Unit = {}
     fun browseShown(section: String) {}
     fun pick(target: PickFor, offer: Offer) {}

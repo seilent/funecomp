@@ -32,6 +32,7 @@ import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.Wikimedia
+import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
@@ -78,6 +79,7 @@ class ArtPickUiTest {
     private var sections: ((List<String>) -> Unit)? = null
     private var sectionDone: ((String) -> Unit)? = null
     private var ended: ((Boolean) -> Unit)? = null
+    private var searched: ((YouTube.Search) -> Unit)? = null
     private val offer = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", null, null, "月-Tsuki-", ByteArray(1))
     private val lib = Library(listOf(Track(1, "TSUKI, Other", listOf("TSUKI", "Other"), "A", "TSUKI", "Song", 200_000, "a", "a.flac", listOf("", dj))))
 
@@ -99,11 +101,12 @@ class ArtPickUiTest {
                 return { calls += "cancel gallery" }
             }
 
-            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name $mbid"
                 this@ArtPickUiTest.tile = tile
                 this@ArtPickUiTest.sections = sections
                 this@ArtPickUiTest.sectionDone = sectionDone
+                searched = search
                 ended = done
                 return { calls += "cancel $name" }
             }
@@ -570,7 +573,7 @@ class ArtPickUiTest {
         var shown by mutableStateOf(true)
         val c = SimControl("ap80", lib)
         val control = object : Control by c {
-            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name"
                 return { calls += "cancel $name" }
             }
@@ -599,7 +602,7 @@ class ArtPickUiTest {
         val shell = Shell(Nav(listOf(Page.Home, Page.NowPlaying, Page.Browse(target))))
         val c = SimControl("ap80", lib)
         val control = object : Control by c {
-            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name"
                 this@ArtPickUiTest.tile = tile
                 this@ArtPickUiTest.sections = sections
@@ -804,6 +807,48 @@ class ArtPickUiTest {
         rule.onNodeWithTag("pick.head.youtube").assertExists()
         val line = top("pick.state")
         assertTrue(top("pick.head.youtube") < line && line < top("pick.head.deezer"))
+    }
+
+    @Test
+    fun aRunThatFailsBeforeTheSearchReportsShowsTheUnavailableLine() {
+        start(listOf(Page.Home, Page.Browse(PickFor("TSUKI"))))
+        sections!!(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH))
+        ended!!(false)
+        settle(300)
+        rule.onNodeWithText("youtube search unavailable", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun aSearchWithNoResultsShowsNoUnavailableLine() {
+        browsePage(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DEEZER))
+        put(Sources.DEEZER, 3)
+        searched!!(YouTube.Search.NoResults)
+        ended!!(true)
+        settle(300)
+        rule.onNodeWithText("youtube search unavailable", useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithTag("pick.tile.deezer.0").assertExists()
+    }
+
+    @Test
+    fun withNoTilesNoResultsIsNoImages() {
+        start(listOf(Page.Home, Page.Browse(PickFor("TSUKI"))))
+        sections!!(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH))
+        searched!!(YouTube.Search.NoResults)
+        ended!!(true)
+        settle(300)
+        rule.onNodeWithText("no images", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("youtube search unavailable", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun withNoTilesAnUnavailableSearchKeepsItsLine() {
+        start(listOf(Page.Home, Page.Browse(PickFor("TSUKI"))))
+        sections!!(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH))
+        searched!!(YouTube.Search.Unavailable)
+        ended!!(true)
+        settle(300)
+        rule.onNodeWithText("youtube search unavailable", useUnmergedTree = true).assertExists()
+        rule.onNodeWithText("no images", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test

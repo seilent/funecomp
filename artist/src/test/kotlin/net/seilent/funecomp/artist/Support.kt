@@ -421,7 +421,7 @@ class Collected : BrowseSink {
     val order = java.util.concurrent.CopyOnWriteArrayList<String>()
     val tiles = java.util.concurrent.CopyOnWriteArrayList<Pair<String, Tile>>()
     val done = java.util.concurrent.CopyOnWriteArrayList<String>()
-    @Volatile var search: Boolean? = null
+    @Volatile var search: YouTube.Search? = null
     var onTile: (Pair<String, Tile>) -> Unit = {}
 
     override fun sections(order: List<String>) {
@@ -437,8 +437,8 @@ class Collected : BrowseSink {
         done += section
     }
 
-    override fun youtubeSearch(ok: Boolean) {
-        search = ok
+    override fun search(outcome: YouTube.Search) {
+        search = outcome
     }
 
     fun of(section: String): List<Tile> = synchronized(tiles) { tiles.filter { it.first == section }.map { it.second } }

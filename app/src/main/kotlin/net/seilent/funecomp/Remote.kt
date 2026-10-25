@@ -47,6 +47,7 @@ import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.artist.Targets
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.UrlHttp
+import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.link.Link
 import net.seilent.funecomp.link.Responder
 import net.seilent.funecomp.link.Session
@@ -643,7 +644,7 @@ object Remote : Control {
         return out.asImageBitmap()
     }
 
-    override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+    override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
         val a = artist ?: run {
             sections(emptyList())
             done(false)
@@ -661,6 +662,8 @@ object Remote : Control {
 
             override fun sectionDone(section: String) = sectionDone(section)
 
+            override fun search(outcome: YouTube.Search) = search(outcome)
+
             override fun done(ok: Boolean) = done(ok)
         }
         val feed = BrowseFeed({ browseDecode(it, px) }, { main.post(it) }, Clock.SYSTEM, run, { r -> Thread(r, "art-browse-decode").apply { isDaemon = true } }, out, log)
@@ -675,7 +678,7 @@ object Remote : Control {
                 ended = false
             } catch (e: RuntimeException) {
                 Log.w(TAG, "art browse: ${e.toString().replace(SECRET, "$1=x")}")
-                feed.youtubeSearch(false)
+                feed.fail()
             } finally {
                 pool.shutdown()
                 val ok = if (ended && !run.cancelled) feed.result.toString() else "cancelled"

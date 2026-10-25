@@ -33,6 +33,10 @@ class BrowseFeedTest {
             events += "done $section"
         }
 
+        override fun search(outcome: YouTube.Search) {
+            events += "search ${outcome::class.simpleName}"
+        }
+
         override fun done(ok: Boolean) {
             events += "end $ok"
         }
@@ -64,7 +68,7 @@ class BrowseFeedTest {
         f.permit()
         f.tile("a", tile("3"))
         f.sectionDone("b")
-        f.youtubeSearch(false)
+        f.search(YouTube.Search.Unavailable)
         f.finish()
         clock.awaitIdle()
         assertEquals(listOf("sections [a, b]"), events.toList())
@@ -72,10 +76,52 @@ class BrowseFeedTest {
         gate.signalAll()
         clock.join(f.thread)
         clock.check()
-        assertEquals(listOf("sections [a, b]", "tile a 1 0", "tile b 2 0", "done a", "tile a 3 0", "done b", "end false"), events.toList())
+        assertEquals(listOf("sections [a, b]", "tile a 1 0", "tile b 2 0", "done a", "tile a 3 0", "done b", "search Unavailable", "end true"), events.toList())
         assertEquals(listOf("tile a", "tile b", "source a done n=1", "tile a", "source b done n=1"), lines.map { it.removePrefix("art browse ").substringBeforeLast(" +") })
         assertEquals(0, f.live)
         assertEquals(0, clock.drained())
+    }
+
+    @Test
+    fun aNoResultsSearchEndsTheRunOk() {
+        val f = feed()
+        f.sections(listOf("a"))
+        f.permit()
+        f.tile("a", tile("1"))
+        f.sectionDone("a")
+        f.search(YouTube.Search.NoResults)
+        f.finish()
+        clock.join(f.thread)
+        clock.check()
+        assertEquals(listOf("sections [a]", "tile a 1 0", "done a", "search NoResults", "end true"), events.toList())
+    }
+
+    @Test
+    fun aFailedRunEndsFalseWhateverTheSearch() {
+        val f = feed()
+        f.sections(listOf("a"))
+        f.search(YouTube.Search.Channels(emptyList()))
+        f.fail()
+        f.finish()
+        clock.join(f.thread)
+        assertEquals(listOf("sections [a]", "search Channels", "end false"), events.toList())
+    }
+
+    @Test
+    fun aCancelledRunSendsNoSearch() {
+        open = false
+        val f = feed()
+        f.sections(listOf("a"))
+        f.permit()
+        f.tile("a", tile("1"))
+        f.search(YouTube.Search.Unavailable)
+        f.finish()
+        clock.awaitIdle()
+        run.cancel()
+        open = true
+        gate.signalAll()
+        clock.join(f.thread)
+        assertTrue(events.none { it.startsWith("search") })
     }
 
     @Test

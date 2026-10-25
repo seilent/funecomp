@@ -28,7 +28,7 @@ class BrowseTest {
     private fun browse(a: ArtistArt = art()): Pair<List<Tile>, Boolean> {
         val c = Collected()
         a.browse("TSUKI", null, 53, c, Inline)
-        return c.all() to (c.search ?: true)
+        return c.all() to (c.search !is YouTube.Search.Unavailable)
     }
 
     @Test
@@ -37,7 +37,7 @@ class BrowseTest {
         art().browse("TSUKI", null, 53, c, Inline)
         assertEquals(listOf(Wikimedia.SOURCE, Sources.DISCOGS, Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DEEZER), c.order)
         assertEquals(c.order, c.done)
-        assertEquals(true, c.search)
+        assertTrue(c.search is YouTube.Search.Channels)
         val ranks = c.tiles.map { c.order.indexOf(it.first) }
         assertEquals(ranks.sorted(), ranks)
         assertEquals("dnb, Jump up", c.of(Sources.DISCOGS).single().caption)
@@ -130,16 +130,119 @@ class BrowseTest {
         assertEquals(emptyList<YouTube.Channel>(), YouTube.channels("<script id=\"yt-initial-data\" type=\"application/json\" nonce=\"n\">{\"a\":[]}</script>"))
     }
 
+    private val nanao = "https://www.youtube.com/results?search_query=Nanao%20Sakuya&sp=EgIQAg%253D%253D"
+    private val nanaoEn = "$nanao&hl=en&gl=US"
+    private val searchLog = ArrayList<String>()
+
+    private fun yt(h: Fixtures = http) = YouTube(Api(h, "ua", Hosts(FakeTime()))) { searchLog += it }
+
+    private fun youtubeCalls(h: Fixtures = http) = h.calls.filter { it.startsWith("https://www.youtube.com/results") }
+
+    private fun queue(url: String, code: Int, body: String = "") {
+        http.queued.getOrPut(url) { ArrayDeque() }.addLast(Response(code, body.toByteArray()))
+    }
+
+    @Test
+    fun aSearchWithChannelsMakesOneRequest() {
+        val r = yt().search("TSUKI")
+        assertEquals(20, (r as YouTube.Search.Channels).list.size)
+        assertEquals(1, youtubeCalls().size)
+        assertTrue(searchLog.isEmpty())
+    }
+
+    @Test
+    fun aGatedPageRetriesInEnglishAndTheChannelsDecide() {
+        val r = yt().search("Nanao Sakuya")
+        val c = (r as YouTube.Search.Channels).list
+        assertEquals(5, c.size)
+        assertEquals("UC_TkQkMaL3qxs2OzwYAubhQ", c[0].id)
+        assertEquals("七狼さくや / Nanao Sakuya", c[0].title)
+        assertEquals(listOf(nanao, nanaoEn), youtubeCalls())
+        assertEquals(listOf("art browse youtube search retry en channels=5"), searchLog)
+    }
+
+    @Test
+    fun aGateInBothLocalesIsUnavailable() {
+        queue(nanaoEn, 200, Fixtures.text("yt-search-nanao.html"))
+        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(listOf(nanao, nanaoEn), youtubeCalls())
+        assertEquals(listOf("art browse youtube search gated", "art browse youtube search retry en unavailable"), searchLog)
+    }
+
+    @Test
+    fun anEmptyPageInBothLocalesIsNoResults() {
+        queue(nanao, 200, Fixtures.text("yt-search-empty.html"))
+        queue(nanaoEn, 200, Fixtures.text("yt-search-empty.html"))
+        assertEquals(YouTube.Search.NoResults, yt().search("Nanao Sakuya"))
+        assertEquals(listOf(nanao, nanaoEn), youtubeCalls())
+        assertEquals(listOf("art browse youtube search retry en none"), searchLog)
+    }
+
+    @Test
+    fun anEmptyPageThenEnglishChannelsIsChannels() {
+        queue(nanao, 200, Fixtures.text("yt-search-empty.html"))
+        assertEquals(5, (yt().search("Nanao Sakuya") as YouTube.Search.Channels).list.size)
+        assertEquals(listOf(nanao, nanaoEn), youtubeCalls())
+    }
+
+    @Test
+    fun aNotFoundIsUnavailableWithNoRetry() {
+        queue(nanao, 404)
+        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(listOf(nanao), youtubeCalls())
+    }
+
+    @Test
+    fun aServerErrorThrowsWithNoRetry() {
+        queue(nanao, 500)
+        try {
+            yt().search("Nanao Sakuya")
+            fail("no throw")
+        } catch (e: IOException) {
+            assertTrue(e.message!!.startsWith("http 500"))
+        }
+        assertEquals(listOf(nanao), youtubeCalls())
+    }
+
+    @Test
+    fun aServerErrorOnTheRetryThrows() {
+        queue(nanaoEn, 500)
+        try {
+            yt().search("Nanao Sakuya")
+            fail("no throw")
+        } catch (e: IOException) {
+            assertTrue(e.message!!.startsWith("http 500"))
+        }
+        assertEquals(listOf(nanao, nanaoEn), youtubeCalls())
+    }
+
+    @Test
+    fun anUnparsedOrMissingRetryIsUnavailable() {
+        val consent = "<html><body>consent</body></html>"
+        queue(nanaoEn, 200, consent)
+        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals("art browse youtube search unparsed chars=${consent.length} var=false element=false window=false", searchLog.first())
+        queue(nanaoEn, 404)
+        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(listOf(nanao, nanaoEn, nanao, nanaoEn), youtubeCalls())
+    }
+
+    @Test
+    fun channelsMissingFromAPageWithResultsIsDrift() {
+        queue(nanao, 200, Fixtures.text("yt-search-drift.html"))
+        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(listOf(nanao), youtubeCalls())
+        assertEquals(listOf("art browse youtube search drift results=79"), searchLog)
+    }
+
     @Test
     fun anUnparsedSearchPageLogsItsMarkersOnly() {
-        val http = Fixtures()
-        val url = "https://www.youtube.com/results?search_query=Nanao%20Sakuya&sp=EgIQAg%253D%253D"
         val page = "<html><body><script>window['ytInitialData'] = secretWord;</script></body></html>"
-        http.queued[url] = ArrayDeque(listOf(Response(200, page.toByteArray())))
-        val lines = ArrayList<String>()
-        assertEquals(null, YouTube(Api(http, "ua", Hosts(FakeTime()))) { lines += it }.search("Nanao Sakuya"))
-        assertEquals(listOf("art browse youtube search unparsed chars=${page.length} var=false element=false window=true"), lines)
-        assertTrue(lines.none { it.contains("secretWord") })
+        queue(nanao, 200, page)
+        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(listOf("art browse youtube search unparsed chars=${page.length} var=false element=false window=true"), searchLog)
+        assertTrue(searchLog.none { it.contains("secretWord") })
+        assertEquals(listOf(nanao), youtubeCalls())
     }
 
     @Test
@@ -172,7 +275,7 @@ class BrowseTest {
         }
         val c = Collected()
         ArtistArt(bad, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time).browse("TSUKI", null, 53, c, Inline)
-        assertEquals(true, c.search)
+        assertTrue(c.search is YouTube.Search.Channels)
         assertEquals(9, c.of(Sources.DEEZER).size)
         assertEquals(9, c.of(ArtistArt.YOUTUBE_SEARCH).size)
     }

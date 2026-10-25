@@ -290,6 +290,8 @@ class ArtPickTest {
                 events += "tile $s ${t.tile.preview.size}"
             }, {
                 events += "done $it"
+            }, {
+                events += "search $it"
             }) {
                 check(Thread.currentThread() == main)
                 events += "end $it"
@@ -314,7 +316,7 @@ class ArtPickTest {
         var ended: Boolean? = null
         Remote.pickLink("https://example.org/a.jpg", "TSUKI") { offered = it }
         var sections: List<String>? = null
-        Remote.browse("TSUKI", null, 53, { sections = it }, { _, _ -> }, {}) {
+        Remote.browse("TSUKI", null, 53, { sections = it }, { _, _ -> }, {}, {}) {
             assertEquals(emptyList<String>(), sections)
             ended = it
         }

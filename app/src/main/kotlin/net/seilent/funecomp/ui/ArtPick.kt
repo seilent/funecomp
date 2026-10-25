@@ -37,6 +37,7 @@ import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
 import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.roundToInt
 
@@ -135,11 +136,13 @@ fun PickPreviewPage(ctx: Ctx, page: Page.PickPreview) {
     }
 }
 
+enum class SearchState { Tiles, NoResults, Unavailable }
+
 @Stable
 class BrowseSession {
     var sections by mutableStateOf<List<String>>(emptyList())
     val tiles = mutableStateMapOf<String, SnapshotStateList<BrowseTile>>()
-    var searchOk by mutableStateOf<Boolean?>(null)
+    var search by mutableStateOf<SearchState?>(null)
     var ended by mutableStateOf<Boolean?>(null)
     var engaged by mutableStateOf(false)
     var focus by mutableStateOf<Pair<String, Int>?>(null)
@@ -156,8 +159,16 @@ class BrowseSession {
         tiles.getOrPut(section) { mutableStateListOf() } += t
     }
 
+    fun searched(outcome: YouTube.Search) {
+        search = when (outcome) {
+            is YouTube.Search.Channels -> SearchState.Tiles
+            YouTube.Search.NoResults -> SearchState.NoResults
+            YouTube.Search.Unavailable -> SearchState.Unavailable
+        }
+    }
+
     fun end(ok: Boolean) {
-        if (YOUTUBE_SEARCH in sections) searchOk = ok
+        if (!ok && search == null && YOUTUBE_SEARCH in sections) search = SearchState.Unavailable
         ended = ok
     }
 
@@ -231,13 +242,13 @@ private fun browseItems(s: BrowseSession, cols: Int): List<BrowseItem> = buildLi
         val tiles = s.tiles[section].orEmpty()
         val search = section == YOUTUBE_SEARCH
         val head = if (search) null else if (section == Sources.YOUTUBE) Sources.YOUTUBE else section
-        val group = if (section == Sources.YOUTUBE) tiles.isNotEmpty() || s.tiles[YOUTUBE_SEARCH].orEmpty().isNotEmpty() || s.searchOk == false else tiles.isNotEmpty()
+        val group = if (section == Sources.YOUTUBE) tiles.isNotEmpty() || s.tiles[YOUTUBE_SEARCH].orEmpty().isNotEmpty() || s.search == SearchState.Unavailable else tiles.isNotEmpty()
         if (head != null && group) {
             if (isNotEmpty()) add(BrowseItem.Gap(head))
             add(BrowseItem.Head(head))
         }
         tiles.chunked(cols).forEachIndexed { r, row -> add(BrowseItem.Row(section, r, row)) }
-        if (search && s.searchOk == false && tiles.isEmpty()) add(BrowseItem.Line(YOUTUBE_UNAVAILABLE))
+        if (search && s.search == SearchState.Unavailable && tiles.isEmpty()) add(BrowseItem.Line(YOUTUBE_UNAVAILABLE))
     }
     if (s.ended == null && isNotEmpty()) add(BrowseItem.Line(LOADING))
 }
@@ -254,7 +265,7 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse) {
     DisposableEffect(key, runs, s, s?.live) {
         if (runs && ctx.browse[key]?.live != true) {
             ctx.browse.start(key) { b ->
-                ctx.control.browse(target.name, target.mbid, px, { if (b.live) b.sections = it }, { section, t -> if (b.live) b.add(section, t) }, {}) { if (b.live) b.end(it) }
+                ctx.control.browse(target.name, target.mbid, px, { if (b.live) b.sections = it }, { section, t -> if (b.live) b.add(section, t) }, {}, { if (b.live) b.searched(it) }) { if (b.live) b.end(it) }
             }
         }
         onDispose {}
@@ -265,7 +276,7 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse) {
             StateLine(
                 when {
                     s?.ended == null -> LOADING
-                    s.searchOk == false -> YOUTUBE_UNAVAILABLE
+                    s.search == SearchState.Unavailable -> YOUTUBE_UNAVAILABLE
                     else -> NO_IMAGES
                 },
                 STATE_TAG,
