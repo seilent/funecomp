@@ -159,7 +159,7 @@ fun App(
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
                     is Page.Eq -> EqPage(ctx, page)
-                    is Page.Browse -> BrowsePage(ctx, page)
+                    is Page.Browse -> BrowsePage(ctx, page, remember(ime, insets) { ime.exclude(insets) })
                     is Page.PickPreview -> PickPreviewPage(ctx, page)
                 }
             }

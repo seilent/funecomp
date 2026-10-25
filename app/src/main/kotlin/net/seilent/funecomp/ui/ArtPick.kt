@@ -6,8 +6,11 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.runtime.Composable
@@ -31,11 +34,14 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
 import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
+import net.seilent.funecomp.artist.Names
+import net.seilent.funecomp.artist.PickLink
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.gen.Tok
@@ -59,6 +65,7 @@ private const val NO_IMAGES = "no images"
 private const val YOUTUBE_UNAVAILABLE = "youtube search unavailable"
 private const val CANCEL = "cancel"
 private const val STATE_TAG = "pick.state"
+private const val IME_KEY = "ime"
 private const val YOUTUBE_SEARCH = ArtistArt.YOUTUBE_SEARCH
 
 internal var browseCols: (Float) -> Int = { Tok.gridCols.toInt() }
@@ -140,6 +147,8 @@ enum class SearchState { Tiles, NoResults, Unavailable }
 
 @Stable
 class BrowseSession {
+    var query by mutableStateOf("")
+    var draft by mutableStateOf("")
     var sections by mutableStateOf<List<String>>(emptyList())
     val tiles = mutableStateMapOf<String, SnapshotStateList<BrowseTile>>()
     var search by mutableStateOf<SearchState?>(null)
@@ -185,9 +194,12 @@ class BrowseSessions {
 
     operator fun get(key: String): BrowseSession? = map[key]
 
-    fun start(key: String, begin: (BrowseSession) -> () -> Unit) {
-        map[key]?.stop()
+    fun start(key: String, query: String, begin: (BrowseSession) -> () -> Unit) {
+        val old = map[key]
+        old?.stop()
         val s = BrowseSession()
+        s.query = query
+        s.draft = old?.draft ?: query
         s.begin = begin
         map[key] = s
         s.cancel = begin(s)
@@ -197,7 +209,7 @@ class BrowseSessions {
     fun sync(stack: List<Page>, keep: Set<String>) {
         val on = stack.indices.filter { runs(stack, it) }.map { "$it/${stack[it]}" }.toSet()
         for ((k, s) in map.toList()) {
-            if (k !in on) s.stop() else if (!s.live) start(k, s.begin)
+            if (k !in on) s.stop() else if (!s.live) start(k, s.query, s.begin)
             if (k !in keep) map.remove(k)
         }
     }
@@ -253,8 +265,21 @@ private fun browseItems(s: BrowseSession, cols: Int): List<BrowseItem> = buildLi
     if (s.ended == null && isNotEmpty()) add(BrowseItem.Line(LOADING))
 }
 
+private fun browseSearch(ctx: Ctx, key: String, target: PickFor, begin: (BrowseSession) -> () -> Unit) {
+    val s = ctx.browse[key] ?: return
+    val text = s.draft.trim()
+    if (text.isEmpty()) return
+    if (PickLink.isLink(text)) {
+        resolving(ctx, target, fromBrowse = true) { done -> ctx.control.pickLink(text, target.name, done) }
+        return
+    }
+    val same = Names.fold(text) == Names.fold(s.query)
+    if (same && (s.ended == null && s.live || s.ended == true && s.search != SearchState.Unavailable)) return
+    ctx.browse.start(key, text, begin)
+}
+
 @Composable
-fun BrowsePage(ctx: Ctx, page: Page.Browse) {
+fun BrowsePage(ctx: Ctx, page: Page.Browse, ime: WindowInsets) {
     val ui = LocalUi.current
     val cols = browseCols(ui.w)
     val target = page.target
@@ -262,12 +287,12 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse) {
     val runs = BrowseSessions.runs(ctx.nav.stack, key.substringBefore('/').toIntOrNull() ?: -1)
     val s = ctx.browse[key]
     val px = ui.px(Tok.tileS).roundToInt()
-    DisposableEffect(key, runs, s, s?.live) {
-        if (runs && ctx.browse[key]?.live != true) {
-            ctx.browse.start(key) { b ->
-                ctx.control.browse(target.name, target.mbid, px, { if (b.live) b.sections = it }, { section, t -> if (b.live) b.add(section, t) }, {}, { if (b.live) b.searched(it) }) { if (b.live) b.end(it) }
-            }
-        }
+    val begin: (BrowseSession) -> () -> Unit = { b ->
+        val mbid = if (Names.fold(b.query) == Names.fold(target.name)) target.mbid else null
+        ctx.control.browse(b.query, mbid, px, { if (b.live) b.sections = it }, { section, t -> if (b.live) b.add(section, t) }, {}, { if (b.live) b.searched(it) }) { if (b.live) b.end(it) }
+    }
+    DisposableEffect(key, runs, s) {
+        if (runs && ctx.browse[key] == null) ctx.browse.start(key, target.name, begin)
         onDispose {}
     }
     HubPage(target.name, { ctx.nav.pop() }) {
@@ -324,9 +349,11 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse) {
                             is BrowseItem.Line -> StateRow(item.text, STATE_TAG)
                         }
                     }
+                    item(IME_KEY, IME_KEY) { Spacer(Modifier.windowInsetsBottomHeight(ime)) }
                 }
             }
         }
+        SearchField(s?.draft ?: target.name, { s?.draft = it }, "browse.field", ImeAction.Search) { browseSearch(ctx, key, target, begin) }
     }
 }
 

@@ -47,14 +47,15 @@ object PickLink {
     private val MUSIC = Regex("^/(channel/UC[0-9A-Za-z_-]{22}|browse/UC[0-9A-Za-z_-]{22}|@[^/?#]+)(/.*)?$")
     private val ARTIST = Regex("^/artist/([0-9A-Fa-f-]{36})(/.*)?$")
 
+    fun isLink(text: String): Boolean {
+        val lower = text.trim().lowercase(Locale.ROOT)
+        return lower.startsWith("https://") || lower.startsWith("http://")
+    }
+
     fun parse(text: String): Link {
+        if (!isLink(text)) return Unsupported
         val t = text.trim()
-        val lower = t.lowercase(Locale.ROOT)
-        val url = when {
-            lower.startsWith("https://") -> t
-            lower.startsWith("http://") -> "https://" + t.substring("http://".length)
-            else -> return Unsupported
-        }
+        val url = if (t.lowercase(Locale.ROOT).startsWith("http://")) "https://" + t.substring("http://".length) else t
         val u = try {
             URI(url)
         } catch (e: URISyntaxException) {

@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -20,6 +21,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
 import androidx.compose.ui.unit.dp
@@ -920,5 +922,181 @@ class ArtPickUiTest {
         assertEquals("Other", shell.sheet.title)
         tap("sheet.item.1")
         assertEquals(Page.Browse(PickFor("Other", dj, library = true)), shell.nav.top)
+    }
+
+    private val suisei = PickFor("Suisei Channel", "8b5c8a5e-1f4e-4b39-9f2a-2f3d2b1c0e11")
+
+    private fun browseSuisei(): Shell = start(listOf(Page.Home, Page.NowPlaying, Page.Browse(suisei))).first
+
+    private fun field() = rule.onNodeWithTag("browse.field").fetchSemanticsNode().config[SemanticsProperties.EditableText].text
+
+    private fun search(text: String) {
+        rule.onNodeWithTag("browse.field").performTextReplacement(text)
+        settle(100)
+        rule.onNodeWithTag("browse.field").performImeAction()
+        settle(500)
+    }
+
+    private fun browses() = calls.filter { it.startsWith("browse ") }
+
+    @Test
+    fun theFieldOpensWithTheNameAndBrowsesIt() {
+        browseSuisei()
+        assertEquals(listOf("browse Suisei Channel ${suisei.mbid}"), calls)
+        assertEquals("Suisei Channel", field())
+    }
+
+    @Test
+    fun aTypedSearchStopsTheRunAndBrowsesTheTextWithNoMbid() {
+        browseSuisei()
+        val old = tile!!
+        val oldSections = sections!!
+        search("Hoshimachi Suisei")
+        assertEquals(listOf("browse Suisei Channel ${suisei.mbid}", "cancel Suisei Channel", "browse Hoshimachi Suisei null"), calls)
+        oldSections(listOf(Sources.DEEZER))
+        old(Sources.DEEZER, tiles(1)[0])
+        settle(300)
+        rule.onNodeWithTag("pick.tile.deezer.0").assertDoesNotExist()
+        assertEquals("Hoshimachi Suisei", field())
+    }
+
+    @Test
+    fun theNameTypedAnotherWayKeepsTheMbid() {
+        browseSuisei()
+        search("Hoshimachi Suisei")
+        search("suisei  channel")
+        assertEquals("browse suisei  channel ${suisei.mbid}", browses().last())
+    }
+
+    @Test
+    fun aBlankSearchDoesNothingAndTheTilesStay() {
+        browseSuisei()
+        deliver(tiles(1)[0])
+        settle(300)
+        search("   ")
+        assertEquals(listOf("browse Suisei Channel ${suisei.mbid}"), calls)
+        rule.onNodeWithTag("pick.tile.deezer.0").assertExists()
+    }
+
+    @Test
+    fun theSameTextRunsAgainOnlyAfterUnavailableOrAFailedRun() {
+        browseSuisei()
+        search("Suisei Channel")
+        search("suisei  CHANNEL")
+        assertEquals(1, browses().size)
+        searched!!(YouTube.Search.Channels(emptyList()))
+        ended!!(true)
+        settle(300)
+        search("Suisei Channel")
+        assertEquals(1, browses().size)
+        search("Hoshimachi Suisei")
+        searched!!(YouTube.Search.NoResults)
+        ended!!(true)
+        settle(300)
+        search("Hoshimachi Suisei")
+        assertEquals(2, browses().size)
+        searched!!(YouTube.Search.Unavailable)
+        ended!!(true)
+        settle(300)
+        rule.onNodeWithText("youtube search unavailable").assertExists()
+        search("Hoshimachi Suisei")
+        assertEquals(3, browses().size)
+        ended!!(false)
+        settle(300)
+        search("Hoshimachi Suisei")
+        assertEquals(4, browses().size)
+    }
+
+    @Test
+    fun aRestartedRunKeepsItsQueryAndTheDraft() {
+        val shell = browseSuisei()
+        search("Hoshimachi Suisei")
+        rule.onNodeWithTag("browse.field").performTextReplacement("Hoshimachi")
+        settle(300)
+        shell.nav.push(Page.Browse(PickFor("Other")))
+        settle(1500)
+        val before = browses().size
+        shell.nav.pop()
+        settle(1500)
+        assertEquals(listOf("browse Hoshimachi Suisei null"), browses().drop(before))
+        assertEquals("Hoshimachi", field())
+    }
+
+    @Test
+    fun aRestartUnderAnotherBrowseRunsOnceWithTheTypedQuery() {
+        val shell = browseSuisei()
+        search("Hoshimachi Suisei")
+        shell.nav.push(Page.Browse(PickFor("Other")))
+        settle(1500)
+        shell.nav.push(Page.NowPlaying)
+        settle(1500)
+        val before = browses().size
+        shell.nav.pop()
+        settle(1500)
+        shell.nav.pop()
+        settle(1500)
+        assertEquals(listOf("browse Other null", "browse Hoshimachi Suisei null"), browses().drop(before))
+    }
+
+    @Test
+    fun aPreviewAndBackKeepTheTypedQueryItsTilesAndScroll() {
+        val shell = browseSuisei()
+        search("Hoshimachi Suisei")
+        tiles(12).forEach { deliver(it) }
+        settle(500)
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("pick.tile.deezer.10"))
+        rule.mainClock.autoAdvance = false
+        settle(300)
+        val at = bounds("pick.tile.deezer.10")
+        val before = calls.size
+        taken = ok(offer)
+        tap("pick.tile.deezer.10")
+        settle(1500)
+        assertTrue(previewing(shell).fromBrowse)
+        tap("back")
+        settle(1500)
+        assertEquals(Page.Browse(suisei), shell.nav.top)
+        assertEquals(at, bounds("pick.tile.deezer.10"))
+        assertEquals("Hoshimachi Suisei", field())
+        assertEquals(listOf("take deezer 10"), calls.drop(before))
+    }
+
+    @Test
+    fun aLinkInTheFieldOpensItsPreviewWithTheBrowseKept() {
+        val shell = browseSuisei()
+        offered = ok(offer)
+        search(" HTTPS://www.youtube.com/@x ")
+        assertEquals("link HTTPS://www.youtube.com/@x Suisei Channel", calls.last())
+        assertEquals(1, browses().size)
+        val p = previewing(shell)
+        assertTrue(p.fromBrowse)
+        assertTrue(calls.none { it.startsWith("cancel Suisei") })
+        tap("pick.label")
+        settle(1500)
+        assertEquals(listOf(suisei to offer), picked)
+        assertEquals(Page.NowPlaying, shell.nav.top)
+    }
+
+    @Test
+    fun aPickFromATypedSearchIsStoredForTheArtist() {
+        val shell = browseSuisei()
+        search("Hoshimachi Suisei")
+        deliver(tiles(2)[0])
+        settle(300)
+        taken = ok(offer)
+        tap("pick.tile.deezer.0")
+        settle(1500)
+        tap("back")
+        settle(1500)
+        assertEquals("Hoshimachi Suisei", field())
+        rule.onNodeWithTag("pick.tile.deezer.0").assertExists()
+        assertTrue(calls.none { it == "cancel Hoshimachi Suisei" })
+        tap("pick.tile.deezer.0")
+        settle(1500)
+        tap("pick.label")
+        settle(1500)
+        assertEquals(listOf(suisei to offer), picked)
+        assertEquals(Page.NowPlaying, shell.nav.top)
     }
 }
