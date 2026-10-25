@@ -13,7 +13,7 @@ class SchemaTokensTest {
 
     @Test
     fun stepRowsAreTheTokenLists() {
-        for (b in listOf("ap80", "v1")) {
+        for (b in listOf("ap80", "v1", "r1")) {
             val tok = TokBoard.of(b)
             val rows = Device(Options(Board.of(b)), Library.synthetic()) { 0L }.rows.associateBy { it.key }
             val want = mapOf(

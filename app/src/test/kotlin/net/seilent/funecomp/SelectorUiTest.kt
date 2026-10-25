@@ -244,9 +244,15 @@ class SelectorUiTest {
     }
 
     @Test
-    fun ap80CodecPickIsADraft() {
-        val c = start()
+    fun codecPickIsADraftOnTheBluetoothPivotAp80() = codecPick("ap80")
+
+    @Test
+    fun codecPickIsADraftOnTheBluetoothPivotV1() = codecPick("v1")
+
+    private fun codecPick(board: String) {
+        val c = start(board, "library", "display", "power", "system", "bluetooth")
         tap("btCodec")
+        assertEquals("codec", shell.sheet.title)
         assertEquals(listOf("AUTO", "APTX", "AAC", "SBC"), shell.sheet.items)
         pick(2)
         assertEquals(listOf("DRAFT"), writes(c))

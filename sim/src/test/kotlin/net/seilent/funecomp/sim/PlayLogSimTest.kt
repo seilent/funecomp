@@ -208,7 +208,7 @@ class PlayLogSimTest {
         for (b in listOf("v1", "ap80")) {
             val d = Device(Options(Board.of(b)), lib) { t }
             val keys = d.rows.map { it.key }
-            assertEquals(keys.indexOf("companion") + 1, keys.indexOf("scrobble"))
+            assertEquals(keys.indexOf("companionPair") + 1, keys.indexOf("scrobble"))
             val row = d.rows.first { it.key == "scrobble" }
             assertEquals("system", row.pivot)
             assertEquals(Enums.RowKind.choice, row.kind)

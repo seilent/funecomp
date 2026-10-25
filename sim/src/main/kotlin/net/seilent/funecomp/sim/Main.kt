@@ -5,11 +5,11 @@ import java.io.File
 import java.time.LocalTime
 import kotlin.system.exitProcess
 
-private const val USAGE = "usage: sim --board ap80|v1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
+private const val USAGE = "usage: sim --board ap80|v1|r1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
     "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... " +
-    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--quiet]"
+    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--headset] [--companion] [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -41,6 +41,8 @@ fun main(args: Array<String>) {
     var playLogCap: Int? = null
     var receiver = false
     var phone: String? = null
+    var headset = false
+    var companion = false
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -77,6 +79,8 @@ fun main(args: Array<String>) {
             "--receiver" -> receiver = true
             "--phone" -> phone = value()
             "--quiet" -> quiet = true
+            "--headset" -> headset = true
+            "--companion" -> companion = true
             else -> {
                 System.err.println(USAGE)
                 exitProcess(2)
@@ -122,6 +126,8 @@ fun main(args: Array<String>) {
         playLogCap ?: base.playLogCap,
         phone = phone?.let { PhoneLine.load(File(it)) }.orEmpty(),
         receiver = receiver,
+        headset = headset,
+        companion = companion,
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {

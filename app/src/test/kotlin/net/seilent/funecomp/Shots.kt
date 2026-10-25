@@ -775,13 +775,23 @@ val SHOTS = listOf(
     Shot("settings-output-v1", board = "v1", pages = HOME + Page.Settings),
     Shot("settings-crossfeed", pages = HOME + Page.Settings) { scrollTo("set.crossfeed") },
     Shot("settings-edit", pages = HOME + Page.Settings) {
+        scrollTo("set.balance")
         rule.onNodeWithTag("set.balance").performClick()
         settle(300)
         rule.onNodeWithTag("set.balance").performTouchInput { click(centerRight) }
     },
-    Shot("settings-pick-volumestep", pages = HOME + Page.Settings) { rule.onNodeWithTag("set.volumeStep").performClick() },
-    Shot("settings-pick-maxvolume", pages = HOME + Page.Settings) { rule.onNodeWithTag("set.maxVolume").performClick() },
-    Shot("settings-pick-poweron", pages = HOME + Page.Settings, prep = { it.set("powerOnVolume", "70") }) { rule.onNodeWithTag("set.powerOnVolume").performClick() },
+    Shot("settings-pick-volumestep", pages = HOME + Page.Settings) {
+        scrollTo("set.volumeStep")
+        rule.onNodeWithTag("set.volumeStep").performClick()
+    },
+    Shot("settings-pick-maxvolume", pages = HOME + Page.Settings) {
+        scrollTo("set.maxVolume")
+        rule.onNodeWithTag("set.maxVolume").performClick()
+    },
+    Shot("settings-pick-poweron", pages = HOME + Page.Settings, prep = { it.set("powerOnVolume", "70") }) {
+        scrollTo("set.powerOnVolume")
+        rule.onNodeWithTag("set.powerOnVolume").performClick()
+    },
     Shot("settings-pick-crossfeed", pages = HOME + Page.Settings) {
         scrollTo("set.crossfeed")
         rule.onNodeWithTag("set.crossfeed").performClick()

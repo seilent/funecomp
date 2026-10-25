@@ -23,7 +23,8 @@ class Board(
         fun of(name: String) = when (name) {
             "ap80" -> Board("ap80", 360, 480, 360, 480, "schema-ap80.txt")
             "v1" -> Board("v1", 240, 320, 240, 320, "schema-v1.txt")
-            else -> throw IllegalArgumentException("board must be ap80 or v1, not $name")
+            "r1" -> Board("r1", 480, 800, 480, 800, "schema-r1.txt")
+            else -> throw IllegalArgumentException("board must be ap80, v1 or r1, not $name")
         }
     }
 }
@@ -123,6 +124,8 @@ class Faults(specs: List<String>) {
     var srcRefuse = 0
     var srcNoSpace = false
     val srcFail = HashSet<String>()
+    val rowsOff = HashSet<String>()
+    var scanMs: Long? = null
 
     init {
         val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
@@ -216,6 +219,8 @@ class Faults(specs: List<String>) {
                 "phone-suspend" -> phoneSuspend = v.toLong()
                 "phone-exit" -> phoneExit = v.toLong()
                 "phone-art-late" -> phoneArtLate = v.toLong()
+                "rows-off" -> rowsOff += v.split('+').filter { it.isNotEmpty() }
+                "scan-ms" -> scanMs = v.toLong()
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')
@@ -262,6 +267,8 @@ class Options(
     val deviceClock: (() -> Long)? = null,
     val phone: List<PhoneLine> = emptyList(),
     val receiver: Boolean = false,
+    val headset: Boolean = false,
+    val companion: Boolean = false,
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()

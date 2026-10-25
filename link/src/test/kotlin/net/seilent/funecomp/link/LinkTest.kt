@@ -163,7 +163,7 @@ class LinkTest {
         assertEquals("v1", s.hello!!.board)
         assertEquals(240, s.hello!!.backdropW)
         waitFor { rec.state.schema.rev != null }
-        assertEquals(4, rec.state.schema.rows.first { it.key == "digitalFilter" }.values.size)
+        assertEquals(5, rec.state.schema.rows.first { it.key == "digitalFilter" }.values.size)
         s.close("done")
     }
 

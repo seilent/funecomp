@@ -1,0 +1,52 @@
+output	output	choice	OUTPUT	auto,headphones,bluetooth	AUTO,JACK,BLUETOOTH	-	-	-
+output	outputPriority	choice	OUTPUT PRIORITY	newest,headphones,bluetooth	NEWEST,JACK,BLUETOOTH	-	-	output=auto
+output	volumeStep	steps	VOLUME STEP	2,5,10	2%,5%,10%	-	-	-
+output	maxVolume	steps	MAX VOLUME	5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-	-
+output	powerOnVolume	steps	POWER ON VOLUME	0,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	LAST,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-	-
+output	balance	range	BALANCE	-	-	-20,20,1	-	-
+output	digitalFilter	choice	DIGITAL FILTER	0,1,2,3	FAST,FAST PHASE,SLOW,SLOW PHASE	-	-	-
+output	dsdOutput	choice	DSD OUTPUT	dop,pcm	DOP,PCM	-	boardOnly	-
+output	sampleRate	info	SAMPLE RATE	-	-	-	readOnly	-
+output	replaygain	choice	REPLAYGAIN	off,track,album	OFF,TRACK,ALBUM	-	-	-
+output	crossfade	steps	CROSSFADE	0,1,2,3,5	OFF,1 S,2 S,3 S,5 S	-	-	-
+output	eq	info	EQ	-	-	-	readOnly	-
+output	crossfeed	choice	CROSSFEED	off,default,chuMoy,janMeier	OFF,DEFAULT,CHU MOY,JAN MEIER	-	-	-
+output	tube	choice	TUBE	off,low,mid,high	OFF,LOW,MID,HIGH	-	-	-
+output	stereoWidth	choice	STEREO WIDTH	off,50,75,125,150,200	OFF,50%,75%,125%,150%,200%	-	-	-
+output	playThrough	choice	PLAY THROUGH	off,folders,albums	OFF,FOLDERS,ALBUMS	-	-	-
+output	resume	choice	RESUME	off,track,position	OFF,TRACK,POSITION	-	-	-
+output	autoNowPlaying	toggle	AUTO NOW PLAYING	off,on	OFF,ON	-	-	-
+library	folders	info	LIBRARY FOLDERS	-	-	-	readOnly	-
+library	rescan	action	RESCAN LIBRARY	-	-	-	-	-
+library	checkCard	action	CHECK CARD	-	-	-	readOnly	-
+library	format	action	FORMAT CARD	-	-	-	readOnly	-
+display	brightness	steps	BRIGHTNESS	10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	10%,15%,20%,25%,30%,35%,40%,45%,50%,55%,60%,65%,70%,75%,80%,85%,90%,95%,100%	-	-	-
+display	led	choice	LED	off,low,mid,high	OFF,LOW,MID,HIGH	-	boardOnly	-
+display	accentHue	range	ACCENT	-	-	0,350,10	-	-
+display	size	draft	SIZE	standard,large	STANDARD,LARGE	-	readOnly,boardOnly,restart	-
+display	saverSeconds	steps	SAVER	10,15,30,60,120,300	10 S,15 S,30 S,1 MIN,2 MIN,5 MIN	-	-	-
+display	saverLyrics	toggle	SAVER LYRICS	off,on	OFF,ON	-	-	-
+display	saverDrift	toggle	SAVER DRIFT	off,on	OFF,ON	-	-	-
+display	clock	choice	CLOCK	24h,12h,off	24H,12H,OFF	-	-	-
+display	batteryPercent	toggle	BATTERY PERCENT	off,on	OFF,ON	-	-	-
+display	statusVolume	toggle	STATUS VOLUME	off,on	OFF,ON	-	-	-
+display	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-	-
+display	artistPhoto	toggle	ARTIST PHOTO	off,on	OFF,ON	-	-	-
+display	navBar	toggle	NAV BAR	off,on	OFF,ON	-	-	-
+display	navOrder	choice	NAV ORDER	backLeft,backRight	BACK LEFT,BACK RIGHT	-	-	navBar=on
+display	navButton	choice	NAV BUTTON	play,np,bt,next,shuffle,search,settings	PLAY/PAUSE,NOW PLAYING,BLUETOOTH,NEXT,SHUFFLE ALL,SEARCH,SETTINGS	-	-	navBar=on
+power	screenOffSeconds	steps	SCREEN OFF AFTER	0,60,120,300,600,1800	OFF,1 MIN,2 MIN,5 MIN,10 MIN,30 MIN	-	-	-
+power	sleep	draft	SLEEP TIMER	0,15,30,45,60,90,120	OFF,15 MIN,30 MIN,45 MIN,60 MIN,90 MIN,120 MIN	0,999	-	-
+power	idleShutdownMinutes	steps	IDLE SHUTDOWN	0,5,10,30,60	OFF,5 MIN,10 MIN,30 MIN,60 MIN	-	-	-
+power	chargeLimit	choice	CHARGE LIMIT	off,4200	OFF,4.20 V	-	boardOnly	-
+power	lockKnob	toggle	LOCK VOLUME	off,on	OFF,ON	-	-	-
+power	screenOffKeys	choice	SCREEN OFF KEYS	all,play,none	ALL,PLAY ONLY,NONE	-	-	-
+power	inlineRemote	toggle	IN-LINE REMOTE	off,on	OFF,ON	-	-	-
+system	usbMode	draft	USB MODE	dock	DOCK	-	readOnly	-
+system	usbStorage	action	USB STORAGE	-	-	-	readOnly	-
+system	dateTime	draft	DATE/TIME	-	-	-	-	-
+system	companion	toggle	PHONE APP	off,on	OFF,ON	-	readOnly,boardOnly	-
+system	companionPair	action	PAIR PHONE APP	-	-	-	readOnly	companion=on
+system	scrobble	choice	SCROBBLE	phone,card,off	PHONE,CARD LOG,OFF	-	-	-
+system	about	info	ABOUT	-	-	-	readOnly	-
+bluetooth	btCodec	draft	CODEC	auto,aptx,aac,sbc	AUTO,APTX,AAC,SBC	-	restart	-

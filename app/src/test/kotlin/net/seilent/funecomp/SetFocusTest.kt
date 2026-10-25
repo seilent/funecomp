@@ -113,18 +113,18 @@ class SetFocusTest {
         val c = start()
         pivot("library")
         pivot("display")
-        focusOn("artistPhoto")
-        assertTrue(barOn("artistPhoto"))
-        val before = bounds("set.artistPhoto").top
-        insertBefore(c, "batteryPercent", row("navOrder", "display"), row("navButton", "display"))
+        focusOn("batteryPercent")
+        assertTrue(barOn("batteryPercent"))
+        val before = bounds("set.batteryPercent").top
+        insertBefore(c, "saverSeconds", row("navOrder", "display"), row("navButton", "display"))
         val from = barTop()
         val seen = frames(8)
-        val to = bounds("set.artistPhoto").top
+        val to = bounds("set.batteryPercent").top
         assertTrue(to > before)
         assertTrue(seen.all { abs(it - from) < 1f || abs(it - to) < 1f })
-        assertTrue(barOn("artistPhoto"))
+        assertTrue(barOn("batteryPercent"))
         settle(600)
-        assertTrue(barOn("artistPhoto"))
+        assertTrue(barOn("batteryPercent"))
         val start = barTop()
         rule.onNodeWithTag("set.clock").performClick()
         val clock = bounds("set.clock").top
@@ -140,13 +140,13 @@ class SetFocusTest {
         val c = start()
         pivot("library")
         pivot("display")
-        focusOn("artistPhoto")
+        focusOn("batteryPercent")
         insertBefore(c, "clock", row("navOrder", "display"), row("navButton", "display"))
         settle(600)
-        assertTrue(barOn("artistPhoto"))
+        assertTrue(barOn("batteryPercent"))
         drop(c, "navOrder", "navButton")
         settle(600)
-        assertTrue(barOn("artistPhoto"))
+        assertTrue(barOn("batteryPercent"))
     }
 
     @Test
@@ -166,12 +166,11 @@ class SetFocusTest {
     @Test
     fun theLastRowRemovedMovesFocusToTheNewLast() {
         val c = start()
-        pivot("library")
-        pivot("display")
-        focusOn("artistPhoto")
-        drop(c, "artistPhoto")
+        for (p in listOf("library", "display", "power")) pivot(p)
+        focusOn("inlineRemote")
+        drop(c, "inlineRemote")
         settle(600)
-        assertTrue(barOn("quickplay"))
+        assertTrue(barOn("screenOffKeys"))
     }
 
     @Test
@@ -181,20 +180,18 @@ class SetFocusTest {
         pivot("display")
         pivot("power")
         val left = bounds("set.lockKnob").left
-        schema(c) { rows -> listOf(row("btCodec", "bluetooth")) + rows }
+        schema(c) { rows -> listOf(row("extraRow", "extra")) + rows }
         repeat(20) {
             frame()
             assertTrue(exists("set.lockKnob"))
             assertEquals(left, bounds("set.lockKnob").left, 0.5f)
         }
-        assertFalse(exists("set.btCodec"))
+        assertFalse(exists("set.extraRow"))
     }
 
     @Test
     fun aRemovedPivotSlidesTheOldRowsOutThenShowsItsNeighbour() {
         val c = start()
-        schema(c) { rows -> rows + row("btCodec", "bluetooth") }
-        settle(600)
         for (p in listOf("library", "display", "power", "system", "bluetooth")) pivot(p)
         val left = bounds("set.btCodec").left
         drop(c, "btCodec")
@@ -306,14 +303,13 @@ class SetFocusTest {
     @Test
     fun aFallbackAfterARebuildJumps() {
         val c = start()
-        pivot("library")
-        pivot("display")
-        focusOn("artistPhoto")
+        for (p in listOf("library", "display", "power")) pivot(p)
+        focusOn("inlineRemote")
         val from = barTop()
-        drop(c, "artistPhoto", "quickplay")
+        drop(c, "inlineRemote", "screenOffKeys")
         val seen = frames(8)
         settle(600)
-        assertTrue(barOn("batteryPercent"))
+        assertTrue(barOn("lockKnob"))
         val to = barTop()
         assertTrue(abs(to - from) > 1f)
         assertTrue(seen.all { abs(it - from) < 1f || abs(it - to) < 1f })

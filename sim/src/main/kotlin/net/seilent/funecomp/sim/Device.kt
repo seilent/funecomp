@@ -158,9 +158,14 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val faults = opts.faults
     private val lock = Any()
 
+    private val conditions = HashMap<String, Pair<String, String>>()
     val rows: List<Row> = loadRows()
     private val pivots = rows.mapNotNull { it.pivot }.distinct()
     private var schemaRev = 1L
+    private var schemaShown: List<Row>? = null
+    private val schemaAt = java.util.WeakHashMap<Out, Long>()
+    private var scanUntil = Long.MIN_VALUE
+    private var wallAt = System.currentTimeMillis() - clock()
 
     private val tok = TokBoard.of(board.name)
     private val prefs = linkedMapOf(
@@ -171,11 +176,15 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         "inlineRemote" to "on", "clock" to "24h", "batteryPercent" to "off", "playThrough" to "off",
         "usbMode" to "storage", "btCodec" to "auto", "btCodecHeadphones" to "auto", "digitalFilter" to "0",
         "balance" to "0", "maxVolume" to whole(Tok.settings_maxVolumeDefault), "powerOnVolume" to "0", "replaygain" to "off",
-        "quickplay" to "on", "resume" to "position", "autoNowPlaying" to "off", "playKey" to "nowPlaying",
-        "dre" to "off", "crossfade" to whole(Tok.settings_crossfadeDefault), "crossfeed" to "off", "artistPhoto" to "on",
-        "saverLyrics" to "off", "brightness" to whole(tok.settings_brightnessDefault), "scrobble" to "phone",
+        "quickplay" to "on", "resume" to "position", "autoNowPlaying" to "off",
+        "crossfade" to whole(Tok.settings_crossfadeDefault), "crossfeed" to "off", "artistPhoto" to "on",
+        "saverLyrics" to "on", "brightness" to whole(tok.settings_brightnessDefault),
+        "outputPriority" to "headphones", "outputGain" to "high", "dsdOutput" to "dop", "tube" to "off", "stereoWidth" to "off",
+        "led" to "high", "saverDrift" to "on", "statusVolume" to "off", "navBar" to "off", "navOrder" to "backLeft",
+        "navButton" to "play", "whenIdle" to "powerOff", "chargeLimit" to "off", "usbFeedback" to "on", "usbOutput" to "headphones",
+        "companion" to if (opts.companion) "on" else "off", "scrobble" to "phone", "size" to "standard",
     ).apply {
-        if (board.name == "v1") put("size", "standard")
+        if (board.name == "r1") put("usbMode", "dock")
         keys.retainAll(rows.mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones"))
         val steps = tok.settings_maxVolumeSteps.split(',').map { it.toInt() }
         opts.maxPct?.let { n -> put("maxVolume", steps.minBy { kotlin.math.abs(it - n) }.toString()) }
@@ -319,6 +328,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             val p = line.split('\t')
             fun list(s: String) = if (s == "-") emptyList() else s.split(',')
             val range = list(p[6]).map { it.toInt() }
+            p.getOrNull(8)?.takeIf { it != "-" }?.let { conditions[p[1]] = it.substringBefore('=') to it.substringAfter('=') }
             Row(
                 p[1], p[3], p[0],
                 Enums.RowKind.names.entries.first { it.value == p[2] }.key,
@@ -513,7 +523,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         cardSent[out] = cardKey()
         send(out, Msg.STATE, state(receipt))
         (faults.cardRun?.start as? CardRun.Start.Delay)?.let { cardStart(now() + it.ms) }
-        pushSchema(out)
+        pushSchema(out, schemaNow())
         pushSettings(out)
         pushEq(out, Enums.EqOutput.wired)
         pushEq(out, Enums.EqOutput.bt)
@@ -603,6 +613,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 send(out, Msg.STATE, state())
             }
         }
+        schemaCheck(out)
         val t = lib.byId[queue.getOrNull(slot)]
         if (stream.tick(lastStateAt)) {
             send(out, Msg.STATE, state())
@@ -698,10 +709,30 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         playFresh = true
     }
 
-    private fun pushSchema(out: Out) {
+    fun conditionOf(key: String?): String? = conditions[key]?.let { (k, v) -> "$k=$v" }
+
+    fun schemaRows(): List<Row> = synchronized(lock) {
+        rows.filter { r -> r.key !in faults.rowsOff && conditions[r.key]?.let { (k, v) -> prefs[k] == v } != false }.map { live(it) }
+    }
+
+    private fun schemaNow(): List<Row> {
+        val now = schemaRows()
+        if (schemaShown != null && now != schemaShown) schemaRev++
+        schemaShown = now
+        return now
+    }
+
+    private fun schemaCheck(out: Out) {
+        val sent = schemaAt[out] ?: return
+        val now = schemaNow()
+        if (sent != schemaRev) pushSchema(out, now)
+    }
+
+    private fun pushSchema(out: Out, shown: List<Row>) {
+        schemaAt[out] = schemaRev
         val fixed = Schema(schemaRev, "system", 0, pivots.size, PageInfo(0, 0, false), emptyList()).encode().size + 8
         pivots.forEachIndexed { pi, pivot ->
-            val prow = rows.filter { it.pivot == pivot }.map { live(it) }
+            val prow = shown.filter { it.pivot == pivot }
             var at = 0
             do {
                 val n = PageInfo.fill(prow.map { it.size }, at, fixed + pivot.length)
@@ -713,13 +744,33 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private fun live(r: Row): Row = when (r.key) {
-        "about" -> r.copy(words = listOf("sim.${board.name}"))
-        "rescan" -> r.copy(words = listOf("${lib.tracks.size} SONGS"))
-        "dateTime" -> r.copy(words = listOf(java.time.LocalDateTime.now().withNano(0).toString().replace('T', ' ').dropLast(3)))
+        "about" -> r.copy(words = listOf(opts.version ?: "sim.${board.name}"))
+        "rescan" -> r.copy(words = listOf(if (now() < scanUntil) "SCANNING" else if (lib.tracks.size == 1) "1 SONG" else "${lib.tracks.size} SONGS"))
+        "dateTime" -> r.copy(words = listOf(wallClock()))
+        "folders" -> r.copy(words = listOf("1 ON"))
+        "sampleRate" -> r.copy(words = listOf("AUTO"))
+        "eq" -> r.copy(words = listOf(eqWord()))
+        "output" -> if (opts.headset || prefs["output"] == "bluetooth") r else r.copy(values = r.values.dropLast(1), words = r.words.dropLast(1))
+        "usbOutput" -> if (opts.headset || prefs["usbOutput"] == "bluetooth") r else r.copy(values = r.values.dropLast(1), words = r.words.dropLast(1))
         else -> r
     }
 
-    private fun settingsText() = prefs.entries.joinToString("") { "${it.key}=${it.value}\n" }
+    private fun wallClock(): String {
+        val ms = wallAt + now()
+        val zone = zoneS?.let { java.time.ZoneOffset.ofTotalSeconds(it) } ?: java.time.ZoneId.systemDefault()
+        return java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(java.time.Instant.ofEpochMilli(ms).atZone(zone))
+    }
+
+    private fun eqWord(): String = when (val k = eqKey[Enums.EqOutput.wired]) {
+        "off" -> "OFF"
+        "custom" -> "CUSTOM"
+        else -> (eqNames.firstOrNull { it.key == k }?.name ?: k).uppercase()
+    }
+
+    private fun settingsText(): String {
+        val shown = schemaRows().mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones")
+        return prefs.entries.filter { it.key in shown }.joinToString("") { "${it.key}=${it.value}\n" }
+    }
 
     private fun pushSettings(out: Out) = send(out, Msg.SETTINGS, Settings(settingsRev, settingsText()).encode())
 
@@ -930,16 +981,16 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private fun draft(b: Node, out: Out): Answer {
         when (b.int(Tags.Draft.kind)) {
             Enums.DraftKind.usbMode -> {
-                val v = b.str(Tags.Draft.`value`)?.takeIf { it in listOf("storage", "dock", "audio") }
-                    ?: return Answer.Fail(Err.badValue, "bad usb mode")
+                val r = rows.first { it.key == "usbMode" }
+                if (Enums.RowFlag.readOnly in r.flags) return Answer.Fail(Err.refused, "refused")
+                val v = b.str(Tags.Draft.`value`)?.takeIf { it in r.values } ?: return Answer.Fail(Err.badValue, "bad usb mode")
                 prefs["usbMode"] = v
             }
             Enums.DraftKind.btCodec -> {
-                if (rows.none { it.key == "btCodec" }) return Answer.Fail(Err.refused, "refused")
                 val role = b.int(Tags.Draft.role) ?: Enums.BtRole.receiver
-                val ok = if (role == Enums.BtRole.receiver) listOf("auto", "aptx", "aac", "sbc") else listOf("auto", "ldac", "aptx", "aac", "sbc")
-                val v = b.str(Tags.Draft.`value`)?.takeIf { it in ok } ?: return Answer.Fail(Err.badValue, "bad codec")
-                prefs[if (role == Enums.BtRole.receiver) "btCodec" else "btCodecHeadphones"] = v
+                if (role != Enums.BtRole.receiver) return Answer.Fail(Err.refused, "refused")
+                val v = b.str(Tags.Draft.`value`)?.takeIf { it in rows.first { r -> r.key == "btCodec" }.values } ?: return Answer.Fail(Err.badValue, "bad codec")
+                prefs["btCodec"] = v
             }
             Enums.DraftKind.sleep -> {
                 val m = b.long(Tags.Draft.minutes) ?: return Answer.Fail(Err.badValue, "no minutes")
@@ -952,7 +1003,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Enums.DraftKind.clock -> {
                 val s = b.long(Tags.Draft.unixS) ?: return Answer.Fail(Err.badValue, "bad clock")
                 if (s < 1735689600L || s > 4102444799L) return Answer.Fail(Err.badValue, "bad clock")
-                zoneS = if (b.bool(Tags.Draft.automatic) == true) b.int(Tags.Draft.zoneS) else null
+                wallAt = s * 1000 - now()
+                zoneS = b.int(Tags.Draft.zoneS)
                 if (v12 && b.bool(Tags.Draft.automatic) == true) {
                     opts.log("clock auto unixS=$s zoneS=${b.int(Tags.Draft.zoneS) ?: 0}")
                     return Answer.Ok(net.seilent.funecomp.proto.tlv { enum(Tags.DraftReply.status, Enums.DraftStatus.done) })
@@ -1267,6 +1319,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     fun rescan(next: Library?) = synchronized(lock) {
+        faults.scanMs?.let { scanUntil = now() + it }
         val old = lib
         if (next != null) {
             next.rev = old.rev
@@ -1675,7 +1728,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         return Answer.Ok(head.copy(more = more, lines = l.lines.subList(at, at + n)).encode())
     }
 
-    private fun updName() = if (board.name == "v1") "v1.upt" else "update.upt"
+    private fun updName() = when (board.name) {
+        "v1" -> "v1.upt"
+        "r1" -> "r1.upt"
+        else -> "update.upt"
+    }
 
     private fun updBegin(b: Node, out: Out): Answer {
         val dir = opts.updDir ?: return Answer.Fail(Err.refused, "no update dir")
@@ -1683,7 +1740,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val size = b.long(Tags.UpdBegin.size) ?: return Answer.Fail(Err.badValue, "no size")
         val md5 = b.str(Tags.UpdBegin.md5)?.lowercase()?.takeIf { MD5.matches(it) } ?: return Answer.Fail(Err.badValue, "bad md5")
         if (name != board.name) return Answer.Fail(Err.badValue, "wrong board")
-        val other = File(dir, if (board.name == "v1") "update.upt" else "ap80.upt")
+        val other = File(dir, if (board.name == "ap80") "ap80.upt" else "update.upt")
         if (other.exists()) return Answer.Fail(Err.badValue, "remove ${other.name}")
         if (battery() < UPDATE_BATTERY_MIN && !opts.battery.charging) return Answer.Fail(Err.refused, "battery")
         val part = File(dir.apply { mkdirs() }, "${updName()}.part")
