@@ -135,13 +135,13 @@ fun balanceText(v: Int): String {
     return (if (v < 0) "l " else "r ") + n + " db"
 }
 
-fun Row.display(v: String?): String = when (kind) {
+fun Row.display(v: String?, live: String? = null): String = when (kind) {
     Enums.RowKind.range -> {
         val n = v?.toIntOrNull() ?: 0
         if (key == BALANCE_KEY) balanceText(n) else if (key == ACCENT_KEY) "" else n.toString()
     }
-    Enums.RowKind.info, Enums.RowKind.action -> words.firstOrNull() ?: ""
-    Enums.RowKind.draft -> if (values.isEmpty() || words.size != values.size) words.firstOrNull() ?: "" else word(v ?: values.first())
+    Enums.RowKind.info, Enums.RowKind.action -> live ?: words.firstOrNull() ?: ""
+    Enums.RowKind.draft -> if (values.isEmpty() || words.size != values.size) live ?: words.firstOrNull() ?: "" else word(v ?: values.first())
     else -> if (key == ACCENT_KEY) "" else word(v)
 }
 
@@ -377,7 +377,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                             eqRow -> profileName(ctx.device, activeEqOutput(ctx.device))
                             aboutRow -> ctx.device.hello?.version ?: ""
                             sleepRow -> sleepText(r, minutes)
-                            else -> r.display(v)
+                            else -> r.display(v, ctx.device.liveWord(key))
                         },
                         Modifier.enter { i }.testTag("set.$key"),
                         focused = focus == i,
