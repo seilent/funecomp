@@ -5,6 +5,7 @@ import net.seilent.funecomp.proto.EqName
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Lib
 import net.seilent.funecomp.proto.LibRow
+import net.seilent.funecomp.proto.Live
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Queue
@@ -26,13 +27,17 @@ data class SchemaMirror(
     val pending: Map<Int, List<Row>> = emptyMap(),
 )
 
+fun keyLines(text: String): Map<String, String> = text.lines().mapNotNull { l ->
+    val eq = l.indexOf('=')
+    if (eq <= 0) null else l.substring(0, eq).trim() to l.substring(eq + 1).trim()
+}.toMap()
+
 data class SettingsMirror(val rev: Long = -1, val text: String = "", val floor: Long = -1) {
-    val values: Map<String, String> by lazy {
-        text.lines().mapNotNull { l ->
-            val eq = l.indexOf('=')
-            if (eq <= 0) null else l.substring(0, eq).trim() to l.substring(eq + 1).trim()
-        }.toMap()
-    }
+    val values: Map<String, String> by lazy { keyLines(text) }
+}
+
+data class LiveMirror(val rev: Long = -1, val text: String = "") {
+    val values: Map<String, String> by lazy { keyLines(text) }
 }
 
 data class EqMirror(
@@ -86,6 +91,7 @@ data class DeviceState(
     val rttMs: Long? = null,
     val schema: SchemaMirror = SchemaMirror(),
     val settings: SettingsMirror = SettingsMirror(),
+    val liveRows: LiveMirror = LiveMirror(),
     val eq: Map<Int, EqMirror> = emptyMap(),
     val queue: QueueMirror = QueueMirror(),
     val lib: LibMirror = LibMirror(),
@@ -117,6 +123,8 @@ data class DeviceState(
 
     fun has(group: String) = hello?.has(group) ?: false
 
+    fun liveWord(key: String?): String? = key?.let { liveRows.values[it] }
+
     fun positionMs(now: Long): Long = Position.at(playback, rttMs, now)
 
     fun sleepLeftMs(now: Long): Long = SleepLeft.leftMs(playback, rttMs, now)
@@ -125,6 +133,7 @@ data class DeviceState(
         Msg.STATE -> withState(State.from(body), now)
         Msg.SCHEMA -> withSchema(Schema.from(body))
         Msg.SETTINGS -> withSettings(Settings.from(body))
+        Msg.LIVE -> withLive(Live.from(body))
         Msg.EQ -> withEq(Eq.from(body))
         Msg.QUEUE -> withQueue(Queue.from(body))
         Msg.LIB -> withLib(Lib.from(body))
@@ -170,6 +179,8 @@ data class DeviceState(
         if (s.rev < settings.floor || s.rev < settings.rev) return this
         return copy(settings = settings.copy(rev = s.rev, text = s.text))
     }
+
+    fun withLive(l: Live) = if (l.rev <= liveRows.rev) this else copy(liveRows = LiveMirror(l.rev, l.text))
 
     fun withSetReply(rev: Long) = copy(settings = settings.copy(floor = maxOf(settings.floor, rev)))
 
