@@ -147,9 +147,14 @@ val SIZES = listOf(
 )
 
 private val HOME = listOf(Page.Home)
-private const val CLOCK = "2026-10-21 12:00"
+private const val CLOCK_S = 1792584000L
 private val NP = HOME + Page.NowPlaying
 private val ALBUM_KEY = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim.Library.synthetic().tracks.first().id)
+
+internal fun shotClock(c: SimControl) {
+    c.draft(Enums.DraftKind.clock, unixS = CLOCK_S, zoneS = 0) { _, _ -> }
+    c.tick()
+}
 
 private fun noBond(c: SimControl) {
     c.bonds = listOf(Bonded("WH-1000XM4", "00:00:00:00:00:02"))
@@ -1370,7 +1375,7 @@ class Shots {
                 if (only.isNotEmpty() && only.split(',').none { "$name-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue
                 val c = SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
-                c.device = c.device.copy(schema = c.device.schema.copy(rows = c.device.schema.rows.map { if (it.key == "dateTime") it.copy(words = listOf(CLOCK)) else it }))
+                shotClock(c)
                 shot.prep(c)
                 if (shot.gated) c.device = DeviceState()
                 sources = shot.sources
