@@ -507,7 +507,8 @@ class ScrobbleSignInTest {
     fun mainSignsInWithTheTestPairAndTheResumeLeavesNavAndLink() {
         app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-        app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE).edit().putBoolean("batteryAsked", true).putString(Main.EXTRA_LINK, "tcp:127.0.0.1:1").commit()
+        app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE).edit().putString(Main.EXTRA_LINK, "tcp:127.0.0.1:1").commit()
+        app.getSharedPreferences(Main.DEVICE_PREFS, Context.MODE_PRIVATE).edit().putBoolean("batteryAsked", true).commit()
         Scrobbles.init(app, ZEROS, net)
         val a = Robolectric.buildActivity(Main::class.java, Intent(app, Main::class.java).setAction(Intent.ACTION_MAIN).putExtra(Main.EXTRA_PAGE, "scrobbling")).create().start().resume().visible()
         try {

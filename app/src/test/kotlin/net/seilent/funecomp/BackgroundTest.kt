@@ -1094,7 +1094,8 @@ class BackgroundTest {
     fun anAskWrittenAfterCreateIsShownAtLiveAndOnStoresIt() {
         val prefs = app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE)
         val spec = sim()
-        prefs.edit().putString(Main.EXTRA_LINK, spec).putBoolean("batteryAsked", true).commit()
+        prefs.edit().putString(Main.EXTRA_LINK, spec).commit()
+        app.getSharedPreferences(Main.DEVICE_PREFS, Context.MODE_PRIVATE).edit().putBoolean("batteryAsked", true).commit()
         val c = Robolectric.buildService(LinkService::class.java, startIntent(spec)).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE }
         val a = Robolectric.buildActivity(Main::class.java, Intent(app, Main::class.java).setAction(Intent.ACTION_MAIN)).create()
@@ -1106,6 +1107,26 @@ class BackgroundTest {
         shadowOf(Looper.getMainLooper()).idle()
         assertTrue(prefs.getBoolean(Main.RECONNECT, false))
         assertFalse(prefs.contains(Main.RECONNECT_ASK))
+        a.pause().stop().destroy()
+        c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
+        c.destroy()
+    }
+
+    @Test
+    fun aBackgroundAnswerIsStoredOnThisPhoneOnly() {
+        val prefs = app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE)
+        val spec = sim()
+        prefs.edit().putString(Main.EXTRA_LINK, spec).commit()
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(spec)).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE }
+        val a = Robolectric.buildActivity(Main::class.java, Intent(app, Main::class.java).setAction(Intent.ACTION_MAIN)).create()
+        a.start().resume().visible()
+        waitFor { a.get().shell.sheet.shown }
+        assertEquals("background", a.get().shell.sheet.title)
+        a.get().shell.sheet.accept(1)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertTrue(app.getSharedPreferences(Main.DEVICE_PREFS, Context.MODE_PRIVATE).getBoolean("batteryAsked", false))
+        assertFalse(prefs.contains("batteryAsked"))
         a.pause().stop().destroy()
         c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
         c.destroy()

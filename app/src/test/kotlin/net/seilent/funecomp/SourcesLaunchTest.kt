@@ -49,7 +49,7 @@ class SourcesLaunchTest {
     @Test
     fun anOldInstallShowsEverySourceOnInTheNewOrderOnTheFirstFrame() {
         app.applicationInfo.flags = app.applicationInfo.flags or ApplicationInfo.FLAG_DEBUGGABLE
-        app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE).edit().putBoolean("batteryAsked", true).commit()
+        app.getSharedPreferences(Main.DEVICE_PREFS, Context.MODE_PRIVATE).edit().putBoolean("batteryAsked", true).commit()
         app.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE).edit()
             .putBoolean("theaudiodb", false).putBoolean("discogs", false).putBoolean("fanarttv", false).putString("fanarttvKey", "")
             .putBoolean("deezer", false).putBoolean("youtube", false).putString("order", "commons,theaudiodb,fanarttv,discogs,youtube,deezer").commit()

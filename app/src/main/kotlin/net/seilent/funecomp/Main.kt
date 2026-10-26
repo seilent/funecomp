@@ -139,7 +139,7 @@ class Main : ComponentActivity() {
         }
 
         override fun backgroundLater() {
-            prefs().edit().putBoolean(BATTERY_ASKED, true).apply()
+            getSharedPreferences(DEVICE_PREFS, MODE_PRIVATE).edit().putBoolean(BATTERY_ASKED, true).apply()
             batteryAsked = true
         }
 
@@ -240,7 +240,7 @@ class Main : ComponentActivity() {
         sources = sources(this)
         init(this)
         windowManager.maximumWindowMetrics.bounds.let { Remote.window(this, it.width(), it.height()) }
-        batteryAsked = prefs().getBoolean(BATTERY_ASKED, false)
+        batteryAsked = batteryAsked(this)
         mediaControls = MediaLink.controls(this)
         lyricsMode = LyricsMode.on(this)
         remember(intent)
@@ -417,6 +417,7 @@ class Main : ComponentActivity() {
         const val EXTRA_PICK_ORIGIN = "pickOrigin"
         private const val BATTERY_ASKED = "batteryAsked"
         const val PREFS = "link"
+        const val DEVICE_PREFS = "device"
         const val WANTED = "wanted"
         const val RECONNECT = "reconnect"
         const val RECONNECT_ASK = "reconnectAsk"
@@ -433,6 +434,18 @@ class Main : ComponentActivity() {
             Firmwares.init(c)
             Remote.logExit(c)
         }
+
+        internal fun batteryAsked(c: Context): Boolean {
+            val link = c.getSharedPreferences(PREFS, MODE_PRIVATE)
+            val device = c.getSharedPreferences(DEVICE_PREFS, MODE_PRIVATE)
+            if (link.contains(BATTERY_ASKED)) {
+                if (upgraded(c) && !device.contains(BATTERY_ASKED)) device.edit().putBoolean(BATTERY_ASKED, link.getBoolean(BATTERY_ASKED, false)).commit()
+                link.edit().remove(BATTERY_ASKED).commit()
+            }
+            return device.getBoolean(BATTERY_ASKED, false)
+        }
+
+        private fun upgraded(c: Context) = c.packageManager.getPackageInfo(c.packageName, 0).let { it.lastUpdateTime > it.firstInstallTime }
 
         fun opens(intent: Intent?, debuggable: Boolean, linked: Boolean = false): Boolean {
             if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return false
