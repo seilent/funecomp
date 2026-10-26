@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     id("org.jetbrains.kotlin.jvm")
     id("funecomp.gen")
+    `java-test-fixtures`
 }
 
 java {
