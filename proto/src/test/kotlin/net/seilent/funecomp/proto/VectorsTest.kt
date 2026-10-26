@@ -201,6 +201,7 @@ class VectorsTest {
             Msg.STATE -> State.from(n).encode()
             Msg.SCHEMA -> Schema.from(n).encode()
             Msg.SETTINGS -> Settings.from(n).encode()
+            Msg.LIVE -> Live.from(n).encode()
             Msg.EQ -> Eq.from(n).encode()
             Msg.QUEUE -> Queue.from(n).encode()
             Msg.LIB -> Lib.from(n).encode()

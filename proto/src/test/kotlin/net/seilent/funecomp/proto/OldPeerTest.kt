@@ -56,12 +56,14 @@ class OldPeerTest {
         out
     }
 
-    private fun bodies(vec: String): List<ByteArray> {
+    private fun frames(vec: String): List<Frame> {
         val path = System.getProperty("funecomp.vectors") ?: "../third_party/funeos/vectors.txt"
         val hex = File(path).readLines().filter { it.startsWith("hex $vec ") }.joinToString("") { it.substringAfter("hex $vec ") }
         val b = ByteArray(hex.length / 2) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
-        return FrameReader().feed(b, 0, b.size).map { it.payload }
+        return FrameReader().feed(b, 0, b.size)
     }
+
+    private fun bodies(vec: String): List<ByteArray> = frames(vec).map { it.payload }
 
     private fun body(vec: String): ByteArray = bodies(vec).single()
 
@@ -319,6 +321,21 @@ class OldPeerTest {
 
         assertFalse("feature imgSource 28" in text("/proto-1.15-ebc0751.txt"))
         assertEquals("imgSource", Feature.names[28])
+    }
+
+    @Test
+    fun liveRowsFramesWithTheEbc0751Table() {
+        val live = frames("live").single()
+        assertNull(v1_15["LIVE"])
+        assertEquals(0, live.flags and (Proto.flagWant or Proto.flagReply))
+        val page = Node.decode("SCHEMA", body("schema_page_live"), v1_15)
+        assertTrue(page.unknownTags.isEmpty())
+        assertTrue(page.nodes(Tags.Schema.row).all { it.unknownTags.isEmpty() })
+        val s = Schema.from(page)
+        assertEquals(listOf("dateTime", "about"), s.rows.map { it.key })
+        assertTrue(s.rows.all { it.words.isEmpty() })
+        assertFalse("feature liveRows 30" in text("/proto-1.15-ebc0751.txt"))
+        assertEquals("liveRows", Feature.names[30])
     }
 
     @Test

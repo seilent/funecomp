@@ -78,6 +78,9 @@ class InboundTest {
         assertTrue(Groups.allowed(Msg.LYR_OFFSET, Groups.all))
         for (f in Feature.eqSlots..Feature.search) assertEquals(0L, Groups.all and (1L shl f))
         assertEquals(32767L or (1L shl 21) or (7L shl 23) or (1L shl 27), Groups.all)
+        assertTrue(Groups.allowed(Msg.LIVE, Groups.mask("liveRows")))
+        assertFalse(Groups.allowed(Msg.LIVE, Groups.mask("settings")))
+        assertEquals(0L, Groups.all and (3L shl Feature.imgSource))
     }
 
     @Test

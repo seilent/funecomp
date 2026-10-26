@@ -451,6 +451,17 @@ data class Settings(val rev: Long, val text: String) {
     }
 }
 
+data class Live(val rev: Long, val text: String) {
+    fun encode() = tlv {
+        u32(Tags.Live.rev, rev)
+        str(Tags.Live.text, text)
+    }
+
+    companion object {
+        fun from(n: Node) = Live(n.long(Tags.Live.rev) ?: 0, n.str(Tags.Live.text) ?: "")
+    }
+}
+
 data class Band(val type: Int, val grid: Int, val milliHz: Int, val gain10: Int, val q100: Int) {
     fun write(o: TlvWriter) = o.apply {
         enum(Tags.Band.type, type)
