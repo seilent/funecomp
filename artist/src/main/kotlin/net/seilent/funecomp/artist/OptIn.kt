@@ -125,7 +125,7 @@ class YouTube(private val api: Api, private val log: (String) -> Unit = {}) {
 
         object NoResults : Search
 
-        object Unavailable : Search
+        data class Unavailable(val gated: Boolean = false) : Search
     }
 
     fun candidates(a: MbArtist): Sequence<Candidate> =
@@ -149,9 +149,9 @@ class YouTube(private val api: Api, private val log: (String) -> Unit = {}) {
 
         object Empty : Read(Search.NoResults)
 
-        object Gated : Read(Search.Unavailable)
+        object Gated : Read(Search.Unavailable(gated = true))
 
-        object Failed : Read(Search.Unavailable)
+        object Failed : Read(Search.Unavailable())
     }
 
     private fun read(html: String?): Read {

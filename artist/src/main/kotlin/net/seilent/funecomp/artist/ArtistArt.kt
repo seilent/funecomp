@@ -402,7 +402,16 @@ class ArtistArt(
                         tile(section, d["name"].str ?: "", small, full)
                     }
                     YOUTUBE_SEARCH -> {
-                        val found = attempt { youtube.search(name) } ?: YouTube.Search.Unavailable
+                        val first = attempt { youtube.search(name) } ?: YouTube.Search.Unavailable()
+                        fun alias(): YouTube.Search? {
+                            val id = Names.mbid(mbid) ?: feed.at(0, run)?.id ?: return null
+                            val known = attempt { mb.aliases(id) } ?: return null
+                            val alias = Aliases.native(known.name, known.aliases, name) ?: return null
+                            val r = attempt { youtube.search(alias) } ?: YouTube.Search.Unavailable()
+                            browseLog("art browse youtube search alias $alias ${if (r is YouTube.Search.Channels) "channels=${r.list.size}" else if (r == YouTube.Search.NoResults) "none" else "unavailable"}")
+                            return r
+                        }
+                        val found = if ((first as? YouTube.Search.Unavailable)?.gated == true) alias() ?: first else first
                         (found as? YouTube.Search.Channels)?.list?.take(BROWSE_RESULTS)?.forEach { c -> tile(Sources.YOUTUBE, c.title, YouTube.sized(c.thumb, YT_PREVIEW), YouTube.sized(c.thumb, YT_FULL)) }
                         out.search(found)
                     }
@@ -464,7 +473,7 @@ class ArtistArt(
             ChannelMatch.Match(YouTube.Channel(channelTag, name.trim(), img ?: ""), ChannelMatch.mbid(name, links)).takeIf { it.mbid != null || img != null } ?: return null
         } else {
             when (val r = youtube.search(name)) {
-                YouTube.Search.Unavailable -> {
+                is YouTube.Search.Unavailable -> {
                     log("art youtube search unavailable ${name.trim()}")
                     pass.answered = false
                     return null

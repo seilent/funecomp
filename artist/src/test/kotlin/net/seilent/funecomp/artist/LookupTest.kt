@@ -616,7 +616,7 @@ class LookupTest {
             Triple(q, old(J.parse(Fixtures.text(line.substringAfter('\t')))["artists"].list, q), mb().search(q))
         }
         assertTrue("missing ${http.missing}", http.missing.isEmpty())
-        assertEquals(44, rows.size)
+        assertEquals(46, rows.size)
         assertEquals(
             listOf(Triple("むと", null, "6ac7acd1-2720-4733-9f98-cc5163bdce21"), Triple("アイミョン", null, "908d9ac2-5187-4b9e-b281-601c6afb0791")),
             rows.filter { it.second != it.third },

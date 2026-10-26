@@ -444,4 +444,16 @@ class ChannelLookupTest {
         assertNull(art().refresh(other, null, 240, 320))
         assertEquals(2, searches())
     }
+
+    @Test
+    fun theLookupNeverSearchesAnAlias() {
+        val tag = "水波琴音Minami Kotone"
+        val gated = Fixtures.load("yt-search-nanao.html")
+        http.queued[search(tag)] = ArrayDeque(listOf(Response(200, gated)))
+        http.queued[search(tag) + "&hl=en&gl=US"] = ArrayDeque(listOf(Response(200, gated)))
+        assertNull(art().get(tag, null, 240, 320))
+        assertEquals(2, http.calls.count { it.startsWith("https://www.youtube.com/results?") })
+        assertNotNull(cache.miss(key(tag))!!.ytFailed)
+        assertTrue(http.calls.none { it.contains("inc=aliases") })
+    }
 }

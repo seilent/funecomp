@@ -920,7 +920,7 @@ val SHOTS = listOf(
         browseType("Tsuki Nakamura", true)
     },
     Shot("browse-noresults", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.tiles = c.tiles.filter { it.tile.source != Sources.YOUTUBE }; c.searched = YouTube.Search.NoResults }),
-    Shot("browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.tiles = c.tiles.filter { it.tile.source != Sources.YOUTUBE }; c.searched = YouTube.Search.Unavailable }),
+    Shot("browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.tiles = c.tiles.filter { it.tile.source != Sources.YOUTUBE }; c.searched = YouTube.Search.Unavailable() }),
     Shot("browse-none", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(0, true)(c); c.searched = YouTube.Search.NoResults }),
     Shot("pick-browse-arriving", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, null)(c); c.tiles = c.tiles.filter { it.tile.source == Sources.DEEZER } }),
     Shot("connection-gated", pages = listOf(Page.Connection), link = GATED, gated = true),

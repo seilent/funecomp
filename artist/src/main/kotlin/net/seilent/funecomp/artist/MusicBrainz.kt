@@ -85,6 +85,26 @@ class Rel(val type: String, val url: String, val ended: Boolean)
 
 class Linked(val id: String, val name: String, val sortName: String)
 
+class Alias(val name: String, val locale: String?, val primary: Boolean, val type: String?)
+
+class MbAliases(val name: String, val aliases: List<Alias>)
+
+object Aliases {
+    private val NATIVE = setOf(Character.UnicodeScript.HAN, Character.UnicodeScript.HIRAGANA, Character.UnicodeScript.KATAKANA, Character.UnicodeScript.HANGUL)
+    private val NAMES = setOf("Artist name", "Legal name")
+
+    fun native(name: String, aliases: List<Alias>, query: String): String? {
+        val q = Names.fold(query)
+        fun ok(s: String) = Names.fold(s) != q && s.any { Character.isLetter(it) && Character.UnicodeScript.of(it.code) in NATIVE }
+        val usable = aliases.filter { it.type != "Search hint" && ok(it.name) }
+        fun lang(a: Alias) = a.locale?.substringBefore('_')
+        return (usable.firstOrNull { it.primary && lang(it) == "ja" }
+            ?: usable.firstOrNull { it.primary && lang(it) != "en" }
+            ?: usable.firstOrNull { it.type in NAMES })?.name
+            ?: name.takeIf { ok(it) }
+    }
+}
+
 class MbArtist(val id: String, val name: String, val country: String?, val rels: List<Rel>, val disambiguation: String = "") {
     fun rels(type: String) = rels.filter { it.type == type && !it.ended }
 }
@@ -111,6 +131,14 @@ class MusicBrainz(private val api: Api, private val base: String = "https://musi
         val folded = all.filter { matches(it, Names::fold, want) }
         val one = if (folded.isNotEmpty()) folded.singleOrNull() else all.filter { matches(it, Names::kana, Names.kana(name)) }.singleOrNull()
         return one?.get("id")?.str?.let { Names.mbid(it) }
+    }
+
+    fun aliases(id: String): MbAliases? {
+        val r = api.json("$base/artist/$id?inc=aliases&fmt=json") ?: return null
+        return MbAliases(r["name"].str ?: "", r["aliases"].list.mapNotNull { x ->
+            val n = x["name"].str ?: return@mapNotNull null
+            Alias(n, x["locale"].str, x["primary"].bool == true, x["type"].str)
+        })
     }
 
     fun byUrl(url: String): List<Linked> {

@@ -172,7 +172,7 @@ class BrowseSession {
         search = when (outcome) {
             is YouTube.Search.Channels -> SearchState.Tiles
             YouTube.Search.NoResults -> SearchState.NoResults
-            YouTube.Search.Unavailable -> SearchState.Unavailable
+            is YouTube.Search.Unavailable -> SearchState.Unavailable
         }
     }
 

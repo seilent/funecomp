@@ -846,7 +846,7 @@ class ArtPickUiTest {
     fun withNoTilesAnUnavailableSearchKeepsItsLine() {
         start(listOf(Page.Home, Page.Browse(PickFor("TSUKI"))))
         sections!!(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH))
-        searched!!(YouTube.Search.Unavailable)
+        searched!!(YouTube.Search.Unavailable())
         ended!!(true)
         settle(300)
         rule.onNodeWithText("youtube search unavailable", useUnmergedTree = true).assertExists()
@@ -995,7 +995,7 @@ class ArtPickUiTest {
         settle(300)
         search("Hoshimachi Suisei")
         assertEquals(2, browses().size)
-        searched!!(YouTube.Search.Unavailable)
+        searched!!(YouTube.Search.Unavailable())
         ended!!(true)
         settle(300)
         rule.onNodeWithText("youtube search unavailable").assertExists()

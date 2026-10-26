@@ -164,7 +164,7 @@ class BrowseTest {
     @Test
     fun aGateInBothLocalesIsUnavailable() {
         queue(nanaoEn, 200, Fixtures.text("yt-search-nanao.html"))
-        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(YouTube.Search.Unavailable(gated = true), yt().search("Nanao Sakuya"))
         assertEquals(listOf(nanao, nanaoEn), youtubeCalls())
         assertEquals(listOf("art browse youtube search gated", "art browse youtube search retry en unavailable"), searchLog)
     }
@@ -179,6 +179,19 @@ class BrowseTest {
     }
 
     @Test
+    fun anEmptyPageThenAGateIsAGatedUnavailable() {
+        queue(nanao, 200, Fixtures.text("yt-search-empty.html"))
+        queue(nanaoEn, 200, Fixtures.text("yt-search-nanao.html"))
+        assertEquals(YouTube.Search.Unavailable(gated = true), yt().search("Nanao Sakuya"))
+    }
+
+    @Test
+    fun aGateThenAnEmptyPageIsNoResults() {
+        queue(nanaoEn, 200, Fixtures.text("yt-search-empty.html"))
+        assertEquals(YouTube.Search.NoResults, yt().search("Nanao Sakuya"))
+    }
+
+    @Test
     fun anEmptyPageThenEnglishChannelsIsChannels() {
         queue(nanao, 200, Fixtures.text("yt-search-empty.html"))
         assertEquals(5, (yt().search("Nanao Sakuya") as YouTube.Search.Channels).list.size)
@@ -188,7 +201,7 @@ class BrowseTest {
     @Test
     fun aNotFoundIsUnavailableWithNoRetry() {
         queue(nanao, 404)
-        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(YouTube.Search.Unavailable(gated = false), yt().search("Nanao Sakuya"))
         assertEquals(listOf(nanao), youtubeCalls())
     }
 
@@ -220,17 +233,17 @@ class BrowseTest {
     fun anUnparsedOrMissingRetryIsUnavailable() {
         val consent = "<html><body>consent</body></html>"
         queue(nanaoEn, 200, consent)
-        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(YouTube.Search.Unavailable(gated = false), yt().search("Nanao Sakuya"))
         assertEquals("art browse youtube search unparsed chars=${consent.length} var=false element=false window=false", searchLog.first())
         queue(nanaoEn, 404)
-        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(YouTube.Search.Unavailable(gated = false), yt().search("Nanao Sakuya"))
         assertEquals(listOf(nanao, nanaoEn, nanao, nanaoEn), youtubeCalls())
     }
 
     @Test
     fun channelsMissingFromAPageWithResultsIsDrift() {
         queue(nanao, 200, Fixtures.text("yt-search-drift.html"))
-        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(YouTube.Search.Unavailable(gated = false), yt().search("Nanao Sakuya"))
         assertEquals(listOf(nanao), youtubeCalls())
         assertEquals(listOf("art browse youtube search drift results=79"), searchLog)
     }
@@ -239,7 +252,7 @@ class BrowseTest {
     fun anUnparsedSearchPageLogsItsMarkersOnly() {
         val page = "<html><body><script>window['ytInitialData'] = secretWord;</script></body></html>"
         queue(nanao, 200, page)
-        assertEquals(YouTube.Search.Unavailable, yt().search("Nanao Sakuya"))
+        assertEquals(YouTube.Search.Unavailable(gated = false), yt().search("Nanao Sakuya"))
         assertEquals(listOf("art browse youtube search unparsed chars=${page.length} var=false element=false window=true"), searchLog)
         assertTrue(searchLog.none { it.contains("secretWord") })
         assertEquals(listOf(nanao), youtubeCalls())
