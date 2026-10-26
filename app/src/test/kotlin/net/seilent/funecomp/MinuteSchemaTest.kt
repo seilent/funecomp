@@ -11,7 +11,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
+import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -47,9 +49,7 @@ class MinuteSchemaTest {
 
     private fun barTop() = rule.onAllNodes(hasTestTag("bar") and hasAnyAncestor(hasTestTag("hub.settings"))).fetchSemanticsNodes().single().boundsInRoot.top
 
-    @Test
-    fun aMinuteSchemaKeepsTheSheetAndTheRows() {
-        val c = SimControl("v1", now = { t })
+    private fun minutes(c: SimControl, start: () -> Unit, check: (Int) -> Unit) {
         c.draft(Enums.DraftKind.clock, unixS = 1767225600, zoneS = 0) { _, _ -> }
         c.tick()
         rule.mainClock.autoAdvance = false
@@ -74,7 +74,7 @@ class MinuteSchemaTest {
         assertEquals(row, bar, 1f)
         val scrolled = top("set.dateTime")
         val strip = rule.onNodeWithTag("pivot.system").fetchSemanticsNode().boundsInRoot
-        val rev = c.device.schema.rev!!
+        start()
         for (m in 1..5) {
             t += 60_000
             c.tick()
@@ -84,7 +84,7 @@ class MinuteSchemaTest {
                 assertEquals(bar, barTop(), 0.5f)
             }
             settle(600)
-            assertEquals(rev + m, c.device.schema.rev)
+            check(m)
             rule.onNode(hasText("2026-01-01 00:0$m") and hasAnyAncestor(hasTestTag("set.dateTime"))).assertExists()
             assertTrue(shell.sheet.shown)
             assertEquals(title, shell.sheet.title)
@@ -93,6 +93,33 @@ class MinuteSchemaTest {
             assertEquals(scrolled, top("set.dateTime"), 0.5f)
             assertEquals(strip, rule.onNodeWithTag("pivot.system").fetchSemanticsNode().boundsInRoot)
             assertEquals(focus, shell.sheet.focus)
+        }
+    }
+
+    @Test
+    fun aMinuteGivesABit30AppLiveAndNoSchema() {
+        val c = SimControl("v1", now = { t })
+        var rev = 0L
+        var live = 0L
+        var schemas = 0
+        minutes(c, {
+            rev = c.device.schema.rev!!
+            live = c.device.liveRows.rev
+            schemas = c.pushed.count { it == Msg.SCHEMA }
+        }) { m ->
+            assertEquals(rev, c.device.schema.rev)
+            assertEquals(live + m, c.device.liveRows.rev)
+            assertEquals(schemas, c.pushed.count { it == Msg.SCHEMA })
+        }
+    }
+
+    @Test
+    fun aMinuteSchemaKeepsTheSheetForAnAppWithoutBit30() {
+        val c = SimControl("v1", now = { t }, appFeatures = LINK_FEATURES and Groups.mask("liveRows").inv())
+        var rev = 0L
+        minutes(c, { rev = c.device.schema.rev!! }) { m ->
+            assertEquals(rev + m, c.device.schema.rev)
+            assertEquals(-1L, c.device.liveRows.rev)
         }
     }
 }

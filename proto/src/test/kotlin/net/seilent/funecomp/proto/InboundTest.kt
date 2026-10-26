@@ -77,9 +77,10 @@ class InboundTest {
         assertEquals(Groups.members.keys.filter { it !in Groups.unserved }.fold(0L) { m, g -> m or (1L shl Groups.bit(g)!!) }, Groups.all)
         assertTrue(Groups.allowed(Msg.LYR_OFFSET, Groups.all))
         for (f in Feature.eqSlots..Feature.search) assertEquals(0L, Groups.all and (1L shl f))
-        assertEquals(32767L or (1L shl 21) or (7L shl 23) or (1L shl 27), Groups.all)
+        assertEquals(32767L or (1L shl 21) or (7L shl 23) or (1L shl 27) or (1L shl 30), Groups.all)
         assertTrue(Groups.allowed(Msg.LIVE, Groups.mask("liveRows")))
         assertFalse(Groups.allowed(Msg.LIVE, Groups.mask("settings")))
+        assertTrue(Groups.allowed(Msg.LIVE, Groups.all))
         assertEquals(0L, Groups.all and (3L shl Feature.imgSource))
     }
 

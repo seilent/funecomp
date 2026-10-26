@@ -56,10 +56,12 @@ class SimControl(
     faults: List<String> = emptyList(),
     cardEq: List<String> = emptyList(),
     schema: String? = null,
+    private val appFeatures: Long = LINK_FEATURES,
 ) : Control {
     val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, Faults(faults), artDir = artDir, minor = minor, cardEq = cardEq), lib, now)
     var device by mutableStateOf(DeviceState())
     val sent = ArrayList<String>()
+    val pushed = ArrayList<Int>()
     val failed = ArrayList<Int>()
     val actions = ArrayList<Pair<Int, Long?>>()
     var usage: Map<String?, ArtCache.Usage> = emptyMap()
@@ -79,6 +81,7 @@ class SimControl(
 
     private val out = object : Out {
         override fun push(type: Int, payload: ByteArray) {
+            pushed += type
             val body = Node.decode(Msg.info.getValue(type).name, payload)
             val e = edit
             val mark = if (type == Msg.STATE) e?.mark() else null
@@ -137,6 +140,7 @@ class SimControl(
 
     init {
         device = device.withHello(HelloReply.from(Node.decode("HELLO.reply", sim.helloReply().encode())))
+        sim.linked(out, appFeatures)
         sim.greet(out)
     }
 

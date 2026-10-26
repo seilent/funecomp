@@ -286,7 +286,7 @@ class Options(
         if (minor < 8) faults.features = faults.features and Groups.mask("artPick").inv()
         if (minor < 9) faults.features = faults.features and Groups.mask("imgOrigin").inv()
         if (minor < 10) faults.features = faults.features and Groups.mask("stateClock").inv()
-        if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig").inv()
+        if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig", "liveRows").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }

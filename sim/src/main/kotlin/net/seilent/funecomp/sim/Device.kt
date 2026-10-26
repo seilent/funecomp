@@ -13,6 +13,7 @@ import net.seilent.funecomp.proto.ImgBeginReply
 import net.seilent.funecomp.proto.ImgEntry
 import net.seilent.funecomp.proto.ImgListReply
 import net.seilent.funecomp.proto.Lib
+import net.seilent.funecomp.proto.Live
 import net.seilent.funecomp.proto.LyrGetReply
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.LyrOffsetReply
@@ -59,6 +60,10 @@ import kotlin.math.roundToInt
 interface Out {
     fun push(type: Int, payload: ByteArray)
 }
+
+private class Forms(val rows: List<Row>, val legacy: List<Row>, val live: String)
+
+private class Sent(val schema: Long, val legacy: Long, val live: Long)
 
 sealed class Answer {
     class Ok(val payload: ByteArray = ByteArray(0), val state: Boolean = false) : Answer()
@@ -163,8 +168,10 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     val rows: List<Row> = loadRows()
     private val pivots = rows.mapNotNull { it.pivot }.distinct()
     private var schemaRev = 1L
-    private var schemaShown: List<Row>? = null
-    private val schemaAt = java.util.WeakHashMap<Out, Long>()
+    private var legacyRev = 1L
+    private var liveRev = 1L
+    private var formsShown: Forms? = null
+    private val schemaAt = java.util.WeakHashMap<Out, Sent>()
     private var scanUntil = Long.MIN_VALUE
     private var wallAt = System.currentTimeMillis() - clock()
 
@@ -525,7 +532,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         cardSent[out] = cardKey()
         send(out, Msg.STATE, state(receipt))
         (faults.cardRun?.start as? CardRun.Start.Delay)?.let { cardStart(now() + it.ms) }
-        pushSchema(out, schemaNow())
+        pushForms(out, forms(), null)
         pushSettings(out)
         pushEq(out, Enums.EqOutput.wired)
         pushEq(out, Enums.EqOutput.bt)
@@ -713,48 +720,74 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun conditionOf(key: String?): String? = conditions[key]?.let { (k, v) -> "$k=$v" }
 
-    fun schemaRows(): List<Row> = synchronized(lock) {
-        rows.filter { r -> r.key !in faults.rowsOff && conditions[r.key]?.let { (k, v) -> prefs[k] == v } != false }.map { live(it) }
+    fun schemaRows(): List<Row> = synchronized(lock) { legacy(structureRows()) }
+
+    private fun structureRows(): List<Row> =
+        rows.filter { r -> r.key !in faults.rowsOff && conditions[r.key]?.let { (k, v) -> prefs[k] == v } != false }.map { structure(it) }
+
+    private fun legacy(rows: List<Row>): List<Row> = rows.map { r -> liveWord(r)?.let { r.copy(words = listOf(it)) } ?: r }
+
+    private fun liveText(rows: List<Row>): String =
+        rows.mapNotNull { r -> liveWord(r)?.replace('\r', ' ')?.replace('\n', ' ')?.takeIf { it.isNotEmpty() }?.let { "${r.key}=$it\n" } }.joinToString("")
+
+    private fun forms(): Forms {
+        val rows = structureRows()
+        val f = Forms(rows, legacy(rows), liveText(rows))
+        formsShown?.let { o ->
+            if (f.rows != o.rows) schemaRev++
+            if (f.legacy != o.legacy) legacyRev++
+            if (f.live != o.live) liveRev++
+        }
+        formsShown = f
+        return f
     }
 
-    private fun schemaNow(): List<Row> {
-        val now = schemaRows()
-        if (schemaShown != null && now != schemaShown) schemaRev++
-        schemaShown = now
-        return now
-    }
+    private fun livePeer(out: Out) = allowed(Msg.LIVE) && Groups.allowed(Msg.LIVE, linked[out] ?: 0L)
 
     private fun schemaCheck(out: Out) {
         val sent = schemaAt[out] ?: return
-        val now = schemaNow()
-        if (sent != schemaRev) pushSchema(out, now)
+        pushForms(out, forms(), sent)
     }
 
-    private fun pushSchema(out: Out, shown: List<Row>) {
-        schemaAt[out] = schemaRev
-        val fixed = Schema(schemaRev, "system", 0, pivots.size, PageInfo(0, 0, false), emptyList()).encode().size + 8
+    private fun pushForms(out: Out, f: Forms, sent: Sent?) {
+        if (livePeer(out)) {
+            if (sent?.live != liveRev) send(out, Msg.LIVE, Live(liveRev, f.live).encode())
+            if (sent?.schema != schemaRev) pushSchema(out, schemaRev, f.rows)
+        } else if (sent?.legacy != legacyRev) {
+            pushSchema(out, legacyRev, f.legacy)
+        }
+        schemaAt[out] = Sent(schemaRev, legacyRev, liveRev)
+    }
+
+    private fun pushSchema(out: Out, rev: Long, shown: List<Row>) {
+        val fixed = Schema(rev, "system", 0, pivots.size, PageInfo(0, 0, false), emptyList()).encode().size + 8
         pivots.forEachIndexed { pi, pivot ->
             val prow = shown.filter { it.pivot == pivot }
             var at = 0
             do {
                 val n = PageInfo.fill(prow.map { it.size }, at, fixed + pivot.length)
                 val more = at + n < prow.size
-                send(out, Msg.SCHEMA, Schema(schemaRev, pivot, pi, pivots.size, PageInfo(at.toLong(), prow.size.toLong(), more), prow.subList(at, at + n)).encode())
+                send(out, Msg.SCHEMA, Schema(rev, pivot, pi, pivots.size, PageInfo(at.toLong(), prow.size.toLong(), more), prow.subList(at, at + n)).encode())
                 at += n
             } while (at < prow.size)
         }
     }
 
-    private fun live(r: Row): Row = when (r.key) {
-        "about" -> r.copy(words = listOf(opts.version ?: "sim.${board.name}"))
-        "rescan" -> r.copy(words = listOf(if (now() < scanUntil) "SCANNING" else if (lib.tracks.size == 1) "1 SONG" else "${lib.tracks.size} SONGS"))
-        "dateTime" -> r.copy(words = listOf(wallClock()))
-        "folders" -> r.copy(words = listOf("1 ON"))
-        "sampleRate" -> r.copy(words = listOf("AUTO"))
-        "eq" -> r.copy(words = listOf(eqWord()))
+    private fun structure(r: Row): Row = when (r.key) {
         "output" -> if (opts.headset || prefs["output"] == "bluetooth") r else r.copy(values = r.values.dropLast(1), words = r.words.dropLast(1))
         "usbOutput" -> if (opts.headset || prefs["usbOutput"] == "bluetooth") r else r.copy(values = r.values.dropLast(1), words = r.words.dropLast(1))
         else -> r
+    }
+
+    private fun liveWord(r: Row): String? = if (r.words.isNotEmpty() || r.kind == Enums.RowKind.range) null else when (r.key) {
+        "about" -> opts.version ?: "sim.${board.name}"
+        "rescan" -> if (now() < scanUntil) "SCANNING" else if (lib.tracks.size == 1) "1 SONG" else "${lib.tracks.size} SONGS"
+        "dateTime" -> wallClock()
+        "folders" -> "1 ON"
+        "sampleRate" -> "AUTO"
+        "eq" -> eqWord()
+        "scale" -> "1.5"
+        else -> null
     }
 
     private fun wallClock(): String {
@@ -770,7 +803,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private fun settingsText(): String {
-        val shown = schemaRows().mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones")
+        val shown = structureRows().mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones")
         return prefs.entries.filter { it.key in shown }.joinToString("") { "${it.key}=${it.value}\n" }
     }
 
