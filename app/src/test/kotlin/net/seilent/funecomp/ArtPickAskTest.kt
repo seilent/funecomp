@@ -59,6 +59,8 @@ class ArtPickAskTest {
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
         MediaLink.controls(app, false)
         app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE).edit().putBoolean("batteryAsked", true).commit()
+        Remote.artist(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
+        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
     }
 
     @After
@@ -199,7 +201,6 @@ class ArtPickAskTest {
 
     @Test
     fun anAskTakesTheSourceItCameWithOnTheSheetAndTheNotice() {
-        Remote.artist(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
         val s = live()
         val a = main()
         assertEquals("ok shown=true", ask(s, "TSUKI"))

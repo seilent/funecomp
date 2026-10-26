@@ -96,6 +96,7 @@ class ArtPickTest {
         MediaLink.controls(app, false)
         app.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE).edit().putInt("defaults", 2).putString("order", "commons,theaudiodb,fanarttv,discogs,youtube,deezer").putBoolean("deezer", true).putBoolean("theaudiodb", true).putBoolean("discogs", false).putBoolean("fanarttv", false).putBoolean("youtube", false).commit()
         Remote.resetArtist()
+        Lyrics.init(app, Http { _, _ -> Response(404, ByteArray(0)) })
     }
 
     @After

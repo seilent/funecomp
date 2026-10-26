@@ -68,6 +68,7 @@ class ArtBlockTest {
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
         MediaLink.controls(app, false)
         Remote.resetArtist()
+        Lyrics.init(app, Http { _, _ -> Response(404, ByteArray(0)) })
     }
 
     @After

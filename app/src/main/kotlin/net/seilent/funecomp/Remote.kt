@@ -452,6 +452,7 @@ object Remote : Control {
 
     internal fun resetArtist() = synchronized(lock) {
         artist = null
+        breaker.network()
         showBlocked { emptyList() }
         showPicks { emptyList() }
         galleryMissing = emptySet()

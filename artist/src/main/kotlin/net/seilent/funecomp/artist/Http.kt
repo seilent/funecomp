@@ -98,7 +98,7 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
 
     private fun send(url: String, headers: Map<String, String>, body: ByteArray?, sink: ((Int, ByteArray, Int) -> Boolean)? = null): Response {
         val run = HttpRun.current.get()
-        val c = URI(url).toURL().openConnection() as HttpURLConnection
+        val c = open(URI(url))
         run?.add(c)
         try {
             c.connectTimeout = timeoutMs
@@ -133,6 +133,10 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
             run?.remove(c)
             c.disconnect()
         }
+    }
+
+    companion object {
+        @Volatile var open: (URI) -> HttpURLConnection = { it.toURL().openConnection() as HttpURLConnection }
     }
 }
 

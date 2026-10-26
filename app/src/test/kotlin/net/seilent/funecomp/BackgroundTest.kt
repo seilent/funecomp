@@ -57,6 +57,8 @@ class BackgroundTest {
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
         MediaLink.controls(app, false)
+        Remote.artist(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
+        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
     }
 
     @After
@@ -1081,7 +1083,7 @@ class BackgroundTest {
     fun aServiceStartedWithoutMainReadsTheLyricsPref() {
         Lyrics.reset()
         app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).edit().putBoolean("netease", false).commit()
-        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim()).putExtra(LinkService.EXTRA_UPDATED, true)).create().startCommand(0, 1)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("stall-ms=60000"))).putExtra(LinkService.EXTRA_UPDATED, true)).create().startCommand(0, 1)
         assertEquals(LyricSources(lrclib = true, netease = false), Lyrics.sources)
         Lyrics.set(LyricSources.LRCLIB, false)
         c.withIntent(Intent(app, LinkService::class.java).setAction(LinkService.ACTION_STOP)).startCommand(0, 2)
