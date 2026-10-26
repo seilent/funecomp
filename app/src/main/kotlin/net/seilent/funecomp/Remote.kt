@@ -100,6 +100,8 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
+val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows")
+
 object Remote : Control {
     const val TAG = "Funecomp"
     const val RECEIVER = DeviceState.RECEIVER
@@ -253,7 +255,7 @@ object Remote : Control {
             Log.i(TAG, "link $spec")
             wake(context)
             val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0"
-            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(version, features = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource")), SystemClock::elapsedRealtime)
+            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(version, features = LINK_FEATURES), SystemClock::elapsedRealtime)
             link = l
             art = worker(context, l)
             l.start()

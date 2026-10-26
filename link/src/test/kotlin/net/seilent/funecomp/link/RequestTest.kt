@@ -72,9 +72,14 @@ class RequestTest {
 
     private class Asks(private val take: Boolean, private val answer: (Responder) -> Unit) : Session.Listener {
         val asked = LinkedBlockingQueue<Pair<Int, Node>>()
+        val pushes = LinkedBlockingQueue<Int>()
         val hello = CountDownLatch(1)
 
         override fun onHello(hello: HelloReply) = this.hello.countDown()
+
+        override fun onPush(type: Int, body: Node) {
+            pushes += type
+        }
 
         override fun onRequest(type: Int, body: Node, responder: Responder): Boolean {
             asked += type to body
@@ -120,6 +125,23 @@ class RequestTest {
         r.ok()
         r.error(Err.staleRev, "stale rev")
         assertNull(p.bytes.poll(300, TimeUnit.MILLISECONDS))
+    }
+
+    @Test
+    fun aLiveReachesTheListenerOnlyWithTheDeviceBit() {
+        val live = Groups.mask("settings", "liveRows")
+        val on = Asks(false) {}
+        val (_, p) = start(live, live, on)
+        p.send(vector("live"))
+        p.send(vector("state_comp2"))
+        assertEquals(Msg.LIVE, on.pushes.poll(3, TimeUnit.SECONDS))
+        assertEquals(Msg.STATE, on.pushes.poll(3, TimeUnit.SECONDS))
+        val off = Asks(false) {}
+        val (_, q) = start(live, Groups.mask("settings"), off)
+        q.send(vector("live"))
+        q.send(vector("state_comp2"))
+        assertEquals(Msg.STATE, off.pushes.poll(3, TimeUnit.SECONDS))
+        assertNull(off.pushes.poll(300, TimeUnit.MILLISECONDS))
     }
 
     @Test
