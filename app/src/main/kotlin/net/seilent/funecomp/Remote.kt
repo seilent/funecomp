@@ -1340,7 +1340,7 @@ object Remote : Control {
             board = hello.board
             Scrobbles.session(hello.has("stateClock"))
             link?.session?.let { Scrobbles.linked(it, hello.has("playLog")) }
-            Firmwares.hello(hello.board, hello.version)
+            Firmwares.hello(hello.board, hello.version, hello.has("updSig"))
             Lyrics.session()
             dapLyrics.session()
             if (synchronized(clock) { clock.hello(hello) }) sendClock("hello")

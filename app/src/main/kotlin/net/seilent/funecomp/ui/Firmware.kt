@@ -18,6 +18,7 @@ private const val NO_UPDATER = "device has no updater"
 private const val CANCEL = "cancel"
 private const val READY = "ready on the dap"
 private const val PATH = "settings > about > update firmware"
+const val UNSIGNED_RELEASE = "unsigned release"
 
 @Immutable
 data class FirmwareView(
@@ -29,6 +30,8 @@ data class FirmwareView(
     val downloading: Boolean = false,
     val download: String = "",
     val ready: Boolean = false,
+    val signed: Boolean = false,
+    val sigListed: Boolean = false,
     val checkDaily: Boolean = false,
     val prereleases: Boolean = true,
     val send: String = "",

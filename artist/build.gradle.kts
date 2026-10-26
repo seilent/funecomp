@@ -16,5 +16,6 @@ kotlin {
 dependencies {
     api(project(":link"))
     testImplementation(project(":sim"))
+    testImplementation(testFixtures(project(":proto")))
     testImplementation(libs.junit)
 }

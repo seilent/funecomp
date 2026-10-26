@@ -27,6 +27,7 @@ import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.FirmwareView
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickedFile
+import net.seilent.funecomp.ui.UNSIGNED_RELEASE
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
@@ -54,6 +55,9 @@ object Firmwares {
     private var run: HttpRun? = null
     private var board: String? = null
     private var version: String? = null
+    @Volatile private var updSig = false
+    @Volatile private var checkedSig: Boolean? = null
+    @Volatile private var unsigned = false
     private val sendExec = Executors.newSingleThreadExecutor { Thread(it, "firmware-send").apply { isDaemon = true } }
     private val retry = Executors.newSingleThreadScheduledExecutor { Thread(it, "firmware-retry").apply { isDaemon = true } }
     private var pending: Source? = null
@@ -85,13 +89,20 @@ object Firmwares {
         view = FirmwareView(checkDaily = prefs(app).getBoolean(DAILY, false), prereleases = prefs(app).getBoolean(PRE, true))
     }
 
-    fun hello(board: String?, version: String?) {
+    fun hello(board: String?, version: String?, updSig: Boolean = false) {
         this.board = board
         this.version = version
+        this.updSig = updSig
         cardWait = null
         val c = context ?: return
         val p = prefs(c)
-        if (p.getBoolean(DAILY, false) && System.currentTimeMillis() - p.getLong(LAST, 0) >= DAY_MS) check()
+        if (checkedSig.let { it != null && it != updSig }) check()
+        else if (p.getBoolean(DAILY, false) && System.currentTimeMillis() - p.getLong(LAST, 0) >= DAY_MS) check()
+    }
+
+    fun opened() {
+        val v = view
+        if (unsigned || v.info == Firmware.BAD_SIG || (v.ready && !v.signed && updSig)) check()
     }
 
     fun state() {
@@ -182,6 +193,9 @@ object Firmwares {
         busy = false
         cardWait = null
         stopSend = false
+        updSig = false
+        checkedSig = null
+        unsigned = false
         view = FirmwareView()
     }
 
@@ -266,19 +280,26 @@ object Firmwares {
         }
     }
 
-    fun check() = exec.execute {
+    fun check(): Unit = exec.execute {
         val c = context ?: return@execute
         val f = firmware ?: return@execute
         val b = board
+        val sig = updSig
         set { it.copy(status = "checking", info = "") }
         val v: (FirmwareView) -> FirmwareView = try {
             prefs(c).edit().putLong(LAST, System.currentTimeMillis()).apply()
-            when (val r = f.check(b, version, prefs(c).getBoolean(PRE, true))) {
+            val r = f.check(b, version, prefs(c).getBoolean(PRE, true), sig)
+            checkedSig = sig
+            if (sig != updSig) check()
+            unsigned = r == Firmware.Check.Unsigned
+            when (r) {
                 is Firmware.Check.Found -> {
                     release = r.release
-                    val ready = f.file(r.release).let { it.isFile && it.length() == r.release.asset.size }
-                    upd { it.copy(status = "", info = if (r.newer == null) "device runs a dev build" else "", tag = r.release.tag, size = r.release.asset.size, newer = r.newer, ready = ready, download = "") }
+                    val ready = f.complete(r.release)
+                    val signed = ready && f.signature(r.release) != null
+                    upd { it.copy(status = "", info = if (r.newer == null) "device runs a dev build" else "", tag = r.release.tag, size = r.release.asset.size, newer = r.newer, ready = ready, signed = signed, sigListed = r.release.asset.sigUrl != null, download = "") }
                 }
+                Firmware.Check.Unsigned -> upd { it.copy(status = "", info = UNSIGNED_RELEASE, tag = null) }
                 Firmware.Check.NoAsset -> upd { it.copy(status = "", info = if (b == null) "not connected" else "no release for $b", tag = null) }
                 Firmware.Check.OnlyPre -> upd { it.copy(status = "", info = "only prereleases", tag = null) }
                 Firmware.Check.NoPublic -> upd { it.copy(status = "", info = "no public releases", tag = null) }
@@ -302,19 +323,23 @@ object Firmwares {
             val f = firmware ?: return@execute
             val v: (FirmwareView) -> FirmwareView = try {
                 r.on {
-                    f.download(rel) { have, size ->
+                    f.downloadSigned(rel) { have, size ->
                         val t = percent(have, size)
                         if (t != view.download) set { it.copy(download = t) }
                     }
                 }
-                upd { it.copy(downloading = false, ready = true, download = "") }
+                val signed = f.signature(rel) != null
+                upd { it.copy(downloading = false, ready = true, signed = signed, download = "") }
             } catch (e: FirmwareRefused) {
-                upd { it.copy(downloading = false, download = "", info = e.message ?: "") }
+                val ready = f.complete(rel)
+                upd { it.copy(downloading = false, download = "", ready = ready, signed = false, info = e.message ?: "") }
             } catch (e: IOException) {
                 Log.w(Remote.TAG, "firmware download: $e")
                 if (r.cancelled) {
                     f.clear(rel)
-                    upd { it.copy(downloading = false, download = "", ready = false) }
+                    upd { it.copy(downloading = false, download = "", ready = false, signed = false) }
+                } else if (f.complete(rel)) {
+                    upd { it.copy(downloading = false, ready = true, signed = false, download = "paused 100%") }
                 } else {
                     val left = percent(f.downloaded(rel), rel.asset.size)
                     upd { it.copy(downloading = false, download = "paused $left") }
@@ -334,7 +359,7 @@ object Firmwares {
         val rel = release ?: return
         exec.execute {
             firmware?.clear(rel)
-            set { it.copy(ready = false, download = "") }
+            set { it.copy(ready = false, signed = false, download = "") }
         }
     }
 

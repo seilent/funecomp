@@ -92,6 +92,7 @@ dependencies {
     implementation(libs.androidx.browser)
     testImplementation(libs.junit)
     testImplementation(project(":sim"))
+    testImplementation(testFixtures(project(":proto")))
     testImplementation(libs.robolectric)
     testImplementation(libs.roborazzi)
     testImplementation(libs.roborazzi.compose)
