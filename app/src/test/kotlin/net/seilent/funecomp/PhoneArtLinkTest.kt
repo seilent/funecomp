@@ -100,7 +100,7 @@ class PhoneArtLinkTest {
 
     private fun live(vararg faults: String, updDir: File? = null): Sim {
         Remote.artist(app, http)
-        val s = Sim(Options(Board.of("v1"), Faults(faults.toList()), log = { logs += it }, phone = stream, receiver = true, updDir = updDir))
+        val s = Sim(Options(Board.of("v1"), Faults(if (updDir != null) faults.toList() + NO_SIG else faults.toList()), log = { logs += it }, phone = stream, receiver = true, updDir = updDir))
         sims += s
         service = Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:${s.listen(0)}")).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.source == Enums.Source.phone }

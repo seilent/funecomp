@@ -1,6 +1,7 @@
 package net.seilent.funecomp.sim
 
 import net.seilent.funecomp.proto.ArtGetReply
+import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Queue
@@ -200,16 +201,16 @@ class Proto12Test {
         val image = ByteArray(100_000) { (it * 7).toByte() }
         val sum = md5(image)
         assertEquals(Err.badValue, code(req(d, Msg.UPD_BEGIN, Req.updBegin("ap80", image.size.toLong(), sum))))
-        val begin = UpdBeginReply.from(Node.decode("UPD_BEGIN.reply", ok(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", image.size.toLong(), sum)))))
+        val begin = UpdBeginReply.from(Node.decode("UPD_BEGIN.reply", ok(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", image.size.toLong(), sum, FwStatementBuilder.forBytes("v1", image))))))
         assertEquals(0L, begin.offset)
         val out = Sink()
         data(d, out, 0, image.copyOfRange(0, Proto.updChunk))
         data(d, out, Proto.updChunk.toLong(), image.copyOfRange(Proto.updChunk, 2 * Proto.updChunk))
-        val again = UpdBeginReply.from(Node.decode("UPD_BEGIN.reply", ok(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", image.size.toLong(), sum)))))
+        val again = UpdBeginReply.from(Node.decode("UPD_BEGIN.reply", ok(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", image.size.toLong(), sum, FwStatementBuilder.forBytes("v1", image))))))
         assertEquals(2L * Proto.updChunk, again.offset)
         data(d, out, 0, image.copyOfRange(0, 10))
         assertEquals(Enums.AbortCode.offsetMismatch, UpdAbort.from(out.of(Msg.UPD_ABORT).single()).code)
-        val resumed = UpdBeginReply.from(Node.decode("UPD_BEGIN.reply", ok(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", image.size.toLong(), sum))))).offset
+        val resumed = UpdBeginReply.from(Node.decode("UPD_BEGIN.reply", ok(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", image.size.toLong(), sum, FwStatementBuilder.forBytes("v1", image)))))).offset
         var at = resumed
         while (at < image.size) {
             val end = minOf(image.size.toLong(), at + Proto.updChunk)
@@ -225,18 +226,20 @@ class Proto12Test {
     fun updateRefusals() {
         val d = device(opts(battery = Battery(40, 40, 0)))
         val sum = md5(ByteArray(10))
-        assertEquals(Err.refused, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 10, sum))))
+        assertEquals(Err.refused, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 10, sum, FwStatementBuilder.build(size = 10)))))
         val e = device(opts())
         File(tmp.root, "upd").mkdirs()
         File(tmp.root, "upd/update.upt").writeText("x")
-        val other = req(e, Msg.UPD_BEGIN, Req.updBegin("v1", 10, sum)) as Answer.Fail
+        val other = req(e, Msg.UPD_BEGIN, Req.updBegin("v1", 10, sum, FwStatementBuilder.build(size = 10))) as Answer.Fail
         assertEquals("remove update.upt", other.text)
         File(tmp.root, "upd/update.upt").delete()
-        assertEquals(Err.noSpace, code(req(device(opts(freeMiB = 100)), Msg.UPD_BEGIN, Req.updBegin("v1", 40L shl 20, sum))))
-        ok(req(e, Msg.UPD_BEGIN, Req.updBegin("v1", 10, sum)))
+        assertEquals(Err.noSpace, code(req(device(opts(freeMiB = 100)), Msg.UPD_BEGIN, Req.updBegin("v1", 40L shl 20, sum, FwStatementBuilder.build(size = 40L shl 20)))))
+        ok(req(e, Msg.UPD_BEGIN, Req.updBegin("v1", 10, sum, FwStatementBuilder.build(size = 10))))
         e.updData(Node.decode("UPD_DATA", Req.updData(0, ByteArray(10) { 1 })), Sink())
         assertEquals(Err.crc, code(req(e, Msg.UPD_END, Req.updEnd(sum))))
         assertFalse(File(tmp.root, "upd/v1.upt").exists())
+        assertEquals(Err.badSignature, code(req(e, Msg.UPD_BEGIN, Req.updBegin("v1", 10, sum))))
+        ok(req(device(opts(minor = 14)), Msg.UPD_BEGIN, Req.updBegin("v1", 10, sum)))
     }
 
     @Test

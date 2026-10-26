@@ -5,6 +5,7 @@ import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Eq
 import net.seilent.funecomp.proto.EqName
 import net.seilent.funecomp.proto.EqPresetReply
+import net.seilent.funecomp.proto.FwStatement
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.ImgAbort
@@ -254,6 +255,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private var output = Enums.Output.wired
     private var rescanLib = opts.rescanLib
     val begins: MutableList<Pair<String, Int?>> = java.util.Collections.synchronizedList(ArrayList())
+    val updSigs = java.util.concurrent.CopyOnWriteArrayList<ByteArray>()
     val fulls: MutableList<Triple<String, Long, Pair<Int, Int>?>> = java.util.concurrent.CopyOnWriteArrayList()
     private val started = clock()
     private var lastBattery = -1
@@ -302,7 +304,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private fun hasPlain(id: Long) = lyrs[id]?.kind == Enums.LyricsKind.plain
 
     class Art(val crc: Long, val w: Int, val h: Int, val bytes: ByteArray, val source: Pair<Long, Long>)
-    class Upd(val board: String, val size: Long, val md5: String, val part: File)
+    class Upd(val board: String, val size: Long, val md5: String, val part: File, val sha256: String?, val sig: String?)
     @Volatile var droppedData = 0
         private set
     private val streamFrames = java.util.concurrent.atomic.AtomicInteger()
@@ -1728,6 +1730,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         return Answer.Ok(head.copy(more = more, lines = l.lines.subList(at, at + n)).encode())
     }
 
+    private fun sha256(b: ByteArray) = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
+
     private fun updName() = when (board.name) {
         "v1" -> "v1.upt"
         "r1" -> "r1.upt"
@@ -1740,18 +1744,40 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val size = b.long(Tags.UpdBegin.size) ?: return Answer.Fail(Err.badValue, "no size")
         val md5 = b.str(Tags.UpdBegin.md5)?.lowercase()?.takeIf { MD5.matches(it) } ?: return Answer.Fail(Err.badValue, "bad md5")
         if (name != board.name) return Answer.Fail(Err.badValue, "wrong board")
+        updSigs += b.bytes(Tags.UpdBegin.sig) ?: ByteArray(0)
+        val signed = (faults.features ushr Groups.bit("updSig")!!) and 1L == 1L
+        val sig = b.bytes(Tags.UpdBegin.sig)?.takeIf { signed }
+        val st = sig?.let { FwStatement.parse(it) }
+        if (size > 0xFFFFFFFFL) return Answer.Fail(Err.badValue, "size")
+        if (signed) {
+            val why = when {
+                sig == null || sig.isEmpty() -> "unsigned"
+                st == null -> "signature"
+                opts.updKeys?.contains(st.keyId) == false -> "key"
+                st.board != board.name -> "board"
+                st.size != size -> "size"
+                else -> null
+            }
+            if (why != null) return Answer.Fail(Err.badSignature, why)
+        }
+        if (battery() < UPDATE_BATTERY_MIN && !opts.battery.charging) return Answer.Fail(Err.refused, "battery")
         val other = File(dir, if (board.name == "ap80") "ap80.upt" else "update.upt")
         if (other.exists()) return Answer.Fail(Err.badValue, "remove ${other.name}")
-        if (battery() < UPDATE_BATTERY_MIN && !opts.battery.charging) return Answer.Fail(Err.refused, "battery")
+        if (st != null) {
+            faults.sigBad?.let { text -> if (faults.sigBadLeft.getAndUpdate { if (it > 0) it - 1 else 0 } > 0) return Answer.Fail(Err.badSignature, text) }
+            if (st.seq < opts.updSeq) return Answer.Fail(Err.badSignature, "older")
+        }
+        val sigHash = sig?.let { sha256(it) }
+        val want = if (sigHash == null) "$size $md5" else "$size $md5 $sigHash"
         val part = File(dir.apply { mkdirs() }, "${updName()}.part")
         val inf = File(dir, "${updName()}.inf")
-        val same = part.isFile && inf.isFile && inf.readText() == "$size $md5"
+        val same = part.isFile && inf.isFile && inf.readText() == want
         if (!same) {
             part.delete()
-            inf.writeText("$size $md5")
+            inf.writeText(want)
         }
         if (size - part.length() > opts.cardFreeMiB * MIB - UPDATE_RESERVE) return Answer.Fail(Err.noSpace, "no space")
-        upd = Upd(name, size, md5, part)
+        upd = Upd(name, size, md5, part, st?.sha256, sigHash)
         updOut = out
         opts.log("upd begin size=$size offset=${part.length()}")
         return Answer.Ok(UpdBeginReply(part.length()).encode())
@@ -1790,11 +1816,16 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             File(u.part.parentFile, "${updName()}.inf").delete()
             return Answer.Fail(Err.crc, "md5")
         }
+        if (u.sha256 != null && sha256(u.part.readBytes()) != u.sha256) {
+            u.part.delete()
+            File(u.part.parentFile, "${updName()}.inf").delete()
+            return Answer.Fail(Err.badSignature, "signature")
+        }
         val f = File(u.part.parentFile, updName())
         f.delete()
         u.part.renameTo(f)
         File(u.part.parentFile, "${updName()}.inf").delete()
-        opts.log("stored upd file=${f.path} bytes=${f.length()} md5=$got")
+        opts.log("stored upd file=${f.path} bytes=${f.length()} md5=$got sig=${u.sig?.take(8) ?: "none"}")
         return Answer.Ok()
     }
 }

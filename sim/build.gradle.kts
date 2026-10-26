@@ -17,6 +17,7 @@ kotlin {
 dependencies {
     implementation(project(":proto"))
     implementation(project(":state"))
+    testImplementation(testFixtures(project(":proto")))
     testImplementation(libs.junit)
 }
 

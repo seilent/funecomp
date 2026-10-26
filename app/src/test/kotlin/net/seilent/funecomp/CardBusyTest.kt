@@ -115,7 +115,7 @@ class CardBusyTest {
     private fun lib(names: List<String>) = Library(names.mapIndexed { i, n -> Library.track(n, "Album $i", "Song $i", 1, 200_000) })
 
     private fun sim(lib: Library, faults: List<String>, lrcDir: File? = null, minor: Int = Proto.minor, updDir: File? = null, artDir: File? = null): Sim {
-        val s = Sim(Options(Board.of("v1"), Faults(faults), lrcDir = lrcDir, minor = minor, updDir = updDir, artDir = artDir, log = { lines += it }), lib)
+        val s = Sim(Options(Board.of("v1"), Faults(if (updDir != null) faults + NO_SIG else faults), lrcDir = lrcDir, minor = minor, updDir = updDir, artDir = artDir, log = { lines += it }), lib)
         sims += s
         return s
     }

@@ -126,6 +126,8 @@ class Faults(specs: List<String>) {
     val srcFail = HashSet<String>()
     val rowsOff = HashSet<String>()
     var scanMs: Long? = null
+    var sigBad: String? = null
+    val sigBadLeft = AtomicInteger(0)
 
     init {
         val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
@@ -221,6 +223,10 @@ class Faults(specs: List<String>) {
                 "phone-art-late" -> phoneArtLate = v.toLong()
                 "rows-off" -> rowsOff += v.split('+').filter { it.isNotEmpty() }
                 "scan-ms" -> scanMs = v.toLong()
+                "sig-bad" -> {
+                    sigBad = v.substringBefore(':').ifEmpty { throw IllegalArgumentException("sig-bad: text missing in $v") }
+                    sigBadLeft.set(if (':' in v) v.substringAfter(':').toIntOrNull() ?: throw IllegalArgumentException("sig-bad: bad count in $v") else 1)
+                }
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')
@@ -269,6 +275,8 @@ class Options(
     val receiver: Boolean = false,
     val headset: Boolean = false,
     val companion: Boolean = false,
+    val updKeys: Set<String>? = null,
+    val updSeq: Long = 0,
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
@@ -278,7 +286,7 @@ class Options(
         if (minor < 8) faults.features = faults.features and Groups.mask("artPick").inv()
         if (minor < 9) faults.features = faults.features and Groups.mask("imgOrigin").inv()
         if (minor < 10) faults.features = faults.features and Groups.mask("stateClock").inv()
-        if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd").inv()
+        if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }

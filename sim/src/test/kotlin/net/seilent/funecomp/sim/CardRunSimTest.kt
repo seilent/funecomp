@@ -1,5 +1,6 @@
 package net.seilent.funecomp.sim
 
+import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.ImgAbort
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Req
@@ -79,7 +80,7 @@ class CardRunSimTest {
         "IMG_LIST" to { d -> req(d, Msg.IMG_LIST, Req.imgList(0, 100)) },
         "LIB_GET" to { d -> req(d, Msg.LIB_GET, Req.libGet(Enums.View.artists, "", 0, 10, lib.rev)) },
         "ART_GET" to { d -> req(d, Msg.ART_GET, Req.artGet(track, 128)) },
-        "UPD_BEGIN" to { d -> req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 1000, "0".repeat(32))) },
+        "UPD_BEGIN" to { d -> req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 1000, "0".repeat(32), FwStatementBuilder.build(size = 1000))) },
         "TRANSPORT" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.pause)) },
         "TRANSPORT repeat" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.repeat, repeat = Enums.Repeat.all)) },
         "TRANSPORT play" to { d -> req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.play)) },
@@ -366,14 +367,14 @@ class CardRunSimTest {
         val dir = tmp.newFolder()
         val d = device(15, dir, "card-run=2000+1000@end")
         val out = linked(d)
-        assertEquals(null, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 2000, "0".repeat(32)), out)))
+        assertEquals(null, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 2000, "0".repeat(32), FwStatementBuilder.build(size = 2000)), out)))
         for (i in 0 until 2) d.updData(Node.decode("UPD_DATA", Req.updData(i * 1000L, ByteArray(1000))), out)
         assertEquals(Err.noCard, code(req(d, Msg.UPD_END, Req.updEnd("0".repeat(32)), out)))
         assertTrue(out.of(Msg.UPD_ABORT).isEmpty())
         assertEquals(2000L, File(dir, "v1.upt.part").length())
         at(d, out, 3000)
         assertEquals(Enums.Card.ready, out.states().last().card)
-        assertEquals(null, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 2000, "0".repeat(32)), out)))
+        assertEquals(null, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 2000, "0".repeat(32), FwStatementBuilder.build(size = 2000)), out)))
     }
 
     @Test
@@ -422,15 +423,15 @@ class CardRunSimTest {
             val dir = tmp.newFolder()
             val d = device(minor, dir, "card-run=2000+1000@upd:3000")
             val out = linked(d)
-            assertEquals(null, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 10_000, "0".repeat(32)), out)))
+            assertEquals(null, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 10_000, "0".repeat(32), FwStatementBuilder.build(size = 10_000)), out)))
             for (i in 0 until 5) d.updData(Node.decode("UPD_DATA", Req.updData(i * 1000L, ByteArray(1000))), out)
             val a = UpdAbort.from(out.of(Msg.UPD_ABORT).single())
             assertEquals("minor $minor", abort, a.code)
             assertEquals(3000L, a.offset)
             assertEquals(3000L, File(dir, "v1.upt.part").length())
-            assertEquals(if (minor >= 15) Err.noCard else Err.busy, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 10_000, "0".repeat(32)), out)))
+            assertEquals(if (minor >= 15) Err.noCard else Err.busy, code(req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 10_000, "0".repeat(32), FwStatementBuilder.build(size = 10_000)), out)))
             at(d, out, 3000)
-            val again = req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 10_000, "0".repeat(32)), out)
+            val again = req(d, Msg.UPD_BEGIN, Req.updBegin("v1", 10_000, "0".repeat(32), FwStatementBuilder.build(size = 10_000)), out)
             assertEquals(null, code(again))
         }
     }

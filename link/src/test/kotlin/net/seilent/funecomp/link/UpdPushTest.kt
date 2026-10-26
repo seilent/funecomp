@@ -1,8 +1,10 @@
 package net.seilent.funecomp.link
 
+import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
+import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
@@ -38,7 +40,7 @@ class UpdPushTest {
     }
 
     private fun sim(vararg faults: String): Int {
-        val s = Sim(Options(Board.of("v1"), Faults(faults.toList()), updDir = tmp.root))
+        val s = Sim(Options(Board.of("v1"), Faults(faults.toList() + "features=${Groups.all and (1L shl Feature.updSig).inv()}"), updDir = tmp.root))
         sims += s
         return s.listen(0)
     }

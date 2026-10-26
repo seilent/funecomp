@@ -52,7 +52,6 @@ object Groups {
         "search",
         "receiver",
         "phoneFiles",
-        "updSig",
         "imgSource",
         "eqStages",
         "liveRows",

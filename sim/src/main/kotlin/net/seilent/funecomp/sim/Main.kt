@@ -7,7 +7,7 @@ import kotlin.system.exitProcess
 
 private const val USAGE = "usage: sim --board ap80|v1|r1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
-    "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
+    "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--upd-keys <hex>,...] [--upd-seq <n>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
     "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... " +
     "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--headset] [--companion] [--quiet]"
 
@@ -27,6 +27,8 @@ fun main(args: Array<String>) {
     var artDir: String? = null
     var lrcDir: String? = null
     var updDir: String? = null
+    var updKeys: Set<String>? = null
+    var updSeq: Long? = null
     var battery: String? = null
     var card: String? = null
     var curve: String? = null
@@ -63,6 +65,8 @@ fun main(args: Array<String>) {
             "--art-dir" -> artDir = value()
             "--lrc-dir" -> lrcDir = value()
             "--upd-dir" -> updDir = value()
+            "--upd-keys" -> updKeys = value().split(',').map { it.trim().lowercase() }.filter { it.isNotEmpty() }.toSet()
+            "--upd-seq" -> updSeq = value().toLong()
             "--battery" -> battery = value()
             "--card" -> card = value()
             "--curve" -> curve = value()
@@ -128,6 +132,8 @@ fun main(args: Array<String>) {
         receiver = receiver,
         headset = headset,
         companion = companion,
+        updKeys = updKeys,
+        updSeq = updSeq ?: base.updSeq,
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {

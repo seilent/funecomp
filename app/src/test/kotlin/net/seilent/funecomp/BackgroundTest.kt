@@ -79,7 +79,7 @@ class BackgroundTest {
     private val logs = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList(), updDir: java.io.File? = null, minor: Int = Proto.minor, phone: List<PhoneLine> = emptyList(), receiver: Boolean = false, output: Int? = null): String {
-        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, updDir = updDir, minor = minor, log = { logs += it }, phone = phone, receiver = receiver))
+        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(if (updDir != null) faults + NO_SIG else faults), battery = battery, lrcDir = lrcDir, updDir = updDir, minor = minor, log = { logs += it }, phone = phone, receiver = receiver))
         output?.let { s.device.output(it) }
         sims += s
         return "tcp:127.0.0.1:${s.listen(0)}"
@@ -879,6 +879,7 @@ class BackgroundTest {
     fun aFirmwareSendRunsWhileThePhoneStreams() {
         val (c, done) = upd()
         assertTrue(PushGate.receiver(Remote.device))
+        assertEquals(true, Remote.device.playback.state.receiver)
         val bytes = image(300_000)
         Firmwares.send(HeldSource(bytes, Int.MAX_VALUE).source())
         landed(done, bytes)
