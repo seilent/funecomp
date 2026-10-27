@@ -86,10 +86,10 @@ class Main : ComponentActivity() {
     }
 
     private var firmwarePicked: ((PickedFile) -> Unit)? = null
-    private val firmwarePicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    private val firmwarePicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         val done = firmwarePicked ?: return@registerForActivityResult
         firmwarePicked = null
-        if (uri != null) Firmwares.read(uri, done)
+        if (uris.isNotEmpty()) Firmwares.read(uris, done)
     }
 
     private var galleryPicked: ((Previewed) -> Unit)? = null
@@ -206,6 +206,8 @@ class Main : ComponentActivity() {
         }
 
         override fun firmwareCheck() = Firmwares.check()
+
+        override fun firmwareOpened() = Firmwares.opened()
 
         override fun firmwareDownload() = Firmwares.download()
 

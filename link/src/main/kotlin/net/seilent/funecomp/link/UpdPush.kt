@@ -14,6 +14,7 @@ class UpdPush(
     private val board: String,
     private val size: Long,
     private val md5: String,
+    private val sig: ByteArray?,
     private val open: (Long) -> InputStream,
     private val gate: () -> Boolean = { true },
     private val progress: (Long) -> Unit = {},
@@ -31,7 +32,7 @@ class UpdPush(
         session.updAbortListener = { abort.set(it) }
         session.pushBegin()
         try {
-            val begin = when (val r = session.call(Msg.UPD_BEGIN, Req.updBegin(board, size, md5))) {
+            val begin = when (val r = session.call(Msg.UPD_BEGIN, Req.updBegin(board, size, md5, sig))) {
                 is Session.Result.Ok -> r
                 is Session.Result.Failed -> return Outcome.Failed(r.error)
                 Session.Result.Unsupported -> return Outcome.Failed(null)

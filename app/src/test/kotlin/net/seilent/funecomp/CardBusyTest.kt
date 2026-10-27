@@ -12,6 +12,7 @@ import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.artist.Wikimedia
+import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
@@ -115,7 +116,7 @@ class CardBusyTest {
     private fun lib(names: List<String>) = Library(names.mapIndexed { i, n -> Library.track(n, "Album $i", "Song $i", 1, 200_000) })
 
     private fun sim(lib: Library, faults: List<String>, lrcDir: File? = null, minor: Int = Proto.minor, updDir: File? = null, artDir: File? = null): Sim {
-        val s = Sim(Options(Board.of("v1"), Faults(if (updDir != null) faults + NO_SIG else faults), lrcDir = lrcDir, minor = minor, updDir = updDir, artDir = artDir, log = { lines += it }), lib)
+        val s = Sim(Options(Board.of("v1"), Faults(faults), lrcDir = lrcDir, minor = minor, updDir = updDir, artDir = artDir, log = { lines += it }), lib)
         sims += s
         return s
     }
@@ -413,7 +414,7 @@ class CardBusyTest {
         val u = upd()
         val c = link(sim(Library.synthetic(), listOf("card-run=8000+4000@upd:150000", "late-state=1500"), minor = minor, updDir = u.card))
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
-        Firmwares.send(u.image)
+        Firmwares.send(u.image, if (minor >= 15) FwStatementBuilder.forFile("v1", u.image) else null)
         waitFor(20_000) { Firmwares.view.info == Heart.CARD }
         assertTrue(Firmwares.view.send, Firmwares.view.send.startsWith("paused"))
         waitFor { Remote.device.cardDown }
@@ -438,7 +439,7 @@ class CardBusyTest {
         val u = upd()
         val c = link(sim(Library.synthetic(), listOf("card-run=4000+1000@end"), updDir = u.card))
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
-        Firmwares.send(u.image)
+        Firmwares.send(u.image, FwStatementBuilder.forFile("v1", u.image))
         waitFor(30_000) { Firmwares.view.info == Heart.CARD }
         assertTrue(Firmwares.view.send, Firmwares.view.send.startsWith("paused"))
         stored(u)
@@ -457,7 +458,7 @@ class CardBusyTest {
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
         s.device.startCard()
         waitFor { Remote.device.cardDown }
-        Firmwares.send(u.image)
+        Firmwares.send(u.image, FwStatementBuilder.forFile("v1", u.image))
         waitFor { Firmwares.view.info == Heart.CARD }
         stored(u)
         assertEquals(emptyList<String>(), between(0, index("card gate ready"), Regex("rx UPD_BEGIN ")))
@@ -472,7 +473,7 @@ class CardBusyTest {
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
         s.device.startCard()
         waitFor { lines.contains("card gate busy") }
-        Firmwares.send(u.image)
+        Firmwares.send(u.image, FwStatementBuilder.forFile("v1", u.image))
         waitFor { Firmwares.view.info == Heart.CARD }
         assertEquals(false, Remote.device.cardDown)
         stored(u)
@@ -492,7 +493,7 @@ class CardBusyTest {
         s.device.startCard()
         waitFor { lines.contains("card gate busy") }
         assertEquals(null, Remote.device.card.value)
-        Firmwares.send(u.image)
+        Firmwares.send(u.image, FwStatementBuilder.forFile("v1", u.image))
         waitFor { Firmwares.view.info == "dap busy" }
         assertTrue(Firmwares.view.send.startsWith("paused") || Firmwares.view.send.isEmpty())
         stored(u)
@@ -506,7 +507,7 @@ class CardBusyTest {
         val s = sim(Library.synthetic(), listOf("fail=UPD_BEGIN:14:1"), updDir = u.card)
         val c = link(s)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
-        Firmwares.send(u.image)
+        Firmwares.send(u.image, FwStatementBuilder.forFile("v1", u.image))
         waitFor { Firmwares.view.info == Heart.CARD }
         assertTrue(Firmwares.view.send.startsWith("paused"))
         settle(Firmwares.BUSY_RETRY_MS + 1000)
@@ -523,7 +524,7 @@ class CardBusyTest {
         val s = sim(Library.synthetic(), listOf("fail=UPD_BEGIN:14:1"), updDir = u.card)
         val c = link(s)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
-        Firmwares.send(u.image)
+        Firmwares.send(u.image, FwStatementBuilder.forFile("v1", u.image))
         waitFor { Firmwares.view.info == Heart.CARD }
         val hellos = lines.count { "rx HELLO" in it }
         s.current!!.close("drop")

@@ -1,10 +1,9 @@
 package net.seilent.funecomp.link
 
-import net.seilent.funecomp.proto.Groups
+import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
-import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
@@ -40,7 +39,7 @@ class UpdPushTest {
     }
 
     private fun sim(vararg faults: String): Int {
-        val s = Sim(Options(Board.of("v1"), Faults(faults.toList() + "features=${Groups.all and (1L shl Feature.updSig).inv()}"), updDir = tmp.root))
+        val s = Sim(Options(Board.of("v1"), Faults(faults.toList()), updDir = tmp.root))
         sims += s
         return s.listen(0)
     }
@@ -56,8 +55,10 @@ class UpdPushTest {
         return s
     }
 
+    private val sig = FwStatementBuilder.forBytes("v1", image)
+
     private fun push(s: Session, board: String = "v1", sum: String = md5, gate: () -> Boolean = { true }, seen: MutableList<Long> = ArrayList()) =
-        UpdPush(s, board, image.size.toLong(), sum, { off -> ByteArrayInputStream(image, off.toInt(), image.size - off.toInt()) }, gate) { seen += it }.run()
+        UpdPush(s, board, image.size.toLong(), sum, sig, { off -> ByteArrayInputStream(image, off.toInt(), image.size - off.toInt()) }, gate) { seen += it }.run()
 
     @Test
     fun wholeImageLandsUnderTheBoardName() {

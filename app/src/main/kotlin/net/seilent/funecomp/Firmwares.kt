@@ -17,21 +17,24 @@ import net.seilent.funecomp.artist.FirmwareRefused
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.HttpRun
 import net.seilent.funecomp.artist.Release
+import net.seilent.funecomp.artist.Sums
 import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.link.UpdPush
+import net.seilent.funecomp.proto.FwStatement
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.FirmwareView
+import net.seilent.funecomp.ui.PICK_ONE
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickedFile
+import net.seilent.funecomp.ui.UNSIGNED_FIRMWARE
 import net.seilent.funecomp.ui.UNSIGNED_RELEASE
 import java.io.File
 import java.io.IOException
 import java.io.InputStream
-import java.security.MessageDigest
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -63,14 +66,15 @@ object Firmwares {
     private var pending: Source? = null
     private var retryNext: ScheduledFuture<*>? = null
     private var pickedUri: Uri? = null
+    private var pickedSig: ByteArray? = null
     @Volatile private var stopSend = false
     @Volatile private var busy = false
     @Volatile private var cardWait: Int? = null
     @Volatile var sending = false
         private set
 
-    internal class Source(val name: String, val size: Long, val open: (Long) -> InputStream) {
-        var md5: String? = null
+    internal class Source(val name: String, val size: Long, val sig: ByteArray?, val open: (Long) -> InputStream) {
+        var sums: Sums? = null
     }
 
     var view by mutableStateOf(FirmwareView())
@@ -120,13 +124,19 @@ object Firmwares {
         if (picked) {
             val uri = pickedUri ?: return
             val size = view.pickedSize.takeIf { it > 0 } ?: return
-            send(Source(view.pickedName, size) { off -> (c.contentResolver.openInputStream(uri) ?: throw IOException("no stream")).also { skip(it, off) } })
+            send(Source(view.pickedName, size, pickedSig) { off -> (c.contentResolver.openInputStream(uri) ?: throw IOException("no stream")).also { skip(it, off) } })
         } else {
-            send(firmware?.file(release ?: return)?.takeIf { it.isFile } ?: return)
+            val fw = firmware ?: return
+            val rel = release ?: return
+            sendExec.execute {
+                val f = fw.file(rel).takeIf { it.isFile } ?: return@execute
+                val src = Source(f.name, f.length(), fw.signature(rel)) { off -> f.inputStream().also { skip(it, off) } }.apply { sums = fw.sums(rel) }
+                main.post { send(src) }
+            }
         }
     }
 
-    internal fun send(f: File) = send(Source(f.name, f.length()) { off -> f.inputStream().also { skip(it, off) } })
+    internal fun send(f: File, sig: ByteArray?) = send(Source(f.name, f.length(), sig) { off -> f.inputStream().also { skip(it, off) } })
 
     internal fun send(src: Source) {
         pending = src
@@ -211,16 +221,21 @@ object Firmwares {
         busy = false
         cardWait = null
         val s = Remote.session() ?: return upd { it.copy(send = paused(it.send), info = "not connected") }
-        val sum = src.md5 ?: md5(src).also { src.md5 = it }
+        val sum = src.sums ?: src.open(0).use { Firmware.sums(it) }.also { src.sums = it }
         val b = board ?: return upd { it.copy(send = paused(it.send), info = "not connected") }
-        val r = UpdPush(s, b, src.size, sum, src.open, gate = {
+        if (!signedOk(src, sum, b)) {
+            Log.i(Remote.TAG, "firmware send ${src.name} -> unsigned")
+            if (pending === src) pending = null
+            return upd { it.copy(send = "", info = UNSIGNED_FIRMWARE) }
+        }
+        val r = UpdPush(s, b, src.size, sum.md5, src.sig, src.open, gate = {
             !stopSend && Remote.phase == Phase.LIVE && refusal() == null && open()
         }) { at ->
             Remote.holdWake(WAKE, WAKE_MS)
             val t = "firmware ${if (src.size > 0) at * 100 / src.size else 0}%"
             if (t != view.send) set { it.copy(send = t) }
         }.run()
-        Log.i(Remote.TAG, "firmware send ${src.name} -> ${r.javaClass.simpleName.lowercase()}")
+        Log.i(Remote.TAG, "firmware send ${src.name} -> ${r.javaClass.simpleName.lowercase()}${(r as? UpdPush.Outcome.Failed)?.error?.let { " ${it.code} ${it.text}" }.orEmpty()}")
         if (r !is UpdPush.Outcome.Done && stopSend) {
             if (pending === src) pending = null
             return upd { it.copy(send = "", info = "") }
@@ -248,23 +263,22 @@ object Firmwares {
                 upd { it.copy(send = paused(it.send), info = why) }
             } else {
                 if (pending === src) pending = null
-                val why = r.error?.text?.takeIf { it.startsWith("remove ") } ?: "send failed"
+                val why = if (r.error?.code == Err.badSignature) sigLine(r.error?.text, src) else r.error?.text?.takeIf { it.startsWith("remove ") } ?: "send failed"
                 upd { it.copy(send = "", info = why) }
             }
         }
     }
 
-    private fun md5(src: Source): String {
-        val md = MessageDigest.getInstance("MD5")
-        src.open(0).use { input ->
-            val buf = ByteArray(65536)
-            while (true) {
-                val n = input.read(buf)
-                if (n < 0) break
-                md.update(buf, 0, n)
-            }
-        }
-        return md.digest().joinToString("") { "%02x".format(it) }
+    private fun signedOk(src: Source, sums: Sums, board: String): Boolean {
+        val sig = src.sig ?: return !Remote.device.has("updSig")
+        val st = FwStatement.parse(sig) ?: return false
+        return st.board == board && st.size == src.size && src.size <= 0xFFFFFFFFL && st.sha256 == sums.sha256
+    }
+
+    private fun sigLine(text: String?, src: Source) = when (text) {
+        "older" -> src.sig?.let { FwStatement.parse(it) }?.let { "older ${it.version}" } ?: UNSIGNED_FIRMWARE
+        "key" -> "unknown signing key"
+        else -> UNSIGNED_FIRMWARE
     }
 
     private fun skip(input: InputStream, n: Long) {
@@ -369,24 +383,59 @@ object Firmwares {
         set { it.copy(checkDaily = checkDaily, prereleases = prereleases) }
     }
 
-    fun read(uri: Uri, done: (PickedFile) -> Unit) {
+    private fun meta(c: Context, uri: Uri): Pair<String, Long> = try {
+        c.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use {
+            if (it.moveToFirst()) (it.getString(0) ?: "") to (if (it.isNull(1)) -1L else it.getLong(1)) else null
+        }
+    } catch (e: RuntimeException) {
+        null
+    } ?: ((uri.lastPathSegment?.substringAfterLast('/') ?: "") to -1L)
+
+    private fun statement(c: Context, uri: Uri): ByteArray? {
+        val head = try {
+            c.contentResolver.openInputStream(uri)?.use { input ->
+                val b = ByteArray(FwStatement.MAX + 1)
+                var n = 0
+                while (n < b.size) {
+                    val k = input.read(b, n, b.size - n)
+                    if (k < 0) break
+                    n += k
+                }
+                b.copyOf(n)
+            }
+        } catch (e: IOException) {
+            null
+        } catch (e: SecurityException) {
+            null
+        } ?: return null
+        val magic = FwStatement.MAGIC.toByteArray(Charsets.ISO_8859_1)
+        return head.takeIf { it.size <= FwStatement.MAX && it.size >= magic.size && it.copyOf(magic.size).contentEquals(magic) }
+    }
+
+    fun read(uris: List<Uri>, done: (PickedFile) -> Unit) {
         val c = context ?: return
         exec.execute {
-            val (name, size) = try {
-                c.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)?.use {
-                    if (it.moveToFirst()) (it.getString(0) ?: "") to (if (it.isNull(1)) -1L else it.getLong(1)) else null
-                }
-            } catch (e: RuntimeException) {
-                null
-            } ?: ((uri.lastPathSegment?.substringAfterLast('/') ?: "") to -1L)
+            val sigs = ArrayList<ByteArray>()
+            val images = ArrayList<Uri>()
+            for (uri in uris) statement(c, uri)?.let { sigs += it } ?: images.add(uri)
+            if (images.size != 1 || sigs.size > 1) {
+                set { it.copy(info = PICK_ONE) }
+                return@execute
+            }
+            val uri = images.single()
+            val (name, size) = meta(c, uri)
             try {
                 c.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
             } catch (e: SecurityException) {
                 Log.w(Remote.TAG, "firmware pick: $e")
             }
             pickedUri = uri
-            set { it.copy(pickedName = name, pickedSize = size) }
-            val p = PickedFile(name, size, board)
+            val sig = sigs.singleOrNull()
+            val st = sig?.let { FwStatement.parse(it) }
+            val match = st != null && st.board == board && st.size == size && size <= 0xFFFFFFFFL
+            pickedSig = sig
+            set { it.copy(pickedName = name, pickedSize = size, info = "") }
+            val p = PickedFile(name, size, board, match, sig != null && !match)
             main.post { done(p) }
         }
     }

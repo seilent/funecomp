@@ -13,6 +13,7 @@ import android.os.Looper
 import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.LyricSources
+import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
@@ -79,7 +80,7 @@ class BackgroundTest {
     private val logs = java.util.concurrent.CopyOnWriteArrayList<String>()
 
     private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList(), updDir: java.io.File? = null, minor: Int = Proto.minor, phone: List<PhoneLine> = emptyList(), receiver: Boolean = false, output: Int? = null): String {
-        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(if (updDir != null) faults + NO_SIG else faults), battery = battery, lrcDir = lrcDir, updDir = updDir, minor = minor, log = { logs += it }, phone = phone, receiver = receiver))
+        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, updDir = updDir, minor = minor, log = { logs += it }, phone = phone, receiver = receiver))
         output?.let { s.device.output(it) }
         sims += s
         return "tcp:127.0.0.1:${s.listen(0)}"
@@ -790,7 +791,7 @@ class BackgroundTest {
         shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
         Firmwares.init(app)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("drop-after-bytes=150000"), updDir = card))).create().startCommand(0, 1)
-        Firmwares.send(image)
+        Firmwares.send(image, FwStatementBuilder.forFile("v1", image))
         val done = java.io.File(card, "v1.upt")
         val end = System.currentTimeMillis() + 30_000
         while (!done.exists()) {
@@ -814,7 +815,7 @@ class BackgroundTest {
         shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
         Firmwares.init(app)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("busy=UPD_BEGIN:1"), updDir = card))).create().startCommand(0, 1)
-        Firmwares.send(image)
+        Firmwares.send(image, FwStatementBuilder.forFile("v1", image))
         waitFor { Firmwares.view.info == "dap busy" }
         val done = java.io.File(card, "v1.upt")
         val end = System.currentTimeMillis() + 30_000
@@ -836,7 +837,7 @@ class BackgroundTest {
         shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
         Firmwares.init(app)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("upd-abort-at=150000"), updDir = card))).create().startCommand(0, 1)
-        Firmwares.send(image)
+        Firmwares.send(image, FwStatementBuilder.forFile("v1", image))
         val done = java.io.File(card, "v1.upt")
         val end = System.currentTimeMillis() + 30_000
         while (!done.exists()) {
@@ -932,9 +933,9 @@ class BackgroundTest {
         Firmwares.init(app)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(updDir = card))).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
-        Firmwares.send(Firmwares.Source("picked.upt", 1000) { throw SecurityException("grant revoked") })
+        Firmwares.send(Firmwares.Source("picked.upt", 1000, null) { throw SecurityException("grant revoked") })
         waitFor { Firmwares.view.info == "send failed" && !Firmwares.sending }
-        Firmwares.send(image)
+        Firmwares.send(image, FwStatementBuilder.forFile("v1", image))
         val done = java.io.File(card, "v1.upt")
         val end = System.currentTimeMillis() + 30_000
         while (!done.exists()) {
@@ -956,7 +957,7 @@ class BackgroundTest {
         Firmwares.init(app)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("slow-bps=200000"), updDir = card))).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
-        Firmwares.send(first)
+        Firmwares.send(first, FwStatementBuilder.forFile("v1", first))
         val end = System.currentTimeMillis() + 30_000
         while (!(Firmwares.sending && logs.any { it.contains("rx UPD_DATA") })) {
             check(System.currentTimeMillis() < end) { "never sending: ${Firmwares.view}" }
@@ -964,7 +965,7 @@ class BackgroundTest {
             Thread.sleep(20)
         }
         Firmwares.stopSend()
-        Firmwares.send(second)
+        Firmwares.send(second, FwStatementBuilder.forFile("v1", second))
         val done = java.io.File(card, "v1.upt")
         while (!(done.exists() && done.readBytes().contentEquals(second.readBytes()))) {
             check(System.currentTimeMillis() < end) { "second not sent: ${logs.filter { it.startsWith("upd") }} ${Firmwares.view}" }
@@ -982,7 +983,7 @@ class BackgroundTest {
         Firmwares.init(app)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(faults = listOf("busy=UPD_BEGIN:100000"), updDir = java.io.File(dir, "card")))).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
-        Firmwares.send(image)
+        Firmwares.send(image, FwStatementBuilder.forFile("v1", image))
         val start = System.currentTimeMillis()
         var pokes = 0
         while (System.currentTimeMillis() - start < 30_000) {
@@ -1006,7 +1007,7 @@ class BackgroundTest {
         val card = java.io.File(dir, "card")
         shadowOf(app.getSystemService(android.os.BatteryManager::class.java)).setIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY, 80)
         Firmwares.init(app)
-        Firmwares.send(image)
+        Firmwares.send(image, FwStatementBuilder.forFile("v1", image))
         image.delete()
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(updDir = card))).create().startCommand(0, 1)
         waitFor { Firmwares.view.info == "send failed" }

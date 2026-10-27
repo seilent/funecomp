@@ -17,5 +17,6 @@ dependencies {
     api(project(":proto"))
     api(project(":state"))
     testImplementation(project(":sim"))
+    testImplementation(testFixtures(project(":proto")))
     testImplementation(libs.junit)
 }

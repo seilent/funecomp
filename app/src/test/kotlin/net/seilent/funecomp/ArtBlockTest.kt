@@ -12,6 +12,7 @@ import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.ArtBlock
+import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
@@ -570,7 +571,7 @@ class ArtBlockTest {
         waitFor(10_000) { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null && lines.any { "rx IMG_LIST" in it } }
         Thread.sleep(500)
         val hold = CountDownLatch(1)
-        Firmwares.send(Firmwares.Source("held.upt", 1000) {
+        Firmwares.send(Firmwares.Source("held.upt", 1000, FwStatementBuilder.forBytes("v1", ByteArray(1000))) {
             hold.await(30, TimeUnit.SECONDS)
             java.io.ByteArrayInputStream(ByteArray(1000))
         })

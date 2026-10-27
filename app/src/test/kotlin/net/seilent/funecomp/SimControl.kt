@@ -424,7 +424,14 @@ class SimControl(
         firmware += "cancel"
     }
 
-    override fun firmwareFile(done: (PickedFile) -> Unit) = done(PickedFile("funeos-v0.4.0-v1.upt", 28_043_264, "v1"))
+    var pickSigned = true
+    var pickMismatch = false
+
+    override fun firmwareOpened() {
+        firmware += "opened"
+    }
+
+    override fun firmwareFile(done: (PickedFile) -> Unit) = done(PickedFile("funeos-v0.4.0-v1.upt", 28_043_264, "v1", pickSigned, pickMismatch))
 
     override fun firmwareSettings(checkDaily: Boolean, prereleases: Boolean) {
         firmware += "settings $checkDaily $prereleases"

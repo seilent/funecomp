@@ -105,6 +105,7 @@ interface Control {
     fun art(track: Long, px: Int): ImageBitmap? = null
     fun log(message: String) {}
     fun firmwareCheck() {}
+    fun firmwareOpened() {}
     fun firmwareDownload() {}
     fun firmwareCancel() {}
     fun firmwareFile(done: (PickedFile) -> Unit) {}

@@ -1,7 +1,9 @@
 package net.seilent.funecomp
 
+import net.seilent.funecomp.artist.Firmware
+import net.seilent.funecomp.proto.FwStatementBuilder
+import java.io.ByteArrayInputStream
 import java.io.InputStream
-import java.security.MessageDigest
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
@@ -9,8 +11,8 @@ internal class HeldSource(private val bytes: ByteArray, private val at: Int) {
     val reached = CountDownLatch(1)
     val go = CountDownLatch(1)
 
-    fun source() = Firmwares.Source("held.upt", bytes.size.toLong()) { off -> Stream(off.toInt()) }.apply {
-        md5 = MessageDigest.getInstance("MD5").digest(bytes).joinToString("") { "%02x".format(it) }
+    fun source() = Firmwares.Source("held.upt", bytes.size.toLong(), FwStatementBuilder.forBytes("v1", bytes)) { off -> Stream(off.toInt()) }.apply {
+        sums = Firmware.sums(ByteArrayInputStream(bytes))
     }
 
     private inner class Stream(private var pos: Int) : InputStream() {
