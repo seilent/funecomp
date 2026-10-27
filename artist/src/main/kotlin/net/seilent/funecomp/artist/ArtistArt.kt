@@ -67,7 +67,8 @@ class ArtistArt(
         val tag = tag(p, mbid)
         val id = tag ?: identify(name, now)
         val key = id ?: "name:${Names.fold(name)}"
-        val hit = cache.hit(key)?.takeIf { it.source in on }
+        val hit = cache.hit(key)
+        if (hit != null && hit.source !in on && !blocked(hit)) return null
         val kept = if (hit != null && blocked(hit)) {
             cache.drop(key)
             false
@@ -121,6 +122,7 @@ class ArtistArt(
         val tag = tag(p, mbid)
         val id = tag ?: identify(name, now)
         val key = id ?: "name:${Names.fold(name)}"
+        if (cache.hit(key)?.let { it.source !in on && !blocked(it) } == true) return null
         val found = try {
             if (online()) find(name, tag, id, key, w, h, on, now, Pass(false)) else null
         } catch (e: IOException) {
@@ -615,7 +617,7 @@ class ArtistArt(
             ArtPicks.NONE -> return null
         }
         val key = (tag(p, mbid) ?: cache.mbid(name)?.mbid?.takeIf { it !in blocks.rejected(name) }) ?: "name:${Names.fold(name)}"
-        return cache.hit(key)?.takeIf { it.source in sources().enabled && cache.hasSource(key) && !blocked(it) }
+        return cache.hit(key)?.takeIf { cache.hasSource(key) && !blocked(it) }
     }
 
     fun source(e: ArtCache.Entry): ByteArray? = cache.source(e.key)

@@ -142,7 +142,7 @@ class ArtCache(private val dir: File) {
 
     @Synchronized
     fun miss(key: String): Miss? {
-        val p = load(meta(key))
+        val p = load(missFile(key)).takeIf { it.getProperty("state") == "miss" } ?: load(meta(key))
         if (p.getProperty("state") != "miss") return null
         return Miss(
             p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }.toSet(), p.getProperty("keyHash", ""),
@@ -205,7 +205,8 @@ class ArtCache(private val dir: File) {
     @Synchronized
     fun putMiss(key: String, at: Long, sources: Set<String>, keyHash: String = "", yt: Long? = null, ytFailed: Long? = null) {
         listed = null
-        dropFiles(key)
+        val m = meta(key)
+        if (load(m).getProperty("state") == "miss") m.delete()
         val p = Properties()
         p.setProperty("state", "miss")
         p.setProperty("key", key)
@@ -215,7 +216,7 @@ class ArtCache(private val dir: File) {
         p.setProperty("cleaned", CLEANED)
         yt?.let { p.setProperty("yt", it.toString()) }
         ytFailed?.let { p.setProperty("ytFailed", it.toString()) }
-        save(meta(key), p)
+        save(missFile(key), p)
     }
 
     @Synchronized
@@ -249,6 +250,7 @@ class ArtCache(private val dir: File) {
     }
 
     private fun meta(key: String) = File(dir, "${hash(key)}.meta")
+    private fun missFile(key: String) = File(dir, "${hash(key)}.miss")
     private fun src(key: String) = File(dir, "${hash(key)}.src")
     private fun jpg(key: String, w: Int, h: Int) = File(dir, "${hash(key)}.${w}x$h.jpg")
 

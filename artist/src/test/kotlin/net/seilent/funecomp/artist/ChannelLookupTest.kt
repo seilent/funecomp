@@ -344,7 +344,7 @@ class ChannelLookupTest {
     fun anOlderMissIsLookedUpOnceUnderTheNewRules() {
         val tag = "NÄO Official Channel"
         cache.putMiss(key(tag), time.now, sources.enabled)
-        val f = java.io.File(tmp.root, "art").listFiles { x -> x.name.endsWith(".meta") }!!.single()
+        val f = java.io.File(tmp.root, "art").listFiles { x -> x.name.endsWith(".miss") }!!.single()
         f.writeText(f.readText().lines().map { if (it.startsWith("cleaned")) "cleaned=2" else it }.joinToString("\n"))
         assertFalse(cache.miss(key(tag))!!.cleaned)
         assertNull(art().get(tag, null, 240, 320))

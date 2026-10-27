@@ -186,9 +186,9 @@ class LookupTest {
         val dir = tmp.newFolder("bad")
         val c = ArtCache(dir)
         c.putMiss("k", 5, setOf("commons"))
-        dir.listFiles()!!.filter { it.name.endsWith(".meta") }.forEach { it.writeText("state=miss\nat=zz\n") }
+        dir.listFiles()!!.filter { it.name.endsWith(".miss") }.forEach { it.writeText("state=miss\nat=zz\n") }
         assertEquals(0L, c.miss("k")!!.at)
-        dir.listFiles()!!.filter { it.name.endsWith(".meta") }.forEach { it.writeText("state=hit\\u12") }
+        dir.listFiles()!!.filter { it.name.endsWith(".miss") }.forEach { it.writeText("state=hit\\u12") }
         assertNull(c.hit("k"))
         assertNull(c.miss("k"))
     }
@@ -274,15 +274,19 @@ class LookupTest {
     }
 
     @Test
-    fun commonsOffSkipsItsStepAndOnAgainFindsThePhoto() {
+    fun commonsOffSkipsItsStepAndOnAgainFindsAPhotoWhereNoneIsKept() {
         val wiki = setOf("www.wikidata.org", "commons.wikimedia.org", "upload.wikimedia.org", "thumb.wikimedia.org", "ja.wikipedia.org", "en.wikipedia.org")
         sources = Sources.NONE.copy(theAudioDb = true)
         assertEquals(Sources.THE_AUDIO_DB, art().get("Radiohead", radiohead, 384, 480)!!.source)
-        assertTrue(art().get("Utada Hikaru", null, 384, 480)?.source != Wikimedia.SOURCE)
+        assertEquals(Sources.THE_AUDIO_DB, art().get("Utada Hikaru", null, 384, 480)?.source)
         assertTrue(http.calls.any { it.contains("artist-mb.php?i=$utada") })
         assertTrue(http.hosts().none { it in wiki })
-        val n = http.calls.size
         sources = Sources.COMMONS
+        val kept = http.calls.size
+        assertNull(art().get("Utada Hikaru", null, 384, 480))
+        assertEquals(kept, http.calls.size)
+        cache.drop(utada)
+        val n = http.calls.size
         assertEquals(Wikimedia.SOURCE, art().get("Utada Hikaru", null, 384, 480)!!.source)
         assertTrue(http.calls.drop(n).any { it.startsWith("https://www.wikidata.org/") })
     }
@@ -386,7 +390,7 @@ class LookupTest {
     }
 
     @Test
-    fun hitIsServedFromCacheForBothBoardsAndDroppedWhenItsSourceIsOff() {
+    fun hitIsServedFromCacheForBothBoardsAndKeptWhenItsSourceIsOff() {
         sources = Sources.COMMONS.copy(theAudioDb = true)
         val first = art().get("Radiohead", radiohead, 384, 480)!!
         val n = http.calls.size
@@ -399,8 +403,9 @@ class LookupTest {
 
         sources = Sources.COMMONS
         assertNull(art().get("Radiohead", radiohead, 384, 480))
-        assertTrue(http.calls.size > n)
-        assertTrue(cache.entries().isEmpty())
+        assertEquals(n, http.calls.size)
+        assertEquals(listOf("Radiohead"), cache.entries().map { it.name })
+        assertEquals(Sources.THE_AUDIO_DB, art().cachedEntry("Radiohead", radiohead)!!.source)
     }
 
     @Test
@@ -520,7 +525,7 @@ class LookupTest {
         val name = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
         val key = "name:${Names.fold(name)}"
         cache.putMiss(key, time.now, sources.enabled)
-        val f = java.io.File(tmp.root, "art").listFiles { x -> x.name.endsWith(".meta") }!!.single()
+        val f = java.io.File(tmp.root, "art").listFiles { x -> x.name.endsWith(".miss") }!!.single()
         f.writeText(f.readText().lines().filter { !it.startsWith("cleaned") }.joinToString("\n"))
         assertTrue(!cache.miss(key)!!.cleaned)
         assertNull(art().get(name, null, 240, 320))
@@ -671,7 +676,7 @@ class LookupTest {
         val name = "DAZBEE official"
         val key = "name:${Names.fold(name)}"
         cache.putMiss(key, time.now, sources.enabled)
-        val f = java.io.File(tmp.root, "art").listFiles { x -> x.name.endsWith(".meta") }!!.single()
+        val f = java.io.File(tmp.root, "art").listFiles { x -> x.name.endsWith(".miss") }!!.single()
         f.writeText(f.readText().lines().map { if (it.startsWith("cleaned")) "cleaned=true" else it }.joinToString("\n"))
         assertFalse(cache.miss(key)!!.cleaned)
         assertNotNull(art().get(name, null, 240, 320))

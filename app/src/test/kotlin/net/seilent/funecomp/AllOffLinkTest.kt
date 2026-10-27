@@ -240,7 +240,7 @@ class AllOffLinkTest {
     }
 
     @Test
-    fun commonsOffDropsItsPhotoFromTheBackdropAndKeepsTheCredit() {
+    fun commonsOffKeepsItsPhotoOnTheBackdropAndTheDap() {
         sources(Wikimedia.SOURCE)
         plain = true
         val key = "name:${Names.fold(utada)}"
@@ -249,12 +249,38 @@ class AllOffLinkTest {
         Remote.shown(true)
         link()
         waitFor { Remote.backdrop?.entry?.key == key }
+        waitFor { stored(utada).isNotEmpty() && runs() > 0 }
         val n = asked.size
+        val r = runs()
         sources()
         Remote.sourcesChanged()
-        waitFor { Remote.backdrop?.entry?.source != Wikimedia.SOURCE }
-        waitFor { Remote.credits.any { it.key == key && it.credit == credit } }
+        waitFor { runs() > r }
+        Thread.sleep(500)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(key, Remote.backdrop?.entry?.key)
+        assertEquals(Wikimedia.SOURCE, Remote.backdrop?.entry?.source)
+        assertTrue(Remote.credits.any { it.key == key && it.credit == credit })
         assertNotNull(ArtCache(File(app.filesDir, "art")).hit(key))
         assertEquals(n, asked.size)
+        assertEquals(1, stored(utada).size)
+        assertEquals(0, lines.count { " rx IMG_DEL " in it })
+    }
+
+    @Test
+    fun aKeptPhotoOfAnOffSourceIsShownAndNotPushed() {
+        sources(Sources.THE_AUDIO_DB)
+        plain = true
+        val key = "name:${Names.fold(utada)}"
+        ArtCache(File(app.filesDir, "art")).putHit(ArtCache.Entry(key, utada, null, Sources.DEEZER, null, "https://e/utada.jpg", System.currentTimeMillis(), "1"), jpeg())
+        Remote.shown(true)
+        link()
+        waitFor { Remote.backdrop?.entry?.key == key }
+        waitFor { runs() > 0 }
+        Thread.sleep(500)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(0, begins())
+        assertEquals(0, lines.count { " rx IMG_DEL " in it })
+        assertNotNull(ArtCache(File(app.filesDir, "art")).hit(key))
+        assertTrue(denied.toString(), denied.isEmpty())
     }
 }
