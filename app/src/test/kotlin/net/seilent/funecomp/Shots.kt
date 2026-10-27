@@ -480,7 +480,7 @@ private val BLOCKED: List<ArtBlocks.Record> = (0 until 12).map { i ->
     else ArtBlocks.Block("k$i", null, listOf("deezer", "commons", "theaudiodb")[i % 3], "id$i", "s$i", listOf("むと", "Radiohead", "空星きらめ/Sorahoshi Kirame【にじさんじ】")[i % 3] + " $i", 100L - i)
 }
 
-private val ORDERED = Sources.NONE.copy(theAudioDb = true, fanartTv = true, deezer = true, order = Sources.order("deezer,commons,theaudiodb"))
+private val ORDERED = Sources.COMMONS.copy(theAudioDb = true, fanartTv = true, deezer = true, order = Sources.order("deezer,commons,theaudiodb"))
 
 private val SCROBBLE = ScrobbleView(Accounts(true, "", "", "seilent", "session", true, "token", "seilent"), queued = 3, app = ZEROS)
 private val SCROBBLE_OUT = ScrobbleView(Accounts(true, listenBrainz = true), app = ZEROS)

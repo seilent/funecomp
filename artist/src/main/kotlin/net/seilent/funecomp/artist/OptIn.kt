@@ -35,6 +35,7 @@ data class Sources(
         val ORDER = listOf("theaudiodb", "fanarttv", "youtube", "discogs", Wikimedia.SOURCE, "deezer")
         private val OLD_ORDER = listOf(Wikimedia.SOURCE, "theaudiodb", "fanarttv", "discogs", "youtube", "deezer")
         val NONE = Sources(theAudioDb = false, discogs = false, fanartTv = false, deezer = false, youtube = false, order = OLD_ORDER)
+        val COMMONS = NONE
         const val DEFAULTS = "defaults"
         const val DEFAULTS_REV = 2
 

@@ -18,7 +18,7 @@ class BrowseTest {
 
     private val http = Fixtures()
     private val time = FakeTime()
-    private var sources = Sources.NONE.copy(discogs = true, deezer = true, youtube = true)
+    private var sources = Sources.COMMONS.copy(discogs = true, deezer = true, youtube = true)
     private val cache by lazy { ArtCache(tmp.newFolder("art")) }
 
     private fun art() = ArtistArt(http, AwtCodec(), cache, { sources }, "0.1.0", { time.now }, time).also {
@@ -64,7 +64,7 @@ class BrowseTest {
 
     @Test
     fun disabledSourcesMakeNoCalls() {
-        sources = Sources.NONE
+        sources = Sources.COMMONS
         val c = Collected()
         art().browse("TSUKI", null, 53, c, Inline)
         assertEquals(listOf(Wikimedia.SOURCE), c.order)

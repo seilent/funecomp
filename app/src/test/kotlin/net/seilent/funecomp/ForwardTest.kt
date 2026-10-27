@@ -1129,7 +1129,7 @@ class ForwardTest {
         var unmetered = false
         val a = net.seilent.funecomp.artist.ArtistArt(
             http, net.seilent.funecomp.artist.Codec { _, _ -> null }, net.seilent.funecomp.artist.ArtCache(tmp.newFolder("art")),
-            { net.seilent.funecomp.artist.Sources.NONE.copy(youtube = true) }, "0.1.0", time = Jump(),
+            { net.seilent.funecomp.artist.Sources.COMMONS.copy(youtube = true) }, "0.1.0", time = Jump(),
         )
         val logged: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val f = Forward(

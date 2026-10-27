@@ -21,10 +21,10 @@ class SourcesTest {
 
     @Test
     fun noneIsCommonsOnlyInTheOldOrder() {
-        assertEquals(setOf("commons"), Sources.NONE.enabled)
-        assertEquals(old.split(','), Sources.NONE.order)
-        assertEquals(setOf("commons", "fanarttv"), Sources.NONE.copy(fanartTv = true, fanartTvKey = "k").enabled)
-        assertEquals(setOf("commons"), Sources.NONE.copy(fanartTvKey = "k").enabled)
+        assertEquals(setOf("commons"), Sources.COMMONS.enabled)
+        assertEquals(old.split(','), Sources.COMMONS.order)
+        assertEquals(setOf("commons", "fanarttv"), Sources.COMMONS.copy(fanartTv = true, fanartTvKey = "k").enabled)
+        assertEquals(setOf("commons"), Sources.COMMONS.copy(fanartTvKey = "k").enabled)
     }
 
     @Test

@@ -25,7 +25,7 @@ class BrowseAliasTest {
     private val lines = java.util.concurrent.CopyOnWriteArrayList<String>()
     private val pool = clock.executor(ArtistArt.BROWSE_WORKERS)
     private val art by lazy {
-        ArtistArt(http, AwtCodec(), ArtCache(tmp.newFolder()), { Sources.NONE.copy(youtube = true, order = Sources.ORDER) }, "0.1.0", { 0L }, clock, browseLog = { lines += it })
+        ArtistArt(http, AwtCodec(), ArtCache(tmp.newFolder()), { Sources.COMMONS.copy(youtube = true, order = Sources.ORDER) }, "0.1.0", { 0L }, clock, browseLog = { lines += it })
     }
 
     @After

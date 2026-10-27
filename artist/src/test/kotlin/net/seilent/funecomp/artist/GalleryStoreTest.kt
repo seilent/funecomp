@@ -28,7 +28,7 @@ class GalleryStoreTest {
     )
 
     private fun art(picks: ArtPicks, store: GalleryStore = GalleryStore(dir)) =
-        ArtistArt(http, AwtCodec(), ArtCache(File(tmp.root, "art")), { Sources.NONE }, "0.1.0", { time.now }, time, picks = picks, gallery = store, log = { logs += it })
+        ArtistArt(http, AwtCodec(), ArtCache(File(tmp.root, "art")), { Sources.COMMONS }, "0.1.0", { time.now }, time, picks = picks, gallery = store, log = { logs += it })
 
     @Test
     fun aPutIsReadBackByItsSha() {

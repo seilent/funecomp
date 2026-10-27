@@ -27,7 +27,7 @@ class SizeTest {
     private val time = FakeTime()
     private val cache by lazy { ArtCache(tmp.newFolder("art")) }
     private val blocks by lazy { ArtBlocks(tmp.root.resolve("artblock.tsv")) }
-    private var sources = Sources.NONE.copy(youtube = true)
+    private var sources = Sources.COMMONS.copy(youtube = true)
     private var targets = Targets(Size(720, 1680))
     private var placeholders = Deezer.PLACEHOLDERS
 
@@ -44,7 +44,7 @@ class SizeTest {
     private fun stored(key: String): Size = Images.size(cache.source(key)!!).let { Size(it.first, it.second) }
 
     private fun deezer(vararg hashes: String) {
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         http.queued.getOrPut(mbSearch) { ArrayDeque() } += Response(404, ByteArray(0))
         val data = hashes.joinToString(",") { "{\"name\":\"$name\",\"nb_fan\":1,\"picture_medium\":\"${dz(it)}\",\"picture_xl\":\"${dz(it)}\"}" }
         http.queued.getOrPut(dzSearch) { ArrayDeque() } += Response(200, "{\"data\":[$data]}".toByteArray())
@@ -271,7 +271,7 @@ class SizeTest {
 
     @Test
     fun theLargestDiscogsImageIsTriedFirstWithinTheSource() {
-        sources = Sources.NONE.copy(discogs = true)
+        sources = Sources.COMMONS.copy(discogs = true)
         discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600))
         serve(dc(1), "400x400@5")
         serve(dc(2), "600x600@5")
@@ -284,7 +284,7 @@ class SizeTest {
 
     @Test
     fun theDiscogsPrimaryImageStaysFirstAndSizeRanksWithinEachType() {
-        sources = Sources.NONE.copy(discogs = true)
+        sources = Sources.COMMONS.copy(discogs = true)
         primary = setOf(dc(3))
         discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600), Triple(dc(3), 300, 400))
         serve(dc(3), "300x400@5")
@@ -309,7 +309,7 @@ class SizeTest {
     @Test
     fun withNoTargetDiscogsKeepsItsOrder() {
         targets = Targets.NONE
-        sources = Sources.NONE.copy(discogs = true)
+        sources = Sources.COMMONS.copy(discogs = true)
         discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600))
         serve(dc(1), "400x400@5")
         art().get(name, artist, 240, 320)!!
@@ -319,7 +319,7 @@ class SizeTest {
 
     @Test
     fun aLargerDiscogsImageThatDoesNotFitMovesOnToTheNext() {
-        sources = Sources.NONE.copy(discogs = true)
+        sources = Sources.COMMONS.copy(discogs = true)
         discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600))
         serve(dc(1), "400x400@5")
         serve(dc(2), "200x200@5")
@@ -329,7 +329,7 @@ class SizeTest {
 
     @Test
     fun aBlockedLargerImageIsSkipped() {
-        sources = Sources.NONE.copy(discogs = true)
+        sources = Sources.COMMONS.copy(discogs = true)
         discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600))
         blocks.add(ArtBlocks.Block(artist, artist, Sources.DISCOGS, ImageIds.of(Sources.DISCOGS, dc(2)), "", name, 1))
         serve(dc(1), "400x400@5")
@@ -340,7 +340,7 @@ class SizeTest {
 
     @Test
     fun aLargerImageOfALaterSourceNeverWins() {
-        sources = Sources.NONE.copy(discogs = true, deezer = true)
+        sources = Sources.COMMONS.copy(discogs = true, deezer = true)
         discogs(Triple(dc(1), 400, 400))
         serve(dc(1), "400x400@5")
         http.queued.getOrPut(dzSearch) { ArrayDeque() } += Response(200, "{\"data\":[{\"name\":\"$name\",\"nb_fan\":1,\"picture_xl\":\"${dz(one)}\"}]}".toByteArray())
@@ -375,7 +375,7 @@ class SizeTest {
     @Test
     fun variantsNeverRunWhenThePlainNameFits() {
         val tagged = "$name【ch】"
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         http.queued.getOrPut("https://musicbrainz.org/ws/2/artist/?query=${Api.enc(tagged)}&fmt=json&limit=10") { ArrayDeque() } += Response(404, ByteArray(0))
         http.queued.getOrPut("https://api.deezer.com/search/artist?q=${Api.enc(tagged)}") { ArrayDeque() } +=
             Response(200, "{\"data\":[{\"name\":\"$tagged\",\"nb_fan\":1,\"picture_xl\":\"${dz(one)}\"}]}".toByteArray())
@@ -386,7 +386,7 @@ class SizeTest {
 
     @Test
     fun deezerKeepsTheSameNameRankingWhenALaterEntryIsLarger() {
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         http.queued.getOrPut(mbSearch) { ArrayDeque() } += Response(404, ByteArray(0))
         http.queued.getOrPut(dzSearch) { ArrayDeque() } += Response(
             200,
@@ -412,7 +412,7 @@ class SizeTest {
     }
 
     private fun searches(vararg found: String) {
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         http.queued.getOrPut(mbSearch) { ArrayDeque() } += Response(404, ByteArray(0))
         for (h in found) http.queued.getOrPut(dzSearch) { ArrayDeque() } += Response(200, "{\"data\":[{\"name\":\"$name\",\"nb_fan\":1,\"picture_xl\":\"${dz(h)}\"}]}".toByteArray())
     }
@@ -527,7 +527,7 @@ class SizeTest {
 
     @Test
     fun theUpgradeTakesAnotherImageOfTheSameSourceThatFitsTheTarget() {
-        sources = Sources.NONE.copy(discogs = true)
+        sources = Sources.COMMONS.copy(discogs = true)
         discogs(Triple(dc(1), 400, 400), Triple(dc(2), 600, 600), Triple(dc(3), 1700, 1700))
         val e = hit(artist, Sources.DISCOGS, dc(1), "400x400@5", artist)
         serve(dc(3), "1700x1700@5")
@@ -593,7 +593,7 @@ class SizeTest {
 
     @Test
     fun aDifferentImageBelowTheTargetNeverReplacesTheHit() {
-        sources = Sources.NONE.copy(theAudioDb = true)
+        sources = Sources.COMMONS.copy(theAudioDb = true)
         val thumb = "https://r2.theaudiodb.com/images/media/artist/thumb/sz.jpg"
         val fanart = "https://r2.theaudiodb.com/images/media/artist/fanart/sz.jpg"
         page("https://www.theaudiodb.com/api/v1/json/123/artist-mb.php?i=$artist", "{\"artists\":[{\"strArtistThumb\":\"$thumb\",\"strArtistFanart\":\"$fanart\"}]}")
@@ -606,7 +606,7 @@ class SizeTest {
 
     @Test
     fun aLargerDifferentDiscogsImageBelowTheTargetNeverReplacesTheHit() {
-        sources = Sources.NONE.copy(discogs = true)
+        sources = Sources.COMMONS.copy(discogs = true)
         discogs(Triple(dc(1), 400, 400), Triple(dc(2), 1700, 1700))
         val e = hit(artist, Sources.DISCOGS, dc(1), "400x400@5", artist)
         serve(dc(2), "900x900@5")
@@ -617,7 +617,7 @@ class SizeTest {
 
     @Test
     fun aSmallerOrEqualCandidateNeverReplacesTheHit() {
-        sources = Sources.NONE.copy(discogs = true)
+        sources = Sources.COMMONS.copy(discogs = true)
         discogs(Triple(dc(1), 600, 600), Triple(dc(2), 1700, 1700), Triple(dc(3), 500, 500))
         val e = hit(artist, Sources.DISCOGS, dc(1), "600x600@5", artist)
         serve(dc(2), "450x450@5")
@@ -628,7 +628,7 @@ class SizeTest {
 
     @Test
     fun theUpgradeNeverTakesAnotherSource() {
-        sources = Sources.NONE.copy(discogs = true, deezer = true)
+        sources = Sources.COMMONS.copy(discogs = true, deezer = true)
         discogs(Triple(dc(1), 400, 400))
         val e = hit(artist, Sources.DISCOGS, dc(1), "400x400@5", artist)
         serve(dz(one), "1000x1000@5")
@@ -651,7 +651,7 @@ class SizeTest {
 
     @Test
     fun aBlockedLargerCandidateIsNotTakenByTheUpgrade() {
-        sources = Sources.NONE.copy(discogs = true)
+        sources = Sources.COMMONS.copy(discogs = true)
         discogs(Triple(dc(1), 400, 400), Triple(dc(2), 1700, 1700))
         val e = hit(artist, Sources.DISCOGS, dc(1), "400x400@5", artist)
         blocks.add(ArtBlocks.Block(artist, artist, Sources.DISCOGS, ImageIds.of(Sources.DISCOGS, dc(2)), "", name, 1))
@@ -662,7 +662,7 @@ class SizeTest {
 
     @Test
     fun aDoneRecordHoldsUntilTheTargetsGrow() {
-        sources = Sources.NONE.copy(discogs = true)
+        sources = Sources.COMMONS.copy(discogs = true)
         discogs(Triple(dc(1), 400, 400))
         val e = hit(artist, Sources.DISCOGS, dc(1), "400x400@5", artist)
         val a = art()

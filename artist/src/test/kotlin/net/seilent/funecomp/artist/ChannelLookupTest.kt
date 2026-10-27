@@ -25,7 +25,7 @@ class ChannelLookupTest {
 
     private val http = Fixtures()
     private val time = FakeTime()
-    private var sources = Sources.NONE.copy(youtube = true, order = Sources.ORDER)
+    private var sources = Sources.COMMONS.copy(youtube = true, order = Sources.ORDER)
     private val cache by lazy { ArtCache(tmp.newFolder("art")) }
     private val blocks by lazy { ArtBlocks(java.io.File(tmp.root, "artblock.tsv")) }
     private val picks = ArtPicks()
@@ -43,7 +43,7 @@ class ChannelLookupTest {
 
     @Test
     fun aBareVariantResolvesOnlyOnAUniqueMusicBrainzMatch() {
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         assertNull(art().get("Suisei Channel", null, 240, 320))
         assertTrue(http.calls.contains("https://musicbrainz.org/ws/2/artist/?query=Suisei&fmt=json&limit=10"))
         assertTrue(http.calls.none { it.contains("/artist/$wrongSuisei") })
@@ -54,7 +54,7 @@ class ChannelLookupTest {
 
     @Test
     fun aBareLookupIgnoresThePlainNameStore() {
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         val full = "e43c7000-2a81-4a4b-a0a2-61c84fd96a34"
         cache.putMbid("Suisei", full, time.now)
         assertNull(art().get("Suisei Channel", null, 240, 320))
@@ -64,7 +64,7 @@ class ChannelLookupTest {
 
     @Test
     fun aChannelSuffixKeepsItsUniqueBareHitAndDropsAnAmbiguousOne() {
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         val a = art().get("DAZBEE official", null, 240, 320)!!
         assertEquals(dazbee, a.mbid)
         val e = cache.hit(key("DAZBEE official"))!!
@@ -79,7 +79,7 @@ class ChannelLookupTest {
 
     @Test
     fun aBareNullIsLookedUpAgainAfterTheTtl() {
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         val q = "https://musicbrainz.org/ws/2/artist/?query=Suisei&fmt=json&limit=10"
         assertNull(art().get("Suisei Channel", null, 240, 320))
         time.now += 3 * day
@@ -103,7 +103,7 @@ class ChannelLookupTest {
 
     @Test
     fun wrongArtistOnABareHitLeavesThePlainTag() {
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         val a = art()
         assertNotNull(a.get("DAZBEE official", null, 240, 320))
         val e = cache.hit(key("DAZBEE official"))!!
@@ -151,7 +151,7 @@ class ChannelLookupTest {
 
     @Test
     fun hitsAndResolvedNamesNeverSearch() {
-        sources = Sources.NONE.copy(youtube = true, deezer = true, order = Sources.ORDER)
+        sources = Sources.COMMONS.copy(youtube = true, deezer = true, order = Sources.ORDER)
         val tags = listOf(
             "Ado", "Radiohead", "コバソロ", "宇多田ヒカル", "Utada Hikaru", "Tenjin Kotone", "むと", "あいみょん", "TSUKI",
             "DAZBEE official", "Kano", "Kapi", "Memento Mori", "Albemuth",
@@ -163,9 +163,9 @@ class ChannelLookupTest {
 
     @Test
     fun noSearchWithTheToggleOffATagMbidOrAnArtistPick() {
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         assertNull(art().get("Suisei Channel", null, 240, 320))
-        sources = Sources.NONE.copy(youtube = true, order = Sources.ORDER)
+        sources = Sources.COMMONS.copy(youtube = true, order = Sources.ORDER)
         cache.clear()
         art().get("Suisei Channel", "e43c7000-2a81-4a4b-a0a2-61c84fd96a34", 240, 320)
         val (k, k2) = ArtPicks.keys("chelly Ch.", null, false)
@@ -414,7 +414,7 @@ class ChannelLookupTest {
 
     @Test
     fun twoTagsSharingABareWordKeepTheirOwnAnswer() {
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         val a = art()
         assertEquals(dazbee, a.get("DAZBEE official", null, 240, 320)!!.mbid)
         assertEquals(dazbee, a.get("DAZBEE Channel", null, 240, 320)!!.mbid)

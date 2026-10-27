@@ -136,7 +136,7 @@ class ArtPickUiTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) {
-                App(c.device, LinkView(link, "AP80", everLive = true), control, shell, Sources.NONE.copy(youtube = true), art = art, picks = shownPicks, galleryMissing = missing)
+                App(c.device, LinkView(link, "AP80", everLive = true), control, shell, Sources.COMMONS.copy(youtube = true), art = art, picks = shownPicks, galleryMissing = missing)
             }
         }
         settle(1000)
@@ -584,7 +584,7 @@ class ArtPickUiTest {
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) {
                 val shell = remember(nav) { Shell(nav) }
-                if (shown) App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, Sources.NONE)
+                if (shown) App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, Sources.COMMONS)
             }
         }
         settle(1000)
@@ -619,7 +619,7 @@ class ArtPickUiTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(w.dp, 960.dp)) {
-                App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, Sources.NONE)
+                App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, Sources.COMMONS)
             }
         }
         settle(1000)

@@ -22,7 +22,7 @@ class PreviewArtistTest {
     private val cached = Images.jpeg(Images.photo(600, 800, 3), 92)
     private val calls = ArrayList<String>()
     private val time = FakeTime()
-    private var sources = Sources.NONE.copy(theAudioDb = true)
+    private var sources = Sources.COMMONS.copy(theAudioDb = true)
     private val blocks = ArtBlocks()
     private val dir get() = File(tmp.root, "art")
     private val cache get() = ArtCache(dir)
@@ -70,7 +70,7 @@ class PreviewArtistTest {
     @Test
     fun aHitFromASwitchedOffSourceIsSkippedAndTheNameIsSearched() {
         cache.putHit(entry(), cached)
-        sources = Sources.NONE.copy(deezer = true)
+        sources = Sources.COMMONS.copy(deezer = true)
         val before = files()
         assertTrue(!art().previewArtist("TSUKI", mbid, 240, 320).contentEquals(cached))
         assertTrue(calls.any { it.contains("search/artist?q=TSUKI") })

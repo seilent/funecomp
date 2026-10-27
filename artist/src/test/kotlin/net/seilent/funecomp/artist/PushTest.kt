@@ -62,7 +62,7 @@ class PushTest {
     fun threeArtistsFreeYoutubeAndNothingFound() {
         val time = FakeTime()
         val http = Fixtures()
-        val lookup = ArtistArt(http, AwtCodec(), ArtCache(tmp.newFolder()), { Sources.NONE.copy(youtube = true) }, "0.1.0", { time.now }, time)
+        val lookup = ArtistArt(http, AwtCodec(), ArtCache(tmp.newFolder()), { Sources.COMMONS.copy(youtube = true) }, "0.1.0", { time.now }, time)
         val (sim, port) = sim()
         val s = session(port)
         val state = State(artists = listOf("宇多田ヒカル", "コバソロ"), mbids = listOf("", "4981caf4-856a-4a2f-bdf1-3cfd65c6a532"))
@@ -186,7 +186,7 @@ class PushTest {
         val s = session(port)
         val looked = ArrayList<String>()
         val time = FakeTime()
-        val lookup = ArtistArt(Fixtures(), AwtCodec(), ArtCache(tmp.newFolder()), { Sources.NONE }, "0.1.0", { time.now }, object : Clock {
+        val lookup = ArtistArt(Fixtures(), AwtCodec(), ArtCache(tmp.newFolder()), { Sources.COMMONS }, "0.1.0", { time.now }, object : Clock {
             override fun now() = time.now
 
             override fun park(until: Long) = throw InterruptedException("sleep")
@@ -320,7 +320,7 @@ class PushTest {
         cache.putMbid(vtuber, null, time.now)
         cache.putMbid("空星きらめ", kirame, time.now)
         seed("name:${Names.fold(vtuber)}", vtuber, kirame, "空星きらめ")
-        val lookup = ArtistArt(Fixtures(), AwtCodec(), cache, { Sources.NONE }, "0.1.0", { time.now }, time)
+        val lookup = ArtistArt(Fixtures(), AwtCodec(), cache, { Sources.COMMONS }, "0.1.0", { time.now }, time)
         val (sim, port) = sim(board = "v1")
         val r = ArtPusher(session(port), lookup::get) { true }.run(listOf("Utada Hikaru" to null, "宇多田ヒカル" to null, vtuber to null))
         assertEquals(3, r.pushed.size + r.stored.size)
