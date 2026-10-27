@@ -550,6 +550,12 @@ class ArtistArt(
 
     fun forget(e: ArtCache.Entry) = cache.drop(e.key, e.at)
 
+    fun clearSource(source: String): List<ArtCache.Entry> = cache.clearSource(source)
+
+    fun clearAll(): List<ArtCache.Entry> = cache.clearAll()
+
+    fun usage(): Map<String?, ArtCache.Usage> = cache.usage()
+
     fun resolvedBy(e: ArtCache.Entry): String =
         e.resolvedBy.ifEmpty { e.name.takeIf { e.mbid != null && cache.mbid(it)?.mbid == e.mbid } ?: "" }
 

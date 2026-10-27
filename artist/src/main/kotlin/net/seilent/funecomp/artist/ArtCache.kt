@@ -26,6 +26,7 @@ class ArtCache(private val dir: File) {
     )
     class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false, val yt: Long? = null, val ytFailed: Long? = null)
     class Looked(val mbid: String?, val at: Long)
+    class Usage(val photos: Int, val bytes: Long)
 
     private val names = File(dir, "names.properties")
     private var nameMap: Properties? = null
@@ -226,6 +227,59 @@ class ArtCache(private val dir: File) {
         .also { listed = it }
 
     @Synchronized
+    fun clearSource(source: String): List<Entry> {
+        listed = null
+        val gone = ArrayList<Entry>()
+        for (key in hits { it.getProperty("source") == source }) {
+            hit(key)?.let { gone += it }
+            dropFiles(key)
+        }
+        for (f in files(".miss") + files(".meta")) {
+            val p = load(f)
+            if (p.getProperty("state") != "miss") continue
+            val was = p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }
+            if (source !in was) continue
+            p.setProperty("sources", (was - source).sorted().joinToString(","))
+            save(f, p)
+        }
+        return gone
+    }
+
+    @Synchronized
+    fun clearAll(): List<Entry> {
+        val gone = entries().filterNot { it.key.startsWith(ArtPicks.PREFIX) }
+        val keep = picked()
+        dir.listFiles()?.forEach { if (it.name.substringBefore('.') !in keep) it.delete() }
+        nameMap = null
+        bareMap = null
+        listed = null
+        return gone
+    }
+
+    @Synchronized
+    fun usage(): Map<String?, Usage> {
+        val sources = HashMap<String, String>()
+        val keep = picked()
+        for (f in files(".meta")) {
+            val p = load(f)
+            if (p.getProperty("state") == "hit" && p.getProperty("key")?.startsWith(ArtPicks.PREFIX) == false) sources[f.name.substringBefore('.')] = p.getProperty("source", "")
+        }
+        val photos = HashMap<String?, Int>()
+        for (s in sources.values) {
+            photos.merge(s, 1, Int::plus)
+            photos.merge(null, 1, Int::plus)
+        }
+        val bytes = HashMap<String?, Long>()
+        for (f in dir.listFiles() ?: emptyArray()) {
+            val h = f.name.substringBefore('.')
+            if (h in keep) continue
+            bytes.merge(null, f.length(), Long::plus)
+            sources[h]?.let { bytes.merge(it, f.length(), Long::plus) }
+        }
+        return (photos.keys + bytes.keys).associateWith { Usage(photos[it] ?: 0, bytes[it] ?: 0) }
+    }
+
+    @Synchronized
     fun clear() {
         nameMap = null
         bareMap = null
@@ -243,6 +297,15 @@ class ArtCache(private val dir: File) {
     }
 
     private fun bareMap() = bareMap ?: load(bares).also { bareMap = it }
+
+    private fun files(ext: String) = (dir.listFiles { f -> f.name.endsWith(ext) } ?: emptyArray()).toList()
+
+    private fun hits(take: (Properties) -> Boolean): List<String> = files(".meta").mapNotNull { f ->
+        val p = load(f)
+        p.getProperty("key")?.takeIf { p.getProperty("state") == "hit" && !it.startsWith(ArtPicks.PREFIX) && take(p) }
+    }
+
+    private fun picked(): Set<String> = files(".meta").filter { load(it).getProperty("key")?.startsWith(ArtPicks.PREFIX) == true }.mapTo(HashSet()) { it.name.substringBefore('.') }
 
     private fun dropFiles(key: String) {
         val h = hash(key)

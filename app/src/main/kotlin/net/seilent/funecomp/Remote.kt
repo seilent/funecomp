@@ -806,6 +806,21 @@ object Remote : Control {
 
     private fun showBlocked(list: () -> List<ArtBlocks.Record>) = synchronized(blockedLock) { blocked = list() }
 
+    override fun clearArt(source: String?) {
+        val a = artist ?: return
+        blockExec.execute {
+            forgetting()
+            val gone = if (source == null) a.clearAll() else a.clearSource(source)
+            if (source == null) app?.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE)?.edit()?.remove(SWEEP)?.apply()
+            Log.i(TAG, "art clear ${source ?: "all"} ${gone.size}")
+            resetBackdrop()
+            decoded.clear()
+            trigger.incrementAndGet()
+            art?.want()
+            credits = a.credits()
+        }
+    }
+
     private fun resetBackdrop() = synchronized(backdropLock) {
         backdropRev++
         backdrop = null
