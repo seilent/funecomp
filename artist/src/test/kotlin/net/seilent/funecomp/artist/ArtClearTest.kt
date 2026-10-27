@@ -121,5 +121,49 @@ class ArtClearTest {
         assertTrue(http.calls.isNotEmpty())
     }
 
+    @Test
+    fun aClearRecordReachesEveryDeviceAndANewClearReachesThemAgain() {
+        val r = ArtBlocks(blocksFile)
+        r.cleared(utada, utada, "宇多田ヒカル", 1)
+        r.applied(r.drops().single(), "tcp:A")
+        assertTrue(r.pending("tcp:A").isEmpty())
+        assertEquals(listOf(utada), r.pending("tcp:B").map { it.key })
+        r.cleared(utada, utada, "宇多田ヒカル", 2)
+        assertEquals(listOf(2L), r.pending("tcp:A").map { it.at })
+        assertEquals(1, r.drops().size)
+    }
+
+    @Test
+    fun aClearRecordExpiresNinetyDaysAfterItWasMade() {
+        val day = 24L * 60 * 60 * 1000
+        val r = ArtBlocks(blocksFile)
+        r.cleared(utada, utada, "宇多田ヒカル", day)
+        r.cleared(radiohead, radiohead, "Radiohead", 2 * day)
+        r.save()
+        assertEquals(listOf(utada, radiohead), ArtBlocks(blocksFile, { 90 * day }).drops().map { it.key })
+        assertEquals(listOf(radiohead), ArtBlocks(blocksFile, { 91 * day }).drops().map { it.key })
+    }
+
+    @Test
+    fun aClearLeavesAPendingDropThatIsNotAClearAsItIs() {
+        val r = ArtBlocks(blocksFile)
+        r.drop(utada, utada, "宇多田ヒカル", 1)
+        r.applied(r.drops().single(), "tcp:A")
+        r.cleared(utada, utada, "宇多田ヒカル", 2)
+        assertEquals(listOf(ArtBlocks.Drop(utada, utada, "宇多田ヒカル", 1, setOf("tcp:A"))), r.drops())
+    }
+
+    @Test
+    fun blockAndOtherDropRecordsNeverExpire() {
+        val day = 24L * 60 * 60 * 1000
+        val r = ArtBlocks(blocksFile)
+        r.add(ArtBlocks.Block(utada, utada, Sources.DEEZER, "1", "", "宇多田ヒカル", day))
+        r.drop(radiohead, radiohead, "Radiohead", day)
+        r.save()
+        val back = ArtBlocks(blocksFile, { 400 * day })
+        assertEquals(listOf(radiohead), back.drops().map { it.key })
+        assertEquals(setOf(utada, radiohead), back.pending("tcp:new").map { it.key }.toSet())
+    }
+
     private fun hashOf(key: String) = java.security.MessageDigest.getInstance("SHA-1").digest(key.toByteArray()).joinToString("") { "%02x".format(it) }.take(20)
 }

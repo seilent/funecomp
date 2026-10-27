@@ -811,6 +811,9 @@ object Remote : Control {
         blockExec.execute {
             forgetting()
             val gone = if (source == null) a.clearAll() else a.clearSource(source)
+            val now = System.currentTimeMillis()
+            for (e in gone) if (a.picks.of(e.mbid, e.name) == null) a.blocks.cleared(e.key, e.mbid, e.name, now)
+            a.blocks.save()
             if (source == null) app?.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE)?.edit()?.remove(SWEEP)?.apply()
             Log.i(TAG, "art clear ${source ?: "all"} ${gone.size}")
             resetBackdrop()

@@ -3,7 +3,7 @@ package net.seilent.funecomp.artist
 import net.seilent.funecomp.proto.gen.Enums
 import java.io.File
 
-class ArtBlocks(private val file: File? = null, private val log: (String) -> Unit = {}) {
+class ArtBlocks(private val file: File? = null, private val clock: () -> Long = { System.currentTimeMillis() }, private val log: (String) -> Unit = {}) {
     sealed interface Record {
         val key: String
         val mbid: String?
@@ -40,6 +40,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         override val name: String,
         override val at: Long,
         val applied: Set<String> = emptySet(),
+        val cleared: Boolean = false,
     ) : Record
 
     data class Held(val name: String, val mbid: String?, val device: String)
@@ -106,6 +107,14 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
         if (drops.any { it.key == key }) return false
         drops += Drop(key, Names.mbid(mbid), name, at)
         return true
+    }
+
+    @Synchronized
+    fun cleared(key: String, mbid: String?, name: String, at: Long) {
+        if (drops.any { it.key == key && !it.cleared }) return
+        upgrades.removeAll { it.key == key }
+        drops.removeAll { it.key == key }
+        drops += Drop(key, Names.mbid(mbid), name, at, cleared = true)
     }
 
     @Synchronized
@@ -210,7 +219,7 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
     @Synchronized
     fun encode(): String = buildString {
         for (b in blocks) line("block", b.key, b.mbid ?: "", b.source, b.id, b.sha, b.name, b.at.toString(), b.applied.joinToString(","), *listOfNotNull(b.crc?.toString()).toTypedArray())
-        for (d in drops) line("drop", d.key, d.mbid ?: "", d.name, d.at.toString(), d.applied.joinToString(","))
+        for (d in drops) line("drop", d.key, d.mbid ?: "", d.name, d.at.toString(), d.applied.joinToString(","), *listOfNotNull(CLEARED.takeIf { d.cleared }).toTypedArray())
         for (r in rejects) line("reject", r.key, r.mbid ?: "", r.resolvedBy, r.name, r.at.toString(), r.applied.joinToString(","), *(if (r.channel.isEmpty()) listOfNotNull(r.crc?.toString()) else listOf(r.crc?.toString() ?: "", r.channel)).toTypedArray())
         for (h in held) line("held", h.name, h.mbid ?: "", h.device)
         for (d in upgradeDevices) line("upgradedevice", d)
@@ -244,7 +253,8 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
             val ok = when (p[0]) {
                 "block" -> (p.size == 9 || p.size == 10) && p[7].toLongOrNull() != null && blocks.add(Block(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5], p[6], p[7].toLong(), set(p[8]), p.getOrNull(9)?.toLongOrNull()))
                 "reject" -> p.size in 7..9 && p[5].toLongOrNull() != null && rejects.add(Reject(p[1], p[2].ifEmpty { null }, p[3], p[4], p[5].toLong(), set(p[6]), p.getOrNull(7)?.toLongOrNull(), p.getOrNull(8) ?: ""))
-                "drop" -> p.size == 6 && p[4].toLongOrNull() != null && drops.none { it.key == p[1] } && drops.add(Drop(p[1], p[2].ifEmpty { null }, p[3], p[4].toLong(), set(p[5])))
+                "drop" -> (p.size == 6 || (p.size == 7 && p[6] == CLEARED)) && p[4].toLongOrNull() != null &&
+                    ((p.size == 7 && clock() - p[4].toLong() >= CLEAR_KEEP_MS) || (drops.none { it.key == p[1] } && drops.add(Drop(p[1], p[2].ifEmpty { null }, p[3], p[4].toLong(), set(p[5]), p.size == 7))))
                 "held" -> p.size == 4 && held.add(Held(p[1], p[2].ifEmpty { null }, p[3]))
                 "upgradedevice" -> p.size == 2 && upgradeDevices.add(p[1])
                 "upgrade" -> p.size == 7 && p[4].toLongOrNull() != null && upgrades.none { it.key == p[1] } &&
@@ -273,6 +283,9 @@ class ArtBlocks(private val file: File? = null, private val log: (String) -> Uni
     private fun set(s: String) = s.split(',').filter { it.isNotEmpty() }.toSet()
 
     internal companion object {
+        const val CLEAR_KEEP_MS = 90L * 24 * 60 * 60 * 1000
+        private const val CLEARED = "clear"
+
         fun escape(s: String) = s.replace("\\", "\\\\").replace("\t", "\\t").replace("\n", "\\n")
 
         fun unescape(s: String) = buildString {

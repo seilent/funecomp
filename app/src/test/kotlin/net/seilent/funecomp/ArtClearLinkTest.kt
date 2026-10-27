@@ -8,8 +8,11 @@ import android.content.pm.ApplicationInfo
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Looper
+import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
+import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.Http
+import net.seilent.funecomp.artist.ImageIds
 import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Response
@@ -56,7 +59,7 @@ class ArtClearLinkTest {
 
     private val http = Http { url, _ ->
         asked += url
-        Response(404, ByteArray(0))
+        if (url == PICKED) Response(200, jpeg()) else Response(404, ByteArray(0))
     }
 
     @Before
@@ -120,12 +123,17 @@ class ArtClearLinkTest {
 
     private fun cache() = ArtCache(File(app.filesDir, "art"))
 
-    private fun keep() = cache().putHit(ArtCache.Entry(key, name, null, Sources.DEEZER, null, "https://e/a.jpg", System.currentTimeMillis(), "1"), jpeg())
+    private fun keep(artist: String = name, source: String = Sources.DEEZER) =
+        cache().putHit(ArtCache.Entry("name:${Names.fold(artist)}", artist, null, source, null, "https://e/$artist.jpg", System.currentTimeMillis(), artist), jpeg())
+
+    private fun records() = ArtBlocks(File(app.filesDir, "artblock.tsv")).drops()
+
+    private fun stored(artist: String) = lines.filter { it.startsWith("stored name=$artist ") }
 
     private fun link(free: Boolean? = null): Sim {
         Remote.artist(app, http)
         free?.let { network(it) }
-        val s = Sim(Options(Board.of("v1"), log = { lines += it }))
+        val s = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }))
         sims += s
         Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:${s.listen(0)}")).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE }
@@ -134,9 +142,9 @@ class ArtClearLinkTest {
 
     private fun logged() = ShadowLog.getLogsForTag(Remote.TAG).map { it.msg }
 
-    private fun cleared() = logged().any { it.startsWith(CLEAR) }
+    private fun cleared(mark: String = CLEAR) = logged().any { it.startsWith(mark) }
 
-    private fun after(prefix: String) = logged().let { l -> l.drop(l.indexOfFirst { it.startsWith(CLEAR) } + 1).count { it.startsWith(prefix) } }
+    private fun after(prefix: String, mark: String = CLEAR) = logged().let { l -> l.drop(l.indexOfFirst { it.startsWith(mark) } + 1).count { it.startsWith(prefix) } }
 
     @Test
     fun aClearedPhotoLeavesTheBackdropAtOnce() {
@@ -197,7 +205,45 @@ class ArtClearLinkTest {
         waitFor { after("art sweep ") > 0 }
     }
 
+    @Test
+    fun aSourceClearDeletesItsPhotosOnTheDapAndLeavesTheOthers() {
+        val other = "Ichiko Aoba"
+        sources(Sources.DEEZER, Sources.THE_AUDIO_DB)
+        keep()
+        keep(other, Sources.THE_AUDIO_DB)
+        link(true)
+        waitFor { stored(name).isNotEmpty() && stored(other).isNotEmpty() }
+        Remote.clearArt(Sources.DEEZER)
+        waitFor { "deleted name=$name" in lines }
+        waitFor { records().any { it.key == key && it.applied.isNotEmpty() } }
+        Thread.sleep(500)
+        assertFalse("deleted name=$other" in lines)
+        assertNotNull(cache().hit("name:${Names.fold(other)}"))
+    }
+
+    @Test
+    fun aClearKeepsTheDapPhotoOfAPickedName() {
+        sources(Sources.DEEZER)
+        keep()
+        val (k, k2) = ArtPicks.keys(name, null, false)
+        ArtPicks(File(app.filesDir, "artpick.tsv")).apply {
+            add(ArtPicks.Pick(k, k2, name, ArtPicks.IMAGE, Sources.LINK, PICKED, ImageIds.of(Sources.LINK, PICKED), "", null, null, 1))
+            save()
+        }
+        link(true)
+        waitFor { stored(name).isNotEmpty() }
+        Remote.clearArt(Sources.DEEZER)
+        waitFor { cleared(DEEZER_CLEAR) }
+        waitFor { after("art DONE ", DEEZER_CLEAR) > 0 }
+        Thread.sleep(500)
+        assertNull(cache().hit(key))
+        assertTrue(records().none { it.key == key })
+        assertTrue(lines.none { " rx IMG_DEL " in it })
+    }
+
     private companion object {
         const val CLEAR = "art clear all "
+        const val DEEZER_CLEAR = "art clear deezer "
+        const val PICKED = "https://example.org/pick.jpg"
     }
 }
