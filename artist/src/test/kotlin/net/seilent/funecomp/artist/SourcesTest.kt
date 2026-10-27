@@ -20,7 +20,15 @@ class SourcesTest {
     }
 
     @Test
-    fun noneIsCommonsOnlyInTheOldOrder() {
+    fun noneIsEveryToggleOffAndCommonsTurnsOff() {
+        assertEquals(emptySet<String>(), Sources.NONE.enabled)
+        assertEquals(Sources.NONE.copy(commons = true), Sources.COMMONS)
+        assertEquals(setOf("theaudiodb", "discogs", "youtube", "deezer"), Sources(commons = false).enabled)
+        assertEquals(listOf("theaudiodb", "youtube", "discogs", "deezer"), Sources(commons = false).ordered)
+    }
+
+    @Test
+    fun commonsIsCommonsOnlyInTheOldOrder() {
         assertEquals(setOf("commons"), Sources.COMMONS.enabled)
         assertEquals(old.split(','), Sources.COMMONS.order)
         assertEquals(setOf("commons", "fanarttv"), Sources.COMMONS.copy(fanartTv = true, fanartTvKey = "k").enabled)
@@ -43,6 +51,11 @@ class SourcesTest {
     @Test
     fun aTrueValueStays() {
         assertEquals(setOf("discogs", "fanarttv", "deezer", "youtube", "order"), Sources.upgrade(v1 + ("theaudiodb" to true)).remove)
+    }
+
+    @Test
+    fun aStoredCommonsOffStays() {
+        assertFalse("commons" in Sources.upgrade(v1 + ("commons" to false)).remove)
     }
 
     @Test

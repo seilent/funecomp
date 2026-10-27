@@ -62,6 +62,7 @@ class ArtistArt(
             ArtPicks.NONE -> return null
         }
         val on = sources().enabled
+        if (on.isEmpty()) return null
         val now = clock()
         val tag = tag(p, mbid)
         val id = tag ?: identify(name, now)
@@ -115,6 +116,7 @@ class ArtistArt(
         val p = picks.of(mbid, name)
         if (p != null && p.kind != ArtPicks.ARTIST) return get(name, mbid, w, h, search)
         val on = sources().enabled
+        if (on.isEmpty()) return null
         val now = clock()
         val tag = tag(p, mbid)
         val id = tag ?: identify(name, now)
@@ -205,6 +207,7 @@ class ArtistArt(
     @Throws(IOException::class)
     fun previewArtist(name: String, mbid: String, w: Int, h: Int): ByteArray? {
         val on = sources().enabled
+        if (on.isEmpty()) return null
         val hit = cache.hit(mbid)?.takeIf { it.source in on && !blocked(it) }
         if (hit != null) cache.source(mbid)?.let { return it }
         cache.miss(mbid)?.let { m ->
@@ -249,7 +252,7 @@ class ArtistArt(
     fun offer(text: String): Offered = try {
         when (val l = PickLink.parse(text)) {
             PickLink.Unsupported -> Offered.Refused(PickLink.UNSUPPORTED)
-            is PickLink.MusicBrainz -> mb.artist(l.mbid)?.let { a -> Offered.Ok(Offer(ArtPicks.ARTIST, Sources.MUSICBRAINZ, "https://musicbrainz.org/artist/${a.id}", a.id, null, a.id, a.name, null)) }
+            is PickLink.MusicBrainz -> if (!sources().anyOn) Offered.Ok(Offer(ArtPicks.ARTIST, Sources.MUSICBRAINZ, "https://musicbrainz.org/artist/${l.mbid}", l.mbid, null, l.mbid, l.mbid, null)) else mb.artist(l.mbid)?.let { a -> Offered.Ok(Offer(ArtPicks.ARTIST, Sources.MUSICBRAINZ, "https://musicbrainz.org/artist/${a.id}", a.id, null, a.id, a.name, null)) }
                 ?: Offered.Refused(PickLink.NOT_FOUND)
             is PickLink.YouTube -> youTube(l.url)
             is PickLink.YouTubeMusic -> youTubeMusic(l)
@@ -309,6 +312,7 @@ class ArtistArt(
         val on = s.enabled
         val order = s.order.filter { it in on }.flatMap { if (it == Sources.YOUTUBE) listOf(it, YOUTUBE_SEARCH) else listOf(it) }
         out.sections(order)
+        if (on.isEmpty()) return
         val run = HttpRun.current.get()
         val feed = Feed(time.condition())
         val lock = Any()
@@ -717,7 +721,7 @@ class ArtistArt(
     }
 
     private fun steps(name: String, id: String?, a: MbArtist?, w: Int, h: Int, on: Set<String>, t: Targets) = mapOf<String, (() -> Sequence<Candidate>)?>(
-        Wikimedia.SOURCE to a?.let { { wikimedia.candidates(it, w, h, targets = t).asSequence() } },
+        Wikimedia.SOURCE to a?.takeIf { Wikimedia.SOURCE in on }?.let { { wikimedia.candidates(it, w, h, targets = t).asSequence() } },
         Sources.THE_AUDIO_DB to id?.takeIf { Sources.THE_AUDIO_DB in on }?.let { { audioDb.candidates(it).asSequence() } },
         Sources.FANART_TV to id?.takeIf { Sources.FANART_TV in on }?.let { { fanartTv.candidates(it).asSequence() } },
         Sources.DISCOGS to a?.takeIf { Sources.DISCOGS in on }?.let { { discogs.candidates(it).asSequence() } },

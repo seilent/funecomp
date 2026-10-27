@@ -8,16 +8,20 @@ data class Sources(
     val deezer: Boolean = true,
     val youtube: Boolean = true,
     val order: List<String> = ORDER,
+    val commons: Boolean = true,
 ) {
     val enabled: Set<String>
         get() = buildSet {
-            add(Wikimedia.SOURCE)
+            if (commons) add(Wikimedia.SOURCE)
             if (theAudioDb) add(THE_AUDIO_DB)
             if (fanartTv && fanartTvKey.isNotBlank()) add(FANART_TV)
             if (discogs) add(DISCOGS)
             if (youtube) add(YOUTUBE)
             if (deezer) add(DEEZER)
         }
+
+    val anyOn: Boolean
+        get() = enabled.isNotEmpty()
 
     val ordered: List<String>
         get() = enabled.let { on -> order.filter { it in on } }
@@ -34,8 +38,8 @@ data class Sources(
     companion object {
         val ORDER = listOf("theaudiodb", "fanarttv", "youtube", "discogs", Wikimedia.SOURCE, "deezer")
         private val OLD_ORDER = listOf(Wikimedia.SOURCE, "theaudiodb", "fanarttv", "discogs", "youtube", "deezer")
-        val NONE = Sources(theAudioDb = false, discogs = false, fanartTv = false, deezer = false, youtube = false, order = OLD_ORDER)
-        val COMMONS = NONE
+        val NONE = Sources(theAudioDb = false, discogs = false, fanartTv = false, deezer = false, youtube = false, commons = false, order = OLD_ORDER)
+        val COMMONS = NONE.copy(commons = true)
         const val DEFAULTS = "defaults"
         const val DEFAULTS_REV = 2
 

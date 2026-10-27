@@ -274,6 +274,20 @@ class LookupTest {
     }
 
     @Test
+    fun commonsOffSkipsItsStepAndOnAgainFindsThePhoto() {
+        val wiki = setOf("www.wikidata.org", "commons.wikimedia.org", "upload.wikimedia.org", "thumb.wikimedia.org", "ja.wikipedia.org", "en.wikipedia.org")
+        sources = Sources.NONE.copy(theAudioDb = true)
+        assertEquals(Sources.THE_AUDIO_DB, art().get("Radiohead", radiohead, 384, 480)!!.source)
+        assertTrue(art().get("Utada Hikaru", null, 384, 480)?.source != Wikimedia.SOURCE)
+        assertTrue(http.calls.any { it.contains("artist-mb.php?i=$utada") })
+        assertTrue(http.hosts().none { it in wiki })
+        val n = http.calls.size
+        sources = Sources.COMMONS
+        assertEquals(Wikimedia.SOURCE, art().get("Utada Hikaru", null, 384, 480)!!.source)
+        assertTrue(http.calls.drop(n).any { it.startsWith("https://www.wikidata.org/") })
+    }
+
+    @Test
     fun wideCompositeIsSkippedAndOptInSourcesStayOff() {
         assertNull(art().get("Radiohead", null, 384, 480))
         assertTrue(http.calls.none { it.contains("RadioheadO2211125") && it.contains("upload.wikimedia.org") })
