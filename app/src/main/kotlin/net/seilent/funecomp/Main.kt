@@ -37,6 +37,7 @@ import net.seilent.funecomp.artist.AppPair
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Battery
@@ -460,6 +461,7 @@ class Main : ComponentActivity() {
             if (s.fanartTvKey != was.fanartTvKey) e.putString(FANART_KEY, s.fanartTvKey)
             if (s.deezer != was.deezer) e.putBoolean(Sources.DEEZER, s.deezer)
             if (s.youtube != was.youtube) e.putBoolean(Sources.YOUTUBE, s.youtube)
+            if (s.commons != was.commons) e.putBoolean(Wikimedia.SOURCE, s.commons)
             if (s.order != was.order) e.putString(ORDER, s.order.joinToString(","))
             e.apply()
         }
@@ -478,6 +480,7 @@ class Main : ComponentActivity() {
                 p.getBoolean(Sources.DEEZER, true),
                 p.getBoolean(Sources.YOUTUBE, true),
                 Sources.order(p.getString(ORDER, null)),
+                p.getBoolean(Wikimedia.SOURCE, true),
             )
         }
     }

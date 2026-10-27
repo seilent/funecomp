@@ -118,6 +118,7 @@ class ForwardTest {
         gate: () -> Boolean = { true },
         upgrades: Forward.Upgrades? = null,
         version: (String) -> Int = { 0 },
+        looking: () -> Boolean = { true },
     ) = Forward(
         { device },
         { n, m, w, h, library ->
@@ -142,6 +143,7 @@ class ForwardTest {
         blocks = blocks,
         cached = known,
         upgrades = upgrades,
+        looking = looking,
         log = log,
     )
 
@@ -184,6 +186,21 @@ class ForwardTest {
         assertEquals(200, stores().size)
         assertEquals(200, stores().toSet().size)
         assertTrue(lines.any { it.startsWith("stored name=Artist 002 mbid=mb-002") })
+    }
+
+    @Test
+    fun withNothingOnTheCurrentAndQueueStagesRunAndThePendingUpgradesAndTheSweepDoNot() {
+        val (sim, port) = sim(30)
+        val looked = Lookups()
+        var listings = 0
+        val ups = Ups(true, (1..30).map { "Artist %03d".format(it) })
+        val r = forward(looked, onLibGet = { listings++ }, upgrades = ups, looking = { false }).run(session(port)) { true }
+        assertEquals(ArtPusher.Stop.DONE, r.stop)
+        assertFalse(r.complete)
+        assertEquals(0, listings)
+        assertEquals((1..6).map { "Artist %03d".format(it) }, ups.ran.sorted())
+        assertEquals((1..6).map { "Artist %03d".format(it) }, stores().sorted())
+        assertEquals(6, sim.device.stored.size)
     }
 
     @Test

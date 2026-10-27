@@ -380,6 +380,10 @@ object Remote : Control {
         if (prefs.getBoolean(BARE_SCAN, false)) return
         try {
             val n = a.scanBare()
+            if (n == null) {
+                Log.i(TAG, "art bare scan skipped")
+                return
+            }
             prefs.edit().putBoolean(BARE_SCAN, true).apply()
             Log.i(TAG, "art bare scan dropped $n")
             if (n > 0) {
@@ -461,7 +465,10 @@ object Remote : Control {
         galleryMissing = emptySet()
     }
 
-    fun sourcesChanged() = art?.want()
+    fun sourcesChanged() {
+        resetBackdrop()
+        art?.want()
+    }
 
     fun reordered() {
         synchronized(refreshLock) {
@@ -875,6 +882,7 @@ object Remote : Control {
                 override fun open() = !shown && online && !breaker.open && unmetered
                 override fun at(key: String) = a.hitAt(key)
             },
+            { Main.sources(context).anyOn },
         ) { Log.i(TAG, it) }
         return ArtWorker(
             { l.session },

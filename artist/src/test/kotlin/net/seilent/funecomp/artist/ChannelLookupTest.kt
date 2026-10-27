@@ -378,6 +378,13 @@ class ChannelLookupTest {
         seed("MaiR Channel", mair, Sources.YOUTUBE, "MaiR")
         val (k, k2) = ArtPicks.keys("MaiR Channel", null, false)
         picks.add(ArtPicks.Pick(k, k2, "MaiR Channel", ArtPicks.IMAGE, Sources.LINK, "https://e/mair.jpg", "https://e/mair.jpg", "", null, null, time.now))
+        val off = sources
+        sources = Sources.NONE
+        val before = http.calls.size
+        assertNull(art().scanBare())
+        assertEquals(before, http.calls.size)
+        assertNotNull(cache.hit(key("Iris Official")))
+        sources = off
         assertEquals(1, art().scanBare())
         assertNull(cache.hit(key("Iris Official")))
         assertEquals(listOf(key("Iris Official")), blocks.drops().map { it.key })

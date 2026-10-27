@@ -653,7 +653,8 @@ class ArtistArt(
     }
 
     @Throws(IOException::class)
-    fun scanBare(): Int {
+    fun scanBare(): Int? {
+        if (!sources().anyOn) return null
         var n = 0
         for (e in cache.entries()) {
             if (picked(e) || e.bare || e.mbid == null) continue

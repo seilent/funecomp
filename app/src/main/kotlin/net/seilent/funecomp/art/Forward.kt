@@ -33,6 +33,7 @@ class Forward(
     private val cached: (String, String?) -> Boolean = { _, _ -> true },
     private val holding: () -> Boolean = { true },
     private val upgrades: Upgrades? = null,
+    private val looking: () -> Boolean = { true },
     private val log: (String) -> Unit = {},
 ) {
     interface Upgrades {
@@ -87,6 +88,7 @@ class Forward(
         upgrade(s, pusher, keep, playing.map { Triple(it.first, it.second, ArtPusher.origin(st.source)) } + up.map { Triple(it.first, it.second, Enums.ImgOrigin.library) }, null)?.let { return it }
         if (retagging() && s.hello?.has("imgOrigin") == true) retag(s, library, keep)?.let { return it }
         if (holding()) held(s, library, keep)?.let { return it }
+        if (!looking()) return now
         upgrades?.takeIf { it.open() }?.let { u ->
             val seen = (playing + up).mapTo(HashSet()) { it.first }
             pending(s, library, keep, u, seen)?.let { return it }

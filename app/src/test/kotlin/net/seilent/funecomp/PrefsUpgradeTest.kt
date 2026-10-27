@@ -60,6 +60,19 @@ class PrefsUpgradeTest {
     }
 
     @Test
+    fun commonsReadsOnWhenAbsentAndAStoredOffStays() {
+        art().edit().clear().commit()
+        assertTrue(Main.sources(app).commons)
+        Main.writeSources(app, Main.sources(app), Main.sources(app).copy(commons = false))
+        assertFalse(art().getBoolean("commons", true))
+        assertFalse(Main.sources(app).commons)
+        art().edit().clear().putBoolean("commons", false).putBoolean("deezer", false).commit()
+        assertEquals(Sources(deezer = true, commons = false), Main.sources(app))
+        art().edit().clear().putInt("defaults", 2).putBoolean("commons", false).commit()
+        assertEquals(Sources(commons = false), Main.sources(app))
+    }
+
+    @Test
     fun anOldInstallThenAnUpgradedOne() {
         anOldFullWriteReadsAsTheNewDefaults()
         anUpgradedStoreReadsBackAsStored()
