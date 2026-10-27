@@ -750,11 +750,7 @@ object Remote : Control {
             a.picks.save()
             a.blocks.save()
             gallery(a)
-            synchronized(backdropLock) {
-                backdropRev++
-                backdrop = null
-                backdropFor = null
-            }
+            resetBackdrop()
             decoded.clear()
             showPicks { a.picks.list() }
             trigger.incrementAndGet()
@@ -800,12 +796,14 @@ object Remote : Control {
 
     private fun showBlocked(list: () -> List<ArtBlocks.Record>) = synchronized(blockedLock) { blocked = list() }
 
+    private fun resetBackdrop() = synchronized(backdropLock) {
+        backdropRev++
+        backdrop = null
+        backdropFor = null
+    }
+
     private fun blockedArt(a: ArtistArt, forget: () -> Unit) {
-        synchronized(backdropLock) {
-            backdropRev++
-            backdrop = null
-            backdropFor = null
-        }
+        resetBackdrop()
         showBlocked { a.blocks.records() }
         trigger.incrementAndGet()
         blockExec.execute {
