@@ -619,6 +619,24 @@ class ArtBlockTest {
         assertTrue(recorded(utadaJa))
     }
 
+    @Test
+    fun aBlockAndAWrongArtistDeleteThePhotoFilesAndKeepTheirRecords() {
+        val utada = "b539e453-c4fe-47e3-8a07-8517eac74429"
+        val dir = File(app.filesDir, "art")
+        val block = seed("name:${Names.fold("Ichiko Aoba")}", "Ichiko Aoba", null, "")
+        val reject = seed(utada, "Utada Hikaru", utada, "Utada Hikaru", "Utada Hikaru" to utada)
+        val a = Remote.artist(app, http)
+        for (e in listOf(block, reject)) assertTrue(a.render(e, 240, 320) != null)
+        Remote.blockArt(block)
+        Remote.wrongArtist(reject)
+        waitFor { cache().hit(block.key) == null && cache().hit(reject.key) == null }
+        assertTrue(dir.list()!!.none { it.endsWith(".src") || it.endsWith(".jpg") })
+        val kept = ArtBlocks(File(app.filesDir, "artblock.tsv")).records()
+        assertTrue(kept.any { it is ArtBlocks.Block && it.key == block.key })
+        assertTrue(kept.any { it is ArtBlocks.Reject && it.key == reject.key })
+        assertEquals(2, Remote.blocked.size)
+    }
+
     private fun recorded(name: String) = ShadowLog.getLogsForTag(Remote.TAG).any { it.msg == "art ask $name already recorded" }
 
     private fun deleted(name: String) = lines.contains("deleted name=$name")
