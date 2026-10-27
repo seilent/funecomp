@@ -653,6 +653,13 @@ private fun phoneShown(lines: List<LyrLine>?, kind: Int = Enums.LyricsKind.synce
 }
 
 private val FOUND = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true)
+private val SIGNED = FOUND.copy(ready = true, signed = true, sigListed = true)
+
+private fun Shots.pickThrough(shell: Shell) {
+    rule.onNodeWithTag("fw.pick").performClick()
+    settle(600)
+    shell.sheet.accept(0)
+}
 
 private val EQ = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)
 
@@ -993,14 +1000,28 @@ val SHOTS = listOf(
     Shot("firmware-downloading", board = "v1", pages = FW, firmware = FOUND.copy(downloading = true, download = "42%", checkDaily = true)),
     Shot("firmware-paused", board = "v1", pages = FW, firmware = FOUND.copy(download = "paused 42%")),
     Shot("firmware-mismatch", board = "v1", pages = FW, firmware = FOUND.copy(info = "checksum mismatch")),
-    Shot("firmware-ready", board = "v1", pages = FW, firmware = FOUND.copy(ready = true)) { rule.onNodeWithTag("fw.release").performClick() },
-    Shot("firmware-picked", board = "v1", pages = FW) { rule.onNodeWithTag("fw.pick").performClick() },
-    Shot("firmware-sending", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%")),
-    Shot("firmware-receiver", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%"), prep = phoneTrack()),
-    Shot("firmware-sent", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, info = "ready on the dap")),
+    Shot("firmware-ready", board = "v1", pages = FW, firmware = SIGNED) { rule.onNodeWithTag("fw.release").performClick() },
+    Shot("firmware-ready-unsigned", board = "v1", pages = FW, firmware = FOUND.copy(ready = true)) { rule.onNodeWithTag("fw.release").performClick() },
+    Shot("firmware-ready-v03", board = "v1", pages = FW, firmware = FOUND.copy(ready = true), minor = 14) { rule.onNodeWithTag("fw.release").performClick() },
+    Shot("firmware-sig-paused", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, sigListed = true, download = "paused 100%")),
+    Shot("firmware-sig-sheet", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, sigListed = true, download = "paused 100%")) { rule.onNodeWithTag("fw.release").performClick() },
+    Shot("firmware-badsig", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, sigListed = true, info = "bad signature file")),
+    Shot("firmware-pick-hint", board = "v1", pages = FW) { rule.onNodeWithTag("fw.pick").performClick() },
+    Shot("firmware-picked", board = "v1", pages = FW) { pickThrough(it) },
+    Shot("firmware-picked-unsigned", board = "v1", pages = FW, prep = { it.pickSigned = false }) { pickThrough(it) },
+    Shot("firmware-picked-v03", board = "v1", pages = FW, minor = 14) { rule.onNodeWithTag("fw.pick").performClick() },
+    Shot("firmware-picked-mismatch", board = "v1", pages = FW, minor = 14, prep = { it.pickSigned = false; it.pickMismatch = true }) { rule.onNodeWithTag("fw.pick").performClick() },
+    Shot("firmware-unsigned-release", board = "v1", pages = FW, firmware = FirmwareView(info = "unsigned release")),
+    Shot("firmware-unsigned-firmware", board = "v1", pages = FW, firmware = SIGNED.copy(info = "unsigned firmware")),
+    Shot("firmware-older", board = "v1", pages = FW, firmware = SIGNED.copy(info = "older v0.4.0")),
+    Shot("firmware-key", board = "v1", pages = FW, firmware = SIGNED.copy(info = "unknown signing key")),
+    Shot("firmware-pick-one", board = "v1", pages = FW, firmware = FirmwareView(info = "pick one image and its signature")),
+    Shot("firmware-sending", board = "v1", pages = FW, firmware = SIGNED.copy(send = "firmware 42%")),
+    Shot("firmware-receiver", board = "v1", pages = FW, firmware = SIGNED.copy(send = "firmware 42%"), prep = phoneTrack()),
+    Shot("firmware-sent", board = "v1", pages = FW, firmware = SIGNED.copy(info = "ready on the dap")),
     Shot("firmware-autocheck-sheet", board = "v1", pages = FW) { tapRow("fw.daily") },
     Shot("firmware-prereleases-sheet", board = "v1", pages = FW) { tapRow("fw.pre") },
-    Shot("firmware-send-cancel", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, send = "firmware 42%")) { rule.onNodeWithTag("fw.send").performClick() },
+    Shot("firmware-send-cancel", board = "v1", pages = FW, firmware = SIGNED.copy(send = "firmware 42%")) { rule.onNodeWithTag("fw.send").performClick() },
     Shot("connection", pages = HOME + Page.Connection),
     Shot("connection-refused", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused)),
     Shot("connection-permission", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "AP80", permission = false)),
