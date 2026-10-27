@@ -382,7 +382,10 @@ object Remote : Control {
             val n = a.scanBare()
             prefs.edit().putBoolean(BARE_SCAN, true).apply()
             Log.i(TAG, "art bare scan dropped $n")
-            if (n > 0) trigger.incrementAndGet()
+            if (n > 0) {
+                resetBackdrop()
+                decoded.clear()
+            }
         } catch (e: IOException) {
             Log.w(TAG, "art bare scan: $e")
         }
