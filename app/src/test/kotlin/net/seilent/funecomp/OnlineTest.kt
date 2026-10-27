@@ -145,7 +145,7 @@ class OnlineTest {
         start(listOf(Page.Home, Page.Online()))
         val tops = sources.order.map { bounds("art.src.$it").top }
         assertEquals(tops.sorted(), tops)
-        shows("art.src.${Wikimedia.SOURCE}", "ALWAYS")
+        shows("art.src.${Wikimedia.SOURCE}", "ON")
         shows("art.src.${Sources.FANART_TV}", "NO KEY")
         shows("art.src.${Sources.DEEZER}", "ON")
         shows("art.src.${Sources.DISCOGS}", "OFF")
@@ -159,8 +159,8 @@ class OnlineTest {
         val (_, shell) = start(listOf(Page.Home, Page.Online()))
         tap("art.src.${Wikimedia.SOURCE}")
         assertEquals("commons", shell.sheet.title)
-        assertEquals(listOf("move down"), shell.sheet.items)
-        assertEquals(0, shell.sheet.focus)
+        assertEquals(listOf("off", "on", "move down"), shell.sheet.items)
+        assertEquals(1, shell.sheet.focus)
         shell.sheet.close()
         settle(600)
         tap("art.src.${Sources.FANART_TV}")
@@ -186,6 +186,24 @@ class OnlineTest {
         pick(1)
         assertEquals(listOf(Sources.COMMONS.copy(discogs = true)), saved)
         shows("art.src.${Sources.DISCOGS}", "ON")
+    }
+
+    @Test
+    fun commonsTurnsOffAndOnLikeTheOtherSources() {
+        val (_, shell) = start(listOf(Page.Home, Page.Online()))
+        tap("art.src.${Wikimedia.SOURCE}")
+        pick(1)
+        assertEquals(emptyList<Sources>(), saved)
+        tap("art.src.${Wikimedia.SOURCE}")
+        pick(0)
+        assertEquals(listOf(Sources.NONE), saved)
+        shows("art.src.${Wikimedia.SOURCE}", "OFF")
+        tap("art.src.${Wikimedia.SOURCE}")
+        assertEquals(listOf("off", "on", "move down"), shell.sheet.items)
+        assertEquals(0, shell.sheet.focus)
+        pick(1)
+        assertEquals(listOf(Sources.NONE, Sources.COMMONS), saved)
+        shows("art.src.${Wikimedia.SOURCE}", "ON")
     }
 
     @Test

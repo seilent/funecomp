@@ -287,8 +287,8 @@ class ArtBlockUiTest {
     fun theSourceSheetMovesASource() {
         val shell = start(listOf(Page.Home, Page.Online()))
         tap("art.src.commons")
-        assertEquals(listOf("move down"), shell.sheet.items)
-        tap("sheet.item.0")
+        assertEquals(listOf("off", "on", "move down"), shell.sheet.items)
+        tap("sheet.item.2")
         assertEquals(listOf("theaudiodb", "commons", "fanarttv", "discogs", "youtube", "deezer"), sources.order)
         scrollTo("art.src.deezer")
         tap("art.src.deezer")

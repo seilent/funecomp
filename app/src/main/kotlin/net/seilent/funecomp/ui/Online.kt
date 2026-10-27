@@ -57,6 +57,7 @@ private fun Sources.on(id: String): Boolean? = when (id) {
     Sources.FANART_TV -> fanartTv
     Sources.YOUTUBE -> youtube
     Sources.DEEZER -> deezer
+    Wikimedia.SOURCE -> commons
     else -> null
 }
 
@@ -66,11 +67,11 @@ private fun Sources.with(id: String, v: Boolean): Sources = when (id) {
     Sources.FANART_TV -> copy(fanartTv = v)
     Sources.YOUTUBE -> copy(youtube = v)
     Sources.DEEZER -> copy(deezer = v)
+    Wikimedia.SOURCE -> copy(commons = v)
     else -> this
 }
 
 fun sourceValue(sources: Sources, id: String) = when {
-    id == Wikimedia.SOURCE -> "always"
     id == Sources.FANART_TV && sources.fanartTv && sources.fanartTvKey.isBlank() -> "no key"
     id in sources.enabled -> ON
     else -> OFF

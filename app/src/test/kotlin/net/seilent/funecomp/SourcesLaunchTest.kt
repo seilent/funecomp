@@ -59,7 +59,7 @@ class SourcesLaunchTest {
         assertEquals(tops.sorted(), tops)
         for (id in listOf("theaudiodb", "youtube", "discogs", "deezer")) shows("art.src.$id", "ON")
         shows("art.src.fanarttv", "NO KEY")
-        shows("art.src.commons", "ALWAYS")
+        shows("art.src.commons", "ON")
     }
 
     private fun shows(tag: String, text: String) {
