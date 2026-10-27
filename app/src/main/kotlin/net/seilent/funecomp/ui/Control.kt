@@ -105,6 +105,7 @@ interface Control {
     fun wrongArtist(e: ArtCache.Entry) {}
     fun unblock(r: ArtBlocks.Record) {}
     fun clearArt(source: String?) {}
+    fun artUsage(done: (Map<String?, ArtCache.Usage>) -> Unit) {}
     fun pickLink(text: String, name: String, done: (Previewed) -> Unit): () -> Unit = {}
     fun pickGallery(done: (Previewed) -> Unit): () -> Unit = {}
     fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}

@@ -377,6 +377,7 @@ fun SettingsRow(
     sub: Boolean = false,
     swatch: Color? = null,
     eqSlot: Boolean = false,
+    onLong: (() -> Unit)? = null,
     onTap: (Float) -> Unit = {},
 ) {
     val ui = LocalUi.current
@@ -402,7 +403,7 @@ fun SettingsRow(
     val right = rowW - edgeX
     val baseline = (rowH - t.size.height) / 2 + t.firstBaseline
     val sw = ui.px(Tok.settingsSwatch)
-    Pressable({ onTap(it.x / rowW) }, modifier.size(rowW.dp(), rowH.dp())) {
+    Pressable({ onTap(it.x / rowW) }, modifier.size(rowW.dp(), rowH.dp()), onLong) {
         val valueColor = vc
         if (eqSlot) {
             RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline), color = tc)

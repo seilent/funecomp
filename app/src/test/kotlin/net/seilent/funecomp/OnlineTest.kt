@@ -13,6 +13,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
@@ -24,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.ArtBlocks
+import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Wikimedia
@@ -68,9 +70,11 @@ class OnlineTest {
     private val lyrics = ArrayList<Pair<String, Boolean>>()
     private val moves = ArrayList<Pair<String, Int>>()
     private val scrobbles = ArrayList<Accounts>()
+    private var holdUsage = false
 
-    private fun start(pages: List<Page>, gated: Boolean = false, scrobble: ScrobbleView = ScrobbleView(), w: Int = 411, h: Int = 960): Pair<SimControl, Shell> {
+    private fun start(pages: List<Page>, gated: Boolean = false, scrobble: ScrobbleView = ScrobbleView(), w: Int = 411, h: Int = 960, usage: Map<String?, ArtCache.Usage> = emptyMap()): Pair<SimControl, Shell> {
         val c = SimControl("ap80")
+        c.usage = usage
         val control = object : Control by c {
             override fun lyricSource(id: String, on: Boolean) {
                 lyrics += id to on
@@ -83,6 +87,10 @@ class OnlineTest {
 
             override fun scrobble(accounts: Accounts) {
                 scrobbles += accounts
+            }
+
+            override fun artUsage(done: (Map<String?, ArtCache.Usage>) -> Unit) {
+                if (!holdUsage) c.artUsage(done)
             }
         }
         val shell = Shell(Nav(pages), gated = gated)
@@ -228,6 +236,111 @@ class OnlineTest {
         settle(600)
         assertEquals("abc123", sources.fanartTvKey)
         shows("art.src.${Sources.FANART_TV}", "ON")
+    }
+
+    private val cached = mapOf(null to ArtCache.Usage(5, 12_300_000), Sources.DEEZER to ArtCache.Usage(3, 7_000_000), Wikimedia.SOURCE to ArtCache.Usage(2, 5_000_000))
+
+    private fun hold(tag: String) {
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag(tag))
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithTag(tag).performTouchInput { longClick() }
+        settle(600)
+    }
+
+    @Test
+    fun theClearRowShowsTheCacheSizeAndClearsOnlyOnClear() {
+        sources = Sources.COMMONS.copy(deezer = true)
+        val (c, shell) = start(listOf(Page.Home, Page.Online()), usage = cached)
+        shows("art.clear", "12.3 MB")
+        tap("art.clear")
+        assertEquals("clear cache?", shell.sheet.title)
+        assertEquals(listOf("clear cache", "keep cache"), shell.sheet.items)
+        assertEquals(listOf("5 photos, 12.3 mb"), shell.sheet.info)
+        assertEquals(1, shell.sheet.focus)
+        pick(1)
+        tap("art.clear")
+        shell.sheet.close()
+        settle(600)
+        assertEquals(emptyList<String?>(), c.cleared)
+        tap("art.clear")
+        pick(0)
+        assertEquals(listOf<String?>(null), c.cleared)
+        shows("art.clear", "0.0 MB")
+        assertEquals(emptyList<Sources>(), saved)
+    }
+
+    @Test
+    fun aLongPressOnASourceOffersToClearItsPhotos() {
+        sources = Sources.COMMONS.copy(deezer = true)
+        val (c, shell) = start(listOf(Page.Home, Page.Online()), usage = cached)
+        hold("art.src.${Sources.DEEZER}")
+        assertEquals("clear deezer?", shell.sheet.title)
+        assertEquals(listOf("clear photos", "keep photos"), shell.sheet.items)
+        assertEquals(listOf("3 photos, 7.0 mb"), shell.sheet.info)
+        assertEquals(1, shell.sheet.focus)
+        pick(0)
+        assertEquals(listOf<String?>(Sources.DEEZER), c.cleared)
+        shows("art.clear", "5.3 MB")
+        assertEquals(emptyList<Sources>(), saved)
+        hold("art.src.${Sources.DISCOGS}")
+        assertEquals("clear discogs?", shell.sheet.title)
+        assertEquals(listOf("keep photos"), shell.sheet.items)
+        assertEquals(listOf("no photos"), shell.sheet.info)
+        pick(0)
+        assertEquals(listOf<String?>(Sources.DEEZER), c.cleared)
+    }
+
+    @Test
+    fun turningASourceOffWithPhotosAsksAndKeepIsFocused() {
+        sources = Sources.COMMONS.copy(deezer = true)
+        val (c, shell) = start(listOf(Page.Home, Page.Online()), usage = cached)
+        tap("art.src.${Sources.DEEZER}")
+        pick(0)
+        assertEquals(listOf(Sources.COMMONS), saved)
+        assertEquals("clear deezer?", shell.sheet.title)
+        assertEquals(1, shell.sheet.focus)
+        pick(1)
+        assertEquals(emptyList<String?>(), c.cleared)
+        tap("art.src.${Wikimedia.SOURCE}")
+        pick(0)
+        assertEquals("clear commons?", shell.sheet.title)
+        shell.sheet.close()
+        settle(600)
+        assertEquals(emptyList<String?>(), c.cleared)
+        tap("art.src.${Wikimedia.SOURCE}")
+        pick(1)
+        tap("art.src.${Wikimedia.SOURCE}")
+        pick(0)
+        pick(0)
+        assertEquals(listOf<String?>(Wikimedia.SOURCE), c.cleared)
+    }
+
+    @Test
+    fun noClearSheetOpensBeforeTheCountsArrive() {
+        holdUsage = true
+        sources = Sources.COMMONS.copy(deezer = true)
+        val (c, shell) = start(listOf(Page.Home, Page.Online()), usage = cached)
+        hold("art.src.${Sources.DEEZER}")
+        assertFalse(shell.sheet.shown)
+        tap("art.src.${Sources.DEEZER}")
+        pick(0)
+        assertEquals(listOf(Sources.COMMONS), saved)
+        assertFalse(shell.sheet.shown)
+        tap("art.clear")
+        assertFalse(shell.sheet.shown)
+        assertEquals(emptyList<String?>(), c.cleared)
+    }
+
+    @Test
+    fun turningASourceWithNoPhotosOffAsksNothing() {
+        sources = Sources.COMMONS.copy(discogs = true)
+        val (c, shell) = start(listOf(Page.Home, Page.Online()), usage = cached)
+        tap("art.src.${Sources.DISCOGS}")
+        pick(0)
+        assertEquals(listOf(Sources.COMMONS), saved)
+        assertFalse(shell.sheet.shown)
+        assertEquals(emptyList<String?>(), c.cleared)
     }
 
     @Test

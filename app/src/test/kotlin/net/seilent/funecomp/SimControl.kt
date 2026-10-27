@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.CompletableDeferred
 import net.seilent.funecomp.art.Thumbs
+import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.proto.ArtGetReply
@@ -57,6 +58,8 @@ class SimControl(
     val sent = ArrayList<String>()
     val failed = ArrayList<Int>()
     val actions = ArrayList<Pair<Int, Long?>>()
+    var usage: Map<String?, ArtCache.Usage> = emptyMap()
+    val cleared = ArrayList<String?>()
     private val heart = Heart()
     private var toast: ((String, String) -> Unit)? = null
     var holdReply = false
@@ -339,6 +342,19 @@ class SimControl(
 
     override fun firmwareStopSend() {
         firmware += "stop send"
+    }
+
+    override fun artUsage(done: (Map<String?, ArtCache.Usage>) -> Unit) = done(usage)
+
+    override fun clearArt(source: String?) {
+        cleared += source
+        val gone = usage[source] ?: return
+        val total = usage[null]
+        usage = when {
+            source == null -> emptyMap()
+            total == null -> usage - source
+            else -> usage - source + (null to ArtCache.Usage(total.photos - gone.photos, total.bytes - gone.bytes))
+        }
     }
 
     companion object {

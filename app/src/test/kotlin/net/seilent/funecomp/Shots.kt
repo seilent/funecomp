@@ -497,6 +497,18 @@ private fun Shots.tapRow(tag: String) {
     settle(600)
 }
 
+private fun Shots.holdRow(tag: String) {
+    scrollTo(tag)
+    rule.onNodeWithTag(tag).performTouchInput { longClick() }
+    settle(600)
+}
+
+private val CACHED_SOURCES = Sources.COMMONS.copy(theAudioDb = true, deezer = true)
+
+private fun cached(c: SimControl) {
+    c.usage = mapOf(null to ArtCache.Usage(214, 138_400_000), Wikimedia.SOURCE to ArtCache.Usage(31, 22_100_000), Sources.THE_AUDIO_DB to ArtCache.Usage(96, 61_800_000), Sources.DEEZER to ArtCache.Usage(87, 54_500_000))
+}
+
 private fun Shots.insertAbove(shell: Shell) {
     for (p in listOf("library", "display")) {
         rule.onNodeWithTag("pivot.$p").performClick()
@@ -943,6 +955,14 @@ val SHOTS = listOf(
     Shot("online-art-lists", pages = ONLINE, picks = PICKS, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.credits") },
     Shot("online-art-lists-blocked-1", pages = ONLINE, blocked = BLOCKED.take(1), credits = CREDITS) { scrollTo("art.credits") },
     Shot("online-art-lists-creditsonly", pages = ONLINE, credits = CREDITS) { scrollTo("art.credits") },
+    Shot("online-art-clear", pages = ONLINE, sources = CACHED_SOURCES, prep = ::cached) { scrollTo("art.clear") },
+    Shot("online-art-clear-sheet", pages = ONLINE, sources = CACHED_SOURCES, prep = ::cached) { tapRow("art.clear") },
+    Shot("online-art-clear-source", pages = ONLINE, sources = CACHED_SOURCES, prep = ::cached) { holdRow("art.src.deezer") },
+    Shot("online-art-clear-source-empty", pages = ONLINE, sources = CACHED_SOURCES, prep = ::cached) { holdRow("art.src.discogs") },
+    Shot("online-art-clear-off", pages = ONLINE, sources = CACHED_SOURCES, prep = ::cached) { shell ->
+        tapRow("art.src.deezer")
+        shell.sheet.accept(0)
+    },
     Shot("online-lyrics", pages = HOME + Page.Online(ONLINE_LYRICS)),
     Shot("online-lyrics-sheet", pages = HOME + Page.Online(ONLINE_LYRICS)) { tapRow("lyr.src.lrclib") },
     Shot("online-lyrics-sheet-netease", pages = HOME + Page.Online(ONLINE_LYRICS)) { tapRow("lyr.src.netease") },

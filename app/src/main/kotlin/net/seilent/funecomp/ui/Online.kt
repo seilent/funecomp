@@ -5,10 +5,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
@@ -27,6 +29,11 @@ private const val MOVE_UP = "move up"
 private const val MOVE_DOWN = "move down"
 private const val KEY = "key"
 private const val COPYRIGHT = "lyrics © their owners"
+private const val CLEAR_CACHE = "clear cache"
+private const val KEEP_CACHE = "keep cache"
+private const val CLEAR_PHOTOS = "clear photos"
+private const val KEEP_PHOTOS = "keep photos"
+private const val NO_PHOTOS = "no photos"
 
 @Composable
 fun SectionLabel(text: String, i: Int) {
@@ -71,6 +78,16 @@ private fun Sources.with(id: String, v: Boolean): Sources = when (id) {
     else -> this
 }
 
+private fun photos(u: ArtCache.Usage) = "${u.photos} ${if (u.photos == 1) "photo" else "photos"}, ${sizeText(u.bytes)}"
+
+private fun clearSheet(ctx: Ctx, label: String, u: ArtCache.Usage?, keep: Keep?, clear: () -> Unit) {
+    if (u == null || u.photos == 0) {
+        ctx.sheet.open("clear $label?", listOf(KEEP_PHOTOS), info = listOf(NO_PHOTOS), keep = keep) {}
+    } else {
+        ctx.sheet.open("clear $label?", listOf(CLEAR_PHOTOS, KEEP_PHOTOS), 1, listOf(photos(u)), keep = keep) { if (it == 0) clear() }
+    }
+}
+
 fun sourceValue(sources: Sources, id: String) = when {
     id == Sources.FANART_TV && sources.fanartTv && sources.fanartTvKey.isBlank() -> "no key"
     id in sources.enabled -> ON
@@ -108,7 +125,14 @@ fun OnlinePage(
 private fun ArtRows(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, credits: List<ArtCache.Entry>, blocked: List<ArtBlocks.Record>, picks: List<ArtPicks.Pick>) {
     val ui = LocalUi.current
     val lists = listOf(Triple(PICKED, picks, Page.ArtPicked), Triple(BLOCKED, blocked, Page.ArtBlocked), Triple(CREDITS, credits, Page.ArtCredits)).filter { it.second.isNotEmpty() }
-    val tags = sources.order.map { "src.$it" } + lists.map { it.first }
+    val tags = sources.order.map { "src.$it" } + lists.map { it.first } + CLEAR_CACHE
+    var usage by remember { mutableStateOf<Map<String?, ArtCache.Usage>?>(null) }
+    val reload = { ctx.control.artUsage { usage = it } }
+    LaunchedEffect(credits) { reload() }
+    fun clear(source: String?) {
+        ctx.control.clearArt(source)
+        reload()
+    }
     var focus by rememberSaveable { mutableStateOf("src.${sources.order.first()}") }
     var last by rememberSaveable { mutableIntStateOf(0) }
     val found = tags.indexOf(focus)
@@ -120,10 +144,18 @@ private fun ArtRows(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, cr
     val list = rememberLazyListState()
     Rows(ui.contentTop, list, focus = at) {
         itemsIndexed(sources.order, key = { _, id -> "src $id" }) { i, id ->
-            SettingsRow(Sources.label(id), sourceValue(sources, id), Modifier.enter { i }.testTag("art.src.$id"), focused = at == i) {
+            val keep = Keep(list, i, ui.px(ui.contentTop))
+            SettingsRow(Sources.label(id), sourceValue(sources, id), Modifier.enter { i }.testTag("art.src.$id"), focused = at == i, onLong = {
+                focus = tags[i]
+                usage?.let { u -> clearSheet(ctx, Sources.label(id), u[id], keep) { clear(id) } }
+            }) {
                 focus = tags[i]
                 val key = if (id == Sources.FANART_TV) (if (sources.fanartTvKey.isBlank()) "not set" else "set") else null
-                sourceSheet(ctx, Sources.label(id), sources.on(id), i, sources.order.size, key, Keep(list, i, ui.px(ui.contentTop)), { onSources(sources.with(id, it)) }, { onSources(sources.moved(id, it)) }) {
+                sourceSheet(ctx, Sources.label(id), sources.on(id), i, sources.order.size, key, keep, { on ->
+                    onSources(sources.with(id, on))
+                    val u = usage?.get(id)
+                    if (!on && u != null && u.photos > 0) clearSheet(ctx, Sources.label(id), u, keep) { clear(id) }
+                }, { onSources(sources.moved(id, it)) }) {
                     ctx.sheet.openEntry("fanart.tv key") {
                         TextEntry(sources.fanartTvKey, secret = true) { k ->
                             ctx.sheet.close()
@@ -139,6 +171,20 @@ private fun ArtRows(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, cr
                 SettingsRow(title, "${entries.size}", Modifier.enter { i }.testTag("art.$title"), focused = at == i) {
                     focus = title
                     ctx.nav.push(target)
+                }
+            }
+        }
+        item(key = CLEAR_CACHE) {
+            val i = tags.size - 1
+            val total = usage?.get(null) ?: usage?.let { ArtCache.Usage(0, 0) }
+            SettingsRow(CLEAR_CACHE, total?.let { sizeText(it.bytes) } ?: "", Modifier.enter { i }.testTag("art.clear"), focused = at == i) {
+                focus = CLEAR_CACHE
+                val u = total ?: return@SettingsRow
+                val keep = Keep(list, i, ui.px(ui.contentTop))
+                if (u.bytes == 0L) {
+                    ctx.sheet.open("$CLEAR_CACHE?", listOf(KEEP_CACHE), info = listOf(NO_PHOTOS), keep = keep) {}
+                } else {
+                    ctx.sheet.open("$CLEAR_CACHE?", listOf(CLEAR_CACHE, KEEP_CACHE), 1, listOf(photos(u)), keep = keep) { if (it == 0) clear(null) }
                 }
             }
         }

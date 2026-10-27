@@ -824,6 +824,14 @@ object Remote : Control {
         }
     }
 
+    override fun artUsage(done: (Map<String?, ArtCache.Usage>) -> Unit) {
+        val a = artist ?: return
+        blockExec.execute {
+            val u = a.usage()
+            main.post { done(u) }
+        }
+    }
+
     private fun resetBackdrop() = synchronized(backdropLock) {
         backdropRev++
         backdrop = null
