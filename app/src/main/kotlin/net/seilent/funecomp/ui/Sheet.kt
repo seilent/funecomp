@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.LazyListState
@@ -227,7 +225,7 @@ private fun SheetValue(value: String, baseline: Float, alpha: Float) {
 }
 
 @Composable
-fun Sheet(state: SheetState) {
+fun Sheet(state: SheetState, ime: WindowInsets) {
     val ui = LocalUi.current
     val progress = remember { Animatable(0f) }
     val panelTop = remember { floatArrayOf(0f) }
@@ -252,7 +250,7 @@ fun Sheet(state: SheetState) {
     val w = ui.px(ui.w)
     val titleH = if (state.title.isEmpty()) 0f else measurer.measure(shown(state.title, Roles.dialogTitle.case), textStyle(Roles.dialogTitle, white(1f))).size.height.toFloat()
     val density = LocalDensity.current
-    val lift = (WindowInsets.ime.getBottom(density) - WindowInsets.systemBars.getBottom(density)).coerceAtLeast(0).toFloat()
+    val lift = ime.getBottom(density).toFloat()
     val screenH = ui.px(ui.h) - lift
     val lines = state.info
     val lineValues = state.infoValues
@@ -267,10 +265,13 @@ fun Sheet(state: SheetState) {
     val heights = layouts.map { pitch + it.getLineBottom(it.lineCount - 1) - it.getLineBottom(0) }
     val wanted = edge + titleH + heights.sum() + state.items.size * pitch + edge
     val panelH = minOf(wanted, screenH)
+    val full = if (state.entry != null) wanted else panelH
+    val short = full - panelH
+    val shift = if (short <= edge) short else edge + titleH
     panelTop[0] = screenH - panelH
     val p = progress.value
     val panelY = screenH - panelH + (1f - p) * panelH
-    val room = (panelH - edge - titleH).coerceAtLeast(0f)
+    val room = (full - edge - titleH).coerceAtLeast(0f)
     val rows = floor(room / pitch).toInt()
     val cap = maxOf(1, rows - minOf(state.items.size, 2)) * pitch
     var fixed = 0
@@ -279,7 +280,7 @@ fun Sheet(state: SheetState) {
         fixedH += heights[fixed]
         fixed++
     }
-    val listH = (if (wanted <= screenH) room - fixedH - edge else floor((room - fixedH) / pitch) * pitch).coerceAtLeast(0f)
+    val listH = (if (full == wanted) room - fixedH - edge else floor((room - fixedH) / pitch) * pitch).coerceAtLeast(0f)
     val listRows = floor(listH / pitch).toInt()
     val scrolled = lines.size - fixed
     val list = remember(state.title, state.items, state.shown) { LazyListState(firstRow(state.focus + scrolled, scrolled + state.items.size, state.items.size, listRows)) }
@@ -294,8 +295,8 @@ fun Sheet(state: SheetState) {
             Modifier.offset { IntOffset(0, panelY.roundToInt()) }.size(w.dp(), panelH.dp())
                 .alpha(p).clipToBounds().testTag("sheet.panel"),
         ) {
-            if (state.title.isNotEmpty()) RoleText(state.title, Roles.dialogTitle, Modifier.at(edge, edge).width((w - 2 * edge).dp()).clipToBounds())
-            var y = edge + titleH
+            if (state.title.isNotEmpty()) RoleText(state.title, Roles.dialogTitle, Modifier.at(edge, edge - shift).width((w - 2 * edge).dp()).clipToBounds())
+            var y = edge + titleH - shift
             for (i in 0 until fixed) {
                 val at = y
                 Box(Modifier.offset { IntOffset(0, at.roundToInt()) }) {
@@ -303,7 +304,7 @@ fun Sheet(state: SheetState) {
                 }
                 y += heights[i]
             }
-            Box(Modifier.offset { IntOffset(0, (edge + titleH + fixedH).roundToInt()) }.size(w.dp(), listH.dp())) {
+            Box(Modifier.offset { IntOffset(0, (edge + titleH + fixedH - shift).roundToInt()) }.size(w.dp(), listH.dp())) {
                 LazyColumn(
                     Modifier.fillMaxSize().testTag("sheet.list"),
                     state = list,

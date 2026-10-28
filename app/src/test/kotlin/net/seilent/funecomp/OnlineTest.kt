@@ -21,6 +21,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
 import net.seilent.funecomp.artist.Accounts
@@ -72,7 +74,7 @@ class OnlineTest {
     private val scrobbles = ArrayList<Accounts>()
     private var holdUsage = false
 
-    private fun start(pages: List<Page>, gated: Boolean = false, scrobble: ScrobbleView = ScrobbleView(), w: Int = 411, h: Int = 960, usage: Map<String?, ArtCache.Usage> = emptyMap()): Pair<SimControl, Shell> {
+    private fun start(pages: List<Page>, gated: Boolean = false, scrobble: ScrobbleView = ScrobbleView(), w: Int = 411, h: Int = 960, usage: Map<String?, ArtCache.Usage> = emptyMap(), ime: Dp = 0.dp): Pair<SimControl, Shell> {
         val c = SimControl("ap80")
         c.usage = usage
         val control = object : Control by c {
@@ -100,7 +102,7 @@ class OnlineTest {
                 App(c.device, link, control, shell, sources, {
                     saved += it
                     sources = it
-                }, blocked = listOf(ArtBlocks.Reject("name:x", null, "x", "x", 1)), scrobble = scrobble)
+                }, blocked = listOf(ArtBlocks.Reject("name:x", null, "x", "x", 1)), scrobble = scrobble, ime = WindowInsets(bottom = ime))
             }
         }
         settle(1000)
@@ -502,9 +504,50 @@ class OnlineTest {
         rule.onNodeWithTag("entry").assertExists()
     }
 
+    private val mix2: Pair<Int, Int> get() = (MIX2_W / rule.density.density).roundToInt() to (MIX2_H / rule.density.density).roundToInt()
+
+    private val mix2Ui: Ui get() = rule.density.density.let { d -> Ui.of((mix2.first * d).roundToInt().toFloat(), (mix2.second * d).roundToInt().toFloat()) }
+
+    private fun entryAbove(room: Float): Triple<Rect, Rect, Float> {
+        val d = rule.density.density
+        val keyboard = (mix2.second * d).roundToInt() - room
+        start(listOf(Page.Home, Page.Online(ONLINE_SCROBBLING)), w = mix2.first, h = mix2.second, ime = (keyboard / d).dp)
+        tap("scrobble.token")
+        rule.onNodeWithTag("entry").assertExists()
+        return Triple(bounds("sheet.panel"), bounds("sheet.item.0"), bounds("frame").bottom - keyboard)
+    }
+
+    private fun assertWholeRow(panel: Rect, row: Rect, top: Float) {
+        val pitch = mix2Ui.px(Tok.settingsPitch)
+        assertTrue("$row $panel $top", row.height >= pitch - 1f && row.top >= panel.top - 1f && row.bottom <= panel.bottom + 1f && panel.bottom <= top + 1f)
+    }
+
+    @Test
+    fun anEntryRowStaysAboveAKeyboardThatLeavesRoomForOneRow() {
+        val (panel, row, top) = entryAbove(mix2Ui.px(Tok.settingsPitch) + mix2Ui.px(Tok.edge))
+        assertWholeRow(panel, row, top)
+    }
+
+    @Test
+    fun aTitleThatCannotFitWholeLeavesThePanelWhole() {
+        val (panel, row, top) = entryAbove(mix2Ui.px(Tok.settingsPitch) + mix2Ui.px(Tok.edge) + TITLE_PART)
+        assertWholeRow(panel, row, top)
+        assertEquals(panel.top, row.top, 1f)
+    }
+
+    @Test
+    fun aKeyboardLeavingLessThanARowAndItsEdgeKeepsTheRowWhole() {
+        val (panel, row, top) = entryAbove(mix2Ui.px(Tok.settingsPitch) + TITLE_PART)
+        assertWholeRow(panel, row, top)
+    }
+
     @Test
     fun noOnlineRowOnceTheGateIsLifted() {
         start(listOf(Page.Home, Page.Connection))
         assertEquals(0, rule.onAllNodesWithTag("conn.online").fetchSemanticsNodes().size)
     }
 }
+
+private const val MIX2_W = 2160f
+private const val MIX2_H = 1080f - 66f
+private const val TITLE_PART = 10f

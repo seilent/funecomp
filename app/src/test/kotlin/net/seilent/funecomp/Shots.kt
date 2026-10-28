@@ -547,6 +547,8 @@ private val EQ = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)
 private val AEQ = EQ + Page.AutoEq(Enums.EqOutput.wired)
 
 private const val AEQ_IME = 0.4f
+private const val TALL_IME = 736f / 1080f
+private val ENTRY_SHOTS = setOf("settings-sleep-entry", "eq-entry", "eqp-rename", "eqp-saveas", "pick-entry", "online-art-key", "online-scrobbling-entry")
 
 private val CLAMPED = SimControl.HD650.replace("Preamp: -6.1 dB", "Preamp: 1.5 dB").replace("Gain 6.4 dB", "Gain 14.0 dB").replace("Fc 5332 Hz Gain -1.1 dB Q 5.75", "Fc 22000 Hz Gain -30.0 dB Q 12.00")
 
@@ -1010,6 +1012,7 @@ class Shots {
     val rule = createComposeRule()
 
     private var frame by mutableStateOf<Pair<Shot, Size>?>(null)
+    private var imeShare by mutableStateOf(0f)
     var control by mutableStateOf<SimControl?>(null)
         private set
     private var shell by mutableStateOf(Shell())
@@ -1091,17 +1094,18 @@ class Shots {
         rule.setContent {
             val f = frame ?: return@setContent
             val c = control ?: return@setContent
-            key(f) {
+            key(f, imeShare) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
                     val held = f.first.artEntry?.let { BackdropArt(if (f.first.white) whiteBg else backdrop ?: plain, null, it, f.first.wrong) }
-                    App(c.device, f.first.link, c, shell, sources, { sources = it }, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, scrobbleLabels = f.first.labels, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * f.first.ime).dp))
+                    App(c.device, f.first.link, c, shell, sources, { sources = it }, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, scrobbleLabels = f.first.labels, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * if (shell.sheet.shown && shell.sheet.entry == null) 0f else imeShare).dp))
                 }
             }
         }
         val only = System.getProperty("shots.only").orEmpty()
         for (size in SIZES) {
-            for (shot in SHOTS) {
-                if (only.isNotEmpty() && only.split(',').none { "${shot.name}-${size.name}".contains(it) }) continue
+            for ((shot, tall) in SHOTS.flatMap { if (it.name in ENTRY_SHOTS) listOf(it to false, it to true) else listOf(it to false) }) {
+                val name = if (tall) "${shot.name}-tallime" else shot.name
+                if (only.isNotEmpty() && only.split(',').none { "$name-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue
                 val c = SimControl(shot.board, artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
                 c.device = c.device.copy(schema = c.device.schema.copy(rows = c.device.schema.rows.map { if (it.key == "dateTime") it.copy(words = listOf(CLOCK)) else it }))
@@ -1111,11 +1115,12 @@ class Shots {
                 browseCols = shot.cols ?: { Tok.gridCols.toInt() }
                 control = c
                 shell = Shell(Nav(shot.pages), gated = shot.gated)
+                imeShare = if (tall) TALL_IME else shot.ime
                 frame = shot to size
                 settle(1000)
                 shot.act(this, shell)
                 settle(shot.after)
-                val file = File(dir, "${shot.name}-${size.name}.png")
+                val file = File(dir, "$name-${size.name}.png")
                 rule.onNodeWithTag("frame").captureRoboImage(file.path)
                 if (shot.held) rule.onNodeWithTag("frame").performTouchInput { cancel() }
             }
