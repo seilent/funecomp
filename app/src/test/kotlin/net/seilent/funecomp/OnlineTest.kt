@@ -15,9 +15,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollToNode
-import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
@@ -41,9 +39,19 @@ import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.ScrobbleView
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.TextEntry
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.proto.gen.Tok
 import android.graphics.BitmapFactory
+import android.content.Context
+import android.provider.Settings
+import androidx.test.core.app.ApplicationProvider
+import android.text.InputType
+import android.view.KeyEvent
+import android.view.View
+import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.EditorInfo
+import android.widget.EditText
 import android.graphics.Color
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -51,6 +59,7 @@ import java.io.File
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -58,6 +67,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.Shadows.shadowOf
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -227,14 +237,112 @@ class OnlineTest {
         assertEquals(listOf("off", "on", "move up", "move down"), shell.sheet.items)
     }
 
+    private fun assertSecret(field: EditText) {
+        assertTrue(field.isFocused)
+        val info = EditorInfo()
+        field.onCreateInputConnection(info)
+        assertEquals(InputType.TYPE_CLASS_TEXT, info.inputType and InputType.TYPE_MASK_CLASS)
+        assertEquals(InputType.TYPE_TEXT_VARIATION_PASSWORD, info.inputType and InputType.TYPE_MASK_VARIATION)
+        assertEquals(InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS, info.inputType and InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)
+        assertEquals(0, info.inputType and InputType.TYPE_TEXT_FLAG_AUTO_CORRECT)
+        assertEquals(EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING, info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING)
+        assertEquals(EditorInfo.IME_ACTION_DONE, info.imeOptions and EditorInfo.IME_MASK_ACTION)
+        assertFalse(field.isImportantForAutofill)
+        assertEquals(View.AUTOFILL_TYPE_NONE, field.autofillType)
+        assertFalse(field.isSaveEnabled)
+    }
+
+    private fun keyEntry(): EditText {
+        sources = Sources.COMMONS.copy(fanartTv = true)
+        start(listOf(Page.Home, Page.Online()))
+        tap("art.src.${Sources.FANART_TV}")
+        pick(4)
+        return secretField()
+    }
+
+    @Test
+    fun aSecretNeverShowsATypedCharacter() {
+        Settings.System.putInt(ApplicationProvider.getApplicationContext<Context>().contentResolver, Settings.System.TEXT_SHOW_PASSWORD, 1)
+        val field = keyEntry()
+        for (c in "abc123") field.append(c.toString())
+        assertEquals("\u2022".repeat(6), field.layout.text.toString())
+    }
+
+    @Test
+    fun aHardwareEnterSavesTheKeyOnce() {
+        val field = keyEntry()
+        field.append("abc123")
+        val before = saved.size
+        field.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_ENTER))
+        field.dispatchKeyEvent(KeyEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_ENTER))
+        settle(600)
+        assertEquals("abc123", sources.fanartTvKey)
+        assertEquals(before + 1, saved.size)
+    }
+
+    @Test
+    fun aClosedSecretEntryHidesTheKeyboard() {
+        val field = keyEntry()
+        val ime = shadowOf(field.context.getSystemService(InputMethodManager::class.java))
+        assertTrue(ime.isSoftInputVisible)
+        field.onEditorAction(EditorInfo.IME_ACTION_DONE)
+        settle(1000)
+        assertFalse(ime.isSoftInputVisible)
+    }
+
+    @Test
+    fun theFanartKeyEntryIsAPasswordFieldTheKeyboardDoesNotLearn() {
+        sources = Sources.COMMONS.copy(fanartTv = true)
+        start(listOf(Page.Home, Page.Online()))
+        tap("art.src.${Sources.FANART_TV}")
+        pick(4)
+        assertSecret(secretField())
+    }
+
+    @Test
+    fun theListenBrainzTokenEntryIsAPasswordFieldTheKeyboardDoesNotLearn() {
+        start(listOf(Page.Home, Page.Online(ONLINE_SCROBBLING)))
+        tap("scrobble.token")
+        assertSecret(secretField())
+    }
+
+    @Test
+    fun aPlainEntryKeepsTheComposeField() {
+        val (_, shell) = start(listOf(Page.Home, Page.Online()))
+        shell.sheet.openEntry("search") { TextEntry("hd 650") {} }
+        settle(600)
+        assertNull(resumedRoot().findViewWithTag<EditText>("entry"))
+        val info = EditorInfo()
+        resumedRoot().findFocus().onCreateInputConnection(info)
+        assertEquals(InputType.TYPE_CLASS_TEXT, info.inputType and InputType.TYPE_MASK_CLASS)
+        assertEquals(0, info.inputType and InputType.TYPE_MASK_VARIATION)
+        assertEquals(EditorInfo.IME_FLAG_FORCE_ASCII, info.imeOptions and EditorInfo.IME_FLAG_FORCE_ASCII)
+        assertEquals(0, info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING)
+    }
+
+    @Test
+    fun aClosedSecretEntryDropsItsText() {
+        sources = Sources.COMMONS.copy(fanartTv = true)
+        start(listOf(Page.Home, Page.Online()))
+        tap("art.src.${Sources.FANART_TV}")
+        pick(4)
+        val field = secretField()
+        field.append("abc123")
+        field.onEditorAction(EditorInfo.IME_ACTION_DONE)
+        settle(1000)
+        assertEquals("abc123", sources.fanartTvKey)
+        assertEquals("", field.text.toString())
+        assertNull(resumedRoot().findViewWithTag<EditText>("entry"))
+    }
+
     @Test
     fun keySavesTheTrimmedKey() {
         sources = Sources.COMMONS.copy(fanartTv = true)
         start(listOf(Page.Home, Page.Online()))
         tap("art.src.${Sources.FANART_TV}")
         pick(4)
-        rule.onNodeWithTag("entry").performTextInput("  abc123 ")
-        rule.onNodeWithTag("entry").performImeAction()
+        secretField().append("  abc123 ")
+        secretField().onEditorAction(EditorInfo.IME_ACTION_DONE)
         settle(600)
         assertEquals("abc123", sources.fanartTvKey)
         shows("art.src.${Sources.FANART_TV}", "ON")
@@ -426,7 +534,7 @@ class OnlineTest {
         tap("art.src.${Sources.FANART_TV}")
         pick(4)
         assertTrue(shell.sheet.shown)
-        rule.onNodeWithTag("entry").performTextInput("typed1")
+        secretField().append("typed1")
         settle(300)
         link = LinkView(Phase.LIVE, "AP80", everLive = true)
         settle(1000)
@@ -434,7 +542,7 @@ class OnlineTest {
         assertEquals(listOf(Page.Home, Page.Online()), shell.nav.stack.toList())
         assertTrue(shell.sheet.shown)
         assertEquals("fanart.tv key", shell.sheet.title)
-        rule.onNodeWithTag("entry").performImeAction()
+        secretField().onEditorAction(EditorInfo.IME_ACTION_DONE)
         settle(600)
         assertEquals("typed1", sources.fanartTvKey)
     }

@@ -548,7 +548,7 @@ private val AEQ = EQ + Page.AutoEq(Enums.EqOutput.wired)
 
 private const val AEQ_IME = 0.4f
 private const val TALL_IME = 736f / 1080f
-private val ENTRY_SHOTS = setOf("settings-sleep-entry", "eq-entry", "eqp-rename", "eqp-saveas", "pick-entry", "online-art-key", "online-scrobbling-entry")
+private val ENTRY_SHOTS = setOf("settings-sleep-entry", "eq-entry", "eqp-rename", "eqp-saveas", "pick-entry", "online-art-key", "online-art-key-filled", "online-scrobbling-entry", "online-scrobbling-entry-filled")
 
 private val CLAMPED = SimControl.HD650.replace("Preamp: -6.1 dB", "Preamp: 1.5 dB").replace("Gain 6.4 dB", "Gain 14.0 dB").replace("Fc 5332 Hz Gain -1.1 dB Q 5.75", "Fc 22000 Hz Gain -30.0 dB Q 12.00")
 
@@ -953,6 +953,10 @@ val SHOTS = listOf(
         tapRow("art.src.fanarttv")
         rule.onNodeWithTag("sheet.item.4").performClick()
     },
+    Shot("online-art-key-filled", pages = ONLINE, sources = ORDERED.copy(fanartTvKey = "0123456789abcdef"), ime = AEQ_IME) {
+        tapRow("art.src.fanarttv")
+        rule.onNodeWithTag("sheet.item.4").performClick()
+    },
     Shot("online-art-gated", pages = listOf(Page.Connection), link = GATED, gated = true) { rule.onNodeWithTag("conn.online").performClick() },
     Shot("online-art-lists", pages = ONLINE, picks = PICKS, blocked = BLOCKED, credits = CREDITS) { scrollTo("art.credits") },
     Shot("online-art-lists-blocked-1", pages = ONLINE, blocked = BLOCKED.take(1), credits = CREDITS) { scrollTo("art.credits") },
@@ -987,6 +991,11 @@ val SHOTS = listOf(
     },
     Shot("online-scrobbling-lbsheet", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { tapRow("scrobble.token") },
     Shot("online-scrobbling-entry", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT) { tapRow("scrobble.token") },
+    Shot("online-scrobbling-entry-filled", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { shell ->
+        tapRow("scrobble.token")
+        settle(600)
+        shell.sheet.accept(0)
+    },
     Shot("online-scrobbling-plain", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE, labels = false),
     Shot("settings-insert-above", pages = HOME + Page.Settings) { insertAbove(it) },
     Shot("settings-about", pages = HOME + Page.Settings) { about() },

@@ -1,13 +1,22 @@
 package net.seilent.funecomp.ui
 
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
 import android.os.SystemClock
+import android.text.InputType
+import android.text.method.PasswordTransformationMethod
+import android.util.TypedValue
+import android.view.KeyEvent
+import android.view.View
+import android.view.WindowInsets
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import android.widget.EditText
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Row as HRow
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
@@ -36,6 +45,11 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -612,10 +626,78 @@ fun typed(ctx: Ctx, title: String, start: String, min: Float, max: Float, unit: 
 }
 
 @Composable
-fun TextEntry(start: String, secret: Boolean = false, done: (String) -> Unit) = Entry(start, secret = secret, done = done)
+fun TextEntry(start: String, secret: Boolean = false, done: (String) -> Unit) = if (secret) SecretEntry(start, done) else Entry(start, done = done)
 
 @Composable
-fun Entry(start: String, unit: String = "", secret: Boolean = false, keyboard: KeyboardType = KeyboardType.Ascii, hint: String = "", done: (String) -> Unit) {
+fun SecretEntry(start: String, done: (String) -> Unit) {
+    val ui = LocalUi.current
+    val role = Roles.dialogItem
+    val size = ui.fontPx(role.size)
+    val tracking = ui.px(Tok.tracking) / size
+    val color = Accent.toArgb()
+    val face = LocalFontFamilyResolver.current.resolve(Selawik, role.weight).value as Typeface
+    val cursor = with(LocalDensity.current) { CURSOR.roundToPx() }
+    val drawable = remember(color, cursor) {
+        GradientDrawable().apply {
+            setColor(color)
+            setSize(cursor, 0)
+        }
+    }
+    val latest by rememberUpdatedState(done)
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(Unit) { focus.requestFocus() }
+    AndroidView(
+        factory = { c ->
+            object : EditText(c) {
+                override fun getAutofillType() = View.AUTOFILL_TYPE_NONE
+            }.apply {
+                tag = "entry"
+                background = null
+                setPadding(0, 0, 0, 0)
+                includeFontPadding = false
+                inputType = SECRET_INPUT
+                imeOptions = SECRET_IME
+                transformationMethod = Dots
+                importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS
+                isSaveEnabled = false
+                setText(start)
+                setOnEditorActionListener { v, action, event ->
+                    if (if (event == null) action == EditorInfo.IME_ACTION_DONE else event.action == KeyEvent.ACTION_DOWN) latest(v.text.toString())
+                    event != null || action == EditorInfo.IME_ACTION_DONE
+                }
+                setOnFocusChangeListener { v, has -> if (has) v.windowInsetsController?.show(WindowInsets.Type.ime()) }
+                addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+                    override fun onViewAttachedToWindow(v: View) {}
+
+                    override fun onViewDetachedFromWindow(v: View) {
+                        v.context.getSystemService(InputMethodManager::class.java).hideSoftInputFromWindow(v.windowToken, 0)
+                    }
+                })
+            }
+        },
+        modifier = Modifier.focusRequester(focus).testTag("entry"),
+        onRelease = { it.text.clear() },
+        update = {
+            it.typeface = face
+            it.setTextSize(TypedValue.COMPLEX_UNIT_PX, size)
+            it.letterSpacing = tracking
+            it.setTextColor(color)
+            it.minWidth = cursor
+            it.textCursorDrawable = drawable
+        },
+    )
+}
+
+const val SECRET_INPUT = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+const val SECRET_IME = EditorInfo.IME_ACTION_DONE or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING or EditorInfo.IME_FLAG_NO_FULLSCREEN
+private val CURSOR = 2.dp
+
+private object Dots : PasswordTransformationMethod() {
+    override fun onTextChanged(s: CharSequence, start: Int, before: Int, count: Int) {}
+}
+
+@Composable
+fun Entry(start: String, unit: String = "", keyboard: KeyboardType = KeyboardType.Ascii, hint: String = "", done: (String) -> Unit) {
     var text by remember { mutableStateOf(start) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
@@ -628,7 +710,6 @@ fun Entry(start: String, unit: String = "", secret: Boolean = false, keyboard: K
             textStyle = style,
             singleLine = true,
             cursorBrush = SolidColor(Accent),
-            visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
             keyboardOptions = KeyboardOptions(keyboardType = keyboard, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { done(text) }),
             decorationBox = { field ->
