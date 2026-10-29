@@ -235,7 +235,7 @@ class Conn(
         when (val a = device.request(f.type, body, this)) {
             is Answer.Ok -> {
                 reply(f, a.payload)
-                if (a.state) push(Msg.STATE, device.state(at))
+                if (a.state) push(Msg.STATE, device.state(at, this))
                 if (pushing != null) askLater(pushing)
             }
             is Answer.Fail -> error(f, a.code, a.text, a.refused)

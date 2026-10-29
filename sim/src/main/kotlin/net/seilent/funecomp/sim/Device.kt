@@ -37,6 +37,7 @@ import net.seilent.funecomp.proto.listView
 import net.seilent.funecomp.proto.lyricsCrc
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
+import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
@@ -211,7 +212,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val eqKey = arrayOf("off", "off")
     private val eqCustom = arrayOf(flat(), flat())
 
-    private var queue: MutableList<Long> = lib.tracks.map { it.id }.toMutableList()
+    private var queue: MutableList<Long> = (lib.tracks + lib.services).map { it.id }.toMutableList()
     private var slot = 0
     private var playing = false
     private var positionMs = 0L
@@ -438,7 +439,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (cardEdges.isEmpty() || cardSent[out] == c) return
         cardSent[out] = c
         opts.log("card state ${Enums.Card.names[c.first]}${if (c.second) "" else " unmounted"}")
-        send(out, Msg.STATE, state())
+        send(out, Msg.STATE, state(out = out))
     }
 
     private fun lagging(): Boolean {
@@ -530,7 +531,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (faults.cardSeq.isNotEmpty()) cardStart(now())
         cardEdge()
         cardSent[out] = cardKey()
-        send(out, Msg.STATE, state(receipt))
+        send(out, Msg.STATE, state(receipt, out))
         (faults.cardRun?.start as? CardRun.Start.Delay)?.let { cardStart(now() + it.ms) }
         pushForms(out, forms(), null)
         pushSettings(out)
@@ -555,24 +556,29 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun sleepLeft(): Long = if (sleepLeftS <= 0) 0 else maxOf(0L, sleepLeftS - (now() - sleepSetAt) / 1000)
 
-    fun state(receipt: Long? = null): ByteArray = synchronized(lock) {
-        if (frozen.get() != null) return@synchronized build(receipt)
+    private fun rowTrack(t: Track): Long? = if (t.service == null) t.id else if (faults.svcRowZero) 0L else null
+
+    private fun svcApp(out: Out?) = out != null && ((linked[out] ?: 0L) ushr Feature.svcLogin) and 1L == 1L
+
+    fun state(receipt: Long? = null, out: Out? = null): ByteArray = synchronized(lock) {
+        if (frozen.get() != null) return@synchronized build(receipt, out)
         frozen.set(clock())
         try {
-            build(receipt)
+            build(receipt, out)
         } finally {
             frozen.remove()
         }
     }
 
-    private fun build(receipt: Long?): ByteArray = run {
+    private fun build(receipt: Long?, out: Out?): ByteArray = run {
         cardEdge()
-        val t = lib.byId[queue.getOrNull(slot)]
+        val row = lib.byId[queue.getOrNull(slot)]
+        val t = row?.takeIf { it.service == null }
         val on = mounted()
         lastStateAt = now()
         val sample = if (v110) now() else receipt ?: now()
         val sent = if (v110) now() else sample
-        val key = t?.artists?.map { fold(it) }?.firstOrNull { it in images }
+        val key = row?.artists?.map { fold(it) }?.firstOrNull { it in images }
         if (key != null && key != shown) images[key]?.at = ++storeClock
         shown = key
         val bat = battery()
@@ -584,10 +590,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
         if (late && now() - flagAt >= (faults.lyricsLate ?: 0)) late = false
         val unread = t != null && (late || t.title in faults.lyricsAbsent)
+        val svc = row?.service?.takeIf { svcApp(out) }
         stream.over(State(
-            source, output, t?.id, t?.title, t?.artist, t?.artists.orEmpty(),
-            t?.mbids.orEmpty(), t?.durationMs, position(), sample, sent, playing, shuffle, repeat,
-            volume, maxVolume, bat, queueRev, slot.toLong(), queue.size.toLong(), lib.rev, t?.album, sleepLeft(),
+            source, output, row?.let { rowTrack(it) }, row?.title, row?.artist, row?.artists.orEmpty(),
+            row?.mbids.orEmpty(), row?.durationMs, position(), sample, sent, playing, shuffle, repeat,
+            volume, maxVolume, bat, queueRev, slot.toLong(), queue.size.toLong(), lib.rev, row?.album, sleepLeft(),
             if (v12) opts.battery.charging else null,
             if (v12 && on) opts.cardFreeMiB else null,
             if (v12 && on) opts.cardTotalMiB else null,
@@ -603,6 +610,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             lyricsOffsetMs = if (t != null && !unread && hasSynced(t.id)) offsetTag(t.id) else null,
             playLogSeq = if (allowed(Msg.PLAYLOG_GET)) playLog.newest else null,
             card = if (opts.minor >= 14) stateCard() else null,
+            service = svc,
+            serviceKey = row?.serviceKey?.takeIf { svc != null },
         )).encode()
     }
 
@@ -619,28 +628,28 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 lib.rev++
                 lib.snapRev++
                 opts.log("snap late rev=${lib.rev} snapRev=${lib.snapRev}")
-                send(out, Msg.STATE, state())
+                send(out, Msg.STATE, state(out = out))
             }
         }
         schemaCheck(out)
         val t = lib.byId[queue.getOrNull(slot)]
         if (stream.tick(lastStateAt)) {
-            send(out, Msg.STATE, state())
+            send(out, Msg.STATE, state(out = out))
         } else if (sleepLeftS > 0 && sleepLeft() == 0L) {
             sleepLeftS = 0
             mark()
             playing = false
             opts.log("sleep expired")
-            send(out, Msg.STATE, state())
+            send(out, Msg.STATE, state(out = out))
         } else if (playing && t != null && position() >= t.durationMs) {
             advance(1, auto = true)
-            send(out, Msg.STATE, state())
+            send(out, Msg.STATE, state(out = out))
         } else if (late && now() - flagAt >= (faults.lyricsLate ?: 0)) {
-            send(out, Msg.STATE, state())
+            send(out, Msg.STATE, state(out = out))
         } else if (playing && now() - lastStateAt >= Proto.stateIntervalMs) {
-            send(out, Msg.STATE, state())
+            send(out, Msg.STATE, state(out = out))
         } else if (battery() != lastBattery) {
-            send(out, Msg.STATE, state())
+            send(out, Msg.STATE, state(out = out))
         }
         follow()
     }
@@ -692,8 +701,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val mbids = t.mbids.takeIf { m -> m.size == t.artists.size && m.all { it.isNotEmpty() } }.orEmpty()
         val old = linked.values.any { !Groups.allowed(Msg.PLAYLOG_GET, it) }
         return PlayEntry(
-            0, local, played, t.durationMs, t.id, t.title, t.artist, t.artists, mbids, t.album.ifEmpty { null },
+            0, local, played, t.durationMs, rowTrack(t), t.title, t.artist, t.artists, mbids, t.album.ifEmpty { null },
             t.albumArtist.takeIf { it != t.artist }, t.no, zoneS, if (old) true else null,
+            service = t.service, serviceKey = t.serviceKey,
         )
     }
 
@@ -1172,6 +1182,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val items = queue.map { id ->
             val t = lib.byId[id]
             when {
+                t?.service != null -> QueueItem(rowTrack(t), t.title, t.artists, t.mbids, t.album, t.durationMs, service = t.service, serviceKey = t.serviceKey)
                 v12 && t != null -> QueueItem(id, t.title, t.artists, t.mbids, t.album, t.durationMs, hasSynced(id), if (v14) hasPlain(id) else null)
                 v11 && t != null -> QueueItem(id, t.title, t.artists, t.mbids)
                 else -> QueueItem(id, t?.title)
@@ -1321,7 +1332,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                     favsBusy--
                     return Answer.Fail(Err.busy, faults.favsBusyText)
                 }
-                if (faults.staleState) send(out, Msg.STATE, state())
+                if (faults.staleState) send(out, Msg.STATE, state(out = out))
                 if (!lib.favorites.add(id)) lib.favorites.remove(id)
                 lib.rev++
             }

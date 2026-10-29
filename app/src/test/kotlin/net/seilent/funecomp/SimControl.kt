@@ -150,7 +150,7 @@ class SimControl(
     }
 
     private fun after(a: Answer) {
-        if (a is Answer.Ok && a.state) out.push(Msg.STATE, sim.state())
+        if (a is Answer.Ok && a.state) out.push(Msg.STATE, sim.state(out = out))
     }
 
     private fun req(type: Int, payload: ByteArray): Answer = call(type, payload).also { after(it) }

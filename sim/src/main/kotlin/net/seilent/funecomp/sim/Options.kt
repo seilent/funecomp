@@ -102,6 +102,7 @@ class Faults(specs: List<String>) {
     var lyricsLate: Long? = null
     val lyricsAbsent = HashSet<String>()
     var newlog = false
+    var svcRowZero = false
     val dropAck = java.util.concurrent.atomic.AtomicBoolean(false)
     var cardRun: CardRun? = null
     var cardSeq: List<Pair<Int, Long>> = emptyList()
@@ -199,6 +200,7 @@ class Faults(specs: List<String>) {
                 "lyrics-late" -> lyricsLate = v.toLong()
                 "lyrics-absent" -> lyricsAbsent += v
                 "newlog" -> newlog = true
+                "svc-row-zero" -> svcRowZero = true
                 "drop-ack" -> dropAck.set(true)
                 "card-run" -> cardRun = CardRun.parse(v)
                 "card-seq" -> cardSeq = CardRun.seq(v)

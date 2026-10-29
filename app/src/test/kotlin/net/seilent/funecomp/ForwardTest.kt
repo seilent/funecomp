@@ -897,6 +897,31 @@ class ForwardTest {
     }
 
     @Test
+    fun aServiceRowArtistTheRowsDoNotListIsPhoneInTheQueueAndWhilePlaying() {
+        val lib = Library(
+            (1..3).map { Library.track("Artist %03d".format(it), "Album $it", "Song $it", 1, 200_000) },
+            listOf(Library.track("Streamer", "Stream", "Live", 1, 200_000, service = "tidal", serviceKey = 167)),
+        )
+        val s0 = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = tmp.newFolder()), lib)
+        sims += s0
+        val s = session(s0.listen(0))
+        forward(Lookups(), sweeping = { false }).run(s) { true }
+        assertEquals(null, firstOrigins(s0).getValue("Streamer"))
+        assertEquals(2, s0.device.stored.getValue("streamer").origins)
+        s0.device.begins.clear()
+        forward(Lookups(), sweeping = { false }, version = { 1 }).run(s) { true }
+        assertEquals(library, firstOrigins(s0).getValue("Artist 002"))
+        assertEquals(phone, firstOrigins(s0).getValue("Streamer"))
+        repeat(3) { assertTrue(s.call(Msg.TRANSPORT, Req.transport(Enums.TransportCmd.next)) is Session.Result.Ok) }
+        val end = System.nanoTime() + 5_000_000_000L
+        while (device.playback.state.artists != listOf("Streamer") && System.nanoTime() < end) Thread.sleep(10)
+        assertEquals(listOf("Streamer"), device.playback.state.artists)
+        s0.device.begins.clear()
+        forward(Lookups(), sweeping = { false }, version = { 2 }).run(s) { true }
+        assertEquals(phone, firstOrigins(s0).getValue("Streamer"))
+    }
+
+    @Test
     fun anUnknownSourceSendsNoOriginAndAMinor8DeviceGetsNone() {
         val (sim, port) = sim(10, Proto.minor, Options.IMG_CAP, "enum=STATE.source=7")
         forward(Lookups()).run(session(port)) { true }

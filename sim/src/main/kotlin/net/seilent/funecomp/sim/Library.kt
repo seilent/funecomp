@@ -17,14 +17,16 @@ class Track(
     val mbids: List<String> = artists.map { "" },
     val genre: String = "",
     val no: Int = 1,
+    val service: String? = null,
+    val serviceKey: Long? = null,
 ) {
     fun mbidOf(name: String): String? = mbids.getOrNull(artists.indexOf(name))?.takeIf { it.isNotEmpty() }
 }
 
 private class Album(val artist: String, val album: String, val genre: String, val titles: List<String>)
 
-class Library(val tracks: List<Track>) {
-    val byId: Map<Long, Track> = tracks.associateBy { it.id }
+class Library(val tracks: List<Track>, val services: List<Track> = emptyList()) {
+    val byId: Map<Long, Track> = (tracks + services).associateBy { it.id }
     val favorites = LinkedHashSet<Long>()
     var rev = 1L
     var snapRev = 1L
@@ -137,11 +139,12 @@ class Library(val tracks: List<Track>) {
             return text.replace(" / ", "; ").replace(", ", "; ").split("; ").map { it.trim() }.filter { it.isNotEmpty() }.distinct()
         }
 
-        fun track(artist: String, album: String, title: String, no: Int, durationMs: Long, albumArtist: String = artist, mbids: List<String> = emptyList(), genre: String = ""): Track {
+        fun track(artist: String, album: String, title: String, no: Int, durationMs: Long, albumArtist: String = artist, mbids: List<String> = emptyList(), genre: String = "", service: String? = null, serviceKey: Long? = null): Track {
             val folder = "${albumArtist.trim()}/${album.trim()}"
             val file = "%02d %s.flac".format(no, title)
             val names = split(artist, albumArtist)
-            return Track(hash64("$folder/$file"), artist, names, album, albumArtist, title, durationMs, folder, file, names.indices.map { mbids.getOrElse(it) { "" }.trim() }, genre.trim(), no)
+            val id = if (service == null) hash64("$folder/$file") else hash64("$service:${java.lang.Long.toUnsignedString(serviceKey ?: 0)}")
+            return Track(id, artist, names, album, albumArtist, title, durationMs, folder, file, names.indices.map { mbids.getOrElse(it) { "" }.trim() }, genre.trim(), no, service, serviceKey)
         }
 
         fun load(f: File): Library {
@@ -151,9 +154,12 @@ class Library(val tracks: List<Track>) {
                 require(p.size >= 4) { "${f.name}: needs artist, album, title, duration ms: $line" }
                 val albumArtist = p.getOrElse(4) { p[0] }.ifEmpty { p[0] }
                 val n = no.merge(albumArtist.trim() to p[1].trim(), 1, Int::plus)!!
-                track(p[0], p[1], p[2], n, p[3].toLong(), albumArtist, p.getOrNull(5)?.split(';').orEmpty(), p.getOrElse(6) { "" })
+                val service = p.getOrNull(7)?.trim()?.ifEmpty { null }
+                val key = p.getOrNull(8)?.trim()?.ifEmpty { null }?.toULong()?.toLong()
+                require(service == null || key != null) { "${f.name}: a service row needs a service key: $line" }
+                track(p[0], p[1], p[2], n, p[3].toLong(), albumArtist, p.getOrNull(5)?.split(';').orEmpty(), p.getOrElse(6) { "" }, service, key)
             }
-            return Library(tracks)
+            return Library(tracks.filter { it.service == null }, tracks.filter { it.service != null })
         }
 
         fun synthetic(): Library {
