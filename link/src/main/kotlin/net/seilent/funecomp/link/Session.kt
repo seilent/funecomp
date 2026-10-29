@@ -28,11 +28,11 @@ import kotlin.concurrent.withLock
 class Session(
     private val transport: Transport,
     private val listener: Listener,
-    private val config: Config = Config(),
+    private val config: Config,
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
     data class Config(
-        val appVersion: String = "0.1.0",
+        val appVersion: String,
         val helloTimeoutMs: Long = Proto.helloTimeoutMs.toLong(),
         val connectTimeoutMs: Long = Proto.requestTimeoutMs.toLong(),
         val requestTimeoutMs: Long = Proto.requestTimeoutMs.toLong(),

@@ -80,7 +80,7 @@ class DapLyricsTest {
                 r.state = r.state.reduce(type, body, now())
                 if (type == Msg.STATE) r.lyrics.poke()
             }
-        }, Session.Config())
+        }, Session.Config("test"))
         r.session = s
         r.lyrics = DapLyrics({ s }, { r.override ?: r.state }, ::now)
         sessions += s

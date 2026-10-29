@@ -97,7 +97,7 @@ class LinkTest {
         }
     }
 
-    private fun session(port: Int, rec: Recorder, config: Session.Config = Session.Config(), bps: Long? = null): Session {
+    private fun session(port: Int, rec: Recorder, config: Session.Config = Session.Config("test"), bps: Long? = null): Session {
         val tcp = TcpTransport("127.0.0.1", port)
         val s = Session(bps?.let { Slow(tcp, it) } ?: tcp, rec, config)
         Thread { s.run() }.apply { isDaemon = true }.start()
@@ -171,7 +171,7 @@ class LinkTest {
     fun helloTimeoutClosesTheApp() {
         val rec = Recorder()
         val t0 = now()
-        session(sim("stall-ms=1500"), rec, Session.Config(helloTimeoutMs = 300))
+        session(sim("stall-ms=1500"), rec, Session.Config("test", helloTimeoutMs = 300))
         assertTrue(rec.closed.await(3, TimeUnit.SECONDS))
         assertEquals("helloTimeout", rec.reason)
         assertTrue(rec.closedAt - t0 < 3000)
@@ -205,7 +205,7 @@ class LinkTest {
     fun aRequestAfterLongIdleSilenceGetsItsReply() {
         val rec = Recorder()
         val t = java.util.concurrent.atomic.AtomicLong(1_000_000)
-        val s = Session(TcpTransport("127.0.0.1", sim("stall-ms=300")), rec, Session.Config(), { t.get() })
+        val s = Session(TcpTransport("127.0.0.1", sim("stall-ms=300")), rec, Session.Config("test"), { t.get() })
         Thread { s.run() }.apply { isDaemon = true }.start()
         assertTrue(rec.hello.await(5, TimeUnit.SECONDS))
         Thread.sleep(300)
@@ -221,7 +221,7 @@ class LinkTest {
     fun aClockJumpBetweenTicksClosesNeitherTheLinkNorAnOpenRequest() {
         val rec = Recorder()
         val t = java.util.concurrent.atomic.AtomicLong(1_000_000)
-        val s = Session(TcpTransport("127.0.0.1", sim("stall-ms=2000")), rec, Session.Config(), { t.get() })
+        val s = Session(TcpTransport("127.0.0.1", sim("stall-ms=2000")), rec, Session.Config("test"), { t.get() })
         Thread { s.run() }.apply { isDaemon = true }.start()
         assertTrue(rec.hello.await(5, TimeUnit.SECONDS))
         val got = java.util.concurrent.atomic.AtomicReference<Session.Result?>()
@@ -296,7 +296,7 @@ class LinkTest {
                 got.countDown()
             }
         }
-        s = Session(TcpTransport("127.0.0.1", sim()), rec)
+        s = Session(TcpTransport("127.0.0.1", sim()), rec, Session.Config("test"))
         Thread { s.run() }.apply { isDaemon = true }.start()
         assertTrue(got.await(5, TimeUnit.SECONDS))
         assertNotNull(seen.get())
@@ -306,7 +306,7 @@ class LinkTest {
     @Test
     fun requestTimeoutPingsThenCloses() {
         val rec = Recorder()
-        val s = session(sim("no-read", idle = 30_000, busy = 400), rec, Session.Config(requestTimeoutMs = 300))
+        val s = session(sim("no-read", idle = 30_000, busy = 400), rec, Session.Config("test", requestTimeoutMs = 300))
         assertTrue(rec.hello.await(5, TimeUnit.SECONDS))
         val t0 = now()
         val r = s.call(Msg.VOLUME, Req.volume(step = 1))
@@ -318,7 +318,7 @@ class LinkTest {
     }
 
     private fun link(port: Int, rec: Recorder, steps: List<Long> = listOf(50, 100, 200)): Link {
-        val l = Link({ TcpTransport("127.0.0.1", port) }, rec, Reconnect(steps, 0.0))
+        val l = Link({ TcpTransport("127.0.0.1", port) }, rec, Reconnect(steps, 0.0), Session.Config("test"))
         links += l
         l.start()
         return l
@@ -375,7 +375,7 @@ class LinkTest {
                     override fun close() = release.countDown()
                 }
             }
-        }, rec, Reconnect(listOf(50, 100, 200), 0.0), Session.Config(connectTimeoutMs = 300))
+        }, rec, Reconnect(listOf(50, 100, 200), 0.0), Session.Config("test", connectTimeoutMs = 300))
         links += l
         l.start()
         waitFor { rec.byes.isNotEmpty() }
@@ -525,7 +525,7 @@ class LinkTest {
                 closes.incrementAndGet()
             }
         }
-        val s = Session(t, object : Session.Listener {})
+        val s = Session(t, object : Session.Listener {}, Session.Config("test"))
         var out: String? = null
         val runner = Thread { out = s.run() }
         runner.start()

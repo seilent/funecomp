@@ -43,7 +43,7 @@ class UpdPushTest {
         return s.listen(0)
     }
 
-    private fun session(port: Int, config: Session.Config = Session.Config()): Session {
+    private fun session(port: Int, config: Session.Config = Session.Config("test")): Session {
         val ready = CountDownLatch(1)
         val s = Session(TcpTransport("127.0.0.1", port), object : Session.Listener {
             override fun onHello(hello: HelloReply) = ready.countDown()
@@ -92,7 +92,7 @@ class UpdPushTest {
 
     @Test
     fun aTimeoutOrCloseOnBeginPauses() {
-        val slow = session(sim("stall-ms=600"), Session.Config(requestTimeoutMs = 200))
+        val slow = session(sim("stall-ms=600"), Session.Config("test", requestTimeoutMs = 200))
         assertEquals(0L, (push(slow) as UpdPush.Outcome.Paused).at)
         val s = session(sim())
         s.close("gone")

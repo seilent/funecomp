@@ -91,7 +91,7 @@ class RequestTest {
 
     private fun start(appFeatures: Long, devFeatures: Long?, listener: Asks): Pair<Session, Peer> {
         val p = Peer()
-        val s = Session(p, listener, Session.Config(features = appFeatures))
+        val s = Session(p, listener, Session.Config("test", features = appFeatures))
         sessions += s
         Thread { s.run() }.apply { isDaemon = true }.start()
         val hello = p.next()!!

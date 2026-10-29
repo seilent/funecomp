@@ -12,7 +12,7 @@ class Link(
     private val connect: () -> Transport,
     private val listener: Listener,
     private val policy: Reconnect = Reconnect(),
-    private val config: Session.Config = Session.Config(),
+    private val config: Session.Config,
     private val clock: () -> Long = { System.nanoTime() / 1_000_000 },
 ) {
     interface Listener : Session.Listener {

@@ -234,7 +234,8 @@ object Remote : Control {
             phase(Phase.CONNECTING)
             Log.i(TAG, "link $spec")
             wake(context)
-            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(features = Groups.mask("artBlock", "artPick", "imgOrigin")), SystemClock::elapsedRealtime)
+            val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0"
+            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(version, features = Groups.mask("artBlock", "artPick", "imgOrigin")), SystemClock::elapsedRealtime)
             link = l
             art = worker(context, l)
             l.start()

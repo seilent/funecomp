@@ -89,7 +89,7 @@ class LyrGetTest {
         val ready = CountDownLatch(1)
         val s = Session(device, object : Session.Listener {
             override fun onHello(hello: HelloReply) = ready.countDown()
-        }, Session.Config(requestTimeoutMs = timeoutMs))
+        }, Session.Config("test", requestTimeoutMs = timeoutMs))
         sessions += s
         Thread { s.run() }.apply { isDaemon = true }.start()
         assertTrue(ready.await(5, TimeUnit.SECONDS))

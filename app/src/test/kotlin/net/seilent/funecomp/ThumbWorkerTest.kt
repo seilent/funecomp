@@ -58,7 +58,7 @@ class ThumbWorkerTest {
                 hello = h
                 ready.countDown()
             }
-        }, Session.Config())
+        }, Session.Config("test"))
         session = link
         Thread { link.run() }.apply { isDaemon = true }.start()
         assertTrue(ready.await(10, TimeUnit.SECONDS))

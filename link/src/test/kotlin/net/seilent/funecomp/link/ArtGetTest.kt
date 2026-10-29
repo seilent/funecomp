@@ -75,7 +75,7 @@ class ArtGetTest {
         val sim = Sim(Options(Board.of("v1"), Faults(emptyList()), minor = minor, artDir = tmp.root), lib)
         sims += sim
         val h = Hello()
-        val s = Session(TcpTransport("127.0.0.1", sim.listen(0)), h, Session.Config())
+        val s = Session(TcpTransport("127.0.0.1", sim.listen(0)), h, Session.Config("test"))
         sessions += s
         Thread { s.run() }.apply { isDaemon = true }.start()
         assertTrue(h.hello.await(5, TimeUnit.SECONDS))
