@@ -233,6 +233,12 @@ object Tok {
     const val focus_border = 2f
     const val focus_barWidth = 2f
     const val focus_barOffset = 8f
+    const val scrollbar_width = 4f
+    const val scrollbar_x = 236f
+    const val scrollbar_min = 25f
+    const val scrollbar_alpha = 0.2f
+    const val scrollbar_hold = 1500f
+    const val scrollbar_fade = 500f
     const val edge = 16f
     const val hubEdge = 20f
     const val homeTextX = 70f
@@ -611,6 +617,9 @@ object Tok {
     const val homeWatermarkGap = 36f
     const val navH = 36f
     const val navGlyph = 16f
+    const val adjustExit = 54f
+    const val adjustColumn = 47f
+    const val adjustNumberDrop = 0.35f
 }
 
 object TokUnit {
@@ -846,6 +855,12 @@ object TokUnit {
     const val focus_border = "u"
     const val focus_barWidth = "u"
     const val focus_barOffset = "u"
+    const val scrollbar_width = "u"
+    const val scrollbar_x = "u"
+    const val scrollbar_min = "u"
+    const val scrollbar_alpha = "alpha"
+    const val scrollbar_hold = "ms"
+    const val scrollbar_fade = "ms"
     const val edge = "u"
     const val hubEdge = "u"
     const val homeTextX = "u"
@@ -1224,4 +1239,7 @@ object TokUnit {
     const val homeWatermarkGap = "u"
     const val navH = "u"
     const val navGlyph = "u"
+    const val adjustExit = "u"
+    const val adjustColumn = "u"
+    const val adjustNumberDrop = "ratio"
 }

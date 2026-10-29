@@ -233,6 +233,12 @@ accent.h350 #FA2A4D rgb
 focus.border 2 u
 focus.barWidth 2 u
 focus.barOffset 8 u
+scrollbar.width 4 u
+scrollbar.x 236 u
+scrollbar.min 25 u
+scrollbar.alpha 0.2 alpha
+scrollbar.hold 1500 ms
+scrollbar.fade 500 ms
 edge 16 u
 hubEdge 20 u
 homeTextX 70 u
@@ -575,7 +581,7 @@ settings.yearMax 2099 year
 settings.clockYearMin 2025 year
 update.batteryMin 50 pct
 volume.percentDbDivisor 60 db
-settings.filterCount 4 count
+settings.filterCount 5 count
 settings.balanceMax 10 db
 settings.balanceStep 0.5 db
 settings.maxVolumeSteps 5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100 pct
@@ -632,3 +638,6 @@ gesture.bottom 14 u
 homeWatermarkGap 36 u
 navH 36 u
 navGlyph 16 u
+adjustExit 54 u
+adjustColumn 47 u
+adjustNumberDrop 0.35 ratio
