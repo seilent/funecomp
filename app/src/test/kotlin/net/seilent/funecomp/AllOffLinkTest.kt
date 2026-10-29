@@ -8,8 +8,10 @@ import android.content.pm.ApplicationInfo
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Looper
+import net.seilent.funecomp.artist.Art
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
+import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.ImageIds
@@ -18,9 +20,16 @@ import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Wikimedia
+import net.seilent.funecomp.link.Session
+import net.seilent.funecomp.link.TcpTransport
+import net.seilent.funecomp.proto.Groups
+import net.seilent.funecomp.proto.HelloReply
+import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.sim.Board
+import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Options
+import net.seilent.funecomp.sim.PhoneLine
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.ui.Phase
 import org.junit.After
@@ -44,6 +53,8 @@ import org.robolectric.shadows.ShadowNetworkCapabilities
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -122,11 +133,11 @@ class AllOffLinkTest {
         shadowOf(Looper.getMainLooper()).idle()
     }
 
-    private fun jpeg(): ByteArray {
-        val img = java.awt.image.BufferedImage(600, 800, java.awt.image.BufferedImage.TYPE_INT_RGB)
+    private fun jpeg(w: Int = 600, h: Int = 800): ByteArray {
+        val img = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB)
         val g = img.createGraphics()
         g.color = java.awt.Color(120, 80, 40)
-        g.fillRect(0, 0, 600, 800)
+        g.fillRect(0, 0, w, h)
         g.dispose()
         return ByteArrayOutputStream().also { javax.imageio.ImageIO.write(img, "jpg", it) }.toByteArray()
     }
@@ -147,13 +158,27 @@ class AllOffLinkTest {
         for (cb in shadowOf(app.getSystemService(ConnectivityManager::class.java)).networkCallbacks) cb.onCapabilitiesChanged(ShadowNetwork.newInstance(7), caps)
     }
 
-    private fun link(): Sim {
+    private fun link(): Sim = link(Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() })))
+
+    private fun link(s: Sim, port: Int = s.listen(0)): Sim {
         Remote.artist(app, http)
-        val s = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }))
         sims += s
-        Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:${s.listen(0)}")).create().startCommand(0, 1)
+        Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:$port")).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE }
         return s
+    }
+
+    private fun oldPush(port: Int, name: String) {
+        val ready = CountDownLatch(1)
+        val s = Session(TcpTransport("127.0.0.1", port), object : Session.Listener {
+            override fun onHello(hello: HelloReply) = ready.countDown()
+            override fun onPush(type: Int, body: Node) {}
+        }, Session.Config("test", features = Groups.mask("imgOrigin")))
+        Thread { s.run() }.apply { isDaemon = true }.start()
+        assertTrue(ready.await(5, TimeUnit.SECONDS))
+        val b = jpeg(240, 320)
+        assertEquals(setOf(name), ArtPusher(s, { n, m, w, h -> Art(b, w, h, n, m, Sources.DEEZER, null) }) { true }.run(listOf(name to null)).pushed.keys)
+        s.close("old app")
     }
 
     private fun logged() = ShadowLog.getLogsForTag(Remote.TAG).map { it.msg }
@@ -264,6 +289,37 @@ class AllOffLinkTest {
         assertEquals(n, asked.size)
         assertEquals(1, stored(utada).size)
         assertEquals(0, lines.count { " rx IMG_DEL " in it })
+    }
+
+    @Test
+    fun everySourceOffSendsNoFullSourceToADeviceListingAnOldSizePhoto() {
+        val old = "Old Artist"
+        sources()
+        ArtCache(File(app.filesDir, "art")).putHit(ArtCache.Entry("name:${Names.fold(old)}", old, null, Sources.DEEZER, null, "https://e/old.jpg", System.currentTimeMillis(), "2"), jpeg(1200, 1600))
+        network()
+        val s = Sim(Options(Board.of("v1"), Faults(listOf("img-source")), log = { lines += it }))
+        val port = s.listen(0)
+        oldPush(port, old)
+        assertEquals(1, begins())
+        lines.clear()
+        link(s, port)
+        allOffRun()
+        assertTrue(s.device.sources.isEmpty())
+        assertFalse(logged().any { it.startsWith("art repush") })
+    }
+
+    @Test
+    fun everySourceOffPushesNoPhotoForAPhoneStreamArtist() {
+        val phone = "Creepy Nuts"
+        sources()
+        ArtCache(File(app.filesDir, "art")).putHit(ArtCache.Entry("name:${Names.fold(phone)}", phone, null, Sources.DEEZER, null, "https://e/cn.jpg", System.currentTimeMillis(), "3"), jpeg())
+        File(app.filesDir, "art/pending.txt").writeText("$phone\t\n")
+        network()
+        val s = Sim(Options(Board.of("v1"), Faults(listOf("img-source")), log = { lines += it }, phone = listOf(PhoneLine("Bling-Bang-Bang-Born", phone, "Bling-Bang-Bang-Born", 200_000, 0, true)), receiver = true))
+        link(s)
+        waitFor { Remote.device.playback.state.source == Enums.Source.phone }
+        allOffRun()
+        assertTrue(s.device.begins.isEmpty())
     }
 
     @Test
