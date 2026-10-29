@@ -761,7 +761,7 @@ class ForwardTest {
     private val phone = Enums.ImgOrigin.phone
 
     @Test
-    fun theCurrentStageTakesTheSourceAndTheQueueAndSweepTakeLibrary() {
+    fun frontStagesTagByTheCachedRowsAndGoUntaggedUntilTheTagPassReadsThem() {
         for (src in listOf(Enums.Source.phone, Enums.Source.local)) {
             val (sim, port) = sim(30, Proto.minor)
             val s = session(port)
@@ -769,9 +769,80 @@ class ForwardTest {
             assertEquals(ArtPusher.Stop.DONE, forward(Lookups()).run(s) { true }.stop)
             val o = firstOrigins(sim)
             assertEquals(30, o.size)
-            assertEquals(if (src == Enums.Source.phone) phone else library, o.getValue("Artist 001"))
-            assertTrue((2..30).all { o.getValue("Artist %03d".format(it)) == library })
+            assertEquals(if (src == Enums.Source.phone) phone else null, o.getValue("Artist 001"))
+            assertTrue((2..6).all { o.getValue("Artist %03d".format(it)) == null })
+            assertTrue((7..30).all { o.getValue("Artist %03d".format(it)) == library })
+            val stored = sim.device.stored
+            assertEquals(if (src == Enums.Source.phone) 2 else 1, stored.getValue("artist 001").origins)
+            assertTrue((2..30).all { stored.getValue("artist %03d".format(it)).origins == 1 })
+            sim.device.begins.clear()
+            forward(Lookups(), version = { 1 }).run(s) { true }
+            val again = firstOrigins(sim)
+            assertEquals(if (src == Enums.Source.phone) phone else library, again.getValue("Artist 001"))
+            assertTrue((2..6).all { again.getValue("Artist %03d".format(it)) == library })
         }
+    }
+
+    @Test
+    fun aHeldOrPendingNameTheRowsDoNotListIsPhoneAndUnreadableRowsSendNone() {
+        val (sim, s) = dropSim()
+        seed(s, "Nobody")
+        seed(s, "Stranger")
+        val records = ArtBlocks()
+        records.hold("Nobody", null, "tcp:A")
+        val ups = Ups(false, emptyList())
+        val bd = blocks(records, "tcp:A")
+        val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+        forward(Lookups(), upgrades = ups, blocks = bd, version = { if (it == "Nobody") 1 else 0 }, log = { logs += it }).run(s) { true }
+        assertEquals("$logs ${sim.device.begins.toList()}", phone, origins(sim)["Nobody"])
+        records.upgraded("Stranger", "Stranger", null, 1, "tcp:Z")
+        ups.ats["Stranger"] = 1
+        ups.open = true
+        sim.device.begins.clear()
+        forward(Lookups(), upgrades = ups, blocks = bd, version = { if (it == "Stranger") 1 else 0 }, log = { logs += it }).run(s) { true }
+        assertEquals("$logs ${sim.device.begins.toList()}", phone, origins(sim)["Stranger"])
+    }
+
+    @Test
+    fun anUpgradeRecordSavedAsLibraryByAnOlderAppIsDecidedByTheRowsAtPushTime() {
+        val (sim, s) = dropSim()
+        seed(s, "Stranger")
+        val records = ArtBlocks()
+        records.upgraded("Stranger", "Stranger", null, 1, "tcp:Z", library)
+        val ups = Ups(true, emptyList())
+        ups.ats["Stranger"] = 1
+        sim.device.begins.clear()
+        forward(Lookups(), upgrades = ups, blocks = blocks(records, "tcp:A"), version = { if (it == "Stranger") 1 else 0 }).run(s) { true }
+        assertEquals(sim.device.begins.toList().toString(), phone, origins(sim)["Stranger"])
+    }
+
+    @Test
+    fun aFrontUpgradeSavesOnlyAPhoneOriginInItsRecord() {
+        for (src in listOf(Enums.Source.local, Enums.Source.phone)) {
+            val (sim, port) = sim(10, Proto.minor)
+            val s = session(port)
+            source(sim, src)
+            forward(Lookups()).run(s) { true }
+            val records = ArtBlocks()
+            records.upgrades("tcp:Z")
+            forward(Lookups(), upgrades = Ups(true, emptyList(), setOf("Artist 001")), blocks = blocks(records, "tcp:A")).run(s) { true }
+            assertEquals(if (src == Enums.Source.phone) phone else null, records.upgrades("tcp:Z").single { it.name == "Artist 001" }.origin)
+        }
+    }
+
+    @Test
+    fun aHeldNameWithUnreadableRowsGoesWithNoOrigin() {
+        val s0 = Sim(Options(Board.of("v1"), Faults(listOf("busy=LIB_GET:1000")), log = { lines += it }, imgDir = tmp.newFolder()), Library(
+            (1..7).map { Library.track("Artist %03d".format(it), "Album $it", "Song $it", 1, 200_000) },
+        ))
+        sims += s0
+        val s = session(s0.listen(0))
+        seed(s, "Nobody")
+        val records = ArtBlocks()
+        records.hold("Nobody", null, "tcp:A")
+        val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+        forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A"), version = { if (it == "Nobody") 1 else 0 }, log = { logs += it }).run(s) { true }
+        assertEquals("$logs ${s0.device.begins.toList()}", listOf("Nobody" to null), s0.device.begins.toList().filter { it.first == "Nobody" }.drop(1))
     }
 
     @Test
@@ -780,7 +851,8 @@ class ForwardTest {
         forward(Lookups()).run(session(port)) { true }
         val o = firstOrigins(sim)
         assertEquals(null, o.getValue("Artist 001"))
-        assertTrue((2..10).all { o.getValue("Artist %03d".format(it)) == library })
+        assertTrue((2..6).all { o.getValue("Artist %03d".format(it)) == null })
+        assertTrue((7..10).all { o.getValue("Artist %03d".format(it)) == library })
         lines.clear()
         val (old, oldPort) = sim(30, 8)
         val r = forward(Lookups()).run(session(oldPort)) { true }
@@ -831,7 +903,7 @@ class ForwardTest {
         val o = firstOrigins(sim)
         assertFalse("Nobody" in o)
         assertEquals(phone, o.getValue("Somebody"))
-        assertEquals(library, o.getValue("Artist 001"))
+        assertEquals(null, o.getValue("Artist 001"))
     }
 
     private fun tagLib(vararg names: String) = Library(
@@ -848,21 +920,56 @@ class ForwardTest {
     private fun seed(s: Session, name: String, origin: Int? = null) =
         assertTrue(name, ImagePush(s, name, null, jpeg(240, 320), 240, 320, origin = origin).run() is ImagePush.Outcome.Done)
 
+    private fun fill(name: String) = name.startsWith("Artist ")
+
     private fun tags() = synchronized(lines) { lines.filter { it.startsWith("tag name=") }.map { it.removePrefix("tag name=") } }
 
     @Test
-    fun theRetagTagsUntaggedLibraryNamesByTheDeviceFoldWithTheListedName() {
-        val (sim, s) = tagSim(tagLib("Gemma", "むト", "BoA", "Lead", "Phoned", "Libbed"))
-        listOf("gemma", "むﾄ", "ＢｏＡ", "Stranger", " Lead").forEach { seed(s, it) }
+    fun theRetagTagsListedNamesLibraryAndOnlyTheNamesThisAppPushedUntaggedPhone() {
+        val (sim, s) = tagSim(tagLib("Gemma", "むト", "BoA", "Lead", "Phoned", "Libbed"), Proto.minor, "busy=LIB_GET:1")
+        listOf("gemma", "むﾄ", "ＢｏＡ", " Lead", "Stranger", "Nobody").forEach { seed(s, it) }
         seed(s, "Phoned", phone)
         seed(s, "Libbed", library)
+        val records = ArtBlocks()
+        records.hold("Nobody", null, "tcp:A")
+        var tagging = false
         val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
-        assertEquals(ArtPusher.Stop.DONE, forward(Lookups(), log = { logs += it }).run(s) { true }.stop)
-        assertEquals(setOf("gemma origin=library", " Lead origin=library"), tags().toSet())
-        assertEquals(2, tags().size)
-        assertTrue("art tag tagged=2 gone=0 of 5" in logs)
+        val f = forward(Lookups(), sweeping = { tagging }, retagging = { tagging }, missing = ::fill, blocks = blocks(records, "tcp:A"), version = { if (it == "Nobody") 1 else 0 }, log = { logs += it })
+        f.run(s) { true }
+        assertEquals(listOf("Nobody" to null), sim.device.begins.toList().filter { it.first == "Nobody" }.drop(1))
+        tagging = true
+        assertEquals(ArtPusher.Stop.DONE, f.run(s) { true }.stop)
+        assertEquals(setOf("gemma origin=library", " Lead origin=library", "Nobody origin=phone"), tags().toSet())
+        assertEquals(3, tags().size)
+        assertTrue("art tag tagged=3 gone=0 of 3" in logs)
         assertEquals(1, sim.device.stored.getValue("gemma").origins)
+        assertEquals(2, sim.device.stored.getValue("nobody").origins)
+        assertEquals(0, sim.device.stored.getValue("stranger").origins)
         assertEquals(0, sim.device.stored.getValue("ＢｏＡ").origins)
+        assertEquals(0, sim.device.stored.getValue("むﾄ").origins)
+    }
+
+    @Test
+    fun aLegacyJoinedNameThisAppDidNotPushStaysUntaggedSoTheScanCanPruneIt() {
+        val (sim, s) = tagSim(tagLib("Gemma", "Hal"))
+        seed(s, "Gemma & Hal")
+        seed(s, "gemma")
+        forward(Lookups(), missing = ::fill).run(s) { true }
+        assertEquals(listOf("gemma origin=library"), tags())
+        assertEquals(0, sim.device.stored.getValue("gemma & hal").origins)
+    }
+
+    @Test
+    fun aPhotoTaggedLibraryForANameTheRowsDoNotListGetsPhoneAdded() {
+        val (sim, s) = tagSim(tagLib("Gemma"))
+        seed(s, "Ghost", library)
+        seed(s, "Gemma", library)
+        val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
+        forward(Lookups(), log = { logs += it }, missing = ::fill).run(s) { true }
+        assertEquals(listOf("Ghost origin=phone"), tags())
+        assertTrue("art tag tagged=1 gone=0 of 1" in logs)
+        assertEquals(3, sim.device.stored.getValue("ghost").origins)
+        assertEquals(1, sim.device.stored.getValue("gemma").origins)
     }
 
     @Test
@@ -871,7 +978,7 @@ class ForwardTest {
         seed(s, "Gemma")
         var deleted = false
         val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
-        val f = forward(Lookups(), log = { logs += it }, onLibGet = { ss ->
+        val f = forward(Lookups(), log = { logs += it }, missing = ::fill, onLibGet = { ss ->
             if (!deleted) {
                 deleted = true
                 assertTrue(ss.call(Msg.IMG_DEL, Req.imgDel("Gemma")) is Session.Result.Ok)
@@ -889,7 +996,7 @@ class ForwardTest {
         val (_, s) = tagSim(tagLib("Gemma"), Proto.minor, "busy=IMG_TAG:1")
         seed(s, "gemma")
         val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
-        val f = forward(Lookups(), marks = Kept(), log = { logs += it })
+        val f = forward(Lookups(), marks = Kept(), log = { logs += it }, missing = ::fill)
         f.run(s) { true }
         assertTrue(logs.none { it.startsWith("art tag tagged") })
         assertTrue(tags().isEmpty())
@@ -907,14 +1014,14 @@ class ForwardTest {
         seed(s, "gemma")
         seed(s, "hal")
         var checks = 0
-        forward(Lookups(), retagging = { checks++ < 2 }).run(s) { true }
+        forward(Lookups(), retagging = { checks++ < 2 }, missing = ::fill).run(s) { true }
         assertEquals(1, tags().size)
         val (_, shown) = tagSim(tagLib("Gemma"))
         seed(shown, "gemma")
         lines.clear()
-        forward(Lookups(), sweeping = { false }, retagging = { false }).run(shown) { true }
+        forward(Lookups(), sweeping = { false }, retagging = { false }, missing = ::fill).run(shown) { true }
         assertTrue(tags().isEmpty())
-        forward(Lookups(), sweeping = { false }).run(shown) { true }
+        forward(Lookups(), sweeping = { false }, missing = ::fill).run(shown) { true }
         assertEquals(listOf("gemma origin=library"), tags())
     }
 

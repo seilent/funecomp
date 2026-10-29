@@ -196,7 +196,7 @@ class ArtPickTest {
         assertEquals(Sources.YOUTUBE, r.source)
         waitFor { deleted("TSUKI") == 1 }
         assertEquals(ArtPicks.NONE, Remote.picks.single().kind)
-        waitFor { File(app.filesDir, "artblock.tsv").readLines().count { it.startsWith("push\tTSUKI\t") } == 1 && File(app.filesDir, "artblock.tsv").readText().contains("origin\tTSUKI\t\tlibrary\n") }
+        waitFor { File(app.filesDir, "artblock.tsv").readLines().count { it.startsWith("push\tTSUKI\t") } == 1 && File(app.filesDir, "artblock.tsv").readLines().none { it.startsWith("origin\t") } }
         assertEquals("ok", s.askBlock(q))
         assertEquals(1, Remote.blocked.size)
         Thread.sleep(800)

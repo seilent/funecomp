@@ -201,7 +201,7 @@ class ArtPickUiTest {
         tap("sheet.item.1")
         assertEquals("Other", shell.sheet.title)
         tap("sheet.item.1")
-        assertEquals(Page.Browse(PickFor("Other", dj, origin = Enums.ImgOrigin.library)), shell.nav.top)
+        assertEquals(Page.Browse(PickFor("Other", dj)), shell.nav.top)
         assertEquals("browse Other $dj", calls.single())
     }
 

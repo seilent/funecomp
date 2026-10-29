@@ -178,12 +178,11 @@ class ArtPickAskTest {
         return java.io.ByteArrayOutputStream().also { javax.imageio.ImageIO.write(img, "jpg", it) }.toByteArray()
     }
 
-    private fun pickedOrigins(s: Sim, target: PickFor): Set<Pair<String, Int?>> {
-        s.source(Enums.Source.phone)
-        waitFor { Remote.device.playback.state.source == Enums.Source.phone }
+    private fun pickedOrigins(s: Sim, target: PickFor, flip: Int, want: Set<Pair<String, Int?>>): Set<Pair<String, Int?>> {
+        s.source(flip)
+        waitFor { Remote.device.playback.state.source == flip }
         s.device.begins.clear()
         Remote.pick(target, offer())
-        val want = setOf(target.name to Enums.ImgOrigin.library, target.name to Enums.ImgOrigin.phone)
         try {
             waitFor { synchronized(s.device.begins) { s.device.begins.toSet() }.containsAll(want) }
         } catch (e: IllegalStateException) {
@@ -200,7 +199,7 @@ class ArtPickAskTest {
     }
 
     @Test
-    fun anAskTakesTheSourceItCameWithOnTheSheetAndTheNotice() {
+    fun anAskFromTheCardLeavesTheOriginToTheRowsAndAPhoneAskKeepsPhoneOnTheSheetAndTheNotice() {
         val s = live()
         val a = main()
         assertEquals("ok shown=true", ask(s, "TSUKI"))
@@ -208,21 +207,20 @@ class ArtPickAskTest {
         a.get().shell.sheet.accept(1)
         waitFor { a.get().shell.nav.top is Page.Browse }
         val target = (a.get().shell.nav.top as Page.Browse).target
-        assertEquals(PickFor("TSUKI", origin = Enums.ImgOrigin.library), target)
+        assertEquals(PickFor("TSUKI"), target)
         a.pause().stop().destroy()
-        assertEquals(setOf("TSUKI" to Enums.ImgOrigin.library, "TSUKI" to Enums.ImgOrigin.phone), pickedOrigins(s, target))
-        s.source(Enums.Source.local)
-        waitFor { Remote.device.playback.state.source == Enums.Source.local }
+        val both = setOf("TSUKI" to Enums.ImgOrigin.library, "TSUKI" to Enums.ImgOrigin.phone)
+        assertEquals(both, pickedOrigins(s, target, Enums.Source.phone, both))
         assertEquals("ok shown=false", ask(s, "TSUKI"))
-        assertEquals(Enums.ImgOrigin.library, tapped().getIntExtra(Main.EXTRA_PICK_ORIGIN, -1))
+        assertEquals(Enums.ImgOrigin.phone, tapped().getIntExtra(Main.EXTRA_PICK_ORIGIN, -1))
         val cold = Robolectric.buildActivity(Main::class.java, tapped()).create().start().resume().visible()
         waitFor { cold.get().shell.sheet.shown }
         cold.get().shell.sheet.accept(1)
         waitFor { cold.get().shell.nav.top is Page.Browse }
         val tap = (cold.get().shell.nav.top as Page.Browse).target
-        assertEquals(PickFor("TSUKI", origin = Enums.ImgOrigin.library), tap)
+        assertEquals(PickFor("TSUKI", origin = Enums.ImgOrigin.phone), tap)
         cold.pause().stop().destroy()
-        assertEquals(setOf("TSUKI" to Enums.ImgOrigin.library, "TSUKI" to Enums.ImgOrigin.phone), pickedOrigins(s, tap))
+        pickedOrigins(s, tap, Enums.Source.local, setOf("TSUKI" to Enums.ImgOrigin.phone))
     }
 
     @Test

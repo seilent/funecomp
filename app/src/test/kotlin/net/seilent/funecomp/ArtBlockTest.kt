@@ -475,7 +475,7 @@ class ArtBlockTest {
     }
 
     @Test
-    fun aDeviceBlockPushesTheNextCandidateWithTheAskOriginAndTheStateMbid() {
+    fun aDeviceBlockOnTheCardRecordsNoOriginAndPushesTheNextCandidateByTheRowsWithTheStateMbid() {
         val hold = CountDownLatch(1)
         app.getSharedPreferences(Main.ART_PREFS, android.content.Context.MODE_PRIVATE).edit().putInt("defaults", 2).putString("order", "commons,theaudiodb,fanarttv,discogs,youtube,deezer").putBoolean("theaudiodb", true).putBoolean("discogs", false).putBoolean("fanarttv", false).putBoolean("deezer", false).putBoolean("youtube", false).commit()
         Remote.artist(app, Http { url, h ->
@@ -496,7 +496,8 @@ class ArtBlockTest {
         waitFor(10_000) { stored().size >= 2 }
         assertEquals(utadaEn to Enums.ImgOrigin.library, s.device.begins.first())
         assertTrue(lines.last { it.startsWith("stored name=Utada Hikaru ") }.startsWith("stored name=Utada Hikaru mbid=$mbid "))
-        waitFor { File(app.filesDir, "artblock.tsv").readText().contains("origin\t$utadaEn\t$mbid\tlibrary\n") }
+        waitFor { File(app.filesDir, "artblock.tsv").readLines().any { it.startsWith("push\t$utadaEn\t$mbid\t") } }
+        assertTrue(File(app.filesDir, "artblock.tsv").readLines().none { it.startsWith("origin\t") })
         c.destroy()
     }
 
@@ -506,8 +507,8 @@ class ArtBlockTest {
         val s = asking(track(vtuber), vtuber)
         assertEquals("ok", s.askBlock(wrong, vtuber))
         waitFor { deleted(vtuber) }
-        waitFor { File(app.filesDir, "artblock.tsv").readText().contains("origin\t$vtuber\t\tlibrary\n") }
-        assertTrue(File(app.filesDir, "artblock.tsv").readLines().any { it.startsWith("push\t$vtuber\t\t") })
+        waitFor { File(app.filesDir, "artblock.tsv").readLines().any { it.startsWith("push\t$vtuber\t\t") } }
+        assertTrue(File(app.filesDir, "artblock.tsv").readLines().none { it.startsWith("origin\t") })
         Thread.sleep(500)
         assertTrue(lines.indexOfLast { it.startsWith("stored name=$vtuber ") } < lines.indexOf("deleted name=$vtuber"))
     }
