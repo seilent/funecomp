@@ -82,6 +82,7 @@ import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.NpKey
 import net.seilent.funecomp.state.PhoneKey
+import net.seilent.funecomp.state.Playing
 
 internal const val PIN_LEAD_MS = 200L
 val LocalUptime = staticCompositionLocalOf<() -> Long> { SystemClock::uptimeMillis }
@@ -108,7 +109,11 @@ private fun phoneShow(d: DeviceState, show: LyricsFetch.Show) = (show as? Lyrics
 private fun npKey(d: DeviceState, show: LyricsFetch.Show): NpKey? = when {
     d.playback.receivedAt == 0L -> null
     phone(d) -> phoneShow(d, show)?.key?.let { NpKey.Phone(it) }
-    else -> d.playback.state.track?.let { NpKey.Lib(it) }
+    else -> when (val p = d.playing) {
+        is Playing.Library -> NpKey.Lib(p.track)
+        is Playing.Service -> NpKey.Service(p.service, p.key)
+        else -> null
+    }
 }
 
 private fun has(d: DeviceState, show: LyricsFetch.Show) = if (phone(d)) phoneShow(d, show)?.copy != null else LyricsFetch.has(d)
@@ -119,12 +124,12 @@ private fun follow(d: DeviceState, show: LyricsFetch.Show): Boolean? = when {
     else -> LyricsFetch.follow(d)
 }
 
-private fun keyable(d: DeviceState, show: LyricsFetch.Show) = d.playback.receivedAt != 0L && if (phone(d)) phoneShow(d, show) != null else d.has(LyricsFetch.GROUP) && d.playback.state.track != null
+private fun keyable(d: DeviceState, show: LyricsFetch.Show) = d.playback.receivedAt != 0L && if (phone(d)) phoneShow(d, show) != null else d.has(LyricsFetch.GROUP) && d.playback.state.library != null
 
 private fun copyFor(show: LyricsFetch.Show, key: NpKey?, s: State): LyricsFetch.Copy? = when (key) {
     is NpKey.Lib -> (show as? LyricsFetch.Show.Lines)?.takeIf { it.track == key.track && (it.held || it.copy.crc == s.lyricsCrc) }?.copy
     is NpKey.Phone -> (show as? LyricsFetch.Show.Phone)?.takeIf { it.key == key.key }?.copy
-    null -> null
+    is NpKey.Service, null -> null
 }
 
 private fun none(show: LyricsFetch.Show) = show == LyricsFetch.Show.None || (show is LyricsFetch.Show.Phone && show.copy == null && show.follow == false)
@@ -461,12 +466,12 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
     BackHandler(active && sheet?.shown != true) { back() }
     val edit = shell?.offset
     val offsets = device.has(OffsetEdit.GROUP)
-    LaunchedEffect(edit, s.track, npKey, s.lyricsPlain, lyrics, lyricTarget, active, offsets, sheet?.shown) {
+    LaunchedEffect(edit, s.library, npKey, s.lyricsPlain, lyrics, lyricTarget, active, offsets, sheet?.shown) {
         val e = edit ?: return@LaunchedEffect
         val p = e.phone
         if (p != null) {
             if (npKey != NpKey.Phone(p) || copyFor(lyrics, npKey, s)?.kind != Enums.LyricsKind.synced || !lyricTarget || !active || sheet?.shown != true) e.end(true)
-        } else if (!offsets) e.end(false) else if (s.track != e.track || s.lyricsPlain == true || !lyricTarget || !active || sheet?.shown != true) e.end(true)
+        } else if (!offsets) e.end(false) else if (s.library != e.track || s.lyricsPlain == true || !lyricTarget || !active || sheet?.shown != true) e.end(true)
     }
     DisposableEffect(shell) {
         onDispose { shell?.offset?.let { it.end(it.phone != null || liveNow().has(OffsetEdit.GROUP)) } }
@@ -533,7 +538,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                 when (k) {
                     is NpKey.Lib -> if (offsets && s.source == Enums.Source.local) lyricsSheet(shell, control, k.track, s.lyricsOffsetMs ?: 0)
                     is NpKey.Phone -> lyricsSheet(shell, control, 0, 0, k.key)
-                    null -> {}
+                    is NpKey.Service, null -> {}
                 }
             }
         }
@@ -563,7 +568,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                     RoleText(s.artist ?: "", Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))
                     RoleText(s.album ?: "", Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("np.album"))
                     if (artSide > 0f) {
-                        val track = s.track
+                        val track = s.library
                         val px = artSide.roundToInt()
                         LaunchedEffect(track, px, device.hello, onPhone) { if (track != null && !onPhone) control.wantArt(Thumbs.NOW_PLAYING, track, px, s.album) }
                         val enter = if (keyable(device, lyrics)) Modifier.press({ lyricsKey() }, longPress) else Modifier
@@ -601,7 +606,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                             }
                         }
                     }
-                    if (s.track != null && (!onPhone || duration > 0)) {
+                    if (device.playing != Playing.None && (!onPhone || duration > 0)) {
                         val thick = ui.px(Tok.npProgressThick).dp()
                         Box(Modifier.at(artX, progressY).size(artSide.dp(), thick).background(white(Tok.alpha_low)))
                         Box(Modifier.at(artX, progressY).size((artSide * fraction).dp(), thick).background(Accent).testTag("np.progress"))
@@ -663,7 +668,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                 }
             }
             val repeat = s.repeat ?: Enums.Repeat.off
-            val queued = s.track != null || (s.slots ?: 0L) > 0L
+            val queued = device.playing != Playing.None || (s.slots ?: 0L) > 0L
             val hitW = ui.px(ui.npRingCenter(1) - ui.npRingCenter(0)) / 2
             val hitH = ui.px(Tok.overlayRing)
             val items = listOfNotNull(

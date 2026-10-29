@@ -26,7 +26,7 @@ class MediaGate {
 
     companion object {
         fun wanted(s: State, setting: Boolean, sinkToDap: Boolean) =
-            setting && !sinkToDap && s.source == Enums.Source.local && s.track != null
+            setting && !sinkToDap && s.source == Enums.Source.local && Playing.of(s) != Playing.None
     }
 }
 

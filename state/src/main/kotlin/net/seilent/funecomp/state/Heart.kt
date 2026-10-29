@@ -22,7 +22,7 @@ class Heart(private val windowMs: Long = WINDOW_MS) {
     @Synchronized
     fun tap(s: State): Tap? {
         if (pending != null) return null
-        val t = Tap(s.track ?: return null)
+        val t = Tap(s.library ?: return null)
         pending = Pending(t, s.title ?: "", s.favorite)
         return t
     }
@@ -53,10 +53,10 @@ class Heart(private val windowMs: Long = WINDOW_MS) {
         val p = pending ?: return null
         val v = s.favorite
         if (p.repliedAt == null) {
-            if (s.track == p.track && v != null && v != p.before) p.result = v
+            if (s.library == p.track && v != null && v != p.before) p.result = v
             return null
         }
-        if (s.track != p.track) {
+        if (s.library != p.track) {
             pending = null
             return fallback(p)
         }
@@ -92,7 +92,7 @@ class Heart(private val windowMs: Long = WINDOW_MS) {
         private val COPY = setOf(CARD, UNREADABLE)
         const val CARD_MINOR = 15
 
-        fun shown(hello: HelloReply?, s: State) = hello?.snapRev != null && s.track != null && s.source != Enums.Source.phone
+        fun shown(hello: HelloReply?, s: State) = hello?.snapRev != null && s.library != null && s.source != Enums.Source.phone
 
         fun lit(s: State) = s.favorite == true
     }

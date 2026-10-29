@@ -79,8 +79,8 @@ class MediaLink(
             session = it
         }
         val st = device.playback.state
-        val image = st.track?.let { art(it, st.album) }
-        val meta = listOf(st.track, st.title, artist(st), st.album, st.durationMs, image)
+        val image = st.library?.let { art(it, st.album) }
+        val meta = listOf(device.playing, st.title, artist(st), st.album, st.durationMs, image)
         if (meta != shown) {
             shown = meta
             s.setMetadata(metadata(st, image))

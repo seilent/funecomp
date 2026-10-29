@@ -8,7 +8,7 @@ object LyricsPlan {
     fun wants(d: DeviceState, done: Set<Long>): List<Want> {
         val s = d.playback.state
         val out = ArrayList<Want>()
-        val track = s.track
+        val track = s.library
         val title = s.title
         val artist = s.artist ?: s.artists.joinToString(", ").ifEmpty { null }
         if (track != null && s.lyrics == false && title != null && artist != null && track !in done) out += Want(track, title, artist, s.album, s.durationMs, s.lyricsPlain == false, s.artists)
@@ -17,7 +17,7 @@ object LyricsPlan {
             val q = d.queue.items[i] ?: continue
             val a = q.artists.joinToString(", ").ifEmpty { null } ?: continue
             val t = q.title ?: continue
-            val id = q.track ?: continue
+            val id = q.library ?: continue
             if (q.lyrics != false || id in done || out.any { it.track == id }) continue
             out += Want(id, t, a, q.album, q.durationMs, q.lyricsPlain == false, q.artists)
         }

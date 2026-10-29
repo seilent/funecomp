@@ -51,7 +51,7 @@ class DapLyrics(
 
     fun offsetSet(track: Long) {
         val d = device()
-        if (d.playback.state.track != track) return
+        if (d.playback.state.library != track) return
         synchronized(fetch) { fetch.hold(track, d.playback.receivedAt) }
         poke()
     }
@@ -82,7 +82,7 @@ class DapLyrics(
         if (!shown) return
         val s = link() ?: return
         val got = try {
-            when (val r = LyrGet(s) { !shown || device().playback.state.track != w.track }.run(w.track, w.have)) {
+            when (val r = LyrGet(s) { !shown || device().playback.state.library != w.track }.run(w.track, w.have)) {
                 is LyrGet.Outcome.Lines -> LyricsFetch.Got.Lines(LyricsFetch.Copy(r.crc, r.kind, r.lines))
                 is LyrGet.Outcome.None -> LyricsFetch.Got.None(r.crc)
                 is LyrGet.Outcome.Have -> LyricsFetch.Got.Have(r.crc)

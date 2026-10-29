@@ -76,7 +76,7 @@ class LyricsFetch {
 
     fun decide(d: DeviceState, now: Long): Decision {
         val s = d.playback.state
-        val track = s.track
+        val track = s.library
         if (!d.has(GROUP) || track == null) return Decision(Show.Off, null)
         if (d.lib.snap != snap) {
             snap = d.lib.snap
@@ -177,14 +177,14 @@ class LyricsFetch {
 
         fun has(d: DeviceState): Boolean {
             val s = d.playback.state
-            return d.has(GROUP) && s.track != null && (s.lyrics == true || s.lyricsPlain == true)
+            return d.has(GROUP) && s.library != null && (s.lyrics == true || s.lyricsPlain == true)
         }
 
         fun follow(d: DeviceState): Boolean? {
             val s = d.playback.state
             return when {
                 d.playback.receivedAt == 0L -> null
-                !d.has(GROUP) || s.track == null || s.source == Enums.Source.phone -> false
+                !d.has(GROUP) || s.library == null || s.source == Enums.Source.phone -> false
                 s.lyrics == null -> null
                 else -> s.lyrics
             }

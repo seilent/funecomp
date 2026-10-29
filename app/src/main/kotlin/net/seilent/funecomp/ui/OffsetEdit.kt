@@ -162,7 +162,7 @@ class OffsetEdit(
     fun mark() = send.mark()
 
     fun state(s: State, mark: OffsetSend.Mark?) {
-        if (mark != null && s.track == track && s.lyrics == true && send.observed(s.lyricsOffsetMs ?: 0, mark)) sync()
+        if (mark != null && s.library == track && s.lyrics == true && send.observed(s.lyricsOffsetMs ?: 0, mark)) sync()
     }
 
     fun replaced(track: Long) = run(send.replaced(track))

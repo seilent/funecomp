@@ -4,19 +4,20 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
 
-data class Play(val track: Long, val libRev: Long?, val startMs: Long, val playedMs: Long = 0, val scrobbled: Boolean = false) {
-    fun line() = "$track\t${libRev ?: ""}\t$startMs\t$playedMs\t${if (scrobbled) 1 else 0}"
+data class Play(val track: Long, val libRev: Long?, val startMs: Long, val playedMs: Long = 0, val scrobbled: Boolean = false, val service: String? = null) {
+    fun line() = "$track\t${libRev ?: ""}\t$startMs\t$playedMs\t${if (scrobbled) 1 else 0}" + (service?.let { "\t$it" } ?: "")
 
     companion object {
         fun parse(line: String): Play? {
             val f = line.trim().split('\t')
-            if (f.size != 5) return null
+            if (f.size != 5 && f.size != 6) return null
             return Play(
                 f[0].toLongOrNull() ?: return null,
                 f[1].toLongOrNull(),
                 f[2].toLongOrNull() ?: return null,
                 f[3].toLongOrNull() ?: return null,
                 f[4] == "1",
+                f.getOrNull(5)?.ifEmpty { null },
             )
         }
     }
@@ -52,11 +53,17 @@ class Plays(open: Play? = null) {
     }
 
     fun frame(s: State, arrivalMs: Long): List<Event> {
-        val track = s.track
-        if (s.source != Enums.Source.local || track == null) {
+        val playing = Playing.of(s)
+        val id = when (playing) {
+            is Playing.Library -> playing.track to null
+            is Playing.Service -> playing.key?.let { it to playing.service }
+            else -> null
+        }
+        if (s.source != Enums.Source.local || id == null) {
             prev = null
             return emptyList()
         }
+        val (track, service) = id
         val sample = s.sampleMs
         val pos = s.positionMs ?: 0
         val sent = s.sentMs?.takeIf { clocked && sample != null }
@@ -70,8 +77,8 @@ class Plays(open: Play? = null) {
         val o = open
         val events = ArrayList<Event>()
         val same = when {
-            o == null || o.track != track || o.libRev != s.libRev -> false
-            p != null -> p.track == track && !repeated(p, s)
+            o == null || o.track != track || o.service != service || o.libRev != s.libRev -> false
+            p != null -> Playing.of(p) == playing && !repeated(p, s)
             else -> kotlin.math.abs(startOf(s, arrivalMs) - o.startMs) <= CONTINUE_MS
         }
         if (same && p == null) refine = false
@@ -79,7 +86,7 @@ class Plays(open: Play? = null) {
             base = null
             refine = true
             announced = false
-            Play(track, s.libRev, startOf(s, arrivalMs))
+            Play(track, s.libRev, startOf(s, arrivalMs), service = service)
         }
         if (refine && base == null && s.positionHeld != true) base = sample?.let { it - pos }
         if (same && p != null && p.playing == true) {

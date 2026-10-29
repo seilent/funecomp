@@ -55,6 +55,27 @@ class MediaLinkTest {
     }
 
     @Test
+    fun aServiceRowIsActiveWithItsTextAndAsksNoArt() {
+        val asked = ArrayList<Long>()
+        val m = MediaLink(app, sim, { t, _ ->
+            asked += t
+            null
+        }) { stops++ }
+        val row = st.copy(track = null, album = null, service = "tidal", serviceKey = 167)
+        m.live(device(row), setting = true, sinkToDap = false)
+        assertTrue(m.active)
+        assertEquals("Airbag", MediaLink.metadata(row).getString(MediaMetadata.METADATA_KEY_TITLE))
+        m.live(device(row.copy(track = 9)), setting = true, sinkToDap = false)
+        assertTrue(asked.isEmpty())
+        m.live(device(st.copy(track = 0)), setting = true, sinkToDap = false)
+        assertFalse(m.active)
+        assertTrue(asked.isEmpty())
+        m.live(device(), setting = true, sinkToDap = false)
+        assertEquals(listOf(7L), asked)
+        m.off()
+    }
+
+    @Test
     fun theSessionTakesTheOpenIntentOnceWhenItIsBuilt() {
         val open = PendingIntent.getActivity(app, 0, Intent(app, Main::class.java).setAction(Main.ACTION_OPEN), PendingIntent.FLAG_IMMUTABLE)
         var asked = 0

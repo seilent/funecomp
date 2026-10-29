@@ -100,6 +100,8 @@ data class DeviceState(
 ) {
     val cardDown: Boolean get() = card.down
 
+    val playing: Playing get() = Playing.of(playback.state)
+
     val playRefusal: String? get() = when {
         cardDown -> CardView.REFUSED
         playback.state.source == Enums.Source.phone -> RECEIVER

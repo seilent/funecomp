@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.ui.App
@@ -104,6 +105,14 @@ class PlayingRowTest {
         assertLit(1 to true, 2 to false)
         c.transport(Enums.TransportCmd.next)
         assertLit(1 to false, 2 to true)
+    }
+
+    @Test
+    fun aServiceRowLightsNoLibraryRow() {
+        start(listOf(Page.Home, Page.Music, Page.Album(album, "First Love", "Utada Hikaru")), ::playing)
+        assertLit(1 to true)
+        c.push(Msg.STATE, c.device.playback.state.copy(service = "tidal", serviceKey = 167).encode())
+        assertLit(0 to false, 1 to false, 2 to false)
     }
 
     @Test
