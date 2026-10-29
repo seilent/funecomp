@@ -174,7 +174,8 @@ class ArtClearLinkTest {
         Thread.sleep(300)
         assertNotNull(cache().hit(key))
         held.countDown()
-        waitFor { cache().hit(key) == null }
+        waitFor { cleared(DEEZER_CLEAR) }
+        assertNull(cache().hit(key))
     }
 
     @Test
