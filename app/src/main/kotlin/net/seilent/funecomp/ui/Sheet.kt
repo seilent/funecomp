@@ -372,6 +372,8 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
                     }
                 }
                 ListBar(list, state.focus + scrolled, edge - ui.px(Tok.focus_barOffset))
+                val span = remember(list) { ListSpan() }
+                ScrollThumb(list, { list.isScrollInProgress }, { span.of(list, { j -> if (j < scrolled) heights[fixed + j] else pitch }) })
             }
         }
     }

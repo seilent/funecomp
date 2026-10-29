@@ -16,6 +16,7 @@ import androidx.compose.foundation.gestures.ScrollScope
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -217,6 +218,10 @@ fun Rows(
     barX: Float = Tok.hubEdge - Tok.focus_barOffset,
     focusKey: Any? = null,
     rebuild: Any? = null,
+    show: Any? = null,
+    size: ((Int) -> Float)? = null,
+    tail: Int = 0,
+    under: WindowInsets? = null,
     content: LazyListScope.() -> Unit,
 ) {
     val ui = LocalUi.current
@@ -235,6 +240,9 @@ fun Rows(
             content = content,
         )
         ListBar(state, focus, ui.px(barX), focusKey, rebuild)
+        val span = remember(state, show) { ListSpan() }
+        val density = LocalDensity.current
+        ScrollThumb(show, { state.isScrollInProgress }, { span.of(state, size, tail, under?.getBottom(density) ?: 0, past.roundToInt()) })
     }
 }
 

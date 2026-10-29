@@ -42,6 +42,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.espresso.Espresso
+import kotlin.math.roundToInt
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.gen.Enums
@@ -205,6 +206,18 @@ class NowPlayingLyricsTest {
         assertTrue(exists("np.mark"))
         enterBy("np.mark.hit")
         assertTrue(exists("np.lyric.plain.0"))
+    }
+
+    @Test
+    fun aLongPlainCopyShowsTheScrollThumbAtTheRightEdge() {
+        start(on = false, copy = plain, kind = Enums.LyricsKind.plain, plain = true)
+        enterBy("np.mark.hit")
+        val img = rule.onRoot().pixels()
+        val ui = Ui.of(img.width.toFloat(), img.height.toFloat())
+        val b = rule.onNodeWithTag("np.lyrics").fetchSemanticsNode().boundsInRoot
+        val r = thumbRun(img, img.width - ui.px(Tok.scrollbar_width).roundToInt() / 2, ui.px(3f).roundToInt(), b.top.roundToInt(), b.bottom.roundToInt())
+        assertNotNull(r)
+        assertEquals(b.top, r!!.first.toFloat(), 1f)
     }
 
     @Test

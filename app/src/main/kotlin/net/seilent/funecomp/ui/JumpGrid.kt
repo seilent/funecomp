@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.Section
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 const val JUMP_EXIT = -1
 const val JUMP_NONE = -2
@@ -230,6 +231,10 @@ fun JumpGrid(avail: Set<Int>, focus: Int, open: Boolean, scroll: ScrollState, on
                 }
             }
         }
+        ScrollThumb(open, { scroll.isScrollInProgress }, {
+            val view = scroll.viewportSize
+            if (!shown.value || view <= 0) null else ThumbSpan(ui.px(Tok.edge).roundToInt(), (view - ui.px(Tok.edge)).roundToInt(), view.toLong(), scroll.maxValue.toLong() + view, scroll.value.toLong())
+        })
     }
 }
 

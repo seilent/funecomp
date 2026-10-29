@@ -28,6 +28,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
@@ -748,6 +749,18 @@ class BehaviorTest {
         settle(300)
         assertEquals(0, jumpNodes())
         assertEquals(0, rule.onAllNodes(hasText("漢")).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun theOpenGridShowsTheScrollThumbOnItsBand() {
+        openAutoEq()
+        openGrid()
+        val img = rule.onRoot().pixels()
+        val ui = Ui.of(img.width.toFloat(), img.height.toFloat())
+        val r = thumbRun(img, img.width - ui.px(Tok.scrollbar_width).roundToInt() / 2, ui.px(3f).roundToInt())
+        assertNotNull(r)
+        assertEquals(0f, gridScroll().value(), 0f)
+        assertEquals(ui.px(Tok.edge).roundToInt(), r!!.first)
     }
 
     @Test

@@ -138,7 +138,7 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
                 }
                 shown == null -> StateLine(LOADING, STATE_TAG)
                 shown.items.isEmpty() -> StateLine(NO_RESULTS, STATE_TAG)
-                else -> Rows(ui.contentTop, state, focus = shown.index[focus] ?: -1) {
+                else -> Rows(ui.contentTop, state, focus = shown.index[focus] ?: -1, tail = 1, under = ime) {
                     items(shown.items, contentType = { it is AutoEqList.Divider }) { item ->
                         when (item) {
                             is AutoEqList.Divider -> DividerRow(item.letter) {

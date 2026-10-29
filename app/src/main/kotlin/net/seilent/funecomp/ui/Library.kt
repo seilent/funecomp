@@ -106,7 +106,7 @@ fun Pane(ctx: Ctx, view: Int, parent: String, top: Float? = null, x: Float = 0f,
     val list = libList(ctx.device, ctx.control, view, parent)
     var focus by rememberSaveable(view, parent) { mutableIntStateOf(0) }
     val state = rememberLazyListState()
-    Rows(top ?: ui.contentTop, state, x, focus = focus) {
+    Rows(top ?: ui.contentTop, state, x, focus = focus, show = view to parent) {
         val n = (list?.total ?: 0L).toInt()
         items(n) { i ->
             val r = list?.row(i, ctx.control, view, parent)

@@ -41,6 +41,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import kotlin.math.ceil
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Crop
@@ -768,6 +769,8 @@ private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, np: NpKe
                 }
             }
         }
+        val track = viewH.roundToInt()
+        ScrollThumb(copy, { scroll.isScrollInProgress }, { ThumbSpan(0, track, track.toLong(), (rows.size * p).roundToLong(), off.roundToLong()) }, Modifier.at(0f, ui.px(ui.npLyricTop)).size(ui.px(ui.w).dp(), viewH.dp()))
         return
     }
     val lines = copy?.lines

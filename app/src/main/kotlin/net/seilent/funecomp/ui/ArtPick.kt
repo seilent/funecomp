@@ -249,6 +249,13 @@ private sealed interface BrowseItem {
     }
 }
 
+private fun BrowseItem.height() = when (this) {
+    is BrowseItem.Head -> Tok.qpFirstBaseline + Tok.qpContentDrop
+    is BrowseItem.Gap -> Tok.qpSectionGap - Tok.qpFirstBaseline - (Tok.tileRowPitch - Tok.tileCellH)
+    is BrowseItem.Row -> Tok.tileRowPitch
+    is BrowseItem.Line -> Tok.rowHeight
+}
+
 private fun browseItems(s: BrowseSession, cols: Int): List<BrowseItem> = buildList {
     for (section in s.sections) {
         val tiles = s.tiles[section].orEmpty()
@@ -331,12 +338,12 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse, ime: WindowInsets) {
                 }
             }
             Box(engage) {
-                Rows(ui.contentTop, state = s.list) {
+                Rows(ui.contentTop, state = s.list, size = { ui.px(items[it].height()) }, tail = 1, under = ime) {
                     itemsIndexed(items, key = { _, it -> it.key }) { i, item ->
                         when (item) {
                             is BrowseItem.Head -> BrowseHead(item.section, i)
-                            is BrowseItem.Gap -> Box(Modifier.size(ui.px(ui.w).dp(), ui.px(Tok.qpSectionGap - Tok.qpFirstBaseline - (Tok.tileRowPitch - Tok.tileCellH)).dp()))
-                            is BrowseItem.Row -> Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(Tok.tileRowPitch).dp())) {
+                            is BrowseItem.Gap -> Box(Modifier.size(ui.px(ui.w).dp(), ui.px(item.height()).dp()))
+                            is BrowseItem.Row -> Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(item.height()).dp())) {
                                 item.tiles.forEachIndexed { c, b ->
                                     val n = item.row * cols + c
                                     val at = item.section to n
@@ -360,7 +367,7 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse, ime: WindowInsets) {
 @Composable
 private fun BrowseHead(section: String, i: Int) {
     val ui = LocalUi.current
-    Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(Tok.qpFirstBaseline + Tok.qpContentDrop).dp()).testTag("pick.head.$section")) {
+    Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(BrowseItem.Head(section).height()).dp()).testTag("pick.head.$section")) {
         RoleText(Sources.label(section), Roles.quickplayHeader, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(Tok.qpFirstBaseline)))
     }
 }

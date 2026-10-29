@@ -672,6 +672,13 @@ private val AEQ = EQ + Page.AutoEq(Enums.EqOutput.wired)
 
 private const val AEQ_IME = 0.4f
 private const val TALL_IME = 736f / 1080f
+private const val THUMB_LOAD = 300L
+private const val THUMB_FADE = "music-artists"
+private val THUMB_FRAMES = listOf(0L, 100L, 1000L, 1500L, 1525L, 1550L, 1600L, 1650L, 1750L, 1850L, 2000L, 2100L)
+private val THUMB_SHOTS = listOf(
+    "home", "music-artists", "music-songs", "artist", "album", "queue", "playlists", "settings-output", "settings-pick-maxvolume", "sheet-song",
+    "eq", "connection", "autoeq-list", "autoeq-jump", "firmware", "online-art", "online-lyrics", "online-scrobbling", "artcredits", "pick-browse",
+).map { it to 400L } + listOf("lyr-plain" to 900L)
 private val ENTRY_SHOTS = setOf("settings-sleep-entry", "eq-entry", "eqp-rename", "eqp-saveas", "pick-entry", "online-art-key", "online-art-key-filled", "online-scrobbling-entry", "online-scrobbling-entry-filled")
 
 private val CLAMPED = SimControl.HD650.replace("Preamp: -6.1 dB", "Preamp: 1.5 dB").replace("Gain 6.4 dB", "Gain 14.0 dB").replace("Fc 5332 Hz Gain -1.1 dB Q 5.75", "Fc 22000 Hz Gain -30.0 dB Q 12.00")
@@ -1353,6 +1360,19 @@ class Shots {
         System.getProperty("shots.backdrop")?.let { File(it) }?.takeIf { it.isFile }?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() }
     }
 
+    private fun load(shot: Shot, size: Size, ime: Float) {
+        val c = SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
+        shotClock(c)
+        shot.prep(c)
+        if (shot.gated) c.device = DeviceState()
+        sources = shot.sources
+        browseCols = shot.cols ?: { Tok.gridCols.toInt() }
+        control = c
+        shell = Shell(Nav(shot.pages), gated = shot.gated)
+        imeShare = ime
+        frame = shot to size
+    }
+
     @Test
     fun shots() {
         assumeTrue(System.getProperty("shots.run") == "true")
@@ -1374,16 +1394,7 @@ class Shots {
                 val name = if (tall) "${shot.name}-tallime" else shot.name
                 if (only.isNotEmpty() && only.split(',').none { "$name-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue
-                val c = SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
-                shotClock(c)
-                shot.prep(c)
-                if (shot.gated) c.device = DeviceState()
-                sources = shot.sources
-                browseCols = shot.cols ?: { Tok.gridCols.toInt() }
-                control = c
-                shell = Shell(Nav(shot.pages), gated = shot.gated)
-                imeShare = if (tall) TALL_IME else shot.ime
-                frame = shot to size
+                load(shot, size, if (tall) TALL_IME else shot.ime)
                 settle(1000)
                 shot.act(this, shell)
                 settle(shot.after)
@@ -1393,6 +1404,30 @@ class Shots {
             }
         }
         if (only.isEmpty()) return
+        for (size in SIZES) {
+            for ((shotName, after) in THUMB_SHOTS) {
+                val name = "thumb-$shotName-${size.name}"
+                if (only.split(',').none { name.contains(it) }) continue
+                val shot = SHOTS.single { it.name == shotName }
+                if (shot.backdrop && backdrop == null) continue
+                load(shot, size, shot.ime)
+                settle(THUMB_LOAD)
+                shot.act(this, shell)
+                settle(after)
+                rule.onNodeWithTag("frame").captureRoboImage(File(dir, "$name.png").path)
+            }
+        }
+        for (size in SIZES) {
+            val name = "thumbfade-$THUMB_FADE-${size.name}"
+            if (only.split(',').none { name.contains(it) }) continue
+            load(SHOTS.single { it.name == THUMB_FADE }, size, 0f)
+            rule.waitForIdle()
+            val start = rule.mainClock.currentTime
+            for (at in THUMB_FRAMES) {
+                rule.mainClock.advanceTimeBy(start + at - rule.mainClock.currentTime, ignoreFrameDuration = true)
+                rule.onNodeWithTag("frame").captureRoboImage(File(dir, "$name/e%04d.png".format(at)).path)
+            }
+        }
         for (size in SIZES) {
             for (strip in STRIPS) {
                 val name = "lyrslide-${strip.name}-${size.name}"
