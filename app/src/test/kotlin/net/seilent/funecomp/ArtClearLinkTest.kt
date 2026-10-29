@@ -8,9 +8,13 @@ import android.content.pm.ApplicationInfo
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Looper
+import net.seilent.funecomp.artist.Art
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.ArtPicks
+import net.seilent.funecomp.artist.ArtPusher
+import net.seilent.funecomp.artist.Full
+import net.seilent.funecomp.artist.FullPush
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.ImageIds
 import net.seilent.funecomp.artist.LyricSources
@@ -18,12 +22,21 @@ import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Wikimedia
+import net.seilent.funecomp.link.Session
+import net.seilent.funecomp.link.TcpTransport
+import net.seilent.funecomp.proto.Groups
+import net.seilent.funecomp.proto.HelloReply
+import net.seilent.funecomp.proto.Node
+import net.seilent.funecomp.proto.Req
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.sim.Board
+import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.ui.Phase
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -45,6 +58,7 @@ import java.io.File
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.zip.CRC32
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -53,6 +67,7 @@ class ArtClearLinkTest {
     private val app get() = RuntimeEnvironment.getApplication()
     private val sims = ArrayList<Sim>()
     private val lines = CopyOnWriteArrayList<String>()
+    private var port = 0
     private val asked = CopyOnWriteArrayList<String>()
     private val name = Library.synthetic().tracks.first().artists.first()
     private val key = "name:${Names.fold(name)}"
@@ -130,14 +145,29 @@ class ArtClearLinkTest {
 
     private fun stored(artist: String) = lines.filter { it.startsWith("stored name=$artist ") }
 
-    private fun link(free: Boolean? = null): Sim {
+    private fun link(free: Boolean? = null, vararg faults: String): Sim {
         Remote.artist(app, http)
         free?.let { network(it) }
-        val s = Sim(Options(Board.of("v1"), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }))
+        val s = Sim(Options(Board.of("v1"), Faults(faults.toList()), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }))
         sims += s
-        Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:${s.listen(0)}")).create().startCommand(0, 1)
+        port = s.listen(0)
+        Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:$port")).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE }
         return s
+    }
+
+    private fun otherApp(artist: String) {
+        val ready = CountDownLatch(1)
+        val s = Session(TcpTransport("127.0.0.1", port), object : Session.Listener {
+            override fun onHello(hello: HelloReply) = ready.countDown()
+            override fun onPush(type: Int, body: Node) {}
+        }, Session.Config("test", features = Groups.mask("imgOrigin", "imgSource")))
+        Thread { s.run() }.apply { isDaemon = true }.start()
+        assertTrue(ready.await(5, TimeUnit.SECONDS))
+        val b = ByteArrayOutputStream().also { javax.imageio.ImageIO.write(java.awt.image.BufferedImage(900, 1200, java.awt.image.BufferedImage.TYPE_INT_RGB), "jpg", it) }.toByteArray()
+        val full = FullPush({ Full(b, 900, 1200, CRC32().apply { update(b) }.value, null) }, { 1 })
+        assertEquals(setOf(artist), ArtPusher(s, { n, m, w, h -> Art(b, w, h, n, m, Sources.DEEZER, null, key = "other") }, full, { true }) { true }.run(listOf(artist to null)).pushed.keys)
+        s.close("other app")
     }
 
     private fun logged() = ShadowLog.getLogsForTag(Remote.TAG).map { it.msg }
@@ -240,6 +270,55 @@ class ArtClearLinkTest {
         assertNull(cache().hit(key))
         assertTrue(records().none { it.key == key })
         assertTrue(lines.none { " rx IMG_DEL " in it })
+    }
+
+    @Test
+    fun aClearOnACrcDeviceDeletesTheClearedPhoto() {
+        sources(Sources.DEEZER)
+        keep()
+        link(true, "img-source")
+        waitFor { Remote.device.hello?.has("imgSource") == true && sims.single().device.sources.isNotEmpty() }
+        Remote.clearArt(Sources.DEEZER)
+        waitFor { "deleted name=$name" in lines }
+        waitFor { records().any { it.key == key && it.applied.isNotEmpty() } }
+        assertTrue(records().single { it.key == key }.crcs.isNotEmpty())
+    }
+
+    @Test
+    fun aClearOnACrcDeviceDeletesAPushedCropAfterItsRenderWasRedone() {
+        sources(Sources.DEEZER)
+        keep()
+        link(true, "img-source", "src-nospace")
+        waitFor { stored(name).isNotEmpty() }
+        val other = ByteArrayOutputStream().also { javax.imageio.ImageIO.write(java.awt.image.BufferedImage(240, 320, java.awt.image.BufferedImage.TYPE_INT_RGB), "jpg", it) }.toByteArray()
+        val renders = File(app.filesDir, "art").listFiles { f -> Regex("\\.\\d+x\\d+\\.jpg$").containsMatchIn(f.name) }!!.toList()
+        assertTrue(renders.isNotEmpty())
+        renders.forEach { it.writeBytes(other) }
+        Remote.clearArt(Sources.DEEZER)
+        waitFor { "deleted name=$name" in lines }
+        waitFor { records().any { it.key == key && it.applied.isNotEmpty() } }
+    }
+
+    @Test
+    fun aClearOnACrcDeviceKeepsAPhotoAnotherAppPushedSince() {
+        val other = "Ichiko Aoba"
+        val otherKey = "name:${Names.fold(other)}"
+        sources(Sources.DEEZER)
+        keep(other)
+        link(true, "img-source")
+        waitFor { sims.single().device.sources.values.any { it.name == other } }
+        Remote.stop()
+        otherApp(other)
+        Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:$port")).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE }
+        val done = logged().count { it.startsWith("art DONE ") }
+        waitFor { logged().count { it.startsWith("art DONE ") } > done }
+        val del = lines.count { " rx IMG_DEL " in it }
+        Remote.clearArt(Sources.DEEZER)
+        waitFor { records().any { it.key == otherKey && it.applied.isNotEmpty() } }
+        assertTrue(records().single { it.key == otherKey }.crcs.isNotEmpty())
+        assertEquals(del, lines.count { " rx IMG_DEL " in it })
+        assertTrue(sims.single().device.sources.values.any { it.name == other && it.w == 900 && it.h == 1200 })
     }
 
     private companion object {

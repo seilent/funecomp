@@ -35,6 +35,8 @@ class FullSource(
         return Full(out.first, out.second, out.third, c, focus)
     }
 
+    fun cropped(key: String, crc: Long) = cache.putCropCrc(key, crc)
+
     fun refused(key: String): Int {
         val e = cache.hit(key) ?: return REFUSALS
         return cache.refused(key, cache.sha(e))

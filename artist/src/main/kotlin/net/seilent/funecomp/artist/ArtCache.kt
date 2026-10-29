@@ -3,6 +3,7 @@ package net.seilent.funecomp.artist
 import java.io.File
 import java.security.MessageDigest
 import java.util.Properties
+import java.util.zip.CRC32
 
 class ArtCache(private val dir: File) {
     class Entry(
@@ -244,6 +245,17 @@ class ArtCache(private val dir: File) {
     }
 
     @Synchronized
+    fun putCropCrc(key: String, crc: Long) {
+        val m = meta(key)
+        val p = load(m)
+        if (p.getProperty("state") != "hit") return
+        val was = p.getProperty("cropCrcs", "").split(',').mapNotNull { it.toLongOrNull() }
+        if (crc in was) return
+        p.setProperty("cropCrcs", (was + crc).takeLast(CROP_CRCS).joinToString(","))
+        save(m, p)
+    }
+
+    @Synchronized
     fun refusals(key: String, sha: String): Int {
         val p = load(meta(key))
         return if (p.getProperty("refusedSha") == sha) p.getProperty("refusals")?.toIntOrNull() ?: 0 else 0
@@ -285,11 +297,14 @@ class ArtCache(private val dir: File) {
         .also { listed = it }
 
     @Synchronized
-    fun clearSource(source: String): List<Entry> {
+    fun clearSource(source: String, seen: (Entry, Set<Long>) -> Unit = { _, _ -> }): List<Entry> {
         listed = null
         val gone = ArrayList<Entry>()
         for (key in hits { it.getProperty("source") == source }) {
-            hit(key)?.let { gone += it }
+            hit(key)?.let {
+                seen(it, crcs(key))
+                gone += it
+            }
             dropFiles(key)
         }
         for (f in files(".miss") + files(".meta")) {
@@ -304,8 +319,9 @@ class ArtCache(private val dir: File) {
     }
 
     @Synchronized
-    fun clearAll(): List<Entry> {
+    fun clearAll(seen: (Entry, Set<Long>) -> Unit = { _, _ -> }): List<Entry> {
         val gone = entries().filterNot { it.key.startsWith(ArtPicks.PREFIX) }
+        for (e in gone) seen(e, crcs(e.key))
         val keep = picked()
         dir.listFiles()?.forEach { if (it.name.substringBefore('.') !in keep) it.delete() }
         nameMap = null
@@ -365,6 +381,16 @@ class ArtCache(private val dir: File) {
 
     private fun picked(): Set<String> = files(".meta").filter { load(it).getProperty("key")?.startsWith(ArtPicks.PREFIX) == true }.mapTo(HashSet()) { it.name.substringBefore('.') }
 
+    private fun crcs(key: String): Set<Long> {
+        val h = hash(key)
+        val out = (dir.listFiles { f -> f.name.startsWith("$h.") && f.name.endsWith(".jpg") && f.name != "$h.full.jpg" } ?: emptyArray())
+            .mapTo(HashSet()) { CRC32().apply { update(it.readBytes()) }.value }
+        val p = load(meta(key))
+        p.getProperty("pushCrc")?.toLongOrNull()?.let { out += it }
+        p.getProperty("cropCrcs", "").split(',').mapNotNullTo(out) { it.toLongOrNull() }
+        return out
+    }
+
     private fun dropFiles(key: String) {
         val h = hash(key)
         dir.listFiles { f -> f.name.startsWith("$h.") }?.forEach { it.delete() }
@@ -414,6 +440,7 @@ class ArtCache(private val dir: File) {
         private const val KANA = ".kana"
         private const val CLEANED = "3"
         private const val NO_FOCUS = "none"
+        private const val CROP_CRCS = 8
 
         fun sha256(b: ByteArray): String = MessageDigest.getInstance("SHA-256").digest(b).joinToString("") { "%02x".format(it) }
     }

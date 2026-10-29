@@ -7,9 +7,10 @@ class FullPush(
     private val source: (String) -> Full?,
     private val refusal: (String) -> Int,
     val bluetooth: () -> Boolean = { false },
+    private val cropped: (String, Long) -> Unit = { _, _ -> },
     private val log: (String) -> Unit = {},
 ) {
-    constructor(s: FullSource, bluetooth: () -> Boolean = { false }, log: (String) -> Unit = {}) : this(s::of, s::refused, bluetooth, log)
+    constructor(s: FullSource, bluetooth: () -> Boolean = { false }, log: (String) -> Unit = {}) : this(s::of, s::refused, bluetooth, s::cropped, log)
 
     private var low: Session? = null
     private val sent = HashMap<String, Pair<Long, String>>()
@@ -27,6 +28,8 @@ class FullPush(
         sent.remove(k)
         return key
     }
+
+    fun crop(key: String, crc: Long) = cropped(key, crc)
 
     fun of(key: String): Full? = source(key)
 

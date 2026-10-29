@@ -9,6 +9,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.util.zip.CRC32
 
 class ArtClearTest {
     @get:Rule
@@ -131,6 +132,25 @@ class ArtClearTest {
         r.cleared(utada, utada, "宇多田ヒカル", 2)
         assertEquals(listOf(2L), r.pending("tcp:A").map { it.at })
         assertEquals(1, r.drops().size)
+    }
+
+    @Test
+    fun aClearReportsTheCrcsOfTheRendersAndTheFullSourceAndTheRecordKeepsThem() {
+        val a = seed()
+        val render = CRC32().apply { update(cache.rendered(utada, 256, 320)!!) }.value
+        cache.putFull(utada, ArtCache.Full(77L, 900, 900, "copy", null, true), null)
+        val seen = HashMap<String, Set<Long>>()
+        a.clearSource(Sources.DEEZER) { e, c -> seen[e.key] = c }
+        assertEquals(mapOf(utada to setOf(render, 77L)), seen)
+        val r = ArtBlocks(blocksFile)
+        r.cleared(utada, utada, "宇多田ヒカル", 1, seen.getValue(utada))
+        r.cleared(radiohead, radiohead, "Radiohead", 1)
+        r.save()
+        val back = ArtBlocks(blocksFile, { 2 }).drops().associateBy { it.key }
+        assertEquals(setOf(render, 77L), back.getValue(utada).crcs)
+        assertTrue(back.getValue(utada).cleared)
+        assertEquals(emptySet<Long>(), back.getValue(radiohead).crcs)
+        assertTrue(back.getValue(radiohead).cleared)
     }
 
     @Test

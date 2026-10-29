@@ -10,6 +10,7 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
+import java.util.zip.CRC32
 
 class ArtPusher(
     private val session: Session,
@@ -188,6 +189,7 @@ class ArtPusher(
                     }
                 }
                 if (f is Form.Source && (o is ImagePush.Outcome.Done || o is ImagePush.Outcome.Have)) fp?.sent(name, f.f.crc, f.key)
+                if (f is Form.Crop && o is ImagePush.Outcome.Done) (f.a.key ?: a.key)?.let { k -> fp?.crop(k, CRC32().apply { update(f.a.jpeg) }.value) }
                 when (o) {
                     is ImagePush.Outcome.Done -> pushed[name] = o.from
                     is ImagePush.Outcome.Have -> stored += name

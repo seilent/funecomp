@@ -578,6 +578,7 @@ class Forward(
     private fun matches(r: ArtBlocks.Record, e: ImgEntry, b: Blocks): Boolean {
         val on = (r.mbid != null && e.mbid?.trim()?.lowercase() == r.mbid) || b.keyOf(e.name, e.mbid) == r.key ||
             (Names.mbid(e.mbid) == null && "name:" + Names.fold(e.name) == r.key)
+        if (r is ArtBlocks.Drop && r.cleared && r.crcs.isNotEmpty() && (e.crc != null || e.srcCrc != null)) return on && (e.crc in r.crcs || e.srcCrc in r.crcs)
         return on && (r !is ArtBlocks.Reject || Names.fold(e.name) == Names.fold(r.name))
     }
 

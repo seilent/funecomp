@@ -550,9 +550,9 @@ class ArtistArt(
 
     fun forget(e: ArtCache.Entry) = cache.drop(e.key, e.at)
 
-    fun clearSource(source: String): List<ArtCache.Entry> = cache.clearSource(source)
+    fun clearSource(source: String, seen: (ArtCache.Entry, Set<Long>) -> Unit = { _, _ -> }): List<ArtCache.Entry> = cache.clearSource(source, seen)
 
-    fun clearAll(): List<ArtCache.Entry> = cache.clearAll()
+    fun clearAll(seen: (ArtCache.Entry, Set<Long>) -> Unit = { _, _ -> }): List<ArtCache.Entry> = cache.clearAll(seen)
 
     fun usage(): Map<String?, ArtCache.Usage> = cache.usage()
 
