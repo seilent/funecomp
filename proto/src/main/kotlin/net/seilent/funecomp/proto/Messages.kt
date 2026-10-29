@@ -42,6 +42,7 @@ object Groups {
         "imgSource" to emptySet(),
         "eqStages" to emptySet(),
         "liveRows" to setOf(Msg.LIVE),
+        "svcLogin" to setOf(Msg.SVC_LOGIN, Msg.SVC_LOGIN_END, Msg.SVC_PKCE, Msg.SVC_KEYS),
     )
     val unserved: Set<String> = setOf(
         "eqSlots",
@@ -54,6 +55,7 @@ object Groups {
         "phoneFiles",
         "imgSource",
         "eqStages",
+        "svcLogin",
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -107,6 +109,7 @@ data class HelloReply(
     val phoneMime: List<String> = emptyList(),
     val phoneMaxRate: Long? = null,
     val phoneMaxBits: Int? = null,
+    val services: List<SvcInfo> = emptyList(),
 ) {
     fun has(group: String) = Groups.bit(group)?.let { (features ushr it) and 1L == 1L } ?: false
 
@@ -132,6 +135,7 @@ data class HelloReply(
         phoneMime.forEach { str(Tags.HelloReply.phoneMime, it) }
         u32(Tags.HelloReply.phoneMaxRate, phoneMaxRate)
         u8(Tags.HelloReply.phoneMaxBits, phoneMaxBits)
+        services.forEach { e -> rec(Tags.HelloReply.service) { e.write(this) } }
     }
 
     companion object {
@@ -156,7 +160,21 @@ data class HelloReply(
             n.strs(Tags.HelloReply.phoneMime),
             n.long(Tags.HelloReply.phoneMaxRate),
             n.int(Tags.HelloReply.phoneMaxBits),
+            n.nodes(Tags.HelloReply.service).map { SvcInfo.from(it) },
         )
+    }
+}
+
+data class SvcInfo(val id: String?, val name: String?, val secrets: List<String> = emptyList(), val pkce: Boolean? = null) {
+    fun write(o: TlvWriter) = o.apply {
+        str(Tags.SvcInfo.id, id)
+        str(Tags.SvcInfo.name, name)
+        secrets.forEach { str(Tags.SvcInfo.secret, it) }
+        bool(Tags.SvcInfo.pkce, pkce)
+    }
+
+    companion object {
+        fun from(n: Node) = SvcInfo(n.str(Tags.SvcInfo.id), n.str(Tags.SvcInfo.name), n.strs(Tags.SvcInfo.secret), n.bool(Tags.SvcInfo.pkce))
     }
 }
 
@@ -255,7 +273,11 @@ data class State(
     val aheadMs: Long? = null,
     val imgHold: Boolean? = null,
     val updHold: Boolean? = null,
+    val service: String? = null,
+    val serviceKey: Long? = null,
 ) {
+    val library: Long? get() = track?.takeIf { it != 0L && service == null }
+
     fun encode() = tlv {
         enum(Tags.State.source, source)
         enum(Tags.State.output, output)
@@ -306,6 +328,8 @@ data class State(
         u32(Tags.State.aheadMs, aheadMs)
         bool(Tags.State.imgHold, imgHold)
         bool(Tags.State.updHold, updHold)
+        str(Tags.State.service, service)
+        u64(Tags.State.serviceKey, serviceKey)
     }
 
     companion object {
@@ -359,6 +383,8 @@ data class State(
             n.long(Tags.State.aheadMs),
             n.bool(Tags.State.imgHold),
             n.bool(Tags.State.updHold),
+            n.str(Tags.State.service),
+            n.long(Tags.State.serviceKey),
         )
     }
 }
@@ -596,7 +622,11 @@ data class QueueItem(
     val lyrics: Boolean? = null,
     val lyricsPlain: Boolean? = null,
     val phoneFile: Long? = null,
+    val service: String? = null,
+    val serviceKey: Long? = null,
 ) {
+    val library: Long? get() = track?.takeIf { it != 0L && service == null }
+
     fun write(o: TlvWriter) = o.apply {
         u64(Tags.QueueItem.track, track)
         str(Tags.QueueItem.title, title)
@@ -607,6 +637,8 @@ data class QueueItem(
         bool(Tags.QueueItem.lyrics, lyrics)
         bool(Tags.QueueItem.lyricsPlain, lyricsPlain)
         u64(Tags.QueueItem.phoneFile, phoneFile)
+        str(Tags.QueueItem.service, service)
+        u64(Tags.QueueItem.serviceKey, serviceKey)
     }
 
     val size: Int get() = TlvWriter().rec(Tags.Queue.item) { write(this) }.size
@@ -629,7 +661,7 @@ data class Queue(val rev: Long, val page: PageInfo, val items: List<QueueItem>) 
                 QueueItem(
                     it.long(Tags.QueueItem.track), it.str(Tags.QueueItem.title), it.strs(Tags.QueueItem.artists), it.strs(Tags.QueueItem.mbids),
                     it.str(Tags.QueueItem.album), it.long(Tags.QueueItem.durationMs), it.bool(Tags.QueueItem.lyrics),
-                    it.bool(Tags.QueueItem.lyricsPlain), it.long(Tags.QueueItem.phoneFile),
+                    it.bool(Tags.QueueItem.lyricsPlain), it.long(Tags.QueueItem.phoneFile), it.str(Tags.QueueItem.service), it.long(Tags.QueueItem.serviceKey),
                 )
             },
         )
@@ -903,7 +935,11 @@ data class PlayEntry(
     val zoneS: Int? = null,
     val liveSeen: Boolean? = null,
     val phoneFile: Long? = null,
+    val service: String? = null,
+    val serviceKey: Long? = null,
 ) {
+    val library: Long? get() = track?.takeIf { it != 0L && service == null }
+
     fun write(o: TlvWriter) = o.apply {
         u32(Tags.PlayEntry.seq, seq)
         i64(Tags.PlayEntry.startLocalS, startLocalS)
@@ -920,6 +956,8 @@ data class PlayEntry(
         i32(Tags.PlayEntry.zoneS, zoneS)
         bool(Tags.PlayEntry.liveSeen, liveSeen)
         u64(Tags.PlayEntry.phoneFile, phoneFile)
+        str(Tags.PlayEntry.service, service)
+        u64(Tags.PlayEntry.serviceKey, serviceKey)
     }
 
     val size: Int get() = TlvWriter().rec(Tags.PlaylogGetReply.entry) { write(this) }.size
@@ -941,6 +979,8 @@ data class PlayEntry(
             n.int(Tags.PlayEntry.zoneS),
             n.bool(Tags.PlayEntry.liveSeen),
             n.long(Tags.PlayEntry.phoneFile),
+            n.str(Tags.PlayEntry.service),
+            n.long(Tags.PlayEntry.serviceKey),
         )
     }
 }
@@ -1145,5 +1185,91 @@ data class PhoneArtReply(val crc: Long?, val total: Long?, val w: Int?, val h: I
             n.long(Tags.PhoneArtReply.offset),
             n.bytes(Tags.PhoneArtReply.data),
         )
+    }
+}
+
+data class SvcLogin(val service: String?, val uri: String?, val host: String?, val userCode: String?, val expiresS: Long?, val seq: Long?) {
+    fun encode() = tlv {
+        str(Tags.SvcLogin.service, service)
+        str(Tags.SvcLogin.uri, uri)
+        str(Tags.SvcLogin.host, host)
+        str(Tags.SvcLogin.userCode, userCode)
+        u32(Tags.SvcLogin.expiresS, expiresS)
+        u32(Tags.SvcLogin.seq, seq)
+    }
+
+    companion object {
+        fun from(n: Node) = SvcLogin(
+            n.str(Tags.SvcLogin.service),
+            n.str(Tags.SvcLogin.uri),
+            n.str(Tags.SvcLogin.host),
+            n.str(Tags.SvcLogin.userCode),
+            n.long(Tags.SvcLogin.expiresS),
+            n.long(Tags.SvcLogin.seq),
+        )
+    }
+}
+
+data class SvcLoginEnd(val service: String?, val seq: Long?, val result: Int?) {
+    fun encode() = tlv {
+        str(Tags.SvcLoginEnd.service, service)
+        u32(Tags.SvcLoginEnd.seq, seq)
+        enum(Tags.SvcLoginEnd.result, result)
+    }
+
+    companion object {
+        fun from(n: Node) = SvcLoginEnd(n.str(Tags.SvcLoginEnd.service), n.long(Tags.SvcLoginEnd.seq), n.int(Tags.SvcLoginEnd.result))
+    }
+}
+
+data class SvcPkce(val service: String?, val authorizeUrl: String?, val host: String?, val redirectPrefix: String?, val seq: Long?) {
+    fun encode() = tlv {
+        str(Tags.SvcPkce.service, service)
+        str(Tags.SvcPkce.authorizeUrl, authorizeUrl)
+        str(Tags.SvcPkce.host, host)
+        str(Tags.SvcPkce.redirectPrefix, redirectPrefix)
+        u32(Tags.SvcPkce.seq, seq)
+    }
+
+    companion object {
+        fun from(n: Node) = SvcPkce(
+            n.str(Tags.SvcPkce.service),
+            n.str(Tags.SvcPkce.authorizeUrl),
+            n.str(Tags.SvcPkce.host),
+            n.str(Tags.SvcPkce.redirectPrefix),
+            n.long(Tags.SvcPkce.seq),
+        )
+    }
+}
+
+data class SvcPkceReply(val redirect: String?) {
+    fun encode() = tlv { str(Tags.SvcPkceReply.redirect, redirect) }
+
+    companion object {
+        fun from(n: Node) = SvcPkceReply(n.str(Tags.SvcPkceReply.redirect))
+    }
+}
+
+data class SvcKey(val name: String?, val value: String?) {
+    fun write(o: TlvWriter) = o.apply {
+        str(Tags.SvcKey.name, name)
+        str(Tags.SvcKey.`value`, value)
+    }
+
+    override fun toString() = "SvcKey(name=$name)"
+
+    companion object {
+        fun from(n: Node) = SvcKey(n.str(Tags.SvcKey.name), n.str(Tags.SvcKey.`value`))
+    }
+}
+
+data class SvcKeys(val service: String?, val keys: List<SvcKey>) {
+    fun encode() = tlv {
+        str(Tags.SvcKeys.service, service)
+        keys.forEach { k -> rec(Tags.SvcKeys.key) { k.write(this) } }
+    }
+
+    companion object {
+        fun from(n: Node) = SvcKeys(n.str(Tags.SvcKeys.service), n.nodes(Tags.SvcKeys.key).map { SvcKey.from(it) })
     }
 }

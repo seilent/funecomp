@@ -10,7 +10,7 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply bc00010101000104004644435002020001000302000f000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply bc000101010001040046444350020200010003020010000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
 hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ffff0000000000000e0400070000000f04000300000010040004000000111a00010a00
 hex hello_reply 6865616470686f6e6573020a004845414450484f4e4553111800010900626c7565746f6f7468020900424c5545544f4f54481201000012010001120100021201
 hex hello_reply 0003
@@ -21,7 +21,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 15
+dec hello_reply 0.body.minor 16
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -5651,3 +5651,191 @@ dec stream_read_landed 0.body.offset 16320
 dec stream_read_landed 0.body.len 16320
 dec stream_read_landed 0.body.landed 16320
 act stream_read_landed accept
+vec svc_login dev
+hex svc_login 54004300f400010500746964616c021f0068747470733a2f2f6c696e6b2e73766364656d6f2e746573742f41424344450311006c696e6b2e73766364656d
+hex svc_login 6f2e7465737404050041424344450504002c01000006040007000000
+dec svc_login 0.len 84
+dec svc_login 0.type SVC_LOGIN
+dec svc_login 0.flags 0x00
+dec svc_login 0.seq 244
+dec svc_login 0.body.service tidal
+dec svc_login 0.body.uri https://link.svcdemo.test/ABCDE
+dec svc_login 0.body.host link.svcdemo.test
+dec svc_login 0.body.userCode ABCDE
+dec svc_login 0.body.expiresS 300
+dec svc_login 0.body.seq 7
+act svc_login accept
+vec svc_login_end dev
+hex svc_login_end 13004400f500010500746964616c0204000700000003010000
+dec svc_login_end 0.len 19
+dec svc_login_end 0.type SVC_LOGIN_END
+dec svc_login_end 0.flags 0x00
+dec svc_login_end 0.seq 245
+dec svc_login_end 0.body.service tidal
+dec svc_login_end 0.body.seq 7
+dec svc_login_end 0.body.result done
+act svc_login_end accept
+vec svc_pkce dev
+hex svc_pkce 72004504f600010500746964616c022f0068747470733a2f2f6c6f67696e2e73766364656d6f2e746573742f617574686f72697a653f73746174653d6162
+hex svc_pkce 31320312006c6f67696e2e73766364656d6f2e7465737404190068747470733a2f2f73766364656d6f2e746573742f6175746805040007000000
+dec svc_pkce 0.len 114
+dec svc_pkce 0.type SVC_PKCE
+dec svc_pkce 0.flags 0x04
+dec svc_pkce 0.seq 246
+dec svc_pkce 0.body.service tidal
+dec svc_pkce 0.body.authorizeUrl https://login.svcdemo.test/authorize?state=ab12
+dec svc_pkce 0.body.host login.svcdemo.test
+dec svc_pkce 0.body.redirectPrefix https://svcdemo.test/auth
+dec svc_pkce 0.body.seq 7
+act svc_pkce accept
+vec svc_pkce_reply app
+hex svc_pkce_reply 31004501f600012e0068747470733a2f2f73766364656d6f2e746573742f617574683f636f64653d633064652673746174653d61623132
+re svc_pkce_reply svc_pkce
+dec svc_pkce_reply 0.len 49
+dec svc_pkce_reply 0.type SVC_PKCE
+dec svc_pkce_reply 0.flags 0x01
+dec svc_pkce_reply 0.seq 246
+dec svc_pkce_reply 0.body.redirect https://svcdemo.test/auth?code=c0de&state=ab12
+act svc_pkce_reply accept
+vec svc_pkce_cancelled app
+hex svc_pkce_cancelled 10004503f6000101000d02090063616e63656c6c6564
+re svc_pkce_cancelled svc_pkce
+dec svc_pkce_cancelled 0.len 16
+dec svc_pkce_cancelled 0.type SVC_PKCE
+dec svc_pkce_cancelled 0.flags 0x03
+dec svc_pkce_cancelled 0.seq 246
+dec svc_pkce_cancelled 0.body.code 13
+dec svc_pkce_cancelled 0.body.text cancelled
+act svc_pkce_cancelled accept
+vec svc_keys app
+hex svc_keys 3c004604f700010500746964616c021500010900636c69656e745f6964020600616263313233021900010d00636c69656e745f7365637265740206007333
+hex svc_keys 63723374
+dec svc_keys 0.len 60
+dec svc_keys 0.type SVC_KEYS
+dec svc_keys 0.flags 0x04
+dec svc_keys 0.seq 247
+dec svc_keys 0.body.service tidal
+dec svc_keys 0.body.key[0].name client_id
+dec svc_keys 0.body.key[0].value abc123
+dec svc_keys 0.body.key[1].name client_secret
+dec svc_keys 0.body.key[1].value s3cr3t
+act svc_keys accept
+vec svc_keys_reply dev
+hex svc_keys_reply 00004601f700
+re svc_keys_reply svc_keys
+dec svc_keys_reply 0.len 0
+dec svc_keys_reply 0.type SVC_KEYS
+dec svc_keys_reply 0.flags 0x01
+dec svc_keys_reply 0.seq 247
+act svc_keys_reply accept
+vec svc_keys_bad dev
+hex svc_keys_bad 10004603f700010100020209006261642076616c7565
+re svc_keys_bad svc_keys
+dec svc_keys_bad 0.len 16
+dec svc_keys_bad 0.type SVC_KEYS
+dec svc_keys_bad 0.flags 0x03
+dec svc_keys_bad 0.seq 247
+dec svc_keys_bad 0.body.code 2
+dec svc_keys_bad 0.body.text bad value
+act svc_keys_bad accept
+vec svc_keys_off dev
+hex svc_keys_off 0a004603f700010100100203006f6666
+re svc_keys_off svc_keys
+dec svc_keys_off 0.len 10
+dec svc_keys_off 0.type SVC_KEYS
+dec svc_keys_off 0.flags 0x03
+dec svc_keys_off 0.seq 247
+dec svc_keys_off 0.body.code 16
+dec svc_keys_off 0.body.text off
+act svc_keys_off accept
+vec queue_service dev
+hex queue_service 44001400f80001040009000000020400000000000304000100000004010000052800020400536f6e6703040042616e64060400400d03000a050074696461
+hex queue_service 6c0b0800a700000000000000
+dec queue_service 0.len 68
+dec queue_service 0.type QUEUE
+dec queue_service 0.flags 0x00
+dec queue_service 0.seq 248
+dec queue_service 0.body.rev 9
+dec queue_service 0.body.offset 0
+dec queue_service 0.body.total 1
+dec queue_service 0.body.more false
+dec queue_service 0.body.item[0].title Song
+dec queue_service 0.body.item[0].artists[0] Band
+dec queue_service 0.body.item[0].durationMs 200000
+dec queue_service 0.body.item[0].service tidal
+dec queue_service 0.body.item[0].serviceKey 167
+act queue_service accept
+vec playlog_entry_service dev
+hex playlog_entry_service 4f003d01f900010800887766554433221102040005000000030100000436000104000500000003040020bf0200040400400d0300060400536f6e67070400
+hex playlog_entry_service 42616e64100500746964616c110800a700000000000000
+dec playlog_entry_service 0.len 79
+dec playlog_entry_service 0.type PLAYLOG_GET
+dec playlog_entry_service 0.flags 0x01
+dec playlog_entry_service 0.seq 249
+dec playlog_entry_service 0.body.log 1234605616436508552
+dec playlog_entry_service 0.body.newest 5
+dec playlog_entry_service 0.body.more false
+dec playlog_entry_service 0.body.entry[0].seq 5
+dec playlog_entry_service 0.body.entry[0].playedMs 180000
+dec playlog_entry_service 0.body.entry[0].durationMs 200000
+dec playlog_entry_service 0.body.entry[0].title Song
+dec playlog_entry_service 0.body.entry[0].artist Band
+dec playlog_entry_service 0.body.entry[0].service tidal
+dec playlog_entry_service 0.body.entry[0].serviceKey 167
+act playlog_entry_service accept
+vec state_service dev
+hex state_service 6d001000fa000101000002010000040400536f6e6705040042616e6406040042616e64330500746964616c340800a700000000000000080400400d030009
+hex state_service 0400881300000a080064093d00000000000c0100011204000900000013040000000000140400010000000b08008c093d0000000000
+dec state_service 0.len 109
+dec state_service 0.type STATE
+dec state_service 0.flags 0x00
+dec state_service 0.seq 250
+dec state_service 0.body.source local
+dec state_service 0.body.output wired
+dec state_service 0.body.title Song
+dec state_service 0.body.artist Band
+dec state_service 0.body.artists[0] Band
+dec state_service 0.body.service tidal
+dec state_service 0.body.serviceKey 167
+dec state_service 0.body.durationMs 200000
+dec state_service 0.body.positionMs 5000
+dec state_service 0.body.sampleMs 4000100
+dec state_service 0.body.playing true
+dec state_service 0.body.queueRev 9
+dec state_service 0.body.slot 0
+dec state_service 0.body.slots 1
+dec state_service 0.body.sentMs 4000140
+act state_service accept
+vec hello_reply_services dev
+hex hello_reply_services c100010101000104004644435002020001000302001000040200763105100032303236313032382e64333331353864060200f00007020040010a04000040
+hex hello_reply_services 00000b0400307500000c0400881300000d0800ffffff7f010000000e0400070000000f0400030000001004000400000016340001070073766364656d6f02
+hex hello_reply_services 070053564344454d4f030900636c69656e745f6964030d00636c69656e745f73656372657404010001161f00010a006e69676874726164696f020b004e69
+hex hello_reply_services 67687420526164696f04010000
+re hello_reply_services hello
+dec hello_reply_services 0.len 193
+dec hello_reply_services 0.type HELLO
+dec hello_reply_services 0.flags 0x01
+dec hello_reply_services 0.seq 1
+dec hello_reply_services 0.body.magic 1346585670
+dec hello_reply_services 0.body.major 1
+dec hello_reply_services 0.body.minor 16
+dec hello_reply_services 0.body.board v1
+dec hello_reply_services 0.body.version 20261028.d33158d
+dec hello_reply_services 0.body.screenW 240
+dec hello_reply_services 0.body.screenH 320
+dec hello_reply_services 0.body.maxPayload 16384
+dec hello_reply_services 0.body.idleMs 30000
+dec hello_reply_services 0.body.busyMs 5000
+dec hello_reply_services 0.body.features 6442450943
+dec hello_reply_services 0.body.libRev 7
+dec hello_reply_services 0.body.settingsRev 3
+dec hello_reply_services 0.body.snapRev 4
+dec hello_reply_services 0.body.service[0].id svcdemo
+dec hello_reply_services 0.body.service[0].name SVCDEMO
+dec hello_reply_services 0.body.service[0].secret[0] client_id
+dec hello_reply_services 0.body.service[0].secret[1] client_secret
+dec hello_reply_services 0.body.service[0].pkce true
+dec hello_reply_services 0.body.service[1].id nightradio
+dec hello_reply_services 0.body.service[1].name Night Radio
+dec hello_reply_services 0.body.service[1].pkce false
+act hello_reply_services accept

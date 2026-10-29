@@ -33,6 +33,7 @@ class OldPeerTest {
     private val v1_13 = table("/proto-1.13.txt")
     private val v1_14 = table("/proto-1.14.txt")
     private val v1_15 = table("/proto-1.15-ebc0751.txt")
+    private val last15 = table("/proto-1.15.txt")
 
     private fun text(name: String) = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
 
@@ -393,6 +394,91 @@ class OldPeerTest {
         for (f in 15..20) assertEquals(0L, Groups.all and (1L shl f))
         assertEquals(Groups.members.keys.filter { it !in Groups.unserved }.fold(0L) { m, g -> m or (1L shl Groups.bit(g)!!) }, Groups.all)
         assertTrue(Groups.allowed(Msg.LYR_OFFSET, Groups.all))
+    }
+
+    @Test
+    fun protocol116FramesDecodeWithThe115TableToEmptyFields() {
+        for (scope in listOf("SVC_LOGIN", "SVC_LOGIN_END", "SVC_PKCE", "SVC_PKCE.reply", "SVC_KEYS", "SvcKey", "SvcInfo")) assertNull(scope, last15[scope])
+        for (m in listOf("0x43", "0x44", "0x45", "0x46")) assertFalse(m, Regex("^msg \\S+ $m ", RegexOption.MULTILINE).containsMatchIn(text("/proto-1.15.txt")))
+        assertFalse("feature svcLogin 32" in text("/proto-1.15.txt"))
+
+        val oldState = Node.decode("STATE", body("state_service"), last15)
+        assertEquals(listOf(51, 52), oldState.unknownTags)
+        val os = State.from(oldState)
+        assertNull(os.track)
+        assertNull(os.service)
+        assertNull(os.library)
+        val st = State.from(Node.decode("STATE", body("state_service")))
+        assertEquals("tidal" to 167L, st.service to st.serviceKey)
+        assertNull(st.track)
+        assertNull(st.library)
+
+        val oldQueue = Node.decode("QUEUE", body("queue_service"), last15)
+        assertEquals(listOf(listOf(10, 11)), oldQueue.nodes(Tags.Queue.item).map { it.unknownTags })
+        val oq = Queue.from(oldQueue).items.single()
+        assertNull(oq.track)
+        assertNull(oq.library)
+        assertEquals("Song", oq.title)
+        val q = Queue.from(Node.decode("QUEUE", body("queue_service"))).items.single()
+        assertEquals(QueueItem(null, "Song", listOf("Band"), durationMs = 200000, service = "tidal", serviceKey = 167), q)
+        assertNull(q.library)
+
+        val oldLog = Node.decode("PLAYLOG_GET.reply", body("playlog_entry_service"), last15)
+        assertEquals(listOf(listOf(16, 17)), oldLog.nodes(Tags.PlaylogGetReply.entry).map { it.unknownTags })
+        val e = PlayLogReply.from(Node.decode("PLAYLOG_GET.reply", body("playlog_entry_service"))).entries.single()
+        assertEquals(PlayEntry(5, null, 180000, 200000, null, "Song", "Band", service = "tidal", serviceKey = 167), e)
+        assertNull(e.library)
+
+        val oldHello = Node.decode("HELLO.reply", body("hello_reply_services"), last15)
+        assertEquals(listOf(22, 22), oldHello.unknownTags)
+        assertTrue(HelloReply.from(oldHello).services.isEmpty())
+        assertEquals(
+            listOf(SvcInfo("svcdemo", "SVCDEMO", listOf("client_id", "client_secret"), true), SvcInfo("nightradio", "Night Radio", pkce = false)),
+            HelloReply.from(Node.decode("HELLO.reply", body("hello_reply_services"))).services,
+        )
+
+        assertEquals(16, Err.off)
+        assertEquals(13, Err.cancelled)
+        assertEquals("svcLogin", Feature.names[32])
+        assertEquals(listOf("done", "expired", "cancelled"), (0..2).map { Enums.SvcLoginResult.names.getValue(it) })
+        assertEquals(0L, Groups.all and (1L shl Feature.svcLogin))
+        for (m in listOf(Msg.SVC_LOGIN, Msg.SVC_LOGIN_END, Msg.SVC_PKCE, Msg.SVC_KEYS)) {
+            assertEquals("svcLogin", Groups.group(m))
+            assertFalse(Groups.allowed(m, Groups.all))
+            assertTrue(Groups.allowed(m, Groups.mask("svcLogin")))
+        }
+    }
+
+    @Test
+    fun aTrackOfZeroOrBesideAServiceIsNoLibraryId() {
+        assertNull(State(track = 0).library)
+        assertNull(State(track = 9, service = "tidal", serviceKey = 167).library)
+        assertEquals(9L, State(track = 9).library)
+        assertNull(QueueItem(0, "Song").library)
+        assertNull(QueueItem(9, "Song", service = "tidal").library)
+        assertEquals(9L, QueueItem(9, "Song").library)
+        assertNull(PlayEntry(1, track = 0).library)
+        assertNull(PlayEntry(1, track = 9, service = "tidal").library)
+        assertEquals(9L, PlayEntry(1, track = 9).library)
+    }
+
+    @Test
+    fun protocol116BuildersMatchTheVectors() {
+        assertArrayEquals(body("svc_keys"), Req.svcKeys("tidal", listOf(SvcKey("client_id", "abc123"), SvcKey("client_secret", "s3cr3t"))))
+        assertArrayEquals(body("svc_pkce_reply"), SvcPkceReply("https://svcdemo.test/auth?code=c0de&state=ab12").encode())
+        assertEquals(
+            SvcPkce("tidal", "https://login.svcdemo.test/authorize?state=ab12", "login.svcdemo.test", "https://svcdemo.test/auth", 7),
+            SvcPkce.from(Node.decode("SVC_PKCE", body("svc_pkce"))),
+        )
+        assertEquals(SvcLogin("tidal", "https://link.svcdemo.test/ABCDE", "link.svcdemo.test", "ABCDE", 300, 7), SvcLogin.from(Node.decode("SVC_LOGIN", body("svc_login"))))
+        assertEquals(SvcLoginEnd("tidal", 7, Enums.SvcLoginResult.done), SvcLoginEnd.from(Node.decode("SVC_LOGIN_END", body("svc_login_end"))))
+        assertEquals(Err.off, ErrorReply.from(Node.decode("error", body("svc_keys_off"))).code)
+        assertEquals(Err.badValue, ErrorReply.from(Node.decode("error", body("svc_keys_bad"))).code)
+        assertEquals(Err.cancelled, ErrorReply.from(Node.decode("error", body("svc_pkce_cancelled"))).code)
+        assertTrue(body("svc_keys_reply").isEmpty())
+        assertFalse("abc123" in SvcKey("client_id", "abc123").toString())
+        assertEquals(90000, Proto.svcReplyMs)
+        assertEquals(600000, Proto.svcPkceMs)
     }
 
     @Test

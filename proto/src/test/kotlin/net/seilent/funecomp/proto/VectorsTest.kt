@@ -193,6 +193,7 @@ class VectorsTest {
             Msg.LRC_PUT, Msg.LRC_DEL -> LrcReply.from(n).encode()
             Msg.STREAM_READ -> StreamReadReply.from(n).encode()
             Msg.PHONE_ART -> PhoneArtReply.from(n).encode()
+            Msg.SVC_PKCE -> SvcPkceReply.from(n).encode()
             else -> null
         }
         return when (f.type) {
@@ -213,6 +214,10 @@ class VectorsTest {
             Msg.STREAM_CANCEL -> StreamCancel.from(n).encode()
             Msg.PHONE_LIST -> PhoneList.from(n).encode()
             Msg.PHONE_ART -> PhoneArt.from(n).encode()
+            Msg.SVC_LOGIN -> SvcLogin.from(n).encode()
+            Msg.SVC_LOGIN_END -> SvcLoginEnd.from(n).encode()
+            Msg.SVC_PKCE -> SvcPkce.from(n).encode()
+            Msg.SVC_KEYS -> SvcKeys.from(n).encode()
             else -> null
         }
     }

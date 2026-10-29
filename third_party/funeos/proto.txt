@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 15
+const minor 16
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -43,6 +43,8 @@ const streamWindowMax 32
 const streamStallMs 60000
 const phoneItemMaxBytes 1024
 const phoneListMs 30000
+const svcReplyMs 90000
+const svcPkceMs 600000
 err unknown 1
 err badValue 2
 err busy 3
@@ -58,6 +60,7 @@ err exists 12
 err cancelled 13
 err noCard 14
 err badSignature 15
+err off 16
 feature settings 0
 feature eq 1
 feature library 2
@@ -89,6 +92,7 @@ feature updSig 27
 feature imgSource 28
 feature eqStages 29
 feature liveRows 30
+feature svcLogin 32
 enum SOURCE 0 local
 enum SOURCE 1 phone
 enum SOURCE 2 phoneFile
@@ -189,6 +193,9 @@ enum LYRICS_KIND 0 synced
 enum LYRICS_KIND 1 plain
 enum IMG_ORIGIN 0 library
 enum IMG_ORIGIN 1 phone
+enum SVC_LOGIN_RESULT 0 done
+enum SVC_LOGIN_RESULT 1 expired
+enum SVC_LOGIN_RESULT 2 cancelled
 msg HELLO 0x01 app req
 tag HELLO 1 magic u32 one
 tag HELLO 2 major u16 one
@@ -216,6 +223,7 @@ tag HELLO.reply 18 bandTypes BAND_TYPE list
 tag HELLO.reply 19 phoneMime str list
 tag HELLO.reply 20 phoneMaxRate u32 one
 tag HELLO.reply 21 phoneMaxBits u8 one
+tag HELLO.reply 22 service SvcInfo list
 msg PING 0x02 both req
 msg BYE 0x03 dev push
 tag BYE 1 reason BYE_REASON one
@@ -272,6 +280,8 @@ tag STATE 47 aheadMs u32 one
 tag STATE 48 imgHold bool one
 tag STATE 49 updHold bool one
 tag STATE 50 eqEarSlot str one
+tag STATE 51 service str one
+tag STATE 52 serviceKey u64 one
 msg SCHEMA 0x11 dev push
 tag SCHEMA 1 pivot str one
 tag SCHEMA 2 offset u32 one
@@ -542,6 +552,27 @@ tag PHONE_ART.reply 3 w u16 one
 tag PHONE_ART.reply 4 h u16 one
 tag PHONE_ART.reply 5 offset u32 one
 tag PHONE_ART.reply 6 data bytes one
+msg SVC_LOGIN 0x43 dev push
+tag SVC_LOGIN 1 service str one
+tag SVC_LOGIN 2 uri str one
+tag SVC_LOGIN 3 host str one
+tag SVC_LOGIN 4 userCode str one
+tag SVC_LOGIN 5 expiresS u32 one
+tag SVC_LOGIN 6 seq u32 one
+msg SVC_LOGIN_END 0x44 dev push
+tag SVC_LOGIN_END 1 service str one
+tag SVC_LOGIN_END 2 seq u32 one
+tag SVC_LOGIN_END 3 result SVC_LOGIN_RESULT one
+msg SVC_PKCE 0x45 dev req
+tag SVC_PKCE 1 service str one
+tag SVC_PKCE 2 authorizeUrl str one
+tag SVC_PKCE 3 host str one
+tag SVC_PKCE 4 redirectPrefix str one
+tag SVC_PKCE 5 seq u32 one
+tag SVC_PKCE.reply 1 redirect str one
+msg SVC_KEYS 0x46 app req
+tag SVC_KEYS 1 service str one
+tag SVC_KEYS 2 key SvcKey list
 tag error 1 code u8 one
 tag error 2 text str one
 tag error 3 refused str list
@@ -574,6 +605,8 @@ tag QueueItem 6 durationMs u32 one
 tag QueueItem 7 lyrics bool one
 tag QueueItem 8 lyricsPlain bool one
 tag QueueItem 9 phoneFile u64 one
+tag QueueItem 10 service str one
+tag QueueItem 11 serviceKey u64 one
 tag LibRow 1 name str one
 tag LibRow 2 count u32 one
 tag LibRow 3 first u64 one
@@ -610,6 +643,8 @@ tag PlayEntry 12 trackNo u16 one
 tag PlayEntry 13 zoneS i32 one
 tag PlayEntry 14 liveSeen bool one
 tag PlayEntry 15 phoneFile u64 one
+tag PlayEntry 16 service str one
+tag PlayEntry 17 serviceKey u64 one
 tag PhoneItem 1 file u64 one
 tag PhoneItem 2 rev u64 one
 tag PhoneItem 3 size u64 one
@@ -624,3 +659,9 @@ tag PhoneItem 11 discNo u16 one
 tag PhoneItem 12 art str one
 tag PhoneItem 19 rate u32 one
 tag PhoneItem 20 bits u8 one
+tag SvcKey 1 name str one
+tag SvcKey 2 value str one
+tag SvcInfo 1 id str one
+tag SvcInfo 2 name str one
+tag SvcInfo 3 secret str list
+tag SvcInfo 4 pkce bool one

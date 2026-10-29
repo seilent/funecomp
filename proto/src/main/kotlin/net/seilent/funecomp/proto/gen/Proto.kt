@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "b75bae10d79708eae3dfa1dc5f4c03572fb17c2b"
-    const val PROTO_SHA256 = "852272ac80c4219155162e0460a888135c1881848d722b0482c0a23469621ebf"
-    const val VECTORS_SHA256 = "e472f9b5238c827033463e3f4a133120dbf4223ef806dbfb39222cff5edcf48f"
+    const val COMMIT = "da0ab1dfd7e3dcf0817d697e25a4b6429ad1918c"
+    const val PROTO_SHA256 = "d93c0d719a20ccbdf36cbc77e8c23096c9142185e377e0f64743ad83f4990e5a"
+    const val VECTORS_SHA256 = "579efd3086b49ecd5166292d1052a839a8d993f6f8f0c174b0b4e6f05065c6e5"
     const val TOKENS_SHA256 = "866596c36cbf2893bcceac16fac2831bc9d4bfa964340c16743059eeadddada3"
     const val TOKENSV1_SHA256 = "37d57fcf30656dceaf02ad86489a210e204ce8f8961d68b323660578869b7055"
     const val TOKENSR1_SHA256 = "e5682f333a563eda0a8036c18b96d1f6c7a184505ea0e0c7273a89b42b947bea"
@@ -19,7 +19,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 15
+    const val minor = 16
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -61,6 +61,8 @@ object Proto {
     const val streamStallMs = 60000
     const val phoneItemMaxBytes = 1024
     const val phoneListMs = 30000
+    const val svcReplyMs = 90000
+    const val svcPkceMs = 600000
 }
 
 object Msg {
@@ -108,6 +110,10 @@ object Msg {
     const val STREAM_CANCEL = 0x40
     const val PHONE_LIST = 0x41
     const val PHONE_ART = 0x42
+    const val SVC_LOGIN = 0x43
+    const val SVC_LOGIN_END = 0x44
+    const val SVC_PKCE = 0x45
+    const val SVC_KEYS = 0x46
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -153,6 +159,10 @@ object Msg {
         STREAM_CANCEL to MsgInfo(STREAM_CANCEL, "STREAM_CANCEL", "dev", true),
         PHONE_LIST to MsgInfo(PHONE_LIST, "PHONE_LIST", "app", false),
         PHONE_ART to MsgInfo(PHONE_ART, "PHONE_ART", "dev", false),
+        SVC_LOGIN to MsgInfo(SVC_LOGIN, "SVC_LOGIN", "dev", true),
+        SVC_LOGIN_END to MsgInfo(SVC_LOGIN_END, "SVC_LOGIN_END", "dev", true),
+        SVC_PKCE to MsgInfo(SVC_PKCE, "SVC_PKCE", "dev", false),
+        SVC_KEYS to MsgInfo(SVC_KEYS, "SVC_KEYS", "app", false),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -173,7 +183,8 @@ object Err {
     const val cancelled = 13
     const val noCard = 14
     const val badSignature = 15
-    val names: Map<Int, String> = mapOf(1 to "unknown", 2 to "badValue", 3 to "busy", 4 to "refused", 5 to "tooBig", 6 to "crc", 7 to "staleRev", 8 to "noLibrary", 9 to "noSpace", 10 to "notFound", 11 to "readOnly", 12 to "exists", 13 to "cancelled", 14 to "noCard", 15 to "badSignature")
+    const val off = 16
+    val names: Map<Int, String> = mapOf(1 to "unknown", 2 to "badValue", 3 to "busy", 4 to "refused", 5 to "tooBig", 6 to "crc", 7 to "staleRev", 8 to "noLibrary", 9 to "noSpace", 10 to "notFound", 11 to "readOnly", 12 to "exists", 13 to "cancelled", 14 to "noCard", 15 to "badSignature", 16 to "off")
 }
 
 object Feature {
@@ -208,7 +219,8 @@ object Feature {
     const val imgSource = 28
     const val eqStages = 29
     const val liveRows = 30
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows")
+    const val svcLogin = 32
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin")
 }
 
 object Enums {
@@ -381,6 +393,12 @@ object Enums {
         const val phone = 1
         val names: Map<Int, String> = mapOf(0 to "library", 1 to "phone")
     }
+    object SvcLoginResult {
+        const val done = 0
+        const val expired = 1
+        const val cancelled = 2
+        val names: Map<Int, String> = mapOf(0 to "done", 1 to "expired", 2 to "cancelled")
+    }
     val byName: Map<String, Map<Int, String>> = mapOf(
         "SOURCE" to Source.names,
         "OUTPUT" to Output.names,
@@ -405,6 +423,7 @@ object Enums {
         "BLOCK_CMD" to BlockCmd.names,
         "LYRICS_KIND" to LyricsKind.names,
         "IMG_ORIGIN" to ImgOrigin.names,
+        "SVC_LOGIN_RESULT" to SvcLoginResult.names,
     )
 }
 
@@ -438,6 +457,7 @@ object Tags {
         const val phoneMime = 19
         const val phoneMaxRate = 20
         const val phoneMaxBits = 21
+        const val service = 22
     }
     object Bye {
         const val reason = 1
@@ -495,6 +515,8 @@ object Tags {
         const val imgHold = 48
         const val updHold = 49
         const val eqEarSlot = 50
+        const val service = 51
+        const val serviceKey = 52
     }
     object Schema {
         const val pivot = 1
@@ -838,6 +860,33 @@ object Tags {
         const val offset = 5
         const val `data` = 6
     }
+    object SvcLogin {
+        const val service = 1
+        const val uri = 2
+        const val host = 3
+        const val userCode = 4
+        const val expiresS = 5
+        const val seq = 6
+    }
+    object SvcLoginEnd {
+        const val service = 1
+        const val seq = 2
+        const val result = 3
+    }
+    object SvcPkce {
+        const val service = 1
+        const val authorizeUrl = 2
+        const val host = 3
+        const val redirectPrefix = 4
+        const val seq = 5
+    }
+    object SvcPkceReply {
+        const val redirect = 1
+    }
+    object SvcKeys {
+        const val service = 1
+        const val key = 2
+    }
     object Error {
         const val code = 1
         const val text = 2
@@ -881,6 +930,8 @@ object Tags {
         const val lyrics = 7
         const val lyricsPlain = 8
         const val phoneFile = 9
+        const val service = 10
+        const val serviceKey = 11
     }
     object LibRow {
         const val name = 1
@@ -931,6 +982,8 @@ object Tags {
         const val zoneS = 13
         const val liveSeen = 14
         const val phoneFile = 15
+        const val service = 16
+        const val serviceKey = 17
     }
     object PhoneItem {
         const val file = 1
@@ -947,6 +1000,16 @@ object Tags {
         const val art = 12
         const val rate = 19
         const val bits = 20
+    }
+    object SvcKey {
+        const val name = 1
+        const val `value` = 2
+    }
+    object SvcInfo {
+        const val id = 1
+        const val name = 2
+        const val secret = 3
+        const val pkce = 4
     }
     val scopes: Map<String, Map<Int, Field>> = mapOf(
         "HELLO" to mapOf(
@@ -978,6 +1041,7 @@ object Tags {
             19 to Field(19, "phoneMime", Base.STR, null, true),
             20 to Field(20, "phoneMaxRate", Base.U32, null, false),
             21 to Field(21, "phoneMaxBits", Base.U8, null, false),
+            22 to Field(22, "service", Base.RECORD, "SvcInfo", true),
         ),
         "BYE" to mapOf(
             1 to Field(1, "reason", Base.ENUM, "BYE_REASON", false),
@@ -1035,6 +1099,8 @@ object Tags {
             48 to Field(48, "imgHold", Base.BOOL, null, false),
             49 to Field(49, "updHold", Base.BOOL, null, false),
             50 to Field(50, "eqEarSlot", Base.STR, null, false),
+            51 to Field(51, "service", Base.STR, null, false),
+            52 to Field(52, "serviceKey", Base.U64, null, false),
         ),
         "SCHEMA" to mapOf(
             1 to Field(1, "pivot", Base.STR, null, false),
@@ -1378,6 +1444,33 @@ object Tags {
             5 to Field(5, "offset", Base.U32, null, false),
             6 to Field(6, "data", Base.BYTES, null, false),
         ),
+        "SVC_LOGIN" to mapOf(
+            1 to Field(1, "service", Base.STR, null, false),
+            2 to Field(2, "uri", Base.STR, null, false),
+            3 to Field(3, "host", Base.STR, null, false),
+            4 to Field(4, "userCode", Base.STR, null, false),
+            5 to Field(5, "expiresS", Base.U32, null, false),
+            6 to Field(6, "seq", Base.U32, null, false),
+        ),
+        "SVC_LOGIN_END" to mapOf(
+            1 to Field(1, "service", Base.STR, null, false),
+            2 to Field(2, "seq", Base.U32, null, false),
+            3 to Field(3, "result", Base.ENUM, "SVC_LOGIN_RESULT", false),
+        ),
+        "SVC_PKCE" to mapOf(
+            1 to Field(1, "service", Base.STR, null, false),
+            2 to Field(2, "authorizeUrl", Base.STR, null, false),
+            3 to Field(3, "host", Base.STR, null, false),
+            4 to Field(4, "redirectPrefix", Base.STR, null, false),
+            5 to Field(5, "seq", Base.U32, null, false),
+        ),
+        "SVC_PKCE.reply" to mapOf(
+            1 to Field(1, "redirect", Base.STR, null, false),
+        ),
+        "SVC_KEYS" to mapOf(
+            1 to Field(1, "service", Base.STR, null, false),
+            2 to Field(2, "key", Base.RECORD, "SvcKey", true),
+        ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),
             2 to Field(2, "text", Base.STR, null, false),
@@ -1421,6 +1514,8 @@ object Tags {
             7 to Field(7, "lyrics", Base.BOOL, null, false),
             8 to Field(8, "lyricsPlain", Base.BOOL, null, false),
             9 to Field(9, "phoneFile", Base.U64, null, false),
+            10 to Field(10, "service", Base.STR, null, false),
+            11 to Field(11, "serviceKey", Base.U64, null, false),
         ),
         "LibRow" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
@@ -1471,6 +1566,8 @@ object Tags {
             13 to Field(13, "zoneS", Base.I32, null, false),
             14 to Field(14, "liveSeen", Base.BOOL, null, false),
             15 to Field(15, "phoneFile", Base.U64, null, false),
+            16 to Field(16, "service", Base.STR, null, false),
+            17 to Field(17, "serviceKey", Base.U64, null, false),
         ),
         "PhoneItem" to mapOf(
             1 to Field(1, "file", Base.U64, null, false),
@@ -1487,6 +1584,16 @@ object Tags {
             12 to Field(12, "art", Base.STR, null, false),
             19 to Field(19, "rate", Base.U32, null, false),
             20 to Field(20, "bits", Base.U8, null, false),
+        ),
+        "SvcKey" to mapOf(
+            1 to Field(1, "name", Base.STR, null, false),
+            2 to Field(2, "value", Base.STR, null, false),
+        ),
+        "SvcInfo" to mapOf(
+            1 to Field(1, "id", Base.STR, null, false),
+            2 to Field(2, "name", Base.STR, null, false),
+            3 to Field(3, "secret", Base.STR, null, true),
+            4 to Field(4, "pkce", Base.BOOL, null, false),
         ),
     )
 }

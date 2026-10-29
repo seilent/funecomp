@@ -198,4 +198,6 @@ object Req {
     }
 
     fun updEnd(md5: String) = tlv { str(Tags.UpdEnd.md5, md5) }
+
+    fun svcKeys(service: String, keys: List<SvcKey>) = SvcKeys(service, keys).encode()
 }
