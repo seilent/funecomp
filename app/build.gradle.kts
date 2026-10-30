@@ -27,8 +27,8 @@ android {
         applicationId = "net.seilent.funecomp"
         minSdk = 31
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 4
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "LASTFM_KEY", "\"\"")
         buildConfigField("String", "LASTFM_SECRET", "\"\"")
