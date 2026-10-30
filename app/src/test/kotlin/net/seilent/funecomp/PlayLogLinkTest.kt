@@ -127,9 +127,8 @@ class PlayLogLinkTest {
 
     private fun seenPastTheCrossing() {
         waitFor { Remote.device.playback.state.let { it.track != short.id || (it.positionMs ?: 0) >= CROSS_MS } }
-        val at = Remote.device.playback.state.sampleMs
         Remote.transport(Enums.TransportCmd.pause, null, null, null)
-        waitFor { Remote.device.playback.state.sampleMs != at }
+        waitFor { Remote.device.playback.state.playing != true }
         Scrobbles.idle()
     }
 
