@@ -630,7 +630,7 @@ class ArtBlockTest {
         for (e in listOf(block, reject)) assertTrue(a.render(e, 240, 320) != null)
         Remote.blockArt(block)
         Remote.wrongArtist(reject)
-        waitFor { cache().hit(block.key) == null && cache().hit(reject.key) == null }
+        waitFor { a.hitAt(block.key) == null && a.hitAt(reject.key) == null }
         assertTrue(dir.list()!!.none { it.endsWith(".src") || it.endsWith(".jpg") })
         val kept = ArtBlocks(File(app.filesDir, "artblock.tsv")).records()
         assertTrue(kept.any { it is ArtBlocks.Block && it.key == block.key })
