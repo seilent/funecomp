@@ -26,6 +26,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
@@ -163,9 +164,20 @@ fun HubPage(
 fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     val ui = LocalUi.current
     var focus by rememberSaveable { mutableIntStateOf(0) }
+    val now = LocalHomeReturn.current
+    val ret = remember { now }
     val enter = remember { Animatable(0f) }
     val ringEnter = remember { Animatable(0f) }
+    var back by remember { mutableFloatStateOf(ret?.let { if (it.scale > 0f) (it.frame - it.outEnd) / it.scale else Float.MAX_VALUE } ?: 0f) }
+    val stagger = if (ret != null) 0f else Tok.motion_homeEnterStagger
+    fun enterMs() = if (ret != null) back else enter.value
+    fun ringMs() = if (ret != null) back else ringEnter.value
     LaunchedEffect(Unit) {
+        if (ret != null) {
+            val end = maxOf(Tok.motion_homeEnter, Tok.motion_homeEnterPeek)
+            if (ret.scale > 0f) while (back < end) withFrameMillis { t -> back = (t - ret.outEnd) / ret.scale }
+            return@LaunchedEffect
+        }
         launch { ringEnter.animateTo(Tok.motion_homeEnterPeek, tween(Tok.motion_homeEnterPeek.toInt(), easing = LinearEasing)) }
         val total = Tok.motion_homeEnter + Tok.motion_homeEnterStagger * items.size
         enter.animateTo(total, tween(total.toInt(), easing = LinearEasing))
@@ -182,7 +194,9 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
             Box(Modifier.size(ui.px(ui.w).dp(), ui.px(height).dp())) {
                 val barX = ui.homeTextX - Tok.focus_barOffset
                 val first = ui.px(Tok.homeFirstBaseline)
-                FocusBar(ui.px(Tok.homeBarH), ui.px(barX), first + ui.px(focus * pitch) - ui.px(Tok.homeBarTop)) { if (music < 0) 1f else homeBarAlpha(barFocus, music) }
+                FocusBar(ui.px(Tok.homeBarH), ui.px(barX), first + ui.px(focus * pitch) - ui.px(Tok.homeBarTop)) {
+                    (if (music < 0) 1f else homeBarAlpha(barFocus, music)) * Decel.transform((enterMs() / Tok.motion_homeEnter).coerceIn(0f, 1f))
+                }
                 if (music >= 0) {
                     var down by remember { mutableStateOf(false) }
                     val left = ui.px(ui.homeMenuX)
@@ -190,7 +204,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                     Box(
                         Modifier.at(left, top)
                             .size((ui.px(ui.homeRingHitRight) - left).dp(), (ui.px(ui.homeRingHitBottom(music)) - top).dp())
-                            .graphicsLayer { alpha = homeRingEnter(ringEnter.value) }
+                            .graphicsLayer { alpha = homeRingEnter(ringMs()) }
                             .press({ onShuffle() }) { down = it }
                             .testTag("home.ring"),
                     ) {
@@ -206,7 +220,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                     val shiftPx = ui.px(Tok.motion_homeEnterShift)
                     Box(
                         Modifier.fillMaxSize().graphicsLayer {
-                            val p = Decel.transform(((enter.value - Tok.motion_homeEnterStagger * i) / Tok.motion_homeEnter).coerceIn(0f, 1f))
+                            val p = Decel.transform(((enterMs() - stagger * i) / Tok.motion_homeEnter).coerceIn(0f, 1f))
                             translationX = shiftPx * (1f - p)
                             alpha = p
                         },
@@ -224,7 +238,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                         }
                     }
                 }
-                RoleText("funecomp", Roles.watermark, Modifier.atBaseline(x, ui.px(height - Tok.edge)))
+                RoleText("funecomp", Roles.watermark, Modifier.atBaseline(x, ui.px(height - Tok.edge)).testTag("home.watermark"))
             }
         }
     }

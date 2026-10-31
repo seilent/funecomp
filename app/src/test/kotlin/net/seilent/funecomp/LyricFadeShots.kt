@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -193,6 +194,7 @@ class LyricFadeShots {
         FadeCase(false, "settings", "follow/", TURN_FRAMES, false, true, listOf(Page.Home), events = listOf(0L to { shell.nav.push(Page.Settings) }), stepMs = TURN_STEP),
         FadeCase(false, "pop-page", "follow/", TURN_FRAMES, false, true, listOf(Page.Home, Page.Settings, Page.Eq(0)), events = listOf(0L to { shell.nav.pop() }), stepMs = TURN_STEP),
         FadeCase(false, "pop-home", "follow/", TURN_FRAMES, false, true, listOf(Page.Home, Page.Settings), events = listOf(0L to { shell.nav.pop() }), stepMs = TURN_STEP),
+        FadeCase(false, "pop-music", "follow/", TURN_FRAMES, false, true, listOf(Page.Home), pre = { tap("home.music"); settle(1500) }, events = listOf(0L to { shell.nav.pop() }), stepMs = TURN_STEP),
     )
 
     private val stills = listOf(
@@ -263,7 +265,11 @@ class LyricFadeShots {
                     ms += lastFrame - base
                 }
                 val names = (0 until k.frames).joinToString(", ") { "\"f%04d.png\"".format(it) }
-                File(out, "anim.json").writeText("{\"fps\": ${k.stepMs?.let { 1000.0 / it } ?: 30}, \"frames\": [$names], \"ms\": [${ms.joinToString(", ")}]}\n")
+                val mark = rule.onAllNodes(hasTestTag("home.watermark")).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.let { r ->
+                    val f = rule.onNodeWithTag("frame").fetchSemanticsNode().boundsInRoot
+                    ", \"watermark\": [${(r.left - f.left).roundToLong()}, ${(r.top - f.top).roundToLong()}, ${(r.right - f.left).roundToLong()}, ${(r.bottom - f.top).roundToLong()}]"
+                } ?: ""
+                File(out, "anim.json").writeText("{\"fps\": ${k.stepMs?.let { 1000.0 / it } ?: 30}, \"frames\": [$names], \"ms\": [${ms.joinToString(", ")}]$mark}\n")
             }
             for (k in stills) {
                 if (only.isNotEmpty() && only.split(',').none { k.name == it }) continue

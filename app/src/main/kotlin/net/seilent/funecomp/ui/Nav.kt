@@ -20,12 +20,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.EqStage
+import kotlin.math.roundToLong
 
 private const val SKIA_CAMERA_UNIT = 72f
 const val ONLINE_ART = 0
@@ -55,6 +58,10 @@ sealed interface Page {
 }
 
 val LocalEntry = staticCompositionLocalOf { "" }
+
+class HomeReturn(val outEnd: Long, val frame: Long, val scale: Float)
+
+val LocalHomeReturn = staticCompositionLocalOf<HomeReturn?> { null }
 
 val LocalTurnProbe = staticCompositionLocalOf<((String, Float) -> Unit)?> { null }
 
@@ -142,6 +149,7 @@ fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Uni
     var shownKey by remember { mutableStateOf("${nav.stack.lastIndex}/$top") }
     val angle = remember { Animatable(0f) }
     var pinned by remember { mutableStateOf<Float?>(null) }
+    var homeReturn by remember { mutableStateOf<HomeReturn?>(null) }
     val holder = rememberSaveableStateHolder()
     val kept = remember { HashSet<String>() }
     val keys = nav.stack.mapIndexed { i, p -> "$i/$p" }.toSet()
@@ -163,13 +171,30 @@ fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Uni
             return@LaunchedEffect
         }
         val push = nav.forward
+        val home = !push && top == Page.Home && nav.stack.size == 1
+        val scale = currentCoroutineContext()[MotionDurationScale]?.scaleFactor ?: 1f
+        var outStart = 0L
+        if (home) launch { withFrameMillis { outStart = it } }
         val outAngle = if (push) Tok.motion_turnstileOutAngle else Tok.motion_turnstileInAngle
         angle.animateTo(outAngle, tween(Tok.motion_turnstileOut.toInt(), easing = ExpIn6))
+        if (home) {
+            val outEnd = outStart + (Tok.motion_turnstileOut * scale).roundToLong()
+            withFrameMillis { f ->
+                homeReturn = HomeReturn(outEnd, f, scale)
+                pinned = 0f
+                shown = top
+                shownKey = "${nav.stack.lastIndex}/$top"
+            }
+            angle.snapTo(0f)
+            pinned = null
+            return@LaunchedEffect
+        }
         pinned = outAngle
         angle.snapTo(if (push) Tok.motion_turnstileInAngle else Tok.motion_turnstileOutAngle)
         val entry = "${nav.stack.lastIndex}/$top"
         launch {
             withFrameMillis {
+                homeReturn = null
                 shown = top
                 shownKey = entry
                 pinned = null
@@ -188,6 +213,6 @@ fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Uni
             probe?.invoke(drawnKey, rotationY)
         },
     ) {
-        key(shownKey) { holder.SaveableStateProvider(shownKey) { CompositionLocalProvider(LocalEntry provides shownKey) { content(shown) } } }
+        key(shownKey) { holder.SaveableStateProvider(shownKey) { CompositionLocalProvider(LocalEntry provides shownKey, LocalHomeReturn provides homeReturn) { content(shown) } } }
     }
 }
