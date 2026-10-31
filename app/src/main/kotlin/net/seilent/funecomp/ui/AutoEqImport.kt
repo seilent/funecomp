@@ -38,8 +38,6 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.Clamp
-import net.seilent.funecomp.state.EqSlots
-import net.seilent.funecomp.state.EqStage
 import net.seilent.funecomp.state.Section
 import kotlin.math.roundToInt
 
@@ -88,8 +86,8 @@ fun autoEqLines(r: AutoEqResult, presets: Boolean): List<String> = when (r) {
     }
 }
 
-fun autoEqImport(ctx: Ctx, output: Int) = ctx.sheet.open(TITLE, listOf(FILE, SEARCH)) { i ->
-    if (i == 0) ctx.control.eqFile { name, text -> autoEqConfirm(ctx, output, AutoEq.name(name), text) } else ctx.nav.push(Page.AutoEq(output))
+fun autoEqImport(ctx: Ctx, slot: String, owner: Any) = ctx.sheet.open(TITLE, listOf(FILE, SEARCH), owner = owner) { i ->
+    if (i == 0) ctx.control.eqFile { name, text -> autoEqConfirm(ctx, slot, AutoEq.name(name), text, owner) } else ctx.nav.push(Page.AutoEq(slot))
 }
 
 @Composable
@@ -109,6 +107,8 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
         }
     }
     var view by remember { mutableStateOf<AutoEqList.View?>(null) }
+    val token = remember { Any() }
+    CloseOnNewTarget(ctx, page.slot, token)
     val state = rememberLazyListState()
     val jump = rememberScrollState()
     val keyboard = LocalSoftwareKeyboardController.current
@@ -154,7 +154,7 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
                                 val e = item.row.entry
                                 ListRow(e.name, Modifier.testTag("aeq.row.${e.name}"), e.source, focused = focus == item.key, onTap = {
                                     focus = item.key
-                                    ctx.control.autoEqProfile(e) { text -> autoEqConfirm(ctx, page.output, AutoEq.name(e.name), text) }
+                                    ctx.control.autoEqProfile(e) { text -> autoEqConfirm(ctx, page.slot, AutoEq.name(e.name), text, token) }
                                 })
                             }
                         }
@@ -187,23 +187,24 @@ private fun DividerRow(letter: Int, onTap: () -> Unit) {
     }
 }
 
-fun autoEqConfirm(ctx: Ctx, output: Int, name: String, text: String?) {
+fun autoEqConfirm(ctx: Ctx, slot: String, name: String, text: String?, owner: Any) {
     val r = if (text == null) AutoEqResult.Refused("not readable") else AutoEq.parse(text, name)
     val presets = ctx.device.has("eqPresets")
     val eq = (r as? AutoEqResult.Ok)?.eq?.takeIf { presets && AutoEq.validName(it.name) }
     if (eq == null) {
-        ctx.sheet.open(name.ifEmpty { TITLE }, listOf(CANCEL), info = autoEqLines(r, presets)) {}
+        ctx.sheet.open(name.ifEmpty { TITLE }, listOf(CANCEL), info = autoEqLines(r, presets), owner = owner) {}
         return
     }
     val ints = AutoEq.profile(eq)
-    ctx.sheet.open(name, listOf(APPLY, CANCEL), info = autoEqLines(r, true)) { if (it == 0) savePreset(ctx, output, name, ints, false) }
+    ctx.sheet.open(name, listOf(APPLY, CANCEL), info = autoEqLines(r, true), owner = owner) { if (it == 0) savePreset(ctx, slot, name, ints, false, owner) }
 }
 
-private fun savePreset(ctx: Ctx, output: Int, name: String, ints: Profile, replace: Boolean) {
-    ctx.control.eqPreset(Enums.EqPresetOp.save, output, null, name, ints, replace) { code, _ ->
+private fun savePreset(ctx: Ctx, slot: String, name: String, ints: Profile, replace: Boolean, owner: Any) {
+    ctx.control.eqPreset(Enums.EqPresetOp.save, slot, null, name, ints, replace) { code, _ ->
         when (code) {
             null -> imported(ctx)
-            Err.exists -> clash(ctx, output, name, ints)
+            Err.exists -> clash(ctx, slot, name, ints, owner)
+            Err.staleRev -> {}
             Err.noSpace -> ctx.toast.show(TOO_MANY, name)
             else -> ctx.toast.show(NOT_SAVED, name)
         }
@@ -214,24 +215,24 @@ private fun imported(ctx: Ctx) {
     if (ctx.nav.top is Page.AutoEq) ctx.nav.pop()
 }
 
-private fun clash(ctx: Ctx, output: Int, name: String, ints: Profile) {
+private fun clash(ctx: Ctx, slot: String, name: String, ints: Profile, owner: Any) {
     val fold = AutoEq.foldKey(name)
-    val hit = ctx.device.eq[EqSlots.of(EqStage.USER, output)]?.names.orEmpty().firstOrNull { AutoEq.foldKey(it.name ?: "") == fold }
+    val hit = ctx.device.eq[slot]?.names.orEmpty().firstOrNull { AutoEq.foldKey(it.name ?: "") == fold }
     when {
         hit == null -> ctx.toast.show(NOT_SAVED, NAME_TAKEN)
-        hit.preset == true -> ctx.sheet.open(REPLACE_TITLE, listOf(REPLACE, KEEP), 1, listOf(name)) { if (it == 0) savePreset(ctx, output, name, ints, true) }
-        else -> ctx.sheet.open(name, listOf(USE, SAVE_AS), info = listOf(NAME_TAKEN)) { i ->
+        hit.preset == true -> ctx.sheet.open(REPLACE_TITLE, listOf(REPLACE, KEEP), 1, listOf(name), owner = owner) { if (it == 0) savePreset(ctx, slot, name, ints, true, owner) }
+        else -> ctx.sheet.open(name, listOf(USE, SAVE_AS), info = listOf(NAME_TAKEN), owner = owner) { i ->
             if (i == 0) {
-                ctx.control.eqSet(output, key = hit.key)
+                ctx.control.eqSet(slot, key = hit.key)
                 imported(ctx)
             } else {
-                ctx.sheet.openEntry(SAVE_PRESET) {
+                ctx.sheet.openEntry(SAVE_PRESET, owner) {
                     TextEntry(name) { text ->
                         if (!AutoEq.validName(text)) {
                             ctx.toast.show(SAVE_PRESET, NAME_NOT_ALLOWED)
                         } else {
                             ctx.sheet.close()
-                            savePreset(ctx, output, text, ints, false)
+                            savePreset(ctx, slot, text, ints, false, owner)
                         }
                     }
                 }

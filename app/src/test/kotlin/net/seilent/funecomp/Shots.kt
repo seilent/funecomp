@@ -59,6 +59,8 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.EqSlots
+import net.seilent.funecomp.state.EqStage
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.SettingsMirror
@@ -521,7 +523,7 @@ private fun emptyQueue(c: SimControl) {
 }
 
 private fun preset(name: String, output: Int = Enums.EqOutput.wired): (SimControl) -> Unit = { c ->
-    c.eqPreset(Enums.EqPresetOp.save, output, null, name, AutoEq.profile((AutoEq.parse(SimControl.HD650, name) as AutoEqResult.Ok).eq), false) { _, _ -> }
+    c.eqPreset(Enums.EqPresetOp.save, EqSlots.of(EqStage.USER, output), null, name, AutoEq.profile((AutoEq.parse(SimControl.HD650, name) as AutoEqResult.Ok).eq), false) { _, _ -> }
 }
 
 private const val LONG_NAME = "Sennheiser HD 650 (2020, worn earpads, oratory1990 target)"
@@ -542,7 +544,7 @@ private fun Shots.apply() {
 }
 
 private fun custom(c: SimControl) {
-    c.eqSet(Enums.EqOutput.wired, ints = Profile(-64, (0 until 10).map { i ->
+    c.eqSet(EqSlots.HEADPHONES, ints = Profile(-64, (0 until 10).map { i ->
         val b = flatBand(i)
         if (i == 0) b.copy(type = Enums.BandType.lowShelf, gain10 = 55, q100 = 70) else b
     }))
@@ -676,7 +678,7 @@ private fun Shots.pickThrough(shell: Shell) {
 
 private val EQ = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)
 
-private val AEQ = EQ + Page.AutoEq(Enums.EqOutput.wired)
+private val AEQ = EQ + Page.AutoEq(EqSlots.HEADPHONES)
 
 private const val AEQ_IME = 0.4f
 private const val TALL_IME = 736f / 1080f
@@ -1029,7 +1031,7 @@ val SHOTS = listOf(
         rule.onNodeWithTag("sheet.item.0").performClick()
     },
     Shot("eqp-custom", pages = EQ, prep = ::custom),
-    Shot("eqp-custom-bt", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.bt), prep = { c -> c.eqSet(Enums.EqOutput.bt, key = "custom") }),
+    Shot("eqp-custom-bt", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.bt), prep = { c -> c.eqSet(EqSlots.BLUETOOTH, key = "custom") }),
     Shot("eqp-preset", pages = EQ, prep = preset("Sennheiser HD 650")),
     Shot("eqp-preset-bt", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.bt), prep = preset("Sennheiser HD 650", Enums.EqOutput.bt)),
     Shot("eqp-preset-long", pages = EQ, prep = preset(LONG_NAME)),

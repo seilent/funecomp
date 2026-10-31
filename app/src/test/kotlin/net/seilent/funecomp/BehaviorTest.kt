@@ -47,6 +47,7 @@ import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.Section
 import net.seilent.funecomp.ui.App
@@ -591,7 +592,7 @@ class BehaviorTest {
     @Test
     fun autoEqSearchOpensTheListAndFetchesTheIndexOnce() {
         val (c, shell) = openAutoEq()
-        assertEquals(Page.AutoEq(Enums.EqOutput.wired), shell.nav.top)
+        assertEquals(Page.AutoEq(EqSlots.HEADPHONES), shell.nav.top)
         assertEquals(1, c.lists)
         rule.onNodeWithTag("aeq.field").assertIsNotFocused()
         rule.onNode(hasText("type to search"), useUnmergedTree = true).assertExists()
@@ -652,7 +653,7 @@ class BehaviorTest {
     fun autoEqTypingWhileLoadingAppliesOnArrival() {
         val (c, shell) = start(eqPage)
         c.holdList = true
-        shell.nav.push(Page.AutoEq(Enums.EqOutput.wired))
+        shell.nav.push(Page.AutoEq(EqSlots.HEADPHONES))
         settle(1500)
         stateLine("loading")
         type("rode")
@@ -667,7 +668,7 @@ class BehaviorTest {
     fun autoEqSearchFailedRetriesOncePerTap() {
         val (c, shell) = start(eqPage)
         c.autoEq = null
-        shell.nav.push(Page.AutoEq(Enums.EqOutput.wired))
+        shell.nav.push(Page.AutoEq(EqSlots.HEADPHONES))
         settle(1500)
         stateLine("search failed")
         assertEquals(1, c.lists)
@@ -732,7 +733,7 @@ class BehaviorTest {
         Espresso.pressBack()
         settle(300)
         assertFalse(gridOpen())
-        assertEquals(Page.AutoEq(Enums.EqOutput.wired), shell.nav.top)
+        assertEquals(Page.AutoEq(EqSlots.HEADPHONES), shell.nav.top)
         Espresso.pressBack()
         settle(1500)
         assertEquals(Page.Eq(Enums.EqOutput.wired), shell.nav.top)
@@ -794,7 +795,7 @@ class BehaviorTest {
     @Test
     fun autoEqGridTapDuringAScrollOnlyStopsIt() {
         val c = SimControl("ap80")
-        val shell = Shell(Nav(eqPage + Page.AutoEq(Enums.EqOutput.wired)))
+        val shell = Shell(Nav(eqPage + Page.AutoEq(EqSlots.HEADPHONES)))
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(360.dp, 640.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell, insets = WindowInsets(0.dp)) }
@@ -929,7 +930,7 @@ class BehaviorTest {
     fun autoEqGridOpensOnTheLastLetterInTheBandFromTheFirstFrame() {
         val c = SimControl("ap80")
         c.autoEq = SimControl.KANJI
-        val shell = Shell(Nav(eqPage + Page.AutoEq(Enums.EqOutput.wired)))
+        val shell = Shell(Nav(eqPage + Page.AutoEq(EqSlots.HEADPHONES)))
         var size by mutableStateOf(411.dp to 960.dp)
         rule.mainClock.autoAdvance = false
         rule.setContent {
@@ -996,7 +997,7 @@ class BehaviorTest {
     @Test
     fun autoEqRestoredOpenGridKeepsItsLetters() {
         val c = SimControl("ap80")
-        val shell = Shell(Nav(eqPage + Page.AutoEq(Enums.EqOutput.wired)))
+        val shell = Shell(Nav(eqPage + Page.AutoEq(EqSlots.HEADPHONES)))
         val restore = StateRestorationTester(rule)
         rule.mainClock.autoAdvance = false
         restore.setContent {
@@ -1045,7 +1046,7 @@ class BehaviorTest {
     @Test
     fun autoEqLastRowScrollsAboveTheKeyboard() {
         val c = SimControl("ap80")
-        val shell = Shell(Nav(eqPage + Page.AutoEq(Enums.EqOutput.wired)))
+        val shell = Shell(Nav(eqPage + Page.AutoEq(EqSlots.HEADPHONES)))
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell, insets = WindowInsets(0.dp), ime = WindowInsets(bottom = 300.dp)) }
@@ -1066,7 +1067,7 @@ class BehaviorTest {
     @Test
     fun autoEqResizeKeepsTheQueryAndTheScroll() {
         val c = SimControl("ap80")
-        val shell = Shell(Nav(eqPage + Page.AutoEq(Enums.EqOutput.wired)))
+        val shell = Shell(Nav(eqPage + Page.AutoEq(EqSlots.HEADPHONES)))
         var size by mutableStateOf(411.dp to 960.dp)
         rule.mainClock.autoAdvance = false
         rule.setContent {

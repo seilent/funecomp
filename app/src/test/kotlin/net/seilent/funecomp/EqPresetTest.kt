@@ -19,6 +19,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.EqName
 import net.seilent.funecomp.proto.Groups
+import net.seilent.funecomp.proto.GraphicBand
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
@@ -27,6 +28,7 @@ import net.seilent.funecomp.proto.gen.Tags
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.EqSlots
+import net.seilent.funecomp.state.EqStage
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
@@ -118,7 +120,7 @@ class EqPresetTest {
     private fun rows() = rule.onAllNodes(eqRow).fetchSemanticsNodes().sortedBy { it.boundsInRoot.top }.map { it.config[SemanticsProperties.TestTag] }
 
     private fun saved(c: SimControl, name: String, output: Int = wired) =
-        c.eqPreset(Enums.EqPresetOp.save, output, null, name, AutoEq.profile((AutoEq.parse(SimControl.HD650, name) as AutoEqResult.Ok).eq), false) { _, _ -> }
+        c.eqPreset(Enums.EqPresetOp.save, EqSlots.of(EqStage.USER, output), null, name, AutoEq.profile((AutoEq.parse(SimControl.HD650, name) as AutoEqResult.Ok).eq), false) { _, _ -> }
 
     @Test
     fun applyFromSearchSavesOnePresetAndPopsToTheEqPage() {
@@ -140,7 +142,7 @@ class EqPresetTest {
         assertEquals(1, c.presets.size)
         val f = c.presets.single()
         assertEquals(Enums.EqPresetOp.save, f.int(Tags.EqPreset.op))
-        assertEquals(wired, f.int(Tags.EqPreset.output))
+        assertEquals(EqSlots.HEADPHONES, f.str(Tags.EqPreset.slot))
         assertEquals("Sennheiser HD 650", f.str(Tags.EqPreset.name))
         assertNull(f.bool(Tags.EqPreset.replace))
         assertEquals(-61, f.node(Tags.EqPreset.ints)?.let { Profile.from(it) }?.preamp10)
@@ -223,7 +225,7 @@ class EqPresetTest {
 
     @Test
     fun saveAsFromSearchPopsOnOk() {
-        val (c, shell) = start(pages = eqPage() + Page.AutoEq(wired), cardEq = listOf("Sennheiser HD 650"))
+        val (c, shell) = start(pages = eqPage() + Page.AutoEq(EqSlots.HEADPHONES), cardEq = listOf("Sennheiser HD 650"))
         rule.onNodeWithTag("aeq.field").performClick()
         rule.onNodeWithTag("aeq.field").performTextInput("hd 650")
         settle(300)
@@ -267,7 +269,20 @@ class EqPresetTest {
         val (c, _) = start(pages = eqPage(bt))
         importFile()
         item(0)
-        assertEquals(bt, c.presets.single().int(Tags.EqPreset.output))
+        assertEquals(EqSlots.BLUETOOTH, c.presets.single().str(Tags.EqPreset.slot))
+        assertEquals(hd650, c.device.eq.getValue(EqSlots.BLUETOOTH).key)
+        assertEquals("off", c.device.eq.getValue(EqSlots.HEADPHONES).key)
+    }
+
+    @Test
+    fun theBluetoothPivotOfAnOutputSessionSavesByOutput() {
+        val (c, _) = start(pages = eqPage(bt), minor = 11)
+        importFile()
+        item(0)
+        val f = c.presets.single()
+        assertEquals(bt, f.int(Tags.EqPreset.output))
+        assertNull(f.str(Tags.EqPreset.slot))
+        assertNull(f.long(Tags.EqPreset.target))
         assertEquals(hd650, c.device.eq.getValue(EqSlots.BLUETOOTH).key)
         assertEquals("off", c.device.eq.getValue(EqSlots.HEADPHONES).key)
     }
@@ -314,15 +329,15 @@ class EqPresetTest {
 
     @Test
     fun presetRowsFollowTheProfileKey() {
-        val (c, _) = start(prep = { it.eqSet(wired, key = "custom") })
+        val (c, _) = start(prep = { it.eqSet(EqSlots.HEADPHONES, key = "custom") })
         assertEquals(listOf("eq.profile", "eq.save", "eq.import", "eq.preamp", "eq.band.0"), rows().take(5))
         saved(c, "HD 650")
         settle()
         assertEquals(listOf("eq.profile", "eq.delete", "eq.rename", "eq.import", "eq.preamp", "eq.band.0"), rows().take(6))
-        c.eqSet(wired, key = "autoeq/oratory1990/Headphone Model 007.txt")
+        c.eqSet(EqSlots.HEADPHONES, key = "autoeq/oratory1990/Headphone Model 007.txt")
         settle()
         assertEquals(listOf("eq.profile", "eq.import", "eq.preamp", "eq.band.0"), rows().take(4))
-        c.eqSet(wired, key = "off")
+        c.eqSet(EqSlots.HEADPHONES, key = "off")
         settle()
         assertEquals(listOf("eq.profile", "eq.import"), rows())
     }
@@ -348,7 +363,7 @@ class EqPresetTest {
     @Test
     fun aCardFileShowsItsBandsAndAnEditBecomesCustom() {
         val card = "autoeq/oratory1990/Headphone Model 007.txt"
-        val (c, _) = start(prep = { it.eqSet(wired, key = card) })
+        val (c, _) = start(prep = { it.eqSet(EqSlots.HEADPHONES, key = card) })
         rule.onNode(hasText("-3.0 db", ignoreCase = true) and hasAnyAncestor(hasTestTag("eq.preamp"))).assertExists()
         rule.onNode(hasText("pk 1 khz -2.0 db q 1.41", ignoreCase = true) and hasAnyAncestor(hasTestTag("eq.band.0"))).assertExists()
         editGain(c, card)
@@ -356,16 +371,16 @@ class EqPresetTest {
 
     @Test
     fun noPresetRowsWithoutTheBit() {
-        start(minor = 4, prep = { it.eqSet(wired, key = "custom") })
+        start(minor = 4, prep = { it.eqSet(EqSlots.HEADPHONES, key = "custom") })
         assertEquals(listOf("eq.profile", "eq.import", "eq.preamp", "eq.band.0"), rows().take(4))
     }
 
     @Test
     fun savePresetSendsNoNameOrInts() {
-        val (c, _) = start(prep = { it.eqSet(wired, key = "custom") })
+        val (c, _) = start(prep = { it.eqSet(EqSlots.HEADPHONES, key = "custom") })
         tap("eq.save")
         val f = c.presets.single()
-        assertEquals(wired, f.int(Tags.EqPreset.output))
+        assertEquals(EqSlots.HEADPHONES, f.str(Tags.EqPreset.slot))
         assertNull(f.str(Tags.EqPreset.name))
         assertNull(f.node(Tags.EqPreset.ints))
         assertEquals("/data/funeos/eq/Preset 1.txt", c.device.eq.getValue(EqSlots.HEADPHONES).key)
@@ -377,7 +392,7 @@ class EqPresetTest {
     fun deleteKeepsOrRemovesTheKeyCapturedAtOpen() {
         val (c, shell) = start(prep = {
             saved(it, "HD 650")
-            it.eqSet(bt, key = "/data/funeos/eq/HD 650.txt")
+            it.eqSet(EqSlots.BLUETOOTH, key = "/data/funeos/eq/HD 650.txt")
         })
         tap("eq.delete")
         assertEquals("delete preset?", shell.sheet.title)
@@ -386,7 +401,7 @@ class EqPresetTest {
         item(1)
         assertEquals(1, c.presets.size)
         tap("eq.delete")
-        c.eqSet(wired, key = "custom")
+        c.eqSet(EqSlots.HEADPHONES, key = "custom")
         settle()
         item(0)
         val f = c.presets.last()
@@ -401,7 +416,7 @@ class EqPresetTest {
         val (c, shell) = start(prep = {
             saved(it, "HD 650")
             saved(it, "Warm", bt)
-            it.eqSet(bt, key = "/data/funeos/eq/HD 650.txt")
+            it.eqSet(EqSlots.BLUETOOTH, key = "/data/funeos/eq/HD 650.txt")
         })
         tap("eq.rename")
         assertEquals("rename preset", shell.sheet.title)
@@ -435,7 +450,7 @@ class EqPresetTest {
     fun aDeviceRefusalOfTheNameToastsNameNotAllowed() {
         val (_, shell) = start(prep = { saved(it, "HD 650") }, wrap = { c ->
             object : Control by c {
-                override fun eqPreset(op: Int, output: Int?, key: String?, name: String?, ints: Profile?, replace: Boolean, done: (Int?, String?) -> Unit) =
+                override fun eqPreset(op: Int, slot: String?, key: String?, name: String?, ints: Profile?, replace: Boolean, mode: Int?, gains: List<GraphicBand>?, done: (Int?, String?) -> Unit) =
                     done(if (name == "Bad") Err.badValue else Err.busy, null)
             }
         })
@@ -453,9 +468,9 @@ class EqPresetTest {
 
     @Test
     fun aPresetSaveFailureKeepsTheSearchPage() {
-        val (_, shell) = start(pages = eqPage() + Page.AutoEq(wired), wrap = { c ->
+        val (_, shell) = start(pages = eqPage() + Page.AutoEq(EqSlots.HEADPHONES), wrap = { c ->
             object : Control by c {
-                override fun eqPreset(op: Int, output: Int?, key: String?, name: String?, ints: Profile?, replace: Boolean, done: (Int?, String?) -> Unit) =
+                override fun eqPreset(op: Int, slot: String?, key: String?, name: String?, ints: Profile?, replace: Boolean, mode: Int?, gains: List<GraphicBand>?, done: (Int?, String?) -> Unit) =
                     done(-1, null)
             }
         })
@@ -465,7 +480,7 @@ class EqPresetTest {
         tap("aeq.row.Sennheiser HD 650")
         item(0)
         settle(1500)
-        assertEquals(Page.AutoEq(wired), shell.nav.top)
+        assertEquals(Page.AutoEq(EqSlots.HEADPHONES), shell.nav.top)
         assertEquals("preset not saved" to "Sennheiser HD 650", toast(shell))
     }
 }

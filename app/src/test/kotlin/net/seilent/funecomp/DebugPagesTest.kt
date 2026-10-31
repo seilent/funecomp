@@ -1,5 +1,6 @@
 package net.seilent.funecomp
 
+import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.ui.ONLINE_LYRICS
 import net.seilent.funecomp.ui.ONLINE_SCROBBLING
 import net.seilent.funecomp.ui.Page
@@ -22,7 +23,7 @@ class DebugPagesTest {
             "playlists" to home + Page.Playlists,
             "settings" to home + Page.Settings,
             "eq" to home + Page.Settings + Page.Eq(0),
-            "autoeq" to home + Page.Settings + Page.Eq(0) + Page.AutoEq(0),
+            "autoeq" to home + Page.Settings + Page.Eq(0) + Page.AutoEq(EqSlots.HEADPHONES),
             "connection" to home + Page.Connection,
             "art" to home + Page.Online(),
             "artpicked" to home + Page.Online() + Page.ArtPicked,

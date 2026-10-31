@@ -16,6 +16,7 @@ import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.proto.ArtGetReply
 import net.seilent.funecomp.proto.EqPresetReply
 import net.seilent.funecomp.proto.ErrorReply
+import net.seilent.funecomp.proto.GraphicBand
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.LyrOffsetReply
@@ -37,6 +38,7 @@ import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Out
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.SvcOpens
@@ -228,15 +230,21 @@ class SimControl(
         if (a is Answer.Fail) done(a.code, a.text) else done(null, null)
     }
 
-    override fun eqSet(output: Int, key: String?, ints: Profile?) {
-        req(Msg.EQ_SET, Req.eqSet(output = output, key = key, ints = ints))
+    val eqSets = ArrayList<Node>()
+
+    fun eqHeadset(name: String?) = sim.eqHeadset(name, out)
+
+    override fun eqSet(slot: String, key: String?, ints: Profile?, mode: Int?, graphicKey: String?, gains: List<GraphicBand>?, on: Boolean?, done: (Int?) -> Unit) {
+        val payload = EqSlots.setRequest(device, slot, key, ints, mode, graphicKey, gains, on)
+        eqSets += Node.decode("EQ_SET", payload)
+        done((req(Msg.EQ_SET, payload) as? Answer.Fail)?.code)
     }
 
     val presets = ArrayList<Node>()
 
-    override fun eqPreset(op: Int, output: Int?, key: String?, name: String?, ints: Profile?, replace: Boolean, done: (Int?, String?) -> Unit) {
+    override fun eqPreset(op: Int, slot: String?, key: String?, name: String?, ints: Profile?, replace: Boolean, mode: Int?, gains: List<GraphicBand>?, done: (Int?, String?) -> Unit) {
         if (!Groups.allowed(Msg.EQ_PRESET, device.hello?.features ?: 0)) return done(-1, null)
-        val payload = Req.eqPreset(op, output, key, name, ints, replace.takeIf { it })
+        val payload = EqSlots.presetRequest(device, op, slot, key, name, ints, replace.takeIf { it }, mode, gains)
         presets += Node.decode("EQ_PRESET", payload)
         val a = req(Msg.EQ_PRESET, payload)
         if (a is Answer.Ok) done(null, EqPresetReply.from(Node.decode("EQ_PRESET.reply", a.payload)).key) else done((a as Answer.Fail).code, null)

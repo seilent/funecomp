@@ -1,6 +1,9 @@
 package net.seilent.funecomp.state
 
 import net.seilent.funecomp.proto.EqName
+import net.seilent.funecomp.proto.GraphicBand
+import net.seilent.funecomp.proto.Profile
+import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
 
 enum class EqForm { OUTPUT, SLOTS, STAGES }
@@ -53,6 +56,22 @@ object EqSlots {
             t == "OFF" -> EqDefault.OFF
             t.startsWith("GRAPHIC ") -> if (t.endsWith(MISSING.uppercase())) EqDefault.GRAPHIC_MISSING else EqDefault.GRAPHIC
             else -> EqDefault.FILE
+        }
+    }
+
+    fun setRequest(d: DeviceState, slot: String, key: String? = null, ints: Profile? = null, mode: Int? = null, graphicKey: String? = null, gains: List<GraphicBand>? = null, on: Boolean? = null): ByteArray = when (d.eqForm) {
+        EqForm.OUTPUT -> Req.eqSet(output = output(slot), key = key, ints = ints)
+        EqForm.SLOTS -> Req.eqSet(slot = slot, key = key, ints = ints, mode = mode, graphicKey = graphicKey, gains = gains)
+        EqForm.STAGES -> Req.eqSet(slot = slot, key = key, ints = ints, mode = mode, graphicKey = graphicKey, gains = gains, on = on, target = d.eq[slot]?.target)
+    }
+
+    fun presetRequest(d: DeviceState, op: Int, slot: String?, key: String?, name: String?, ints: Profile?, replace: Boolean?, mode: Int? = null, gains: List<GraphicBand>? = null): ByteArray {
+        val form = d.eqForm
+        if (op != Enums.EqPresetOp.save || slot == null) return Req.eqPreset(op, key = key, name = name, replace = replace, mode = mode.takeIf { form != EqForm.OUTPUT })
+        return when (form) {
+            EqForm.OUTPUT -> Req.eqPreset(op, output(slot), key, name, ints, replace)
+            EqForm.SLOTS -> Req.eqPreset(op, null, key, name, ints, replace, slot = slot, mode = mode, gains = gains)
+            EqForm.STAGES -> Req.eqPreset(op, null, key, name, ints, replace, slot = slot, mode = mode, gains = gains, target = d.eq[slot]?.target)
         }
     }
 

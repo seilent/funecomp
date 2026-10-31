@@ -61,6 +61,7 @@ import net.seilent.funecomp.proto.ArtPick
 import net.seilent.funecomp.proto.ArtPickReply
 import net.seilent.funecomp.proto.Bye
 import net.seilent.funecomp.proto.EqPresetReply
+import net.seilent.funecomp.proto.GraphicBand
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.LyrOffsetReply
@@ -82,6 +83,7 @@ import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.ClockSync
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.PushGate
@@ -107,7 +109,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin")
+val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin", "eqSlots", "eqStages")
 
 object Remote : Control {
     const val TAG = "Funecomp"
@@ -1284,14 +1286,14 @@ object Remote : Control {
     override fun draft(kind: Int, value: String?, minutes: Long?, unixS: Long?, zoneS: Int?, done: (Int?, String?) -> Unit) =
         send(Msg.DRAFT, Req.draft(kind, value, minutes = minutes, unixS = unixS, zoneS = zoneS), "draft ${Enums.DraftKind.names[kind]}", done = { code, text -> main.post { done(code, text) } })
 
-    override fun eqSet(output: Int, key: String?, ints: Profile?) =
-        send(Msg.EQ_SET, Req.eqSet(output = output, key = key, ints = ints), "eq set output=$output key=$key")
+    override fun eqSet(slot: String, key: String?, ints: Profile?, mode: Int?, graphicKey: String?, gains: List<GraphicBand>?, on: Boolean?, done: (Int?) -> Unit) =
+        send(Msg.EQ_SET, EqSlots.setRequest(device, slot, key, ints, mode, graphicKey, gains, on), "eq set slot=$slot key=$key graphicKey=$graphicKey on=$on", done = { code, _ -> main.post { done(code) } })
 
-    override fun eqPreset(op: Int, output: Int?, key: String?, name: String?, ints: Profile?, replace: Boolean, done: (Int?, String?) -> Unit) {
+    override fun eqPreset(op: Int, slot: String?, key: String?, name: String?, ints: Profile?, replace: Boolean, mode: Int?, gains: List<GraphicBand>?, done: (Int?, String?) -> Unit) {
         var saved: String? = null
         send(
-            Msg.EQ_PRESET, Req.eqPreset(op, output, key, name, ints, replace.takeIf { it }),
-            "eq preset ${Enums.EqPresetOp.names[op]} output=$output key=$key replace=$replace",
+            Msg.EQ_PRESET, EqSlots.presetRequest(device, op, slot, key, name, ints, replace.takeIf { it }, mode, gains),
+            "eq preset ${Enums.EqPresetOp.names[op]} slot=$slot key=$key replace=$replace",
             ok = { saved = EqPresetReply.from(it).key },
             done = { code, _ -> main.post { done(code, saved) } },
         )

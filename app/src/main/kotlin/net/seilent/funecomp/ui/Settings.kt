@@ -65,6 +65,8 @@ import net.seilent.funecomp.proto.gen.Tok
 import kotlinx.coroutines.delay
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.EqDefault
+import net.seilent.funecomp.state.EqForm
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.EqStage
 import net.seilent.funecomp.state.Rows as RowRules
@@ -77,6 +79,7 @@ import kotlin.math.roundToInt
 private const val BALANCE_KEY = "balance"
 private const val ACCENT_KEY = "accentHue"
 private const val EQ_KEY = "eq"
+private const val EQ_EAR_KEY = "eqEar"
 private const val CLOCK_KEY = "dateTime"
 private const val SLEEP_KEY = "sleep"
 private const val HALF_DB = 0.5f
@@ -211,18 +214,6 @@ fun Row.typedMinutes(text: String, minutes: Int): Send? {
 }
 
 fun Row.actionCmd(): Int? = Enums.ActionCmd.names.entries.firstOrNull { it.value == key }?.key
-
-fun activeEqOutput(device: net.seilent.funecomp.state.DeviceState) =
-    if (device.playback.state.output == Enums.Output.btHeadset) Enums.EqOutput.bt else Enums.EqOutput.wired
-
-fun profileName(device: net.seilent.funecomp.state.DeviceState, output: Int): String {
-    val eq = device.eq[EqSlots.of(EqStage.USER, output)]
-    return when (val k = eq?.key ?: "off") {
-        "off" -> "off"
-        "custom" -> "custom"
-        else -> eq?.names?.firstOrNull { it.key == k }?.name ?: k.substringAfterLast('/').removeSuffix(".txt")
-    }
-}
 
 private class Opened(val token: Any, val row: Row)
 
@@ -369,14 +360,20 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                     val key = r.key ?: ""
                     val editing = edit?.key == key
                     val v = if (editing) editValue else values[key]
-                    val eqRow = key == EQ_KEY && eqOn
+                    val eqStage = when {
+                        !eqOn -> null
+                        key == EQ_KEY -> EqStage.USER
+                        key == EQ_EAR_KEY && ctx.device.eqForm == EqForm.STAGES -> EqStage.CORRECTION
+                        else -> null
+                    }
+                    val eqRow = eqStage != null
                     val aboutRow = key == ABOUT_KEY
                     val sleepRow = r.sleep()
                     val minutes = if (sleepRow) sleepMinutes(ctx.device) else 0
                     SettingsRow(
                         r.label ?: key,
                         when {
-                            eqRow -> profileName(ctx.device, activeEqOutput(ctx.device))
+                            eqStage != null -> EqSlots.value(ctx.device.playingEqSlot(eqStage)?.let { ctx.device.eq[it] })
                             aboutRow -> ctx.device.hello?.version ?: ""
                             sleepRow -> sleepText(r, minutes)
                             else -> r.display(v, ctx.device.liveWord(key))
@@ -400,7 +397,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                                     ctx.control.set(key, next)
                                 }
                             }
-                            eqRow -> ctx.nav.push(Page.Eq(activeEqOutput(ctx.device)))
+                            eqStage != null -> ctx.nav.push(Page.Eq(ctx.device.playingEqSlot(eqStage)?.let { EqSlots.output(it) } ?: ctx.device.playingEqOutput, eqStage))
                             key == CLOCK_KEY -> ctx.sheet.open("date/time", listOf("set from phone")) {
                                 val now = System.currentTimeMillis()
                                 ctx.control.draft(Enums.DraftKind.clock, unixS = now / MILLI, zoneS = java.util.TimeZone.getDefault().getOffset(now) / MILLI)
@@ -469,117 +466,158 @@ private class EqLine(val id: String, val title: String, val value: String, val s
 
 @Composable
 fun EqPage(ctx: Ctx, page: Page.Eq) {
-    val ui = LocalUi.current
-    val outputs = listOf(Enums.EqOutput.wired to "headphones", Enums.EqOutput.bt to "bluetooth")
-    var pivot by rememberSaveable { mutableIntStateOf(outputs.indexOfFirst { it.first == page.output }.coerceAtLeast(0)) }
-    HubPage("eq", { ctx.nav.pop() }, outputs.map { it.second }, pivot, { pivot = it }) { shown ->
-        EqRows(ctx, outputs[shown].first)
+    val slots = ctx.device.eqSlots.filter { EqSlots.stage(it) == page.stage }
+    val labels = ctx.device.hello?.eqSlots.orEmpty().associate { it.key to it.label }
+    val pivots = slots.map { s ->
+        when (s) {
+            EqSlots.HEADPHONES, EqSlots.EAR_HEADPHONES -> "headphones"
+            EqSlots.BLUETOOTH, EqSlots.EAR_BLUETOOTH -> "bluetooth"
+            else -> (labels[s] ?: s).lowercase()
+        }
+    }
+    var pivot by rememberSaveable { mutableIntStateOf(slots.indexOf(EqSlots.of(page.stage, page.output)).coerceAtLeast(0)) }
+    HubPage(if (page.stage == EqStage.CORRECTION) "correction eq" else "eq", { ctx.nav.pop() }, pivots, pivot, { pivot = it }) { shown ->
+        slots.getOrNull(shown)?.let { EqRows(ctx, it) }
     }
 }
 
 @Composable
-private fun EqRows(ctx: Ctx, output: Int) {
+private fun EqRows(ctx: Ctx, slot: String) {
     val ui = LocalUi.current
-    val eq = ctx.device.eq[EqSlots.of(EqStage.USER, output)]
+    val device = ctx.device
+    val eq = device.eq[slot]
+    val graphics = device.has("eqGraphic") && device.eqForm != EqForm.OUTPUT
+    val graphic = graphics && eq?.graphic == true
     val key = eq?.key ?: "off"
     val ints = eq?.ints ?: Profile(0, emptyList())
-    var open by rememberSaveable(output) { mutableIntStateOf(-1) }
-    var focus by rememberSaveable(output) { mutableStateOf("profile") }
+    val token = remember(slot) { Any() }
+    CloseOnNewTarget(ctx, slot, token)
+    var open by rememberSaveable(slot) { mutableIntStateOf(-1) }
+    var focus by rememberSaveable(slot) { mutableStateOf(if (device.eqForm == EqForm.STAGES) "enable" else if (graphics) "mode" else "profile") }
     val state = rememberLazyListState()
     val scope = rememberCoroutineScope()
+    val headset = eq?.headset?.takeIf { slot == EqSlots.EAR_BLUETOOTH }
+    val pickTitle = if (headset != null) "profile $headset" else null
     fun bands() = (0 until Tok.eq_bands.toInt()).map { ints.bands.getOrNull(it) }
-    fun send(p: Profile) = ctx.control.eqSet(output, ints = p)
+    fun send(p: Profile) = ctx.control.eqSet(slot, ints = p)
     fun setBand(i: Int, b: Band) = send(Profile(ints.preamp10, bands().mapIndexed { j, x -> if (j == i) b else x ?: flatBand(j) }))
     val lines = ArrayList<EqLine>()
+    fun keep(id: String) = Keep(state, lines.indexOfFirst { it.id == id }, ui.px(ui.contentTop))
     fun typedAt(id: String, title: String, start: String, min: Float, max: Float, unit: String, done: (Float) -> Unit) {
         val index = lines.indexOfFirst { it.id == id }
         if (index >= 0) scope.launch { state.animateScrollToItem(index) }
-        typed(ctx, title, start, min, max, unit, done)
+        typed(ctx, title, start, min, max, unit, token, done)
     }
-    lines += EqLine("profile", "profile", profileName(ctx.device, output), false) {
-        val names = eq?.names.orEmpty()
-        val keys = names.map { it.key }
-        ctx.sheet.open("profile", names.map { it.name ?: it.key }, keys.indexOf(key).coerceAtLeast(0), keep = Keep(state, lines.indexOfFirst { it.id == "profile" }, ui.px(ui.contentTop))) { ctx.control.eqSet(output, key = keys[it]) }
+    if (device.eqForm == EqForm.STAGES) {
+        val title = if (EqSlots.stage(slot) == EqStage.CORRECTION) "correction eq" else "eq"
+        val on = eq?.on != false
+        lines += EqLine("enable", title, if (on) "on" else "off", false) {
+            ctx.sheet.open(title, listOf(ON, OFF), if (on) 0 else 1, owner = token, keep = keep("enable")) { if ((it == 0) != on) ctx.control.eqSet(slot, on = it == 0) }
+        }
     }
-    val entry = eq?.names?.firstOrNull { it.key == key }
-    val presets = ctx.device.has("eqPresets")
-    if (presets && key == "custom") {
-        lines += EqLine("save", SAVE_PRESET, "", false) {
-            ctx.control.eqPreset(Enums.EqPresetOp.save, output, null, null, null, false) { code, _ ->
-                when (code) {
-                    null -> focus = "delete"
-                    Err.noSpace -> ctx.toast.show(TOO_MANY, "")
-                    else -> ctx.toast.show(NOT_SAVED, "")
-                }
+    if (graphics) {
+        lines += EqLine("mode", "mode", if (graphic) "graphic" else "parametric", false) {
+            ctx.sheet.open("mode", listOf("PARAMETRIC", "GRAPHIC"), if (graphic) 1 else 0, owner = token, keep = keep("mode")) {
+                ctx.control.eqSet(slot, mode = if (it == 1) Enums.EqMode.graphic else Enums.EqMode.parametric)
             }
         }
     }
-    if (presets && entry?.preset == true) {
-        val name = entry.name ?: key
-        lines += EqLine("delete", DELETE_PRESET, "", false) {
-            ctx.sheet.open("$DELETE_PRESET?", listOf(DELETE_PRESET, KEEP_PRESET), 1) {
-                if (it == 0) ctx.control.eqPreset(Enums.EqPresetOp.remove, null, key, null, null, false) { code, _ ->
-                    if (code == null) focus = "profile" else ctx.toast.show(NOT_DELETED, name)
+    val presets = device.has("eqPresets")
+    if (graphic) {
+        val gkey = eq?.graphicKey ?: "off"
+        val gnames = eq?.graphicNames.orEmpty()
+        lines += EqLine("preset", "preset", EqSlots.presetText(eq), false) {
+            val keys = gnames.map { it.key }
+            ctx.sheet.open(pickTitle ?: "preset", gnames.map { it.name ?: it.key }, keys.indexOf(gkey).coerceAtLeast(0), owner = token, keep = keep("preset")) {
+                ctx.control.eqSet(slot, mode = Enums.EqMode.graphic, graphicKey = keys[it])
+            }
+        }
+        val gentry = gnames.firstOrNull { it.key == gkey }
+        if (presets && gkey == "custom") {
+            lines += EqLine("save", SAVE_PRESET, "", false) {
+                ctx.control.eqPreset(Enums.EqPresetOp.save, slot, null, null, null, false, Enums.EqMode.graphic) { code, _ ->
+                    when (code) {
+                        null -> focus = "delete"
+                        Err.staleRev -> {}
+                        Err.noSpace -> ctx.toast.show(TOO_MANY, "")
+                        else -> ctx.toast.show(NOT_SAVED, "")
+                    }
                 }
             }
         }
-        fun rename(start: String) {
-            ctx.sheet.openEntry(RENAME_PRESET) {
-                TextEntry(start) { text ->
-                    when {
-                        text == name -> ctx.sheet.close()
-                        !AutoEq.validName(text) -> ctx.toast.show(RENAME_PRESET, NAME_NOT_ALLOWED)
-                        else -> {
-                            ctx.sheet.close()
-                            ctx.control.eqPreset(Enums.EqPresetOp.rename, null, key, text, null, false) { code, _ ->
-                                when (code) {
-                                    null -> {}
-                                    Err.exists, Err.badValue -> {
-                                        ctx.toast.show(RENAME_PRESET, if (code == Err.exists) NAME_TAKEN else NAME_NOT_ALLOWED)
-                                        rename(text)
-                                    }
-                                    else -> ctx.toast.show(NOT_RENAMED, name)
-                                }
-                            }
+        if (presets && gentry?.preset == true) presetRows(ctx, lines, token, gkey, gentry.name ?: gkey, Enums.EqMode.graphic) { focus = it }
+        val gains = eq?.gains
+        val shown = gains != null && gkey != "off" && gentry != null && (gkey != EqSlots.DEFAULT || eq.defaultForm() == EqDefault.GRAPHIC)
+        if (shown) {
+            lines += EqLine("gpreamp", "preamp", signed(gains!!.preamp10 / 10f, false) + " db", false) {}
+            gains.bands.forEachIndexed { i, b ->
+                lines += EqLine("gband$i", freqText(gridHz(b.grid)), signed(b.gain10 / 10f, true) + " db", false) {
+                    typedAt("gband$i", freqText(gridHz(b.grid)), signed(b.gain10 / 10f, true), Tok.eq_gainMin, Tok.eq_gainMax, "db") { v ->
+                        val edited = gains.bands.mapIndexed { j, x -> if (j == i) x.copy(gain10 = (v * 10).roundToInt()) else x }
+                        ctx.control.eqSet(slot, mode = Enums.EqMode.graphic, gains = edited)
+                    }
+                }
+            }
+        }
+    } else {
+        lines += EqLine("profile", "profile", EqSlots.profileText(eq), false) {
+            val names = eq?.names.orEmpty()
+            val keys = names.map { it.key }
+            ctx.sheet.open(pickTitle ?: "profile", names.map { it.name ?: it.key }, keys.indexOf(key).coerceAtLeast(0), owner = token, keep = keep("profile")) {
+                ctx.control.eqSet(slot, key = keys[it])
+            }
+        }
+        val entry = eq?.names?.firstOrNull { it.key == key }
+        if (presets && key == "custom") {
+            lines += EqLine("save", SAVE_PRESET, "", false) {
+                ctx.control.eqPreset(Enums.EqPresetOp.save, slot, null, null, null, false) { code, _ ->
+                    when (code) {
+                        null -> focus = "delete"
+                        Err.staleRev -> {}
+                        Err.noSpace -> ctx.toast.show(TOO_MANY, "")
+                        else -> ctx.toast.show(NOT_SAVED, "")
+                    }
+                }
+            }
+        }
+        if (presets && entry?.preset == true) presetRows(ctx, lines, token, key, entry.name ?: key, null) { focus = it }
+        lines += EqLine("import", "import autoeq", "", false) { autoEqImport(ctx, slot, token) }
+        val listed = if (key == EqSlots.DEFAULT) eq?.defaultForm() == EqDefault.CUSTOM else key == "custom" || entry != null && key != "off"
+        if (listed) {
+            lines += EqLine("preamp", "preamp", signed(ints.preamp10 / 10f, false) + " db", false) {
+                typedAt("preamp", "preamp", signed(ints.preamp10 / 10f, false), Tok.eq_preampMin, Tok.eq_preampMax, "db") { v ->
+                    send(Profile((v * 10).roundToInt(), bands().mapIndexed { j, b -> b ?: flatBand(j) }))
+                }
+            }
+            bands().forEachIndexed { i, b ->
+                lines += EqLine("band$i", "band ${i + 1}", bandText(b), false) { open = if (open == i) -1 else i }
+                if (open == i) {
+                    val band = b ?: flatBand(i)
+                    FIELDS.indices.forEach { f ->
+                        val id = "band$i.$f"
+                        val value = when (f) {
+                            FIELD_TYPE -> TYPE_LONG.firstOrNull { it.first == band.type }?.second ?: "off"
+                            FIELD_FREQ -> freqText(band.hz())
+                            FIELD_GAIN -> signed(band.gain10 / 10f, true) + " db"
+                            else -> qText(band.q100)
                         }
-                    }
-                }
-            }
-        }
-        lines += EqLine("rename", RENAME_PRESET, "", false) { rename(name) }
-    }
-    lines += EqLine("import", "import autoeq", "", false) { autoEqImport(ctx, output) }
-    if (key == "custom" || entry != null && key != "off") {
-        lines += EqLine("preamp", "preamp", signed(ints.preamp10 / 10f, false) + " db", false) {
-            typedAt("preamp", "preamp", signed(ints.preamp10 / 10f, false), Tok.eq_preampMin, Tok.eq_preampMax, "db") { v ->
-                send(Profile((v * 10).roundToInt(), bands().mapIndexed { j, b -> b ?: flatBand(j) }))
-            }
-        }
-        bands().forEachIndexed { i, b ->
-            lines += EqLine("band$i", "band ${i + 1}", bandText(b), false) { open = if (open == i) -1 else i }
-            if (open == i) {
-                val band = b ?: flatBand(i)
-                FIELDS.indices.forEach { f ->
-                    val id = "band$i.$f"
-                    val value = when (f) {
-                        FIELD_TYPE -> TYPE_LONG.firstOrNull { it.first == band.type }?.second ?: "off"
-                        FIELD_FREQ -> freqText(band.hz())
-                        FIELD_GAIN -> signed(band.gain10 / 10f, true) + " db"
-                        else -> qText(band.q100)
-                    }
-                    lines += EqLine(id, FIELDS[f], value, true) {
-                        when (f) {
-                            FIELD_TYPE -> ctx.sheet.open("type", TYPE_LONG.map { it.second }, TYPE_LONG.indexOfFirst { it.first == band.type }.coerceAtLeast(0), keep = Keep(state, lines.indexOfFirst { it.id == id }, ui.px(ui.contentTop))) {
-                                setBand(i, band.copy(type = TYPE_LONG[it].first))
-                            }
-                            FIELD_FREQ -> typedAt(id, "frequency", band.hz().roundToInt().toString(), Tok.eq_freqMin, Tok.eq_freqMax, "hz") { v ->
-                                setBand(i, band.copy(grid = -1, milliHz = (v * MILLI).roundToInt()))
-                            }
-                            FIELD_GAIN -> typedAt(id, "gain", signed(band.gain10 / 10f, true), Tok.eq_gainMin, Tok.eq_gainMax, "db") { v ->
-                                setBand(i, band.copy(gain10 = (v * 10).roundToInt()))
-                            }
-                            else -> typedAt(id, "q", qText(band.q100), Tok.eq_qMin, Tok.eq_qMax, "") { v ->
-                                setBand(i, band.copy(q100 = (v * 100).roundToInt()))
+                        lines += EqLine(id, FIELDS[f], value, true) {
+                            when (f) {
+                                FIELD_TYPE -> {
+                                    val types = TYPE_LONG.filter { t -> device.hello?.bandTypes.orEmpty().let { it.isEmpty() || t.first in it } }
+                                    ctx.sheet.open("type", types.map { it.second }, types.indexOfFirst { it.first == band.type }.coerceAtLeast(0), owner = token, keep = keep(id)) {
+                                        setBand(i, band.copy(type = types[it].first))
+                                    }
+                                }
+                                FIELD_FREQ -> typedAt(id, "frequency", band.hz().roundToInt().toString(), Tok.eq_freqMin, Tok.eq_freqMax, "hz") { v ->
+                                    setBand(i, band.copy(grid = -1, milliHz = (v * MILLI).roundToInt()))
+                                }
+                                FIELD_GAIN -> typedAt(id, "gain", signed(band.gain10 / 10f, true), Tok.eq_gainMin, Tok.eq_gainMax, "db") { v ->
+                                    setBand(i, band.copy(gain10 = (v * 10).roundToInt()))
+                                }
+                                else -> typedAt(id, "q", qText(band.q100), Tok.eq_qMin, Tok.eq_qMax, "") { v ->
+                                    setBand(i, band.copy(q100 = (v * 100).roundToInt()))
+                                }
                             }
                         }
                     }
@@ -588,10 +626,11 @@ private fun EqRows(ctx: Ctx, output: Int) {
         }
     }
     val fieldTags = listOf("type", "frequency", "gain", "q")
-    Rows(ui.contentTop, state, focus = lines.indexOfFirst { it.id == focus }, show = output) {
+    Rows(ui.contentTop, state, focus = lines.indexOfFirst { it.id == focus }, show = slot) {
         itemsIndexed(lines, key = { _, l -> l.id }) { i, l ->
             val tag = when {
-                l.id in setOf("profile", "save", "delete", "rename", "import", "preamp") -> "eq.${l.id}"
+                l.id in setOf("enable", "mode", "profile", "preset", "save", "delete", "rename", "import", "preamp", "gpreamp") -> "eq.${l.id}"
+                l.id.startsWith("gband") -> "eq.gband.${l.id.removePrefix("gband")}"
                 l.sub -> "eq.band.${l.id.removePrefix("band").substringBefore('.')}.${fieldTags[l.id.substringAfter('.').toInt()]}"
                 else -> "eq.band.${l.id.removePrefix("band")}"
             }
@@ -602,6 +641,52 @@ private fun EqRows(ctx: Ctx, output: Int) {
             }
         }
     }
+}
+
+@Composable
+fun CloseOnNewTarget(ctx: Ctx, slot: String, token: Any) {
+    val target = ctx.device.eq[slot]?.target
+    var seen by remember(slot) { mutableStateOf(target) }
+    LaunchedEffect(target) {
+        if (target != seen) {
+            ctx.sheet.closeIf(token)
+            seen = target
+        }
+    }
+}
+
+private fun presetRows(ctx: Ctx, lines: MutableList<EqLine>, token: Any, key: String, name: String, mode: Int?, focus: (String) -> Unit) {
+    lines += EqLine("delete", DELETE_PRESET, "", false) {
+        ctx.sheet.open("$DELETE_PRESET?", listOf(DELETE_PRESET, KEEP_PRESET), 1, owner = token) {
+            if (it == 0) ctx.control.eqPreset(Enums.EqPresetOp.remove, null, key, null, null, false, mode) { code, _ ->
+                if (code == null) focus(if (mode == null) "profile" else "preset") else ctx.toast.show(NOT_DELETED, name)
+            }
+        }
+    }
+    fun rename(start: String) {
+        ctx.sheet.openEntry(RENAME_PRESET, token) {
+            TextEntry(start) { text ->
+                when {
+                    text == name -> ctx.sheet.close()
+                    !AutoEq.validName(text) -> ctx.toast.show(RENAME_PRESET, NAME_NOT_ALLOWED)
+                    else -> {
+                        ctx.sheet.close()
+                        ctx.control.eqPreset(Enums.EqPresetOp.rename, null, key, text, null, false, mode) { code, _ ->
+                            when (code) {
+                                null -> {}
+                                Err.exists, Err.badValue -> {
+                                    ctx.toast.show(RENAME_PRESET, if (code == Err.exists) NAME_TAKEN else NAME_NOT_ALLOWED)
+                                    rename(text)
+                                }
+                                else -> ctx.toast.show(NOT_RENAMED, name)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    lines += EqLine("rename", RENAME_PRESET, "", false) { rename(name) }
 }
 
 @Composable
@@ -619,8 +704,8 @@ fun Modifier.enterSub(index: Int): Modifier {
     }
 }
 
-fun typed(ctx: Ctx, title: String, start: String, min: Float, max: Float, unit: String, done: (Float) -> Unit) {
-    ctx.sheet.openEntry(title) { Entry(start, unit = unit) { text ->
+fun typed(ctx: Ctx, title: String, start: String, min: Float, max: Float, unit: String, owner: Any? = null, done: (Float) -> Unit) {
+    ctx.sheet.openEntry(title, owner) { Entry(start, unit = unit) { text ->
         val v = text.trim().replace(',', '.').toFloatOrNull()
         ctx.sheet.close()
         if (v != null) done(v.coerceIn(min, max))

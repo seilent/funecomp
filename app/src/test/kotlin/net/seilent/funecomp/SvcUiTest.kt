@@ -21,6 +21,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import androidx.compose.foundation.layout.WindowInsets
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LoginPage
 import net.seilent.funecomp.ui.Ui
@@ -287,7 +288,7 @@ class SvcUiTest {
 
     @Test
     fun aFocusedSearchFieldWithTheKeyboardClosedDoesNotWait() {
-        val (c, _) = start(listOf(Page.Home, Page.Settings, Page.Eq(0), Page.AutoEq(0)), known = listOf("login.svcdemo.test"))
+        val (c, _) = start(listOf(Page.Home, Page.Settings, Page.Eq(0), Page.AutoEq(EqSlots.HEADPHONES)), known = listOf("login.svcdemo.test"))
         rule.onNodeWithTag("aeq.field").performClick()
         settle(600)
         svc = ask(7)

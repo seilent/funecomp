@@ -25,6 +25,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.state.EqSlots
+import net.seilent.funecomp.state.EqStage
 
 private const val SKIA_CAMERA_UNIT = 72f
 const val ONLINE_ART = 0
@@ -45,10 +47,10 @@ sealed interface Page {
     data object ArtCredits : Page
     data object Firmware : Page
     data class Online(val pivot: Int = ONLINE_ART) : Page
-    data class AutoEq(val output: Int) : Page
+    data class AutoEq(val slot: String) : Page
     data class Artist(val name: String, val songs: Long? = null) : Page
     data class Album(val key: String, val title: String, val artist: String) : Page
-    data class Eq(val output: Int) : Page
+    data class Eq(val output: Int, val stage: EqStage = EqStage.USER) : Page
     data class Browse(val target: PickFor) : Page
     data class PickPreview(val target: PickFor, val previews: List<Preview>, val fromBrowse: Boolean = false) : Page
 }
@@ -108,7 +110,7 @@ fun debugPages(name: String): List<Page>? {
         "playlists" -> base + Page.Playlists
         "settings" -> base + Page.Settings
         "eq" -> base + Page.Settings + Page.Eq(0)
-        "autoeq" -> base + Page.Settings + Page.Eq(0) + Page.AutoEq(0)
+        "autoeq" -> base + Page.Settings + Page.Eq(0) + Page.AutoEq(EqSlots.HEADPHONES)
         "connection" -> base + Page.Connection
         "art" -> base + Page.Online()
         "artpicked" -> base + Page.Online() + Page.ArtPicked

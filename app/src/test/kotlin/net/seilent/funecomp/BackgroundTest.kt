@@ -24,6 +24,7 @@ import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.PhoneLine
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.CardView
+import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LyricsPlan
 import net.seilent.funecomp.state.PushGate
@@ -299,7 +300,7 @@ class BackgroundTest {
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE }
         val got = java.util.concurrent.CopyOnWriteArrayList<Pair<Int?, String?>>()
-        Remote.eqPreset(Enums.EqPresetOp.save, Enums.EqOutput.wired, null, "HD 650", null, false) { code, key -> got += code to key }
+        Remote.eqPreset(Enums.EqPresetOp.save, EqSlots.HEADPHONES, null, "HD 650", null, false) { code, key -> got += code to key }
         waitFor { got.isNotEmpty() }
         Thread.sleep(200)
         shadowOf(Looper.getMainLooper()).idle()
@@ -313,7 +314,7 @@ class BackgroundTest {
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim(minor = 4))).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE }
         val got = java.util.concurrent.CopyOnWriteArrayList<Pair<Int?, String?>>()
-        Remote.eqPreset(Enums.EqPresetOp.save, Enums.EqOutput.wired, null, "HD 650", null, false) { code, key -> got += code to key }
+        Remote.eqPreset(Enums.EqPresetOp.save, EqSlots.HEADPHONES, null, "HD 650", null, false) { code, key -> got += code to key }
         waitFor { got.isNotEmpty() }
         assertEquals(listOf<Pair<Int?, String?>>(-1 to null), got.toList())
         assertTrue(logs.none { "EQ_PRESET" in it })

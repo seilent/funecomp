@@ -14,6 +14,7 @@ import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import net.seilent.funecomp.proto.GraphicBand
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.SvcKey
@@ -76,8 +77,8 @@ interface Control {
     fun queueAdd(cmd: Int, view: Int?, parent: String?, tracks: List<Long> = emptyList(), done: (Long?, Int?) -> Unit = { _, _ -> }) = done(null, -1)
     fun set(key: String, value: String)
     fun draft(kind: Int, value: String? = null, minutes: Long? = null, unixS: Long? = null, zoneS: Int? = null, done: (Int?, String?) -> Unit = { _, _ -> })
-    fun eqSet(output: Int, key: String? = null, ints: Profile? = null)
-    fun eqPreset(op: Int, output: Int?, key: String?, name: String?, ints: Profile?, replace: Boolean, done: (Int?, String?) -> Unit) {}
+    fun eqSet(slot: String, key: String? = null, ints: Profile? = null, mode: Int? = null, graphicKey: String? = null, gains: List<GraphicBand>? = null, on: Boolean? = null, done: (Int?) -> Unit = {})
+    fun eqPreset(op: Int, slot: String?, key: String?, name: String?, ints: Profile?, replace: Boolean, mode: Int? = null, gains: List<GraphicBand>? = null, done: (Int?, String?) -> Unit) {}
     fun action(cmd: Int, track: Long? = null, done: (Int?, String?) -> Unit = { _, _ -> })
     fun favorite(s: State, toast: (String, String) -> Unit) {}
     fun refusals(show: ((String, String) -> Unit)?, owner: ((String, String) -> Unit)? = null) {}
