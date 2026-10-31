@@ -85,7 +85,7 @@ fun ScrobbleRows(ctx: Ctx, view: ScrobbleView, labels: Boolean = true) {
         add(
             Item("last.fm account", view.lastFmRow, "account") { i ->
                 if (view.signedIn) {
-                    ctx.sheet.open(a.lastFmUser, listOf(SIGN_OUT), info = listOf(REVOKE_INFO), keep = keep(i)) { signOut(Accounts.LAST_FM) }
+                    ctx.sheet.open(a.lastFmUser, listOf(SIGN_OUT), info = listOf(REVOKE_INFO), keep = keep(i), titleMixed = true) { signOut(Accounts.LAST_FM) }
                 } else {
                     ctx.control.lastFmSignIn()
                 }
@@ -98,7 +98,7 @@ fun ScrobbleRows(ctx: Ctx, view: ScrobbleView, labels: Boolean = true) {
             Item("listenbrainz token", view.listenBrainz.ifEmpty { a.listenBrainzUser.takeIf { a.token.isNotBlank() } ?: "not set" }, "token") { i ->
                 fun change() = entry("listenbrainz token", a.token, true) { if (it.isNotEmpty()) ctx.control.listenBrainzToken(it) }
                 if (a.token.isNotBlank()) {
-                    ctx.sheet.open(a.listenBrainzUser.ifBlank { "listenbrainz" }, listOf("change token", SIGN_OUT), keep = keep(i)) { if (it == 0) change() else signOut(Accounts.LISTEN_BRAINZ) }
+                    ctx.sheet.open(a.listenBrainzUser.ifBlank { "listenbrainz" }, listOf("change token", SIGN_OUT), keep = keep(i), titleMixed = a.listenBrainzUser.isNotBlank()) { if (it == 0) change() else signOut(Accounts.LISTEN_BRAINZ) }
                 } else {
                     change()
                 }

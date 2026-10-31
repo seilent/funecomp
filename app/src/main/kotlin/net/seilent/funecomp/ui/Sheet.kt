@@ -68,10 +68,14 @@ class SheetState {
     private var lineValues by mutableStateOf<() -> List<String>>({ emptyList() })
     private var lineMixed by mutableStateOf<() -> List<Boolean>>({ emptyList() })
     private var values by mutableStateOf<() -> List<String>>({ emptyList() })
+    private var itemCase by mutableStateOf<() -> List<Boolean>>({ emptyList() })
+    var titleMixed by mutableStateOf(false)
+        private set
     val info: List<String> get() = lines()
     val infoValues: List<String> get() = lineValues()
     val infoMixed: List<Boolean> get() = lineMixed()
     val itemValues: List<String> get() = values()
+    val itemMixed: List<Boolean> get() = itemCase()
     var focus by mutableIntStateOf(0)
     var entry by mutableStateOf<(@Composable () -> Unit)?>(null)
         private set
@@ -100,6 +104,8 @@ class SheetState {
         infoValues: () -> List<String> = { emptyList() },
         itemValues: () -> List<String> = { emptyList() },
         infoMixed: () -> List<Boolean> = { emptyList() },
+        itemMixed: () -> List<Boolean> = { emptyList() },
+        titleMixed: Boolean = false,
         infoLines: () -> List<String> = { info },
         keep: Keep? = null,
         accent: () -> Int = { -1 },
@@ -119,6 +125,8 @@ class SheetState {
         this.lines = infoLines
         this.lineValues = infoValues
         this.lineMixed = infoMixed
+        this.itemCase = itemMixed
+        this.titleMixed = titleMixed
         this.values = itemValues
         this.items = items
         this.focus = focus
@@ -140,6 +148,8 @@ class SheetState {
         this.lines = { emptyList() }
         this.lineValues = { emptyList() }
         this.lineMixed = { emptyList() }
+        this.itemCase = { emptyList() }
+        this.titleMixed = false
         this.values = { emptyList() }
         this.items = listOf("")
         this.focus = 0
@@ -285,7 +295,8 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
     val pitch = ui.px(Tok.settingsPitch)
     val gutter = ui.px(Tok.gutter)
     val w = ui.px(ui.w)
-    val titleH = if (state.title.isEmpty()) 0f else measurer.measure(shown(state.title, Roles.dialogTitle.case), textStyle(Roles.dialogTitle, white(1f))).size.height.toFloat()
+    val titleRole = if (state.titleMixed) Roles.dialogTitle.copy(case = Case.MIXED) else Roles.dialogTitle
+    val titleH = if (state.title.isEmpty()) 0f else measurer.measure(shown(state.title, titleRole.case), textStyle(titleRole, white(1f))).size.height.toFloat()
     val density = LocalDensity.current
     val lift = ime.getBottom(density).toFloat()
     val screenH = ui.px(ui.h) - lift
@@ -293,6 +304,7 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
     val lineValues = state.infoValues
     val mixed = state.infoMixed
     val itemValues = state.itemValues
+    val itemMixed = state.itemMixed
     val itemStyle = textStyle(Roles.dialogItem, white(1f))
     val valueStyle = textStyle(Roles.settingsValue, white(1f))
     fun slot(value: String) = (if (value.isEmpty()) w - 2 * edge else w - 2 * edge - measurer.measure(shown(value, Roles.settingsValue.case), valueStyle).size.width - gutter).coerceAtLeast(0f)
@@ -332,7 +344,7 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
             Modifier.offset { IntOffset(0, panelY.roundToInt()) }.size(w.dp(), panelH.dp())
                 .alpha(p).clipToBounds().testTag("sheet.panel"),
         ) {
-            if (state.title.isNotEmpty()) RoleText(state.title, Roles.dialogTitle, Modifier.at(edge, edge - shift).width((w - 2 * edge).dp()).clipToBounds())
+            if (state.title.isNotEmpty()) RoleText(state.title, titleRole, Modifier.at(edge, edge - shift).width((w - 2 * edge).dp()).clipToBounds().testTag("sheet.title"))
             var y = edge + titleH - shift
             for (i in 0 until fixed) {
                 val at = y
@@ -362,9 +374,10 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
                                 Box(Modifier.at(edge, pitch / 2, ay = 0.5f).width((w - 2 * edge).dp())) { entry() }
                             } else {
                                 val c by animateColorAsState(white(if (on) Roles.dialogItem.alpha else Roles.dialogItem.dim), tween(Tok.motion_focusAlpha.toInt()), label = "item")
-                                RoleText(item, Roles.dialogItem, Modifier.at(edge, pitch / 2, ay = 0.5f).width(slot(value).dp()).clipToBounds(), color = c)
+                                val role = if (itemMixed.getOrElse(i) { false }) Roles.dialogItem.copy(case = Case.MIXED) else Roles.dialogItem
+                                RoleText(item, role, Modifier.at(edge, pitch / 2, ay = 0.5f).width(slot(value).dp()).clipToBounds(), color = c)
                                 if (value.isNotEmpty()) {
-                                    val t = measurer.measure(shown(item, Roles.dialogItem.case), itemStyle)
+                                    val t = measurer.measure(shown(item, role.case), itemStyle)
                                     SheetValue(value, (pitch - t.size.height) / 2 + t.firstBaseline, if (on) Tok.settingsValueFocused else Tok.settingsValueDim, i == state.accentItem)
                                 }
                             }

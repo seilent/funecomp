@@ -66,7 +66,8 @@ class KeysFlow {
 
 fun loginSheet(ctx: Ctx, l: SvcLogins.Login, owner: Any) {
     val seen = { ctx.control.svcSeen(l.service, l.seq) }
-    ctx.sheet.open(serviceName(ctx.device, l.service), listOf(OPEN, CANCEL), info = listOfNotNull(l.host, l.userCode?.takeIf { it.isNotEmpty() }), onDismiss = seen, owner = owner) {
+    val info = listOfNotNull(l.host, l.userCode?.takeIf { it.isNotEmpty() })
+    ctx.sheet.open(serviceName(ctx.device, l.service), listOf(OPEN, CANCEL), info = info, onDismiss = seen, owner = owner, infoMixed = { info.map { true } }, titleMixed = true) {
         seen()
         if (it == 0) {
             l.host?.let { h -> ctx.control.svcKnown(l.service, h) }
@@ -77,7 +78,7 @@ fun loginSheet(ctx: Ctx, l: SvcLogins.Login, owner: Any) {
 
 fun askSheet(ctx: Ctx, a: SvcAsk, owner: Any) {
     val cancel = { ctx.control.svcCancel() }
-    ctx.sheet.open(a.name, listOf(CONTINUE, CANCEL), info = listOf(a.host), onDismiss = cancel, owner = owner) {
+    ctx.sheet.open(a.name, listOf(CONTINUE, CANCEL), info = listOf(a.host), onDismiss = cancel, owner = owner, infoMixed = { listOf(true) }, titleMixed = true) {
         if (it == 0) {
             ctx.control.svcKnown(a.service, a.host)
             ctx.control.svcContinue()
@@ -90,14 +91,14 @@ fun askSheet(ctx: Ctx, a: SvcAsk, owner: Any) {
 fun serviceSheet(ctx: Ctx, flow: KeysFlow, s: SvcInfo) {
     val name = s.name?.takeIf { it.isNotBlank() } ?: s.id.orEmpty()
     val items = listOfNotNull(CUSTOM_KEYS.takeIf { s.secrets.isNotEmpty() }) + CANCEL
-    ctx.sheet.open(name, items, info = listOf(SIGN_IN_ON_DAP), owner = flow) { if (items[it] == CUSTOM_KEYS) keysSheet(ctx, flow, KeyDraft(s.id.orEmpty(), name, s.secrets)) }
+    ctx.sheet.open(name, items, info = listOf(SIGN_IN_ON_DAP), owner = flow, titleMixed = true) { if (items[it] == CUSTOM_KEYS) keysSheet(ctx, flow, KeyDraft(s.id.orEmpty(), name, s.secrets)) }
 }
 
 fun keysSheet(ctx: Ctx, flow: KeysFlow, d: KeyDraft, focus: Int = 0) {
     flow.draft = d
     ctx.control.secure(true)
     val items = d.names + listOfNotNull(SEND.takeIf { d.any }) + CANCEL
-    ctx.sheet.open(d.name, items, focus.coerceIn(0, items.lastIndex), itemValues = { d.names.map { if (d.has(it)) SET else NOT_SET } }, owner = d) { i ->
+    ctx.sheet.open(d.name, items, focus.coerceIn(0, items.lastIndex), itemValues = { d.names.map { if (d.has(it)) SET else NOT_SET } }, owner = d, titleMixed = true) { i ->
         when {
             i < d.names.size -> keyEntry(ctx, flow, d, i)
             items[i] == SEND -> send(ctx, flow, d)
@@ -123,7 +124,7 @@ private fun send(ctx: Ctx, flow: KeysFlow, d: KeyDraft) {
     flow.drop()
     ctx.control.secure(false)
     val token = Any()
-    ctx.sheet.open(d.name, listOf(CANCEL), info = listOf(WAITING), owner = token) {}
+    ctx.sheet.open(d.name, listOf(CANCEL), info = listOf(WAITING), owner = token, titleMixed = true) {}
     ctx.control.svcKeys(d.service, keys) { line ->
         ctx.sheet.closeIf(token)
         ctx.toast.show(d.name, line)

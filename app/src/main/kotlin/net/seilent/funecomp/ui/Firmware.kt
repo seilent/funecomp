@@ -66,7 +66,7 @@ private fun pickFile(ctx: Ctx) = ctx.control.firmwareFile { p ->
     val send = updater && p.size > 0 && !unsigned
     val info = listOf(sizeText(p.size), "board ${p.board ?: "unknown"}") + (if (updater) emptyList() else listOf(NO_UPDATER)) +
         (if (unsigned) listOf(UNSIGNED_FIRMWARE) else emptyList()) + if (unsigned && signing) listOf(FROM_CARD) else emptyList()
-    ctx.sheet.open(p.name.ifEmpty { "firmware" }, if (send) listOf("send", CANCEL) else listOf(CANCEL), info = info) {
+    ctx.sheet.open(p.name.ifEmpty { "firmware" }, if (send) listOf("send", CANCEL) else listOf(CANCEL), info = info, titleMixed = p.name.isNotEmpty()) {
         if (send && it == 0) ctx.control.firmwareSend(picked = true)
     }
 }

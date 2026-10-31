@@ -524,7 +524,7 @@ private fun EqRows(ctx: Ctx, slot: String) {
         val gnames = eq?.graphicNames.orEmpty()
         lines += EqLine("preset", "preset", EqSlots.presetText(eq), false) {
             val keys = gnames.map { it.key }
-            ctx.sheet.open(pickTitle ?: "preset", gnames.map { it.name ?: it.key }, keys.indexOf(gkey).coerceAtLeast(0), owner = token, keep = keep("preset")) {
+            ctx.sheet.open(pickTitle ?: "preset", gnames.map { it.name ?: it.key }, keys.indexOf(gkey).coerceAtLeast(0), owner = token, keep = keep("preset"), itemMixed = { keys.map { '/' in it } }) {
                 ctx.control.eqSet(slot, mode = Enums.EqMode.graphic, graphicKey = keys[it])
             }
         }
@@ -559,7 +559,7 @@ private fun EqRows(ctx: Ctx, slot: String) {
         lines += EqLine("profile", "profile", EqSlots.profileText(eq), false) {
             val names = eq?.names.orEmpty()
             val keys = names.map { it.key }
-            ctx.sheet.open(pickTitle ?: "profile", names.map { it.name ?: it.key }, keys.indexOf(key).coerceAtLeast(0), owner = token, keep = keep("profile")) {
+            ctx.sheet.open(pickTitle ?: "profile", names.map { it.name ?: it.key }, keys.indexOf(key).coerceAtLeast(0), owner = token, keep = keep("profile"), itemMixed = { keys.map { '/' in it } }) {
                 ctx.control.eqSet(slot, key = keys[it])
             }
         }

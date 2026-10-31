@@ -577,6 +577,7 @@ private val ORDERED = Sources.COMMONS.copy(theAudioDb = true, fanartTv = true, d
 
 private val SCROBBLE = ScrobbleView(Accounts(true, "", "", "seilent", "session", true, "token", "seilent"), queued = 3, app = ZEROS)
 private val SCROBBLE_OUT = ScrobbleView(Accounts(true, listenBrainz = true), app = ZEROS)
+private val SCROBBLE_MIXED = ScrobbleView(Accounts(true, "", "", "SeiLent", "session", true, "token", "SeiLent"), queued = 3, app = ZEROS)
 
 private val FW = HOME + Page.Settings + Page.Firmware
 
@@ -985,7 +986,7 @@ val SHOTS = listOf(
         settle(600)
         tapRow("eq.band.0.gain")
     },
-    Shot("eq-profile", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)) { tapRow("eq.profile") },
+    Shot("eq-profile", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired), prep = { c -> preset("Harman 2019")(c); preset("HD 650 oratory1990")(c) }) { tapRow("eq.profile") },
     Shot("eq-user", pages = EQ, prep = ::custom),
     Shot("eq-correction", pages = EQ_EAR),
     Shot("eq-correction-headset", pages = EQ_EAR_BT, prep = eqFollow()) { tapRow("eq.profile") },
@@ -1137,6 +1138,7 @@ val SHOTS = listOf(
     Shot("firmware-badsig", board = "v1", pages = FW, firmware = FOUND.copy(ready = true, sigListed = true, info = "bad signature file")),
     Shot("firmware-pick-hint", board = "v1", pages = FW) { rule.onNodeWithTag("fw.pick").performClick() },
     Shot("firmware-picked", board = "v1", pages = FW) { pickThrough(it) },
+    Shot("firmware-picked-mixed", board = "v1", pages = FW, prep = { it.pickName = "funeOS-v0.4.0-v1.upt" }) { pickThrough(it) },
     Shot("firmware-picked-unsigned", board = "v1", pages = FW, prep = { it.pickSigned = false }) { pickThrough(it) },
     Shot("firmware-picked-v03", board = "v1", pages = FW, minor = 14) { rule.onNodeWithTag("fw.pick").performClick() },
     Shot("firmware-picked-mismatch", board = "v1", pages = FW, minor = 14, prep = { it.pickSigned = false; it.pickMismatch = true }) { rule.onNodeWithTag("fw.pick").performClick() },
@@ -1346,6 +1348,8 @@ val SHOTS = listOf(
         shell.sheet.accept(0)
     },
     Shot("online-scrobbling-lbsheet", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { tapRow("scrobble.token") },
+    Shot("online-scrobbling-account-mixed", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_MIXED) { tapRow("scrobble.account") },
+    Shot("online-scrobbling-lbsheet-mixed", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_MIXED) { tapRow("scrobble.token") },
     Shot("online-scrobbling-entry", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT) { tapRow("scrobble.token") },
     Shot("online-scrobbling-entry-filled", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE) { shell ->
         tapRow("scrobble.token")

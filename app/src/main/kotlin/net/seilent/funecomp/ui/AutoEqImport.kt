@@ -192,11 +192,11 @@ fun autoEqConfirm(ctx: Ctx, slot: String, name: String, text: String?, owner: An
     val presets = ctx.device.has("eqPresets")
     val eq = (r as? AutoEqResult.Ok)?.eq?.takeIf { presets && AutoEq.validName(it.name) }
     if (eq == null) {
-        ctx.sheet.open(name.ifEmpty { TITLE }, listOf(CANCEL), info = autoEqLines(r, presets), owner = owner) {}
+        ctx.sheet.open(name.ifEmpty { TITLE }, listOf(CANCEL), info = autoEqLines(r, presets), owner = owner, titleMixed = name.isNotEmpty()) {}
         return
     }
     val ints = AutoEq.profile(eq)
-    ctx.sheet.open(name, listOf(APPLY, CANCEL), info = autoEqLines(r, true), owner = owner) { if (it == 0) savePreset(ctx, slot, name, ints, false, owner) }
+    ctx.sheet.open(name, listOf(APPLY, CANCEL), info = autoEqLines(r, true), owner = owner, titleMixed = true) { if (it == 0) savePreset(ctx, slot, name, ints, false, owner) }
 }
 
 private fun savePreset(ctx: Ctx, slot: String, name: String, ints: Profile, replace: Boolean, owner: Any) {
@@ -220,8 +220,8 @@ private fun clash(ctx: Ctx, slot: String, name: String, ints: Profile, owner: An
     val hit = ctx.device.eq[slot]?.names.orEmpty().firstOrNull { AutoEq.foldKey(it.name ?: "") == fold }
     when {
         hit == null -> ctx.toast.show(NOT_SAVED, NAME_TAKEN)
-        hit.preset == true -> ctx.sheet.open(REPLACE_TITLE, listOf(REPLACE, KEEP), 1, listOf(name), owner = owner) { if (it == 0) savePreset(ctx, slot, name, ints, true, owner) }
-        else -> ctx.sheet.open(name, listOf(USE, SAVE_AS), info = listOf(NAME_TAKEN), owner = owner) { i ->
+        hit.preset == true -> ctx.sheet.open(REPLACE_TITLE, listOf(REPLACE, KEEP), 1, listOf(name), owner = owner, infoMixed = { listOf(true) }) { if (it == 0) savePreset(ctx, slot, name, ints, true, owner) }
+        else -> ctx.sheet.open(name, listOf(USE, SAVE_AS), info = listOf(NAME_TAKEN), owner = owner, titleMixed = true) { i ->
             if (i == 0) {
                 ctx.control.eqSet(slot, key = hit.key)
                 imported(ctx)
