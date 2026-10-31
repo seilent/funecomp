@@ -16,7 +16,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.SvcKey
 import net.seilent.funecomp.state.PhoneKey
+import net.seilent.funecomp.state.SvcOpens
 
 enum class Phase { NONE, CONNECTING, LIVE, DOWN, STOPPED }
 
@@ -50,6 +52,15 @@ sealed interface Previewed {
     class Refused(val reason: String) : Previewed
     data object Closed : Previewed
 }
+
+@Immutable
+data class SvcAsk(val service: String, val name: String, val seq: Long, val host: String, val link: String, val page: Boolean = false)
+
+@Immutable
+data class SvcLine(val title: String, val line: String, val id: Int)
+
+@Immutable
+data class SvcView(val ask: SvcAsk? = null, val line: SvcLine? = null)
 
 @Immutable
 data class Bonded(val name: String, val address: String, val companion: Boolean = false)
@@ -126,6 +137,15 @@ interface Control {
     fun undoPick(p: ArtPicks.Pick) {}
     fun tryAgain(p: ArtPicks.Pick) {}
     fun pickHandled(name: String) {}
+    fun svcSeen(service: String, seq: Long) {}
+    fun svcSheet() {}
+    fun svcOpen(service: String, seq: Long) {}
+    fun svcContinue() {}
+    fun svcTake(service: String, seq: Long, link: String, host: String?, listed: Boolean): SvcOpens.Verdict = SvcOpens.Verdict.ASK
+    fun svcKnown(service: String, host: String) {}
+    fun svcCancel() {}
+    fun svcKeys(service: String, keys: List<SvcKey>, done: (String) -> Unit) {}
+    fun secure(on: Boolean) {}
 }
 
 const val LIB_PAGE = 100L

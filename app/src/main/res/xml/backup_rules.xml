@@ -9,4 +9,6 @@
     <exclude domain="file" path="firmware/" />
     <exclude domain="file" path="autoeq/" />
     <exclude domain="file" path="scrobble/" />
+    <exclude domain="root" path="app_webview/" />
+    <exclude domain="root" path="app_webview_login/" />
 </full-backup-content>

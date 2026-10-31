@@ -84,7 +84,7 @@ class QueueServiceTest {
 
     @Test
     fun aBit32LessAppSeesAServiceRowAsNothingPlaying() {
-        val c = start(pages = listOf(Page.Home, Page.NowPlaying), features = LINK_FEATURES)
+        val c = start(pages = listOf(Page.Home, Page.NowPlaying), features = LINK_FEATURES and (1L shl Feature.svcLogin).inv())
         val from = c.sent.size
         c.wanted.clear()
         next(c)

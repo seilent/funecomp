@@ -2,6 +2,7 @@ package net.seilent.funecomp
 
 import android.Manifest
 import android.app.ActivityManager
+import android.app.Application
 import android.bluetooth.BluetoothManager
 import android.content.ActivityNotFoundException
 import android.content.Context
@@ -16,6 +17,7 @@ import android.os.PowerManager
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -228,6 +230,15 @@ class Main : ComponentActivity() {
 
         override fun firmwareStopSend() = Firmwares.stopSend()
 
+        override fun svcOpen(service: String, seq: Long) {
+            val l = Remote.device.logins.open[service]?.takeIf { it.seq == seq && it.ok } ?: return
+            if (!browse(l.uri ?: return)) Log.i(Remote.TAG, "svc login no browser")
+        }
+
+        override fun secure(on: Boolean) {
+            if (on) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
+
         override fun askPermission() {
             if (asked >= 2) {
                 startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
@@ -249,7 +260,10 @@ class Main : ComponentActivity() {
         lyricsMode = LyricsMode.on(this)
         remember(intent)
         launch = opens(intent, Remote.debuggable(this), Remote.phase != Phase.NONE)
-        if (launch) pickFrom(intent)
+        if (launch) {
+            pickFrom(intent)
+            svcFrom(intent)
+        }
         setContent {
             Box(Modifier.fillMaxSize().background(Black)) {
                 val b = battery
@@ -281,6 +295,7 @@ class Main : ComponentActivity() {
             shell.nav.reset(listOf(Page.Home, Page.NowPlaying))
         }
         pickFrom(intent)
+        svcFrom(intent)
         launch = true
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) launched()
     }
@@ -294,6 +309,7 @@ class Main : ComponentActivity() {
         Remote.pickAsk = { target ->
             (!shell.gated && !shell.sheet.shown && shell.pick == null && !askBattery() && !reconnectAsk).also { if (it) shell.pick = target }
         }
+        Remote.svcShown = { !shell.gated && !shell.sheet.shown && shell.pick == null && !askBattery() && !reconnectAsk }
         Scrobbles.opener = { browse(it) }
         launched()
     }
@@ -307,6 +323,7 @@ class Main : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         Remote.pickAsk = null
+        Remote.svcShown = null
         Scrobbles.opener = null
         if (!isChangingConfigurations) {
             shell.offset?.let { it.end(it.phone != null || Remote.device.has(OffsetEdit.GROUP)) }
@@ -383,6 +400,11 @@ class Main : ComponentActivity() {
         shell.pick = PickFor(name, intent.getStringExtra(EXTRA_PICK_MBID), origin = intent.getIntExtra(EXTRA_PICK_ORIGIN, -1).takeIf { it >= 0 })
     }
 
+    private fun svcFrom(intent: Intent?) {
+        if (intent?.action != ACTION_SIGN_IN || !SvcNotice.take(this, intent.getStringExtra(EXTRA_SIGN_IN_NONCE))) return
+        Remote.svcUnseen()
+    }
+
     private fun deviceName(spec: String?): String? {
         val s = spec ?: return null
         if (!s.startsWith("rfcomm:")) return s
@@ -426,6 +448,8 @@ class Main : ComponentActivity() {
         const val EXTRA_PICK_MBID = "pickMbid"
         const val EXTRA_PICK_NONCE = "pickNonce"
         const val EXTRA_PICK_ORIGIN = "pickOrigin"
+        const val ACTION_SIGN_IN = "net.seilent.funecomp.SIGN_IN"
+        const val EXTRA_SIGN_IN_NONCE = "signInNonce"
         private const val BATTERY_ASKED = "batteryAsked"
         const val PREFS = "link"
         const val DEVICE_PREFS = "device"
@@ -437,7 +461,10 @@ class Main : ComponentActivity() {
         private const val ORDER = "order"
         private val upgrade = Any()
 
+        fun mainProcess(c: Context) = Application.getProcessName() == c.packageName
+
         fun init(c: Context) {
+            if (!mainProcess(c)) return
             Remote.artist(c)
             Scrobbles.init(c, AppPair(BuildConfig.LASTFM_KEY, BuildConfig.LASTFM_SECRET))
             Lyrics.init(c)
@@ -460,7 +487,7 @@ class Main : ComponentActivity() {
 
         fun opens(intent: Intent?, debuggable: Boolean, linked: Boolean = false): Boolean {
             if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return false
-            return intent.action == Intent.ACTION_MAIN || intent.action == ACTION_OPEN || (linked && intent.action == ACTION_PICK_ART) || (debuggable && intent.hasExtra(EXTRA_LINK))
+            return intent.action == Intent.ACTION_MAIN || intent.action == ACTION_OPEN || (linked && (intent.action == ACTION_PICK_ART || intent.action == ACTION_SIGN_IN)) || (debuggable && intent.hasExtra(EXTRA_LINK))
         }
 
         internal fun writeSources(context: Context, was: Sources, s: Sources) {

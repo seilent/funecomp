@@ -70,6 +70,11 @@ import net.seilent.funecomp.proto.QueueOpReply
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.SetReply
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.SvcKey
+import net.seilent.funecomp.proto.SvcLogin
+import net.seilent.funecomp.proto.SvcLoginEnd
+import net.seilent.funecomp.proto.SvcPkce
+import net.seilent.funecomp.proto.SvcPkceReply
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
@@ -81,6 +86,8 @@ import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
+import net.seilent.funecomp.state.SvcLogins
+import net.seilent.funecomp.state.SvcOpens
 import net.seilent.funecomp.state.Wake
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.BrowseTile
@@ -100,7 +107,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows")
+val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin")
 
 object Remote : Control {
     const val TAG = "Funecomp"
@@ -138,6 +145,8 @@ object Remote : Control {
     internal var queuedAsk: () -> Unit = {}
     internal var asking: () -> Unit = {}
     @Volatile var pickAsk: ((PickFor) -> Boolean)? = null
+    @Volatile var svcShown: (() -> Boolean)? = null
+    @Volatile private var sessions = 0
     private val pickLock = Any()
     private var resolving: HttpRun? = null
     @Volatile private var app: Context? = null
@@ -232,12 +241,14 @@ object Remote : Control {
     fun debuggable(context: Context) = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
     fun start(context: Context, spec: String): Boolean {
+        if (!Main.mainProcess(context)) return false
         synchronized(lock) {
             if (spec == this.spec && link != null) {
                 link?.foreground()
                 return true
             }
             drop()
+            Svc.init(context)
             thumbs(context)
             val connect = connector(context.applicationContext, spec)
             if (connect == null) {
@@ -264,7 +275,6 @@ object Remote : Control {
     }
 
     fun stop() {
-        app?.let { PickNotice.clear(it) }
         clockOff()
         synchronized(lock) { drop() }
         wake?.drop(ATTEMPT)
@@ -658,6 +668,79 @@ object Remote : Control {
 
     override fun pickHandled(name: String) {
         app?.let { PickNotice.done(it, name) }
+    }
+
+    override fun svcSeen(service: String, seq: Long) = update { it.copy(logins = it.logins.seen(service, seq)) }
+
+    override fun svcSheet() {
+        app?.let { SvcNotice.clear(it) }
+    }
+
+    override fun svcCancel() {
+        Svc.cancel()
+        if (device.logins.shown == null) app?.let { SvcNotice.clear(it) }
+    }
+
+    override fun svcKeys(service: String, keys: List<SvcKey>, done: (String) -> Unit) {
+        val s = link?.session ?: return done(Svc.NO_REPLY)
+        Svc.keys(service, keys, s::request, { Log.i(TAG, it) }) { line -> main.post { done(line) } }
+    }
+
+    override fun svcTake(service: String, seq: Long, link: String, host: String?, listed: Boolean): SvcOpens.Verdict {
+        val known = host != null && Svc.opens.known(service, host)
+        val v = Svc.opens.take(service, seq, link, listed, known, SvcOpens.Kind.OPEN, SystemClock.elapsedRealtime(), Svc.spendTap())
+        Log.i(TAG, "svc take $service $seq listed=$listed known=$known -> ${v.name.lowercase()}")
+        return v
+    }
+
+    override fun svcKnown(service: String, host: String) = Svc.opens.remember(service, host)
+
+    fun svcUnseen() = update { it.copy(logins = it.logins.unseen()) }
+
+    fun svcAway() {
+        Svc.waiting?.let { (service, seq, link) -> svcNotice(service, seq, link) }
+        device.logins.shown?.let { svcNotice(it.service, it.seq, it.uri.orEmpty()) }
+    }
+
+    private fun svcNotice(service: String, seq: Long, link: String) = main.post {
+        val c = app ?: return@post
+        if (svcShown?.invoke() == true || Svc.opens.opened(service, seq, link)) return@post
+        val v = Svc.opens.take(service, seq, link, true, true, SvcOpens.Kind.NOTICE, SystemClock.elapsedRealtime())
+        if (v == SvcOpens.Verdict.NONE) return@post
+        Log.i(TAG, "svc notice ${if (SvcNotice.post(c, Svc.nameOf(service), silent = v == SvcOpens.Verdict.ASK)) "posted" else "off"}${if (v == SvcOpens.Verdict.ASK) " silent" else ""}")
+    }
+
+    private fun svcPush(type: Int, body: Node, before: SvcLogins) {
+        if (type == Msg.SVC_LOGIN) {
+            val l = SvcLogin.from(body).service?.let { device.logins.open[it] } ?: return
+            if (before.open[l.service]?.seq == l.seq) return
+            Log.i(TAG, "svc login ${l.service} ${l.seq} ok=${l.ok}")
+            if (l.ok) {
+                svcNotice(l.service, l.seq, l.uri.orEmpty())
+                return
+            }
+            svcSeen(l.service, l.seq)
+            Svc.refusedLogin(l.service, l.seq, l.uri.orEmpty())
+            return
+        }
+        val e = SvcLoginEnd.from(body)
+        val code = before.open[e.service]?.takeIf { it.seq == e.seq }
+        val pkce = code == null && Svc.ended(e)
+        Log.i(TAG, "svc login end ${e.service} ${e.seq} ${Enums.SvcLoginResult.names[e.result ?: -1]} ${if (code != null) "code" else if (pkce) "pkce" else "unknown"}")
+        if (code != null && e.result == Enums.SvcLoginResult.done) Svc.signedIn(code.service)
+        if ((code != null || pkce) && device.logins.shown == null && Svc.asking == null) app?.let { SvcNotice.clear(it) }
+    }
+
+    private fun svcAsk(q: SvcPkce, r: Responder) {
+        val out = Svc.pkce(q, device.hello) { a ->
+            when (a) {
+                is Svc.Answer.Redirect -> r.ok(SvcPkceReply(a.url).encode())
+                is Svc.Answer.Error -> r.error(a.code, a.text)
+            }
+            Log.i(TAG, "svc pkce answer ${if (a is Svc.Answer.Redirect) "redirect len=${a.url.length}" else "error ${(a as Svc.Answer.Error).code}"}")
+        }
+        Log.i(TAG, "svc pkce $out")
+        Svc.waiting?.let { (service, seq, link) -> svcNotice(service, seq, link) }
     }
 
     override fun pickLink(text: String, name: String, done: (Previewed) -> Unit) = resolve(done, PickLink.UNREACHABLE, name) { it.offer(text) }
@@ -1094,6 +1177,12 @@ object Remote : Control {
 
     private fun drop() {
         generation++
+        sessions++
+        app?.let {
+            PickNotice.clear(it)
+            SvcNotice.clear(it)
+        }
+        Svc.dropped()
         heart.down()
         Scrobbles.unlinked()
         heartToast = null
@@ -1345,6 +1434,7 @@ object Remote : Control {
             Firmwares.hello(hello.board, hello.version, hello.has("updSig"))
             Lyrics.session()
             dapLyrics.session()
+            Svc.hello(hello)
             if (synchronized(clock) { clock.hello(hello) }) sendClock("hello")
             phase(Phase.LIVE)
             phoneLyrics.retry()
@@ -1359,13 +1449,16 @@ object Remote : Control {
             val now = SystemClock.elapsedRealtime()
             var old = device.playback.state
             var epoch = device.card.epoch
+            var logins = device.logins
             val pushed = if (type == Msg.STATE) State.from(body) else null
             if (pushed?.source == Enums.Source.phone && old.source != Enums.Source.phone) phoneLyrics.mode = lyricsMode()
             update {
                 old = it.playback.state
                 epoch = it.card.epoch
+                logins = it.logins
                 it.reduce(type, body, now)
             }
+            if (type == Msg.SVC_LOGIN || type == Msg.SVC_LOGIN_END) svcPush(type, body, logins)
             if (type == Msg.STATE || type == Msg.QUEUE) Lyrics.poke()
             if (type == Msg.LIB || type == Msg.QUEUE) synchronized(asked) { asked.removeAll { k -> k.startsWith(if (type == Msg.LIB) "lib " else "queue ") } }
             if (type != Msg.STATE) return
@@ -1413,6 +1506,12 @@ object Remote : Control {
                 askPick(ArtPick.from(body), responder)
                 return true
             }
+            if (type == Msg.SVC_PKCE) {
+                val q = SvcPkce.from(body)
+                val at = sessions
+                main.post { if (at == sessions) svcAsk(q, responder) }
+                return true
+            }
             if (type != Msg.ART_BLOCK) return false
             val q = ArtBlock.from(body)
             val dev = spec
@@ -1431,10 +1530,15 @@ object Remote : Control {
 
         override fun onClosed(reason: String) {
             if (!live) return
-            app?.let { PickNotice.clear(it) }
+            app?.let {
+                PickNotice.clear(it)
+                SvcNotice.clear(it)
+            }
+            sessions++
+            Svc.dropped()
             offset?.end(false)
             phoneCover.clear()
-            update { it.copy(hello = null) }
+            update { it.copy(hello = null, logins = SvcLogins()) }
             dapLyrics.poke()
             heart.down()
             art?.cancel()

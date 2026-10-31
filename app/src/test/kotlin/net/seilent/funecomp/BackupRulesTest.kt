@@ -23,6 +23,8 @@ class BackupRulesTest {
         "sharedpref device.xml",
     )
 
+    private val web = listOf("root app_webview/", "root app_webview_login/")
+
     private fun excludes(id: Int): Map<String, List<String>> {
         val x = app.resources.getXml(id)
         val out = LinkedHashMap<String, MutableList<String>>()
@@ -35,11 +37,11 @@ class BackupRulesTest {
     }
 
     @Test
-    fun cloudBackupLeavesOutTheCachesAndTheQueueAndTransferCarriesAllButTheKeys() {
-        val cloud = (keys + listOf("file lyrics/", "file art/", "file thumb/", "file firmware/", "file autoeq/", "file scrobble/")).sorted()
+    fun cloudBackupLeavesOutTheCachesAndTheQueueAndTransferCarriesAllButTheKeysAndNoBackupHoldsWebViewData() {
+        val cloud = (keys + web + listOf("file lyrics/", "file art/", "file thumb/", "file firmware/", "file autoeq/", "file scrobble/")).sorted()
         val rules = excludes(R.xml.data_extraction_rules)
         assertEquals(cloud, rules["cloud-backup"]?.sorted())
-        assertEquals(keys.sorted(), rules["device-transfer"]?.sorted())
+        assertEquals((keys + web).sorted(), rules["device-transfer"]?.sorted())
         assertEquals(mapOf("full-backup-content" to cloud), excludes(R.xml.backup_rules).mapValues { it.value.sorted() })
     }
 

@@ -33,6 +33,9 @@
             android:name=".LinkService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+        <service
+            android:name=".SvcLoginHost"
+            android:exported="false" />
         <receiver
             android:name=".Updated"
             android:exported="false">
