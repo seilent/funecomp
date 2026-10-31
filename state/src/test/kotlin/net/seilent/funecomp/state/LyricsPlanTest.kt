@@ -51,4 +51,46 @@ class LyricsPlanTest {
         val w = LyricsPlan.wants(device(false, items, plain = true), emptySet())
         assertEquals(listOf(1L to false, 2L to true, 3L to false, 4L to false), w.map { it.track to it.plain })
     }
+
+    @Test
+    fun heldTakesTheWindowWithSyncedAndPlainCopies() {
+        val items = mapOf(
+            1L to item(2, true, false),
+            2L to item(3, false, true),
+            3L to item(4, false, false),
+            4L to item(5, null, null),
+            5L to item(6, true, null),
+            6L to item(7, true, false),
+        )
+        val h = LyricsPlan.held(device(true, items, plain = false), emptySet())
+        assertEquals(listOf(1L, 2L, 3L, 6L), h.map { it.track })
+        assertEquals(LyricsPlan.Held(1, "One", "Utada Hikaru", listOf("Utada Hikaru"), "Bad Mode", 261_000, true, true, listOf("Utada Hikaru")), h[0])
+        assertEquals(LyricsPlan.Held(2, "T2", "A2", listOf("A2"), "Al", 2000, true, false, listOf("A2")), h[1])
+        assertEquals(listOf(true, false, true), h.drop(1).map { it.synced })
+    }
+
+    @Test
+    fun heldCarriesBothArtistStringsOfThePlayingTrack() {
+        val d = DeviceState(playback = Playback(State(track = 1, title = "One", artist = "A feat. B", artists = listOf("A", "B"), slot = 0, lyrics = true)))
+        assertEquals(listOf("A feat. B", "A, B"), LyricsPlan.held(d, emptySet()).single().keys)
+        val joined = DeviceState(playback = Playback(State(track = 1, title = "One", artists = listOf("A", "B"), slot = 0, lyricsPlain = true)))
+        assertEquals(LyricsPlan.Held(1, "One", "A, B", listOf("A, B"), null, null, false, true, listOf("A", "B")), LyricsPlan.held(joined, emptySet()).single())
+    }
+
+    @Test
+    fun heldNeverTakesAbsentOrFalseFlagsOrDoneTracks() {
+        val items = mapOf(1L to item(2, null, null), 2L to item(3, false, false), 3L to item(4, true))
+        assertEquals(emptyList<Long>(), LyricsPlan.held(device(null, items), setOf(4L)).map { it.track })
+        assertEquals(emptyList<Long>(), LyricsPlan.held(device(false, emptyMap(), plain = false), emptySet()).map { it.track })
+        assertEquals(listOf(4L), LyricsPlan.held(device(true, items), setOf(1L)).map { it.track })
+    }
+
+    @Test
+    fun aMarkedQueueSlotPassedAsExcludedIsNoWant() {
+        val items = mapOf(1L to item(2, false, true), 2L to item(3, false, false))
+        val d = device(false, items, plain = false)
+        assertEquals(listOf(1L, 2L, 3L), LyricsPlan.wants(d, emptySet()).map { it.track })
+        assertEquals(listOf(2L), LyricsPlan.held(d, emptySet()).map { it.track })
+        assertEquals(listOf(1L, 3L), LyricsPlan.wants(d, LyricsPlan.held(d, emptySet()).map { it.track }.toSet()).map { it.track })
+    }
 }

@@ -3,6 +3,7 @@ package net.seilent.funecomp
 import android.content.Context
 import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.LyricSources
+import net.seilent.funecomp.artist.NeMix
 import net.seilent.funecomp.artist.Sources
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -16,6 +17,8 @@ import org.robolectric.annotation.Config
 import org.xmlpull.v1.XmlPullParser
 import java.io.File
 import java.io.FileNotFoundException
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -91,6 +94,44 @@ class PrefsUpgradeTest {
         Lyrics.init(app)
         assertEquals(LyricSources(lrclib = false, netease = true, order = LyricSources.ORDER), Lyrics.sources)
         assertTrue(Lyrics.on)
+    }
+
+    private fun drain() {
+        val l = CountDownLatch(1)
+        assertTrue(Lyrics.phone { l.countDown() })
+        assertTrue(l.await(5, TimeUnit.SECONDS))
+    }
+
+    @Test
+    fun theNemixSweepRunsOnceOnAFreshOrOldStoreAndAgainBelowItsVersion() {
+        val p = app.getSharedPreferences("lyrics", Context.MODE_PRIVATE)
+        p.edit().clear().commit()
+        Lyrics.reset()
+        Lyrics.init(app)
+        drain()
+        assertEquals(mapOf("nemix" to NeMix.VERSION), p.all)
+        p.edit().clear().putBoolean("lrclib", true).putBoolean("netease", false).putString("order", "netease,lrclib").commit()
+        val dir = File(app.filesDir, "lyrics").apply { mkdirs() }
+        val mixed = "rule=1\n" + (1..5).joinToString("\n") { "[00:0$it.00]あめが 视る$it" }
+        dir.resolve("a.ne.lrc").writeText(mixed)
+        Lyrics.reset()
+        Lyrics.init(app)
+        drain()
+        assertEquals(LyricSources(true, false, listOf("netease", "lrclib")), Lyrics.sources)
+        assertEquals(NeMix.VERSION, p.getInt("nemix", 0))
+        assertTrue(dir.resolve("a.ne.bad").isFile)
+        dir.resolve("b.ne.lrc").writeText(mixed)
+        Lyrics.reset()
+        Lyrics.init(app)
+        drain()
+        assertTrue(dir.resolve("b.ne.lrc").isFile)
+        p.edit().putInt("nemix", NeMix.VERSION - 1).commit()
+        Lyrics.reset()
+        Lyrics.init(app)
+        drain()
+        assertFalse(dir.resolve("b.ne.lrc").exists())
+        assertTrue(dir.resolve("b.ne.bad").isFile)
+        assertEquals(NeMix.VERSION, p.getInt("nemix", 0))
     }
 
     @Test

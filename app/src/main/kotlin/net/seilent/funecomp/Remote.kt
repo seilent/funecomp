@@ -52,6 +52,7 @@ import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.link.ArtGet
 import net.seilent.funecomp.link.Link
+import net.seilent.funecomp.link.LyrGet
 import net.seilent.funecomp.link.Responder
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
@@ -64,6 +65,7 @@ import net.seilent.funecomp.proto.EqPresetReply
 import net.seilent.funecomp.proto.GraphicBand
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
+import net.seilent.funecomp.proto.LrcReply
 import net.seilent.funecomp.proto.LyrOffsetReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Profile
@@ -1233,6 +1235,26 @@ object Remote : Control {
             )
         }
     }
+
+    fun lrcDel(track: Long, reason: String, done: (Int?, LrcReply?) -> Unit) {
+        val s = link?.session ?: return done(-1, null)
+        s.request(Msg.LRC_DEL, Req.lrcDel(track)) { r ->
+            val flags = (r as? Session.Result.Ok)?.let { LrcReply.from(it.body) }?.takeIf { it.lyrics != null || it.lyricsPlain != null }
+            if (r is Session.Result.Ok) dapLyrics.dropped(track)
+            Log.i(TAG, "lrc del ${java.lang.Long.toUnsignedString(track)} $reason -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}${flags?.let { " flags ${it.lyrics == true} ${it.lyricsPlain == true}" } ?: ""}")
+            done(
+                when (r) {
+                    is Session.Result.Ok -> null
+                    is Session.Result.Failed -> r.error.code
+                    is Session.Result.Unsupported -> Err.unknown
+                    else -> -1
+                },
+                flags,
+            )
+        }
+    }
+
+    fun lyrGet(track: Long): LyrGet.Outcome? = link?.session?.let { LyrGet(it).run(track) }
 
     fun volumeSet(n: Int) = send(Msg.VOLUME, Req.volume(set = n), "volume set $n")
 

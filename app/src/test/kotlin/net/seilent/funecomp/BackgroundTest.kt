@@ -37,6 +37,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeFalse
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -80,8 +81,8 @@ class BackgroundTest {
 
     private val logs = java.util.concurrent.CopyOnWriteArrayList<String>()
 
-    private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList(), updDir: java.io.File? = null, minor: Int = Proto.minor, phone: List<PhoneLine> = emptyList(), receiver: Boolean = false, output: Int? = null): String {
-        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, updDir = updDir, minor = minor, log = { logs += it }, phone = phone, receiver = receiver))
+    private fun sim(battery: Battery = Battery(87, 87, 0), lrcDir: java.io.File? = null, faults: List<String> = emptyList(), updDir: java.io.File? = null, minor: Int = Proto.minor, phone: List<PhoneLine> = emptyList(), receiver: Boolean = false, output: Int? = null, offsets: Map<Long, Int> = emptyMap(), lib: net.seilent.funecomp.sim.Library = net.seilent.funecomp.sim.Library.synthetic()): String {
+        val s = Sim(Options(Board.of("v1"), net.seilent.funecomp.sim.Faults(faults), battery = battery, lrcDir = lrcDir, updDir = updDir, minor = minor, log = { logs += it }, phone = phone, receiver = receiver, lyrOffsets = offsets), lib)
         output?.let { s.device.output(it) }
         sims += s
         return "tcp:127.0.0.1:${s.listen(0)}"
@@ -436,12 +437,12 @@ class BackgroundTest {
     private val syntheticSyncedBody = "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}"
     private val head = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim.Library.synthetic().tracks.first().id)
 
-    private fun lyricsFrom(body: String): MutableList<String> {
+    private fun lyricsFrom(body: String, code: Int = 200): MutableList<String> {
         java.io.File(app.filesDir, "lyrics").deleteRecursively()
         val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
         Lyrics.init(app, net.seilent.funecomp.artist.Http { url, _ ->
             calls += url
-            net.seilent.funecomp.artist.Response(200, body.toByteArray())
+            net.seilent.funecomp.artist.Response(code, body.toByteArray())
         })
         Lyrics.set(LyricSources.NETEASE, false)
         Lyrics.set(LyricSources.LRCLIB, true)
@@ -671,6 +672,583 @@ class BackgroundTest {
         assertEquals(2 * first, puts())
         Lyrics.set(LyricSources.LRCLIB, false)
         c.destroy()
+    }
+
+    private val synth = net.seilent.funecomp.sim.Library.synthetic().tracks
+
+    private fun uid(i: Int) = java.lang.Long.toUnsignedString(synth[i].id)
+
+    private fun keyOf(t: net.seilent.funecomp.sim.Track, artist: String) = net.seilent.funecomp.artist.Lrclib.Query(t.title, artist, t.album, t.durationMs).key
+
+    private fun marker(i: Int): java.io.File {
+        val t = synth[i]
+        return java.io.File(app.filesDir, "lyrics").resolve("${keyOf(t, if (i == 0) t.artist else t.artists.joinToString(", "))}.ne.bad")
+    }
+
+    private fun mark(f: java.io.File) = f.apply { parentFile!!.mkdirs() }.writeText("1\nhan")
+
+    private fun mark(i: Int) = mark(marker(i))
+
+    private val oldSynced = (1..5).joinToString("\n") { "[00:0$it.00]あめが ふる$it\n[00:1$it.00]视线时间$it" } + "\n"
+
+    private val oldPlain = (1..5).joinToString("\n") { "あめが ふる$it\n视线时间$it" } + "\n"
+
+    private val glyphSynced = (1..5).joinToString("\n") { "[00:0$it.00]あめが 视る$it" } + "\n"
+
+    private fun copy(i: Int, text: String) = kotlin.io.path.createTempDirectory("lrc").toFile().also { it.resolve("${uid(i)}.lrc").writeText(text) }
+
+    private fun appLog(prefix: String) = org.robolectric.shadows.ShadowLog.getLogsForTag(Remote.TAG).map { it.msg }.filter { it.startsWith(prefix) }
+
+    private fun putLines(i: Int) = appLog("lrc put ${uid(i)} ")
+
+    private fun delLines(i: Int) = appLog("lrc del ${uid(i)} ").filter { " -> " in it }
+
+    private fun verdicts(i: Int) = appLog("lrc del ${uid(i)} verdict ")
+
+    private fun dels() = logs.count { it.contains("rx LRC_DEL") }
+
+    private fun resets(i: Int) = logs.count { it == "lyr offset reset track=${uid(i)}" }
+
+    private fun offsetSends() = logs.count { it.contains("rx LYR_OFFSET") }
+
+    private fun lines(i: Int, vararg tails: String) = tails.map { Regex("lrc put ${uid(i)} [0-9]+ $it") }
+
+    private fun matches(want: List<Regex>, got: List<String>) = want.size == got.size && want.zip(got).all { (r, g) -> r.matches(g) }
+
+    private fun settle(n: Int = 3) = repeat(n) {
+        Lyrics.poke()
+        Thread.sleep(700)
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
+    }
+
+    private fun heldLive(i: Int, body: String, code: Int = 200, copy: String = oldSynced, faults: List<String> = emptyList(), minor: Int = Proto.minor, late: Boolean = false): org.robolectric.android.controller.ServiceController<LinkService> {
+        lyricsFrom(body, code)
+        if (late) Lyrics.set(LyricSources.LRCLIB, false)
+        mark(i)
+        org.robolectric.shadows.ShadowLog.clear()
+        val c = live(sim(lrcDir = copy(i, copy), faults = faults, minor = minor, offsets = mapOf(synth[i].id to 500)))
+        if (late) {
+            waitFor { Remote.device.queue.items.size > LyricsPlan.AHEAD }
+            Lyrics.set(LyricSources.LRCLIB, true)
+        }
+        return c
+    }
+
+    private fun aSyncedCopyTakesASyncedAnswer(i: Int) {
+        val c = heldLive(i, syntheticSyncedBody, late = i == 0)
+        waitFor(15_000) { putLines(i).any { it.endsWith("-> ok") } }
+        settle()
+        assertTrue(putLines(i).toString(), matches(lines(i, "synced lrclib -> ok"), putLines(i)))
+        assertFalse(marker(i).exists())
+        assertEquals(0, dels())
+        assertEquals(1, resets(i))
+        assertEquals(0, offsetSends())
+        if (i == 0) assertTrue(appLog("lrc put ").first().startsWith("lrc put ${uid(0)} "))
+        c.destroy()
+    }
+
+    @Test
+    fun aMarkedPlayingSyncedCopyIsReplacedFirst() = aSyncedCopyTakesASyncedAnswer(0)
+
+    @Test
+    fun aMarkedQueueSyncedCopyIsReplaced() = aSyncedCopyTakesASyncedAnswer(2)
+
+    private fun aSyncedCopyTakesAPlainAnswer(i: Int) {
+        val c = heldLive(i, syntheticPlainBody)
+        waitFor(15_000) { stored().any { it.startsWith("stored lrc track=${uid(i)} ") } }
+        settle()
+        val del = logs.indexOfFirst { it.startsWith("lrc del track=${uid(i)} ") }
+        val put = logs.indexOfFirst { it.startsWith("stored lrc track=${uid(i)} ") }
+        assertTrue("$del $put", del in 0 until put)
+        assertTrue(logs[put].endsWith("kind=plain"))
+        assertEquals(1, dels())
+        assertFalse(marker(i).exists())
+        assertEquals(1, resets(i))
+        assertEquals(0, offsetSends())
+        c.destroy()
+    }
+
+    @Test
+    fun aMarkedPlayingSyncedCopyWithAPlainAnswerIsDeletedThenPut() = aSyncedCopyTakesAPlainAnswer(0)
+
+    @Test
+    fun aMarkedQueueSyncedCopyWithAPlainAnswerIsDeletedThenPut() = aSyncedCopyTakesAPlainAnswer(2)
+
+    private fun aPlainCopyTakesAPlainAnswer(i: Int) {
+        val c = heldLive(i, syntheticPlainBody, copy = oldPlain)
+        waitFor(15_000) { stored().any { it.startsWith("stored lrc track=${uid(i)} ") } }
+        settle()
+        assertEquals(1, putLines(i).size)
+        assertTrue(putLines(i).single().endsWith("plain lrclib -> ok"))
+        assertEquals(0, dels())
+        assertFalse(marker(i).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aMarkedPlayingPlainCopyTakesOnePlainPut() = aPlainCopyTakesAPlainAnswer(0)
+
+    @Test
+    fun aMarkedQueuePlainCopyTakesOnePlainPut() = aPlainCopyTakesAPlainAnswer(2)
+
+    @Test
+    fun aMarkedQueuePlainCopyTakesOneSyncedPutAndNoWant() {
+        val c = heldLive(2, syntheticSyncedBody, copy = oldPlain)
+        waitFor(15_000) { stored().any { it.startsWith("stored lrc track=${uid(2)} ") } }
+        settle()
+        assertTrue(putLines(2).toString(), matches(lines(2, "synced lrclib -> ok"), putLines(2)))
+        assertEquals(0, dels())
+        assertFalse(marker(2).exists())
+        c.destroy()
+    }
+
+    private fun aCopyWithNoAnswer(i: Int, faults: List<String> = emptyList(), minor: Int = Proto.minor): org.robolectric.android.controller.ServiceController<LinkService> {
+        val c = heldLive(i, "", code = 404, copy = oldPlain, faults = faults, minor = minor)
+        waitFor(15_000) { appLog("lrc del ${uid(i)} ").isNotEmpty() }
+        settle()
+        return c
+    }
+
+    private fun aCopyWithNoAnswerIsDeleted(i: Int) {
+        val c = aCopyWithNoAnswer(i)
+        assertEquals(1, dels())
+        assertEquals(listOf("lrc del ${uid(i)} han -> ok flags false false"), delLines(i))
+        assertEquals(listOf("lrc del ${uid(i)} verdict gone"), verdicts(i))
+        assertFalse(marker(i).exists())
+        assertEquals(0, resets(i))
+        assertEquals(0, offsetSends())
+        c.destroy()
+    }
+
+    @Test
+    fun aMarkedPlayingPlainCopyWithNoAnswerIsDeleted() = aCopyWithNoAnswerIsDeleted(0)
+
+    @Test
+    fun aMarkedQueuePlainCopyWithNoAnswerIsDeleted() = aCopyWithNoAnswerIsDeleted(2)
+
+    private fun aDeleteThatLeavesTheUsersLyricsDropsTheMarker(i: Int) {
+        val c = aCopyWithNoAnswer(i, listOf("del-beside"))
+        assertEquals(1, dels())
+        assertEquals(listOf("lrc del ${uid(i)} han -> ok flags false true"), delLines(i))
+        assertEquals(listOf("lrc del ${uid(i)} verdict gone"), verdicts(i))
+        assertFalse(marker(i).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aPlayingDeleteThatLeavesTheUsersLyricsDropsTheMarker() = aDeleteThatLeavesTheUsersLyricsDropsTheMarker(0)
+
+    @Test
+    fun aQueueDeleteThatLeavesTheUsersLyricsDropsTheMarker() = aDeleteThatLeavesTheUsersLyricsDropsTheMarker(2)
+
+    private fun anUntaggedDeleteKeepsTheMarker(i: Int) {
+        val c = aCopyWithNoAnswer(i, listOf("del-untagged"))
+        settle()
+        assertEquals(1, dels())
+        assertEquals(listOf("lrc del ${uid(i)} han -> ok"), delLines(i))
+        assertEquals(listOf("lrc del ${uid(i)} verdict kept"), verdicts(i))
+        assertTrue(marker(i).exists())
+        nextSession { sims.last().current!!.close("drop") }
+        assertEquals(2, dels())
+        assertTrue(marker(i).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aPlayingUntaggedDeleteKeepsTheMarker() = anUntaggedDeleteKeepsTheMarker(0)
+
+    @Test
+    fun aQueueUntaggedDeleteKeepsTheMarker() = anUntaggedDeleteKeepsTheMarker(2)
+
+    private fun aPre15CopyThatNeedsADeleteGetsNothing(i: Int, body: String, code: Int) {
+        val c = heldLive(i, body, code = code, minor = 14)
+        waitFor(15_000) { appLog("lrc del ${uid(i)} ").isNotEmpty() }
+        settle()
+        assertEquals(listOf("lrc del ${uid(i)} kept, link below 1.15"), appLog("lrc del ${uid(i)} "))
+        assertEquals(0, dels())
+        assertEquals(emptyList<String>(), putLines(i))
+        assertTrue(marker(i).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aPre15PlayingCopyWithNoAnswerGetsNothing() = aPre15CopyThatNeedsADeleteGetsNothing(0, "", 404)
+
+    @Test
+    fun aPre15QueueCopyWithNoAnswerGetsNothing() = aPre15CopyThatNeedsADeleteGetsNothing(2, "", 404)
+
+    @Test
+    fun aPre15QueueSyncedCopyWithAPlainAnswerGetsNothing() = aPre15CopyThatNeedsADeleteGetsNothing(2, syntheticPlainBody, 200)
+
+    @Test
+    fun aPre15QueueSyncedCopyTakesASyncedAnswer() {
+        val c = heldLive(2, syntheticSyncedBody, minor = 14)
+        waitFor(15_000) { putLines(2).any { it.endsWith("-> ok") } }
+        settle()
+        assertTrue(putLines(2).toString(), matches(lines(2, "synced lrclib -> ok"), putLines(2)))
+        assertEquals(0, dels())
+        assertFalse(marker(2).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aMarkerUnderThePlayingTracksSecondArtistKeyIsFoundAndDropped() {
+        val lib = net.seilent.funecomp.sim.Library(listOf(net.seilent.funecomp.sim.Track(1L, "A / B", listOf("A", "B"), "Al", "A", "Song", 200_000, "a", "s.flac")) + List(6) { net.seilent.funecomp.sim.Track(it + 2L, "C$it", listOf("C$it"), "Al$it", "C$it", "T$it", 200_000, "a", "t$it.flac") })
+        val t = lib.tracks[0]
+        lyricsFrom(syntheticSyncedBody)
+        val second = java.io.File(app.filesDir, "lyrics").resolve("${keyOf(t, "A, B")}.ne.bad")
+        mark(second)
+        org.robolectric.shadows.ShadowLog.clear()
+        val dir = kotlin.io.path.createTempDirectory("lrc").toFile().also { it.resolve("1.lrc").writeText(oldSynced) }
+        val c = live(sim(lrcDir = dir, lib = lib))
+        waitFor(15_000) { appLog("lrc put 1 ").any { it.endsWith("-> ok") } }
+        settle()
+        assertEquals(1, appLog("lrc put 1 ").size)
+        assertFalse(second.exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aReadOnlyCardGetsOneDeletePerSession() {
+        val c = heldLive(2, "", code = 404, copy = oldPlain, faults = listOf("fail=LRC_DEL:${Err.readOnly}"))
+        waitFor(15_000) { dels() >= 1 }
+        settle(5)
+        assertEquals(1, dels())
+        assertEquals(listOf("lrc del ${uid(2)} han -> error ${Err.readOnly}"), delLines(2))
+        assertTrue(marker(2).exists())
+        nextSession { sims.last().current!!.close("drop") }
+        assertEquals(2, dels())
+        assertTrue(marker(2).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aBusyDeleteIsTriedTwicePerSession() {
+        val c = heldLive(2, "", code = 404, copy = oldPlain, faults = listOf("busy=LRC_DEL:50"))
+        waitFor(15_000) { dels() >= 2 }
+        settle(5)
+        assertEquals(2, dels())
+        assertTrue(marker(2).exists())
+        nextSession { sims.last().current!!.close("drop") }
+        assertEquals(4, dels())
+        c.destroy()
+    }
+
+    private fun aFailedHeldPutIsNotRepeated(code: Int) {
+        val c = heldLive(2, syntheticSyncedBody, faults = listOf("fail=LRC_PUT:$code"))
+        waitFor(15_000) { putLines(2).isNotEmpty() }
+        settle()
+        assertTrue(putLines(2).toString(), matches(lines(2, "synced lrclib -> error $code"), putLines(2)))
+        assertTrue(marker(2).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aHeldPutAnsweringNoSpaceIsNotRepeated() = aFailedHeldPutIsNotRepeated(Err.noSpace)
+
+    @Test
+    fun aHeldPutAnsweringStaleRevIsNotRepeated() = aFailedHeldPutIsNotRepeated(Err.staleRev)
+
+    @Test
+    fun aHeldPutAnsweringNoLibraryIsNotRepeated() = aFailedHeldPutIsNotRepeated(Err.noLibrary)
+
+    @Test
+    fun aHeldPutAnsweringNotFoundIsNotRepeated() = aFailedHeldPutIsNotRepeated(Err.notFound)
+
+    @Test
+    fun aHeldNoCardPutWaitsForTheCard() {
+        val c = heldLive(0, syntheticSyncedBody, faults = listOf("fail=LRC_PUT:${Err.noCard}:2"))
+        waitFor(15_000) { putLines(0).any { it.endsWith("-> ok") } }
+        assertTrue(putLines(0).toString(), matches(lines(0, "synced lrclib -> error ${Err.noCard}", "synced lrclib -> error ${Err.noCard}", "synced lrclib -> ok"), putLines(0)))
+        assertFalse(marker(0).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aBusyHeldPutIsTriedTwicePerSession() {
+        val c = heldLive(0, syntheticSyncedBody, faults = listOf("busy=LRC_PUT:50"))
+        waitFor(15_000) { putLines(0).size >= 2 }
+        settle(5)
+        assertTrue(putLines(0).toString(), matches(lines(0, "synced lrclib -> error ${Err.busy}", "synced lrclib -> error ${Err.busy}"), putLines(0)))
+        assertTrue(marker(0).exists())
+        c.destroy()
+    }
+
+    private fun aDapCopyIsJudgedBeforeADelete(copy: String, verdict: String, deleted: Boolean) {
+        val c = heldLive(0, "", code = 404, copy = copy)
+        waitFor(15_000) { appLog("lrc del ${uid(0)} ").isNotEmpty() }
+        settle()
+        assertEquals(if (deleted) 1 else 0, dels())
+        assertTrue(appLog("lrc del ${uid(0)} ").toString(), appLog("lrc del ${uid(0)} ").contains(verdict))
+        c.destroy()
+    }
+
+    @Test
+    fun aCleanDapCopyDropsTheMarkersWithNothingSent() {
+        aDapCopyIsJudgedBeforeADelete((1..5).joinToString("\n") { "[00:0$it.00]あめが 見る$it" } + "\n", "lrc del ${uid(0)} skipped, dap copy clean", false)
+        assertFalse(marker(0).exists())
+    }
+
+    @Test
+    fun anAbsentDapCopyDropsTheMarkersWithNothingSent() {
+        val c = heldLive(0, "", code = 404, copy = oldSynced, faults = listOf("lyrget-absent"))
+        waitFor(15_000) { appLog("lrc del ${uid(0)} ").isNotEmpty() }
+        settle()
+        assertEquals(0, dels())
+        assertEquals(listOf("lrc del ${uid(0)} skipped, dap copy clean"), appLog("lrc del ${uid(0)} "))
+        assertFalse(marker(0).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aGlyphOnlyDapCopyIsKeptWithNoReplacement() {
+        aDapCopyIsJudgedBeforeADelete(glyphSynced, "lrc del ${uid(0)} kept, dap copy glyphs only", false)
+        assertTrue(marker(0).exists())
+    }
+
+    @Test
+    fun aMixedChineseDapCopyIsStillDeleted() {
+        aDapCopyIsJudgedBeforeADelete(oldSynced, "lrc del ${uid(0)} verdict gone", true)
+        assertFalse(marker(0).exists())
+    }
+
+    @Test
+    fun aGlyphOnlySyncedCopyIsKeptOverAPlainAnswer() {
+        val c = heldLive(0, syntheticPlainBody, copy = glyphSynced)
+        waitFor(15_000) { appLog("lrc del ${uid(0)} ").isNotEmpty() }
+        settle()
+        assertEquals(listOf("lrc del ${uid(0)} kept, dap copy glyphs only"), appLog("lrc del ${uid(0)} "))
+        assertEquals(0, dels())
+        assertEquals(emptyList<String>(), putLines(0))
+        assertTrue(marker(0).exists())
+        c.destroy()
+    }
+
+    private fun reads() = logs.count { it.contains("rx LYR_GET") }
+
+    @Test
+    fun aBusyDapReadKeepsTheCopyAndIsTriedTwicePerSession() {
+        val c = heldLive(2, "", code = 404, copy = oldPlain, faults = listOf("busy=LYR_GET:50"))
+        waitFor(15_000) { reads() >= 2 }
+        settle(5)
+        assertEquals(2, reads())
+        assertEquals(0, dels())
+        assertTrue(marker(2).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aDapReadWithNoCardWaitsForTheCard() {
+        val c = heldLive(2, "", code = 404, copy = oldPlain, faults = listOf("fail=LYR_GET:${Err.noCard}:1"))
+        waitFor(15_000) { appLog("lrc del ${uid(2)} verdict ").isNotEmpty() }
+        settle()
+        assertEquals(2, reads())
+        assertEquals(1, dels())
+        assertFalse(marker(2).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun anAnswerOverTheSizeLimitCountsAsNoAnswer() {
+        val big = (1..500).joinToString("\\n") { "[${"%02d".format(it / 60)}:${"%02d".format(it % 60)}.00]line number $it of a long text" }
+        val c = heldLive(0, "{\"syncedLyrics\":\"$big\",\"instrumental\":false}", copy = oldSynced)
+        waitFor(15_000) { appLog("lrc del ${uid(0)} ").any { "verdict" in it } }
+        settle()
+        assertTrue(appLog("lyrics ").any { "bytes over ${Proto.lrcMaxBytes}" in it })
+        assertEquals(1, dels())
+        assertEquals(emptyList<String>(), putLines(0))
+        assertFalse(marker(0).exists())
+        c.destroy()
+    }
+
+    private fun twoKeyLib(): net.seilent.funecomp.sim.Library = net.seilent.funecomp.sim.Library(
+        listOf(net.seilent.funecomp.sim.Track(1L, "C", listOf("C"), "Al0", "C", "T0", 200_000, "a", "t0.flac"), net.seilent.funecomp.sim.Track(2L, "A / B", listOf("A", "B"), "Al", "A", "Song", 200_000, "a", "s.flac")) +
+            List(5) { net.seilent.funecomp.sim.Track(it + 3L, "D$it", listOf("D$it"), "Al$it", "D$it", "U$it", 200_000, "a", "u$it.flac") },
+    )
+
+    private fun songKey(artist: String) = java.io.File(app.filesDir, "lyrics").resolve("${keyOf(twoKeyLib().tracks[1], artist)}.ne.bad")
+
+    @Test
+    fun aMarkerLeftUnderTheOtherKeyNeverDeletesACleanCopy() {
+        java.io.File(app.filesDir, "lyrics").deleteRecursively()
+        Lyrics.init(app, net.seilent.funecomp.artist.Http { url, _ ->
+            if ("artist_name=A%2C%20B" in url) net.seilent.funecomp.artist.Response(200, syntheticSyncedBody.toByteArray()) else net.seilent.funecomp.artist.Response(404, ByteArray(0))
+        })
+        Lyrics.set(LyricSources.NETEASE, false)
+        Lyrics.set(LyricSources.LRCLIB, true)
+        val first = songKey("A / B")
+        val second = songKey("A, B")
+        mark(first)
+        mark(second)
+        org.robolectric.shadows.ShadowLog.clear()
+        val dir = kotlin.io.path.createTempDirectory("lrc").toFile().also { it.resolve("2.lrc").writeText(oldSynced) }
+        val c = live(sim(lrcDir = dir, lib = twoKeyLib()))
+        waitFor(15_000) { appLog("lrc put 2 ").any { it.endsWith("-> ok") } }
+        settle()
+        assertFalse(second.exists())
+        assertTrue(first.exists())
+        Remote.transport(Enums.TransportCmd.next, null, null, null)
+        waitFor { Remote.device.playback.state.library == 2L }
+        nextSession { sims.last().current!!.close("drop") }
+        waitFor(15_000) { appLog("lrc del 2 ").isNotEmpty() }
+        settle()
+        assertEquals(0, dels())
+        assertEquals(listOf("lrc del 2 skipped, dap copy clean"), appLog("lrc del 2 "))
+        assertFalse(first.exists())
+        c.destroy()
+    }
+
+    @Test
+    fun markersUnderBothKeysOfThePlayingTrackAreDropped() {
+        lyricsFrom(syntheticSyncedBody)
+        val lib = twoKeyLib()
+        val song = lib.tracks[1]
+        val keys = listOf(songKey("A / B"), songKey("A, B"))
+        keys.forEach { mark(it) }
+        org.robolectric.shadows.ShadowLog.clear()
+        val dir = kotlin.io.path.createTempDirectory("lrc").toFile().also { it.resolve("2.lrc").writeText(oldSynced) }
+        val c = live(sim(lrcDir = dir, lib = net.seilent.funecomp.sim.Library(listOf(song) + lib.tracks.filter { it != song })))
+        waitFor(15_000) { appLog("lrc put 2 ").any { it.endsWith("-> ok") } }
+        settle()
+        assertEquals(1, appLog("lrc put 2 ").size)
+        assertTrue(keys.none { it.exists() })
+        c.destroy()
+    }
+
+    @Test
+    fun aMarkerUnderThePlayingTracksFirstKeyIsFound() {
+        lyricsFrom(syntheticSyncedBody)
+        val lib = twoKeyLib()
+        val song = lib.tracks[1]
+        val first = songKey("A / B")
+        mark(first)
+        org.robolectric.shadows.ShadowLog.clear()
+        val dir = kotlin.io.path.createTempDirectory("lrc").toFile().also { it.resolve("2.lrc").writeText(oldSynced) }
+        val c = live(sim(lrcDir = dir, lib = net.seilent.funecomp.sim.Library(listOf(song) + lib.tracks.filter { it != song })))
+        waitFor(15_000) { appLog("lrc put 2 ").any { it.endsWith("-> ok") } }
+        settle()
+        assertEquals(1, appLog("lrc put 2 ").size)
+        assertFalse(first.exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aPlainPutRefusedAfterADeleteIsNotSentAgainNextSession() {
+        val c = heldLive(2, syntheticPlainBody, faults = listOf("refuse=LRC_PUT"))
+        waitFor(15_000) { putLines(2).isNotEmpty() }
+        settle()
+        assertEquals(1, dels())
+        assertTrue(putLines(2).toString(), matches(lines(2, "plain lrclib -> error ${Err.refused}"), putLines(2)))
+        nextSession { sims.last().current!!.close("drop") }
+        assertEquals(1, putLines(2).size)
+        assertEquals(1, dels())
+        assertTrue(marker(2).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aFailedSourceSendsNothingForAMarkedCopy() {
+        val c = heldLive(0, "", code = 500)
+        waitFor(15_000) { appLog("lyrics lrclib ").isNotEmpty() }
+        settle(5)
+        assertEquals(emptyList<String>(), putLines(0))
+        assertEquals(0, dels())
+        assertTrue(marker(0).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aCopyWithoutAMarkerIsLeftAlone() {
+        lyricsFrom(syntheticSyncedBody)
+        val c = live(sim(lrcDir = copy(2, oldSynced)))
+        waitFor(15_000) { stored().size >= 3 }
+        settle()
+        assertEquals(emptyList<String>(), putLines(2))
+        assertEquals(0, dels())
+        c.destroy()
+    }
+
+    @Test
+    fun everySourceOffSendsNothingForAMarkedCopy() {
+        lyricsFrom("", code = 404)
+        Lyrics.set(LyricSources.LRCLIB, false)
+        mark(2)
+        val c = live(sim(lrcDir = copy(2, oldPlain)))
+        settle(4)
+        assertEquals(0, dels())
+        assertEquals(0, puts())
+        assertTrue(marker(2).exists())
+        c.destroy()
+    }
+
+    @Test
+    fun aWantPutDropsAMarker() {
+        lyricsFrom(syntheticSyncedBody)
+        mark(2)
+        val c = live(sim())
+        waitFor(15_000) { stored().any { it.startsWith("stored lrc track=${uid(2)} ") } }
+        settle()
+        assertFalse(marker(2).exists())
+        assertEquals(0, dels())
+        c.destroy()
+    }
+
+    private val mixedBody = "rule=1\n" + (1..5).joinToString("\n") { "[00:0$it.00]あめが 视る$it" }
+
+    @Test
+    fun theSweepMarksARejectedCacheFileOnceAndRunsBeforeTheFirstLyricsRun() {
+        Lyrics.reset()
+        val dir = java.io.File(app.filesDir, "lyrics").apply { deleteRecursively(); mkdirs() }
+        dir.resolve("abc.ne.lrc").writeText(mixedBody)
+        app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).edit().remove("nemix").commit()
+        val gate = java.util.concurrent.CountDownLatch(1)
+        Lyrics.phone { gate.await() }
+        org.robolectric.shadows.ShadowLog.clear()
+        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(200, syntheticSyncedBody.toByteArray()) })
+        Lyrics.set(LyricSources.NETEASE, false)
+        Lyrics.set(LyricSources.LRCLIB, true)
+        val c = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
+        Lyrics.poke()
+        gate.countDown()
+        waitFor(15_000) { appLog("lrc put ").isNotEmpty() }
+        val all = org.robolectric.shadows.ShadowLog.getLogsForTag(Remote.TAG).map { it.msg }
+        assertTrue(all.indexOf("nemix sweep 1 1") in 0 until all.indexOfFirst { it.startsWith("lrc put ") })
+        assertEquals("han", dir.resolve("abc.ne.bad").readText().substringAfter('\n'))
+        assertFalse(dir.resolve("abc.ne.lrc").exists())
+        assertEquals(net.seilent.funecomp.artist.NeMix.VERSION, app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).getInt("nemix", 0))
+        c.destroy()
+        Lyrics.reset()
+        dir.resolve("def.ne.lrc").writeText(mixedBody)
+        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
+        Lyrics.phone {}
+        Thread.sleep(300)
+        assertTrue(dir.resolve("def.ne.lrc").exists())
+        assertEquals(1, appLog("nemix sweep ").size)
+    }
+
+    @Test
+    fun aSweepFileErrorLeavesTheKeyUnwrittenAndTheOtherFilesSwept() {
+        Lyrics.reset()
+        val dir = java.io.File(app.filesDir, "lyrics").apply { deleteRecursively(); mkdirs() }
+        val locked = dir.resolve("abc.ne.lrc").apply { writeText(mixedBody) }
+        dir.resolve("def.ne.lrc").writeText(mixedBody)
+        try {
+            locked.setReadable(false)
+            assumeFalse(locked.canRead())
+            app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).edit().remove("nemix").commit()
+            org.robolectric.shadows.ShadowLog.clear()
+            Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
+            val done = java.util.concurrent.CountDownLatch(1)
+            Lyrics.phone { done.countDown() }
+            assertTrue(done.await(5, TimeUnit.SECONDS))
+            assertTrue(appLog("nemix sweep abc.ne.lrc: ").isNotEmpty())
+            assertEquals(listOf("nemix sweep 2 1 errors 1"), appLog("nemix sweep 2"))
+            assertTrue(dir.resolve("def.ne.bad").isFile)
+            assertFalse(app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).contains("nemix"))
+        } finally {
+            locked.setReadable(true)
+        }
     }
 
     private fun listenAgain(s: Sim, port: Int, waitMs: Long = 10_000) {
