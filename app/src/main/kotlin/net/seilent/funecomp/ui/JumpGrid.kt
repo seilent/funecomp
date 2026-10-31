@@ -99,7 +99,10 @@ class JumpLayout(val cols: Int, val tile: Float, val left: Float) {
 
         fun of(ui: Ui): JumpLayout {
             val span = ui.w - 2 * MARGIN
-            val cols = if (ui.landscape) max(Tok.jumpCols.toInt(), ((span + Tok.jumpGap) / (Tok.tileS + Tok.jumpGap)).toInt()) else Tok.jumpCols.toInt()
+            val cols = when (ui.shape) {
+                Shape.P, Shape.SN -> Tok.jumpCols.toInt()
+                Shape.SW, Shape.L -> max(Tok.jumpCols.toInt(), ((span + Tok.jumpGap) / (Tok.tileS + Tok.jumpGap)).toInt())
+            }
             return JumpLayout(cols, (span - (cols - 1) * Tok.jumpGap) / cols, MARGIN)
         }
     }

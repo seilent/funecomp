@@ -112,11 +112,15 @@ import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import androidx.compose.ui.test.performTextReplacement
 
-class Size(val name: String, val w: Int, val h: Int, val bars: WindowInsets = if (w > h) FLIP_LAND else FLIP_PORT)
+class Size(val name: String, val w: Float, val h: Float, val bars: WindowInsets = if (w > h) FLIP_LAND else FLIP_PORT) {
+    constructor(name: String, w: Int, h: Int, bars: WindowInsets = if (w > h) FLIP_LAND else FLIP_PORT) : this(name, w.toFloat(), h.toFloat(), bars)
+}
 
 private val FLIP_PORT = WindowInsets(0.dp, (109 / 2.625f).dp, 0.dp, (39 / 2.625f).dp)
 private val FLIP_LAND = WindowInsets((109 / 2.625f).dp, (109 / 2.625f).dp, 0.dp, (39 / 2.625f).dp)
-private val FLIP_COVER = WindowInsets(0.dp, (79 / 2.625f).dp, 0.dp, (220 / 2.625f).dp)
+private val NO_BARS = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
+const val COVER_W = 1244 / 2.625f
+const val COVER_H = 1101 / 2.625f
 
 class Shot(
     val name: String,
@@ -155,16 +159,20 @@ class Shot(
 val SIZES = listOf(
     Size("360x640", 360, 640),
     Size("411x960", 411, 960),
-    Size("cover361x399", 361, 399, FLIP_COVER),
+    Size("cover474x419", COVER_W, COVER_H, NO_BARS),
     Size("600x960", 600, 960),
     Size("960x600", 960, 600),
     Size("flip960x411", 960, 411),
     Size("1280x800", 1280, 800),
+    Size("sn411x438", 411, 438, NO_BARS),
+    Size("wm361x343", 361, 343, NO_BARS),
 )
 
 private val HOME = listOf(Page.Home)
 private const val CLOCK_S = 1792584000L
 private val NP = HOME + Page.NowPlaying
+private const val LONG_TRACK_MS = 720_000L
+private const val LONG_TRACK_AT = 300_000L
 private val ALBUM_KEY = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim.Library.synthetic().tracks.first().id)
 
 internal fun shotClock(c: SimControl) {
@@ -335,6 +343,11 @@ private fun Shots.pasted(shell: Shell) {
     rule.onNodeWithTag("entry").performImeAction()
 }
 
+private fun longTrack(c: SimControl) {
+    val s = c.device.playback.state
+    c.device = c.device.withState(s.copy(durationMs = LONG_TRACK_MS, positionMs = LONG_TRACK_AT, playing = false), SystemClock.elapsedRealtime())
+}
+
 private fun longTitle(c: SimControl) {
     val p = c.device.playback
     c.device = c.device.copy(playback = p.copy(state = p.state.copy(title = "Svefn-g-englar (Live at the Hammersmith Apollo, London, 2001 remaster)")))
@@ -472,7 +485,9 @@ private val HOLDS = STRIPS.filter { it.name.endsWith("-1000") && it.name != "cue
 )
 
 private fun Shots.lyricsMode() {
-    rule.onNodeWithTag("np.art").performClick()
+    val art = rule.onNodeWithTag("np.art").fetchSemanticsNode().boundsInRoot
+    val heart = rule.onAllNodesWithTag("np.heart").fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+    rule.onNodeWithTag(if (heart != null && heart.contains(art.center)) "np.mark.hit" else "np.art").performClick()
 }
 
 private fun lrc(lines: List<LyrLine>) = lines.joinToString("") { l -> "[%02d:%02d.%02d]%s\n".format(l.ms!! / 60_000, l.ms!! / 1000 % 60, l.ms!! / 10 % 100, l.text) }
@@ -775,6 +790,7 @@ val SHOTS = listOf(
     Shot("nowplaying-linkdown", pages = NP, prep = ::playing, link = LinkView(Phase.DOWN, "AP80", everLive = true)),
     Shot("nowplaying-playing", pages = NP, prep = { c -> playing(c); c.transport(Enums.TransportCmd.toggle) }),
     Shot("nowplaying-long", pages = NP, prep = { c -> playing(c); longTitle(c) }),
+    Shot("nowplaying-longtrack", pages = NP, prep = { c -> playing(c); longTrack(c) }),
     Shot("nowplaying-idle", pages = NP, prep = ::playing, after = (Tok.motion_idle + Tok.motion_idleFade).toLong() + 100),
     Shot("heart-unlit", pages = NP, prep = ::playing),
     Shot("heart-lit", pages = NP, prep = ::favorite),
@@ -857,6 +873,9 @@ val SHOTS = listOf(
     Shot("album", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru"), prep = ::playing),
     Shot("album-art", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru"), prep = ::playing, art = true),
     Shot("album-play-focused", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru")) {
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("row.2"))
+        rule.mainClock.autoAdvance = false
         rule.onNodeWithTag("row.2").performClick()
         settle(1000)
         it.nav.pop()

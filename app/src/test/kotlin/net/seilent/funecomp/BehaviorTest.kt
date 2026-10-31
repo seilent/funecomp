@@ -1085,12 +1085,13 @@ class BehaviorTest {
     }
 
     @Test
+    @Config(qualifiers = "w474dp-h420dp-420dpi")
     fun prereleasesOnTheCoverScreenScrollsAboveThePanel() {
         val c = SimControl("v1")
         val shell = Shell(Nav(listOf(Page.Home, Page.Settings, Page.Firmware)))
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(361.dp, 399.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell, firmware = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true)) }
+            Box(Modifier.requiredSize(COVER_W.dp, COVER_H.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell, firmware = FirmwareView(tag = "v0.4.0", size = 28_043_264, newer = true)) }
         }
         settle(1000)
         rule.mainClock.autoAdvance = true
@@ -1101,7 +1102,7 @@ class BehaviorTest {
         settle(600)
         assertTrue(shell.sheet.shown)
         val d = rule.density.density
-        val gutter = Ui.of((361 * d).roundToInt().toFloat(), (399 * d).roundToInt().toFloat()).px(Tok.gutter)
+        val gutter = Ui.of((COVER_W * d).roundToInt().toFloat(), (COVER_H * d).roundToInt().toFloat()).px(Tok.gutter)
         val row = rule.onNodeWithTag("fw.pre").fetchSemanticsNode().boundsInRoot
         val panel = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot
         assertTrue("${row.bottom} ${panel.top} $gutter", row.bottom <= panel.top - gutter)

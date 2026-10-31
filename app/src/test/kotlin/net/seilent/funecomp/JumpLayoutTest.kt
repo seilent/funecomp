@@ -6,6 +6,7 @@ import net.seilent.funecomp.ui.JUMP_NONE
 import net.seilent.funecomp.ui.JUMP_SEARCH
 import net.seilent.funecomp.ui.JumpLayout
 import net.seilent.funecomp.ui.LayoutTok
+import net.seilent.funecomp.ui.Shape
 import net.seilent.funecomp.ui.Ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -14,7 +15,7 @@ import org.junit.Test
 class JumpLayoutTest {
     private class Row(val name: String, val ui: Ui, val cols: Int, val tile: Float, val rows: Int, val content: Float, val limit: Float)
 
-    private val dap = Ui(1f, Tok.canvasW, LayoutTok.canvasH, false)
+    private val dap = Ui(1f, Tok.canvasW, LayoutTok.canvasH, Shape.SN)
 
     private val all = (0 until Tok.jumpCells.toInt()).toSet()
 
@@ -26,7 +27,10 @@ class JumpLayoutTest {
         Row("960x600", Ui.of(2411f, 1427f), 8, 54.5f, 5, 320.5f, 36.4f),
         Row("flip960x411", Ui.of(2411f, 930.875f), 12, 53.7f, 4, 258.8f, 0f),
         Row("1280x800", Ui.of(3251f, 1952f), 8, 54.5f, 5, 320.5f, 32.3f),
-        Row("cover361x399", Ui.of(947.625f, 748.375f), 8, 54.5f, 5, 320.5f, 0f),
+        Row("cover474x419", Ui.of(1244f, 1101f), 6, 54.26f, 7, 435.8f, 115.8f),
+        Row("sn411x438", Ui.of(1078.875f, 1149.75f), 4, 73.0f, 10, 798.0f, 457.0f),
+        Row("sw320", Ui(3f, 320f, 320f, Shape.SW), 5, 57.6f, 8, 520.8f, 200.8f),
+        Row("sw1001x1000", Ui.of(1001f, 1000f), 5, 57.66f, 8, 521.3f, 201.3f),
     )
 
     private fun center(g: JumpLayout, slot: Int) = (g.x(slot) + g.tile / 2) to (g.y(slot) + g.tile / 2)

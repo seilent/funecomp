@@ -21,8 +21,10 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+enum class Shape { P, SN, SW, L }
+
 @Immutable
-class Ui(val u: Float, val w: Float, val h: Float, val landscape: Boolean) {
+class Ui(val u: Float, val w: Float, val h: Float, val shape: Shape) {
     fun px(v: Float) = v * u
 
     fun fontPx(v: Float) = max(MIN_TEXT_PX, v * u).roundToInt().toFloat()
@@ -33,20 +35,25 @@ class Ui(val u: Float, val w: Float, val h: Float, val landscape: Boolean) {
         const val PORTRAIT_H = 480f
         const val LANDSCAPE_W = 480f
         const val LANDSCAPE_H = 272f
+        val SHORT_SIDE = LayoutTok.canvasH
 
         fun of(widthPx: Float, heightPx: Float): Ui {
-            val landscape = widthPx > heightPx
-            val u = if (landscape) {
-                min(widthPx / LANDSCAPE_W, heightPx / LANDSCAPE_H)
-            } else {
-                min(widthPx / PORTRAIT_W, heightPx / PORTRAIT_H)
+            val portrait = min(widthPx / PORTRAIT_W, heightPx / PORTRAIT_H)
+            val landscape = min(widthPx / LANDSCAPE_W, heightPx / LANDSCAPE_H)
+            val short = min(widthPx / SHORT_SIDE, heightPx / SHORT_SIDE)
+            val shape = when {
+                landscape > portrait && landscape > short -> Shape.L
+                portrait >= short -> Shape.P
+                widthPx <= heightPx -> Shape.SN
+                else -> Shape.SW
             }
-            return Ui(u, widthPx / u, heightPx / u, landscape)
+            val u = max(portrait, max(landscape, short))
+            return Ui(u, widthPx / u, heightPx / u, shape)
         }
     }
 }
 
-val LocalUi = staticCompositionLocalOf { Ui(1f, Tok.canvasW, LayoutTok.canvasH, false) }
+val LocalUi = staticCompositionLocalOf { Ui(1f, Tok.canvasW, LayoutTok.canvasH, Shape.SN) }
 
 @Immutable
 data class Bleed(val left: Int = 0, val top: Int = 0, val right: Int = 0, val bottom: Int = 0)

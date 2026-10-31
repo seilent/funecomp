@@ -154,16 +154,40 @@ class SelectorUiTest {
         assertEquals(emptyList<String>(), writes(c))
     }
 
-    @Test
-    @Config(qualifiers = "w362dp-h400dp-420dpi")
-    fun theCoverScreenRowClearsTheGutterInWholePixels() {
-        startAt((948 / 2.625f).dp, (1048 / 2.625f).dp, "ap80", "library")
+    private fun rowClearsTheGutterAt(w: Dp, h: Dp) {
+        startAt(w, h, "ap80", "library")
         scrolledTo("resume")
         rule.onNodeWithTag("set.resume").performClick()
         settle(600)
         assertTrue(shell.sheet.shown)
-        clearsThePanelPx("resume", 948f, 1048f)
+        val d = rule.density.density
+        clearsThePanelPx("resume", (w.value * d).roundToInt().toFloat(), (h.value * d).roundToInt().toFloat())
     }
+
+    private fun rowStaysInPlaceAt(w: Dp, h: Dp) {
+        startAt(w, h, "ap80", "library")
+        val before = scrolledTo("resume")
+        rule.onNodeWithTag("set.resume").performClick()
+        settle(600)
+        assertTrue(shell.sheet.shown)
+        val d = rule.density.density
+        val ui = Ui.of((w.value * d).roundToInt().toFloat(), (h.value * d).roundToInt().toFloat())
+        val room = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot.top - ui.px(Tok.gutter) - rule.onNodeWithTag("rows").fetchSemanticsNode().boundsInRoot.top
+        assertTrue("$room", room < ui.px(Tok.rowHeight))
+        assertEquals(before, top("set.resume"), 1.5f)
+    }
+
+    @Test
+    @Config(qualifiers = "w362dp-h400dp-420dpi")
+    fun aShortNarrowBoxRowClearsTheGutterInWholePixels() = rowClearsTheGutterAt((948 / 2.625f).dp, (1048 / 2.625f).dp)
+
+    @Test
+    @Config(qualifiers = "w474dp-h420dp-420dpi")
+    fun theCoverScreenSheetTallerThanTheRoomLeavesTheRowInPlace() = rowStaysInPlaceAt(COVER_W.dp, COVER_H.dp)
+
+    @Test
+    @Config(qualifiers = "w362dp-h400dp-420dpi")
+    fun aShortWideSheetTallerThanTheRoomLeavesTheRowInPlace() = rowStaysInPlaceAt(361.dp, 343.dp)
 
     @Test
     fun aLandscapeSheetTallerThanTheRoomLeavesTheLastRowInPlace() {
@@ -399,12 +423,12 @@ class SelectorUiTest {
     }
 
     @Test
-    @Config(qualifiers = "w361dp-h399dp-420dpi")
+    @Config(qualifiers = "w474dp-h420dp-420dpi")
     fun aFocusedItemBelowManyInfoLinesShowsOnOpen() {
         val c = SimControl("ap80")
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(361.dp, 399.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
+            Box(Modifier.requiredSize(COVER_W.dp, COVER_H.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
         }
         settle(1000)
         shell.sheet.open("confirm", listOf("apply", "cancel"), info = (1..12).map { "line $it" }) {}

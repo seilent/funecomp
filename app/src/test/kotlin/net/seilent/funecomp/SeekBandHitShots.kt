@@ -235,7 +235,7 @@ class SeekBandHitShots {
         val SEEK_MID = (LayoutTok.npSeekBandBottom - LayoutTok.npProgressY) / 2
         const val CAPTION = 64
         val HELD_AT = listOf(0.25f, 0.75f)
-        val DRAG_SIZES = setOf("flip960x411", "960x600", "cover361x399")
+        val DRAG_SIZES = setOf("flip960x411", "960x600", "cover474x419")
         val HITS = listOf(
             "np.seek" to Color(255, 64, 64),
             "np.titleBlock" to Color(64, 160, 255),

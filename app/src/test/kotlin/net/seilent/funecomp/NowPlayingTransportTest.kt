@@ -37,6 +37,7 @@ import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Roles
+import net.seilent.funecomp.ui.Shape
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.formatTime
@@ -206,7 +207,7 @@ class NowPlayingTransportTest {
             val ui = Ui.of(np.width.toFloat(), np.height.toFloat())
             val ring = bounds("np.mark")
             val art = bounds("np.art")
-            if (ui.landscape) {
+            if (ui.shape in CORNER) {
                 assertEquals(s.name, Tok.detailRingInset * ui.u, art.right - ring.right, 1.5f)
                 assertEquals(s.name, Tok.detailRingInset * ui.u, art.bottom - ring.bottom, 1.5f)
             } else {
@@ -234,7 +235,7 @@ class NowPlayingTransportTest {
             val np = rule.onNodeWithTag("np").fetchSemanticsNode().size
             val mark = bounds("np.mark.hit")
             val art = bounds("np.art")
-            if (Ui.of(np.width.toFloat(), np.height.toFloat()).landscape) {
+            if (Ui.of(np.width.toFloat(), np.height.toFloat()).shape in CORNER) {
                 assertTrue(s.name, mark.left >= art.left && mark.top >= art.top && mark.right <= art.right && mark.bottom <= art.bottom)
             } else {
                 assertFalse(s.name, overlap(mark, art))
@@ -373,7 +374,7 @@ class NowPlayingTransportTest {
             assertEquals(s.name, (LayoutTok.npSeekBandBottom - LayoutTok.npProgressY) * ui.u, band.height, 1f)
             assertEquals(s.name, art.left - margin, band.left, 1f)
             assertEquals(s.name, art.right + margin, band.right, 1.5f)
-            if (!ui.landscape) {
+            if (ui.shape == Shape.P || ui.shape == Shape.SN) {
                 val titleTop = bounds("np").top + (ui.npTitleBaseline - Tok.capHeight * Roles.npTitle.size) * ui.u
                 assertEquals(s.name, titleTop, band.bottom, 1f)
             }
@@ -531,6 +532,7 @@ class NowPlayingTransportTest {
         const val ART_EDGE = 4f
         const val LINE = 2f
         const val EDGE_LIMIT_DP = 200f
+        val CORNER = setOf(Shape.SW, Shape.L)
         val ENTRY = ArtCache.Entry("name:automatic", "Automatic", null, "deezer", null, "https://example.invalid/a.jpg", 1, sha = "s")
     }
 }

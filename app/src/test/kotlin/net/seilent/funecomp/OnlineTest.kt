@@ -84,7 +84,7 @@ class OnlineTest {
     private val scrobbles = ArrayList<Accounts>()
     private var holdUsage = false
 
-    private fun start(pages: List<Page>, gated: Boolean = false, scrobble: ScrobbleView = ScrobbleView(), w: Int = 411, h: Int = 960, usage: Map<String?, ArtCache.Usage> = emptyMap(), ime: Dp = 0.dp): Pair<SimControl, Shell> {
+    private fun start(pages: List<Page>, gated: Boolean = false, scrobble: ScrobbleView = ScrobbleView(), w: Dp = 411.dp, h: Dp = 960.dp, usage: Map<String?, ArtCache.Usage> = emptyMap(), ime: Dp = 0.dp): Pair<SimControl, Shell> {
         val c = SimControl("ap80")
         c.usage = usage
         val control = object : Control by c {
@@ -108,7 +108,7 @@ class OnlineTest {
         val shell = Shell(Nav(pages), gated = gated)
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(w.dp, h.dp).testTag("frame")) {
+            Box(Modifier.requiredSize(w, h).testTag("frame")) {
                 App(c.device, link, control, shell, sources, {
                     saved += it
                     sources = it
@@ -561,7 +561,7 @@ class OnlineTest {
 
     @Test
     fun eachPivotKeepsItsFocusAndScroll() {
-        val (_, shell) = start(listOf(Page.Home, Page.Online()), w = 960, h = 411)
+        val (_, shell) = start(listOf(Page.Home, Page.Online()), w = 960.dp, h = 411.dp)
         tap("art.src.${Sources.DEEZER}")
         shell.sheet.close()
         settle(600)
@@ -579,18 +579,18 @@ class OnlineTest {
 
     @Test
     fun listenBrainzOnTheCoverScreenClearsThePanel() {
-        val (_, shell) = start(listOf(Page.Home, Page.Online(ONLINE_SCROBBLING)), w = 361, h = 399)
+        val (_, shell) = start(listOf(Page.Home, Page.Online(ONLINE_SCROBBLING)), w = COVER_W.dp, h = COVER_H.dp)
         tap("scrobble.listenbrainz")
         assertTrue(shell.sheet.shown)
         val d = rule.density.density
-        val gutter = Ui.of((361 * d).roundToInt().toFloat(), (399 * d).roundToInt().toFloat()).px(Tok.gutter)
+        val gutter = Ui.of((COVER_W * d).roundToInt().toFloat(), (COVER_H * d).roundToInt().toFloat()).px(Tok.gutter)
         val row = bounds("scrobble.listenbrainz")
         assertTrue("${row.bottom} ${bounds("sheet.panel").top}", row.bottom <= bounds("sheet.panel").top - gutter)
     }
 
     @Test
     fun anEntryAfterAValueSheetOnAnotherPageStillRises() {
-        val (_, shell) = start(listOf(Page.Home, Page.Settings), w = 960, h = 411)
+        val (_, shell) = start(listOf(Page.Home, Page.Settings), w = 960.dp, h = 411.dp)
         rule.onNodeWithTag("pivot.library").performClick()
         settle(1000)
         rule.mainClock.autoAdvance = true
@@ -621,7 +621,7 @@ class OnlineTest {
     private fun entryAbove(room: Float): Triple<Rect, Rect, Float> {
         val d = rule.density.density
         val keyboard = (mix2.second * d).roundToInt() - room
-        start(listOf(Page.Home, Page.Online(ONLINE_SCROBBLING)), w = mix2.first, h = mix2.second, ime = (keyboard / d).dp)
+        start(listOf(Page.Home, Page.Online(ONLINE_SCROBBLING)), w = mix2.first.dp, h = mix2.second.dp, ime = (keyboard / d).dp)
         tap("scrobble.token")
         rule.onNodeWithTag("entry").assertExists()
         return Triple(bounds("sheet.panel"), bounds("sheet.item.0"), bounds("frame").bottom - keyboard)
