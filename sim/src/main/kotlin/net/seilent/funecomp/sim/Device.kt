@@ -125,6 +125,7 @@ class Lyr(val kind: Int, val lines: List<LyrLine>) {
 private val MD5 = Regex("^[0-9a-f]{32}$")
 private const val EQ_DIR = "/data/funeos/eq/"
 private const val GRAPHIC_DIR = "/data/funeos/eq/graphic/"
+private val FRESH_BAND = Band(Enums.BandType.peak, 34, 1_000_000, 0, 140)
 private const val GRAPHIC_BANDS = 10
 private const val GRAPHIC_FIRST_GRID = 4
 private const val GRAPHIC_GRID_STEP = 6
@@ -220,7 +221,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private class EqUnit(var on: Boolean) {
         var key = "off"
-        var custom = Profile(0, emptyList())
+        var custom = Profile(0, listOf(FRESH_BAND))
         var mode = Enums.EqMode.parametric
         var graphicKey = "off"
         var gains: List<Int> = List(GRAPHIC_BANDS) { 0 }

@@ -48,6 +48,7 @@ import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.artist.YouTube
+import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Row
@@ -85,10 +86,10 @@ import net.seilent.funecomp.ui.SvcLine
 import net.seilent.funecomp.ui.SvcView
 import net.seilent.funecomp.ui.TextEntry
 import net.seilent.funecomp.ui.browseCols
+import net.seilent.funecomp.ui.gridHz
 import net.seilent.funecomp.ui.ONLINE_LYRICS
 import net.seilent.funecomp.ui.ONLINE_SCROBBLING
 import net.seilent.funecomp.ui.ONLINE_STREAMING
-import net.seilent.funecomp.ui.flatBand
 import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -100,6 +101,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import kotlin.math.exp
 import kotlin.math.ln
+import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Req
@@ -541,6 +543,11 @@ private fun Shots.apply() {
     import()
     rule.onNodeWithTag("sheet.item.0").performClick()
     settle(600)
+}
+
+private fun flatBand(i: Int): Band {
+    val grid = 4 + 6 * i
+    return Band(Enums.BandType.peak, grid, (gridHz(grid) * 1000).roundToInt(), 0, 140)
 }
 
 private fun custom(c: SimControl) {

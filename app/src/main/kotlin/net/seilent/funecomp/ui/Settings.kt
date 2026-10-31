@@ -86,9 +86,10 @@ private const val HALF_DB = 0.5f
 private const val GRID_CENTER = 34
 private const val GRID_STEPS_PER_OCTAVE = 6f
 private const val GRID_REF_HZ = 1000f
-private const val FLAT_FIRST_GRID = 4
-private const val FLAT_GRID_STEP = 6
-private const val FLAT_Q100 = 140
+private const val ADDED_GRID = 34
+private const val ADDED_MILLI_HZ = 1_000_000
+private const val ADDED_Q100 = 140
+private val ADDED_BAND = Band(Enums.BandType.peak, ADDED_GRID, ADDED_MILLI_HZ, 0, ADDED_Q100)
 private const val MILLI = 1000
 private const val TYPE_VALUE = "type value"
 private const val ABOUT_KEY = "about"
@@ -446,11 +447,6 @@ fun bandText(b: Band?): String {
     return "${TYPE_SHORT[b.type] ?: "pk"} ${freqText(b.hz())} ${signed(b.gain10 / 10f, true)} db q ${qText(b.q100)}"
 }
 
-fun flatBand(i: Int): Band {
-    val grid = FLAT_FIRST_GRID + FLAT_GRID_STEP * i
-    return Band(Enums.BandType.peak, grid, (gridHz(grid) * MILLI).roundToInt(), 0, FLAT_Q100)
-}
-
 private const val FIELD_TYPE = 0
 private const val FIELD_FREQ = 1
 private const val FIELD_GAIN = 2
@@ -498,9 +494,9 @@ private fun EqRows(ctx: Ctx, slot: String) {
     val scope = rememberCoroutineScope()
     val headset = eq?.headset?.takeIf { slot == EqSlots.EAR_BLUETOOTH }
     val pickTitle = if (headset != null) "profile $headset" else null
-    fun bands() = (0 until Tok.eq_bands.toInt()).map { ints.bands.getOrNull(it) }
+    val bands = ints.bands
     fun send(p: Profile) = ctx.control.eqSet(slot, ints = p)
-    fun setBand(i: Int, b: Band) = send(Profile(ints.preamp10, bands().mapIndexed { j, x -> if (j == i) b else x ?: flatBand(j) }))
+    fun setBand(i: Int, b: Band) = send(Profile(ints.preamp10, bands.mapIndexed { j, x -> if (j == i) b else x }))
     val lines = ArrayList<EqLine>()
     fun keep(id: String) = Keep(state, lines.indexOfFirst { it.id == id }, ui.px(ui.contentTop))
     fun typedAt(id: String, title: String, start: String, min: Float, max: Float, unit: String, done: (Float) -> Unit) {
@@ -586,13 +582,12 @@ private fun EqRows(ctx: Ctx, slot: String) {
         if (listed) {
             lines += EqLine("preamp", "preamp", signed(ints.preamp10 / 10f, false) + " db", false) {
                 typedAt("preamp", "preamp", signed(ints.preamp10 / 10f, false), Tok.eq_preampMin, Tok.eq_preampMax, "db") { v ->
-                    send(Profile((v * 10).roundToInt(), bands().mapIndexed { j, b -> b ?: flatBand(j) }))
+                    send(Profile((v * 10).roundToInt(), bands))
                 }
             }
-            bands().forEachIndexed { i, b ->
-                lines += EqLine("band$i", "band ${i + 1}", bandText(b), false) { open = if (open == i) -1 else i }
+            bands.forEachIndexed { i, band ->
+                lines += EqLine("band$i", "${i + 1}", bandText(band), false) { open = if (open == i) -1 else i }
                 if (open == i) {
-                    val band = b ?: flatBand(i)
                     FIELDS.indices.forEach { f ->
                         val id = "band$i.$f"
                         val value = when (f) {
@@ -623,13 +618,27 @@ private fun EqRows(ctx: Ctx, slot: String) {
                     }
                 }
             }
+            if (bands.size < Tok.eq_bands.toInt()) {
+                lines += EqLine("add", "add band", "", false) {
+                    open = bands.size
+                    focus = "band${bands.size}"
+                    send(Profile(ints.preamp10, bands + ADDED_BAND))
+                }
+            }
+            if (bands.size > 1) {
+                lines += EqLine("remove", "remove band", "${bands.size}", false) {
+                    if (open == bands.lastIndex) open = -1
+                    if (bands.size == 2) focus = "add"
+                    send(Profile(ints.preamp10, bands.dropLast(1)))
+                }
+            }
         }
     }
     val fieldTags = listOf("type", "frequency", "gain", "q")
     Rows(ui.contentTop, state, focus = lines.indexOfFirst { it.id == focus }, show = slot) {
         itemsIndexed(lines, key = { _, l -> l.id }) { i, l ->
             val tag = when {
-                l.id in setOf("enable", "mode", "profile", "preset", "save", "delete", "rename", "import", "preamp", "gpreamp") -> "eq.${l.id}"
+                l.id in setOf("enable", "mode", "profile", "preset", "save", "delete", "rename", "import", "preamp", "gpreamp", "add", "remove") -> "eq.${l.id}"
                 l.id.startsWith("gband") -> "eq.gband.${l.id.removePrefix("gband")}"
                 l.sub -> "eq.band.${l.id.removePrefix("band").substringBefore('.')}.${fieldTags[l.id.substringAfter('.').toInt()]}"
                 else -> "eq.band.${l.id.removePrefix("band")}"
