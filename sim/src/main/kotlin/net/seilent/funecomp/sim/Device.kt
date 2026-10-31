@@ -5,7 +5,10 @@ import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Eq
 import net.seilent.funecomp.proto.EqName
 import net.seilent.funecomp.proto.EqPresetReply
+import net.seilent.funecomp.proto.EqSlot
 import net.seilent.funecomp.proto.FwStatement
+import net.seilent.funecomp.proto.Graphic
+import net.seilent.funecomp.proto.GraphicBand
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.ImgAbort
@@ -47,6 +50,7 @@ import net.seilent.funecomp.proto.gen.TokBoard
 import net.seilent.funecomp.state.ArtKey
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.CardView
+import net.seilent.funecomp.state.EqSlots
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
@@ -120,6 +124,12 @@ class Lyr(val kind: Int, val lines: List<LyrLine>) {
 }
 private val MD5 = Regex("^[0-9a-f]{32}$")
 private const val EQ_DIR = "/data/funeos/eq/"
+private const val GRAPHIC_DIR = "/data/funeos/eq/graphic/"
+private const val GRAPHIC_BANDS = 10
+private const val GRAPHIC_FIRST_GRID = 4
+private const val GRAPHIC_GRID_STEP = 6
+private val DAP_BAND_TYPES = listOf(Enums.BandType.off, Enums.BandType.peak, Enums.BandType.lowShelf, Enums.BandType.highShelf)
+private val EAR_LABELS = mapOf(EqSlots.HEADPHONES to "HEADPHONES", EqSlots.BLUETOOTH to "BLUETOOTH", EqSlots.EAR_HEADPHONES to "CORRECTION HEADPHONES", EqSlots.EAR_BLUETOOTH to "CORRECTION BLUETOOTH")
 private val CARD_PROFILE = Profile(-30, listOf(Band(Enums.BandType.peak, -1, 1_000_000, -20, 141)))
 
 private fun eqNameOrder(x: String, y: String): Int {
@@ -206,12 +216,35 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private class Preset(val name: String, val profile: Profile)
 
+    private class GraphicPreset(val name: String, val gains: List<Int>)
+
+    private class EqUnit(var on: Boolean) {
+        var key = "off"
+        var custom = Profile(0, emptyList())
+        var mode = Enums.EqMode.parametric
+        var graphicKey = "off"
+        var gains: List<Int> = List(GRAPHIC_BANDS) { 0 }
+
+        fun copy() = EqUnit(on).also {
+            it.key = key
+            it.custom = custom
+            it.mode = mode
+            it.graphicKey = graphicKey
+            it.gains = gains
+        }
+
+        fun same(o: EqUnit) = on == o.on && key == o.key && custom == o.custom && mode == o.mode && graphicKey == o.graphicKey && gains == o.gains
+    }
+
     private val presets = HashMap<String, Preset>()
     private val cards: List<EqName> = ((1..198).map { EqName("autoeq/oratory1990/Headphone Model %03d.txt".format(it), "Headphone Model %03d".format(it)) } +
         opts.cardEq.map { EqName("autoeq/$it.txt", it) }).sortedWith { a, b -> eqNameOrder(a.key.substringAfterLast('/'), b.key.substringAfterLast('/')) }
     private var eqNames: List<EqName> = listEq()
-    private val eqKey = arrayOf("off", "off")
-    private val eqCustom = arrayOf(flat(), flat())
+    private val eqUnits = linkedMapOf(EqSlots.HEADPHONES to EqUnit(true), EqSlots.BLUETOOTH to EqUnit(true), EqSlots.EAR_HEADPHONES to EqUnit(false), EqSlots.EAR_BLUETOOTH to EqUnit(false))
+    private val eqTargets = HashMap<String, Long>().apply { eqUnits.keys.forEach { put(it, 1L) } }
+    private var eqHeadset: String? = opts.eqHeadset
+    private val headsetPicks = HashMap<String, EqUnit>()
+    private val graphicPresets = linkedMapOf(GRAPHIC_DIR + "Rock.ini" to GraphicPreset("Rock", listOf(40, 30, 10, 0, -10, -20, 0, 10, 30, 60)))
 
     private var queue: MutableList<Long> = (lib.tracks + lib.services).map { it.id }.toMutableList()
     private var slot = 0
@@ -516,12 +549,28 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         push = null
     }
 
-    fun helloReply(app: Long = 0) = HelloReply(
+    fun helloReply(out: Out? = null) = HelloReply(
         faults.major, opts.minor, board.name, opts.version ?: "sim.${board.name}", board.screenW, board.screenH,
         board.backdropW, board.backdropH, Proto.maxPayload, opts.idleMs, opts.busyMs, faults.features, lib.rev, settingsRev,
         if (v13) lib.snapRev else null,
-        services = if (svcBoth(app)) opts.services else emptyList(),
+        services = if (svcBoth(out?.let { linked[it] } ?: 0L)) opts.services else emptyList(),
+        eqSlots = if (devBit(Feature.eqSlots)) EAR_LABELS.entries.take(if (devBit(Feature.eqStages) && appBit(out, Feature.eqStages)) 4 else 2).map { EqSlot(it.key, it.value) } else emptyList(),
+        bandTypes = if (devBit(Feature.eqSlots)) DAP_BAND_TYPES else emptyList(),
     )
+
+    private fun devBit(bit: Int) = (faults.features ushr bit) and 1L == 1L
+
+    private fun appBit(out: Out?, bit: Int) = out != null && ((linked[out] ?: 0L) ushr bit) and 1L == 1L
+
+    private fun slotsFor(out: Out?) = devBit(Feature.eqSlots) && appBit(out, Feature.eqSlots)
+
+    private fun stagesFor(out: Out?) = slotsFor(out) && devBit(Feature.eqStages) && appBit(out, Feature.eqStages)
+
+    private fun slotKeys(out: Out?) = if (stagesFor(out)) eqUnits.keys.toList() else listOf(EqSlots.HEADPHONES, EqSlots.BLUETOOTH)
+
+    private fun playingUser() = if (output == Enums.Output.btHeadset) EqSlots.BLUETOOTH else EqSlots.HEADPHONES
+
+    private fun playingEar() = if (output == Enums.Output.btHeadset) EqSlots.EAR_BLUETOOTH else EqSlots.EAR_HEADPHONES
 
     fun svcBoth(app: Long) = allowed(Msg.SVC_LOGIN) && Groups.allowed(Msg.SVC_LOGIN, app)
 
@@ -539,8 +588,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         (faults.cardRun?.start as? CardRun.Start.Delay)?.let { cardStart(now() + it.ms) }
         pushForms(out, forms(), null)
         pushSettings(out)
-        pushEq(out, Enums.EqOutput.wired)
-        pushEq(out, Enums.EqOutput.bt)
+        pushEqAll(out)
     }
 
     private val frozen = ThreadLocal<Long>()
@@ -614,6 +662,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             lyricsOffsetMs = if (t != null && !unread && hasSynced(t.id)) offsetTag(t.id) else null,
             playLogSeq = if (allowed(Msg.PLAYLOG_GET)) playLog.newest else null,
             card = if (opts.minor >= 14) stateCard() else null,
+            eqSlot = if (slotsFor(out)) playingUser() else null,
+            eqEarSlot = if (stagesFor(out)) playingEar() else null,
             service = svc,
             serviceKey = row?.serviceKey?.takeIf { svc != null },
         )).encode()
@@ -810,7 +860,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         return java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(java.time.Instant.ofEpochMilli(ms).atZone(zone))
     }
 
-    private fun eqWord(): String = when (val k = eqKey[Enums.EqOutput.wired]) {
+    private fun eqWord(): String = when (val k = eqUnits.getValue(EqSlots.HEADPHONES).key) {
         "off" -> "OFF"
         "custom" -> "CUSTOM"
         else -> (eqNames.firstOrNull { it.key == k }?.name ?: k).uppercase()
@@ -823,16 +873,125 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun pushSettings(out: Out) = send(out, Msg.SETTINGS, Settings(settingsRev, settingsText()).encode())
 
-    private fun pushEq(out: Out, output: Int) {
-        val fixed = Eq(output, eqKey[output], emptyList(), eqCustom[output], PageInfo(0, 0, false)).encode().size + 8
+    private fun shownUnit(slot: String): EqUnit = eqHeadset?.takeIf { slot == EqSlots.EAR_BLUETOOTH }?.let { headsetPicks[it] } ?: eqUnits.getValue(slot)
+
+    private fun following(slot: String) = slot == EqSlots.EAR_BLUETOOTH && eqHeadset != null && eqHeadset !in headsetPicks
+
+    private fun graphicList(): List<EqName> = listOf(EqName("off", "OFF"), EqName("flat", "FLAT")) +
+        graphicPresets.map { EqName(it.key, it.value.name, true) } + EqName("custom", "CUSTOM")
+
+    private fun gainsOf(u: EqUnit): List<Int>? = when (u.graphicKey) {
+        "off" -> null
+        "flat" -> List(GRAPHIC_BANDS) { 0 }
+        "custom" -> u.gains
+        else -> graphicPresets[u.graphicKey]?.gains
+    }
+
+    private fun graphic(g: List<Int>) = Graphic(-maxOf(0, g.maxOrNull() ?: 0), g.mapIndexed { i, v -> GraphicBand(GRAPHIC_FIRST_GRID + GRAPHIC_GRID_STEP * i, v) })
+
+    private fun profileOf(u: EqUnit): Profile = when {
+        u.key == "custom" -> u.custom
+        else -> presets[u.key]?.profile ?: if (cards.any { it.key == u.key }) CARD_PROFILE else flat()
+    }
+
+    private fun defaultText(): String {
+        val u = eqUnits.getValue(EqSlots.EAR_BLUETOOTH)
+        if (u.mode == Enums.EqMode.graphic) {
+            val p = u.graphicKey
+            if ('/' !in p) return if (p == "off") "off" else "graphic $p"
+            return "graphic " + (graphicPresets[p]?.name ?: (EqSlots.presetName(p) + " (missing)"))
+        }
+        val k = u.key
+        if (k == "off" || k == "custom") return k
+        return eqNames.firstOrNull { it.key == k }?.name ?: (EqSlots.sourceName(k) + " (missing)")
+    }
+
+    private fun pushEqAll(out: Out) = slotKeys(out).forEach { pushEq(out, it) }
+
+    private fun pushEq(out: Out, slot: String) {
+        val slots = slotsFor(out)
+        val stages = stagesFor(out)
+        val u = shownUnit(slot)
+        val follow = stages && following(slot)
+        val off = !stages && !eqUnits.getValue(slot).on
+        val headset = stages && slot == EqSlots.EAR_BLUETOOTH && eqHeadset != null
+        val defaultItem = if (headset) listOf(EqName(EqSlots.DEFAULT, "DEFAULT (${defaultText()})".uppercase())) else emptyList()
+        val names = defaultItem + eqNames
+        val key = when {
+            off -> "off"
+            follow -> EqSlots.DEFAULT
+            else -> u.key
+        }
+        val ints = if (follow) u.custom else profileOf(u)
+        val graphics = devBit(Feature.eqGraphic)
+        val gnames = if (graphics) defaultItem + graphicList() else emptyList()
+        val gkey = when {
+            !graphics -> null
+            off -> "off"
+            follow -> EqSlots.DEFAULT
+            else -> u.graphicKey
+        }
+        val gains = when {
+            !graphics || off -> null
+            follow -> gainsOf(u) ?: List(GRAPHIC_BANDS) { 0 }
+            else -> gainsOf(u)
+        }?.let { graphic(it) }
+        fun page(at: Int, n: Int, more: Boolean, gat: Int? = null, gn: Int = 0) = Eq(
+            if (slots) null else EqSlots.output(slot), key, if (gat == null) names.subList(at, at + n) else emptyList(), ints,
+            PageInfo(if (gat == null) at.toLong() else names.size.toLong(), names.size.toLong(), more),
+            slot = if (slots) slot else null,
+            mode = if (graphics) u.mode else null,
+            graphicKey = gkey,
+            graphicNames = gat?.let { gnames.subList(it, it + gn) } ?: emptyList(),
+            gains = gains,
+            graphicOffset = gat?.toLong(),
+            graphicTotal = gat?.let { gnames.size.toLong() },
+            on = if (stages) u.on else null,
+            target = if (stages) eqTargets.getValue(slot) else null,
+            headset = if (headset) eqHeadset else null,
+        )
+        val fixed = page(0, 0, false).encode().size + 8
         var at = 0
         do {
-            val n = PageInfo.fill(eqNames.map { it.size }, at, fixed)
-            val more = at + n < eqNames.size
-            val ints = if (eqKey[output] == "custom") eqCustom[output] else presets[eqKey[output]]?.profile ?: if (cards.any { it.key == eqKey[output] }) CARD_PROFILE else flat()
-            send(out, Msg.EQ, Eq(output, eqKey[output], eqNames.subList(at, at + n), ints, PageInfo(at.toLong(), eqNames.size.toLong(), more)).encode())
+            val n = PageInfo.fill(names.map { it.size }, at, fixed)
+            send(out, Msg.EQ, page(at, n, at + n < names.size || graphics).encode())
             at += n
-        } while (at < eqNames.size)
+        } while (at < names.size)
+        if (!graphics) return
+        val gfixed = page(0, 0, false, 0).encode().size + 8
+        at = 0
+        do {
+            val n = PageInfo.fill(gnames.map { it.size }, at, gfixed)
+            send(out, Msg.EQ, page(0, 0, at + n < gnames.size, at, n).encode())
+            at += n
+        } while (at < gnames.size)
+    }
+
+    fun eqHeadset(name: String?, out: Out?) = synchronized(lock) {
+        if (name == eqHeadset) return@synchronized
+        eqHeadset = name
+        eqTargets[EqSlots.EAR_BLUETOOTH] = eqTargets.getValue(EqSlots.EAR_BLUETOOTH) + 1
+        opts.log("eq headset ${name ?: "none"} target ${eqTargets[EqSlots.EAR_BLUETOOTH]}")
+        if (out != null && stagesFor(out)) pushEq(out, EqSlots.EAR_BLUETOOTH)
+    }
+
+    private fun eqSlotOf(b: Node, out: Out, outputTag: Int, slotTag: Int, targetTag: Int): Pair<String?, Answer?> {
+        val slot = b.str(slotTag)
+        val o = b.int(outputTag)
+        if (!slotsFor(out)) {
+            if (slot != null) return null to Answer.Fail(Err.badValue, "slot on an output session")
+            val s = EqSlots.ofOutput(o) ?: return null to Answer.Fail(Err.badValue, "no output")
+            return s to null
+        }
+        if (o != null || slot == null || slot !in slotKeys(out)) return null to Answer.Fail(Err.badValue, "bad slot")
+        val t = if (stagesFor(out)) b.long(targetTag) else null
+        if (t != null && t != eqTargets[slot]) return null to Answer.Fail(Err.staleRev, "stale target")
+        return slot to null
+    }
+
+    private fun editUnit(slot: String): EqUnit {
+        val h = eqHeadset?.takeIf { slot == EqSlots.EAR_BLUETOOTH } ?: return eqUnits.getValue(slot)
+        return headsetPicks.getOrPut(h) { eqUnits.getValue(slot).copy() }
     }
 
     fun request(type: Int, body: Node, out: Out): Answer = synchronized(lock) {
@@ -1077,18 +1236,51 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private fun eqSet(b: Node, out: Out): Answer {
-        val o = b.int(Tags.EqSet.output) ?: return Answer.Fail(Err.badValue, "no output")
+        val (slot, fail) = eqSlotOf(b, out, Tags.EqSet.output, Tags.EqSet.slot, Tags.EqSet.target)
+        if (slot == null) return fail!!
+        val stages = stagesFor(out)
+        val on = b.bool(Tags.EqSet.on)
         val key = b.str(Tags.EqSet.key)
         val ints = b.node(Tags.EqSet.ints)?.let { Profile.from(it) }
-        if (key != null && eqNames.none { it.key == key }) return Answer.Fail(Err.badValue, "unknown profile")
-        if (ints != null) {
-            if (!valid(ints)) return Answer.Fail(Err.badValue, "profile out of range")
-            eqCustom[o] = ints
-            eqKey[o] = "custom"
+        val mode = b.int(Tags.EqSet.mode)
+        val gkey = b.str(Tags.EqSet.graphicKey)
+        val gains = b.node(Tags.EqSet.gains)?.let { Graphic.from(it) }
+        val param = key != null || ints != null
+        val graph = gkey != null || gains != null
+        if (mode == null && param && graph) return Answer.Fail(Err.badValue, "mixed")
+        if (on == null && mode == null && !param && !graph) return Answer.Fail(Err.badValue, "no key or ints")
+        if ((graph || mode != null) && !devBit(Feature.eqGraphic)) return Answer.Fail(Err.badValue, "no graphic")
+        if (mode != null && mode !in Enums.EqMode.names) return Answer.Fail(Err.badValue, "bad mode")
+        val ear = slot == EqSlots.EAR_BLUETOOTH && eqHeadset != null && stages
+        if (key == EqSlots.DEFAULT || gkey == EqSlots.DEFAULT) {
+            if (!ear) return Answer.Fail(Err.badValue, "no default")
+            if (on != null || ints != null || gains != null) return Answer.Fail(Err.badValue, "default with edits")
+            headsetPicks.remove(eqHeadset)
+            pushEq(out, slot)
+            return Answer.Ok()
         }
-        if (key != null) eqKey[o] = key
-        if (key == null && ints == null) return Answer.Fail(Err.badValue, "no key or ints")
-        pushEq(out, o)
+        if (key != null && eqNames.none { it.key == key }) return Answer.Fail(Err.badValue, "unknown profile")
+        if (ints != null && !valid(ints)) return Answer.Fail(Err.badValue, "profile out of range")
+        if (gkey != null && graphicList().none { it.key == gkey }) return Answer.Fail(Err.badValue, "unknown preset")
+        if (gains != null && (gains.bands.size != GRAPHIC_BANDS || gains.bands.any { it.gain10 !in -240..120 })) return Answer.Fail(Err.badValue, "gains out of range")
+        val following = ear && following(slot)
+        val u = if (following) eqUnits.getValue(slot).copy() else if (ear) editUnit(slot) else eqUnits.getValue(slot)
+        if (on != null) u.on = on else if (!stages) u.on = true
+        if (param || graph || mode != null) {
+            if (ints != null) {
+                u.custom = ints
+                u.key = "custom"
+            }
+            if (key != null) u.key = key
+            if (gains != null) {
+                u.gains = gains.bands.map { it.gain10 }
+                u.graphicKey = "custom"
+            }
+            if (gkey != null) u.graphicKey = gkey
+            u.mode = mode ?: if (graph) Enums.EqMode.graphic else Enums.EqMode.parametric
+        }
+        if (following && !u.same(eqUnits.getValue(slot))) headsetPicks[eqHeadset!!] = u
+        pushEq(out, slot)
         return Answer.Ok()
     }
 
@@ -1111,10 +1303,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun eqStored(out: Out, key: String?): Answer {
         eqNames = listEq()
-        pushEq(out, Enums.EqOutput.wired)
-        pushEq(out, Enums.EqOutput.bt)
+        pushEqAll(out)
         return Answer.Ok(EqPresetReply(key).encode())
     }
+
+    private fun allUnits() = eqUnits.values + headsetPicks.values
 
     private fun eqPreset(b: Node, out: Out): Answer {
         val op = b.int(Tags.EqPreset.op) ?: return Answer.Fail(Err.badValue, "no op")
@@ -1122,7 +1315,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val path = b.str(Tags.EqPreset.key)
         val replace = b.bool(Tags.EqPreset.replace) == true
         if (op == Enums.EqPresetOp.save) {
-            val o = b.int(Tags.EqPreset.output)?.takeIf { it in Enums.EqOutput.names } ?: return Answer.Fail(Err.badValue, "no output")
+            if (b.int(Tags.EqPreset.output)?.let { it !in Enums.EqOutput.names } == true) return Answer.Fail(Err.badValue, "no output")
+            val (slot, fail) = eqSlotOf(b, out, Tags.EqPreset.output, Tags.EqPreset.slot, Tags.EqPreset.target)
+            if (slot == null) return fail!!
+            val unit = editUnit(slot)
+            if (b.int(Tags.EqPreset.mode) == Enums.EqMode.graphic) return graphicSave(b, out, unit, name, replace)
             val sent = b.node(Tags.EqPreset.ints)?.let { Profile.from(it) }
             if (sent != null && (sent.bands.isEmpty() || !valid(sent))) return Answer.Fail(Err.badValue, "profile out of range")
             val n = name ?: eqNext()
@@ -1131,18 +1328,20 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             if (clash != null && (!replace || clash !in presets)) return Answer.Fail(Err.exists, "exists")
             if (clash == null && presets.size >= Tok.eq_profilesMax.toInt()) return Answer.Fail(Err.noSpace, "no space")
             val to = clash ?: (EQ_DIR + n + ".txt")
-            presets[to] = Preset(presets[to]?.name ?: n, sent ?: eqCustom[o])
-            eqKey[o] = to
+            presets[to] = Preset(presets[to]?.name ?: n, sent ?: unit.custom)
+            unit.key = to
+            unit.mode = Enums.EqMode.parametric
             return eqStored(out, to)
         }
         if (op != Enums.EqPresetOp.remove && op != Enums.EqPresetOp.rename) return Answer.Fail(Err.badValue, "bad op")
         if (path == null || (op == Enums.EqPresetOp.rename && name == null)) return Answer.Fail(Err.badValue, "missing tag")
-        if (path == "off" || path == "custom") return Answer.Fail(Err.readOnly, "read only")
+        if (path == "off" || path == "custom" || path == "flat") return Answer.Fail(Err.readOnly, "read only")
+        if (path in graphicPresets) return graphicEdit(out, op, path, name, replace)
         if (eqNames.none { it.key == path }) return Answer.Fail(Err.notFound, "not found")
         val was = presets[path] ?: return Answer.Fail(Err.readOnly, "read only")
         if (op == Enums.EqPresetOp.remove) {
             presets.remove(path)
-            for (o in eqKey.indices) if (eqKey[o] == path) eqKey[o] = "off"
+            allUnits().filter { it.key == path }.forEach { it.key = "off" }
             return eqStored(out, null)
         }
         val n = name ?: return Answer.Fail(Err.badValue, "missing tag")
@@ -1153,7 +1352,44 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val to = clash ?: (EQ_DIR + n + ".txt")
         presets.remove(path)
         presets[to] = Preset(clash?.let { presets[it]?.name } ?: n, was.profile)
-        for (o in eqKey.indices) if (eqKey[o] == path) eqKey[o] = to
+        allUnits().filter { it.key == path }.forEach { it.key = to }
+        return eqStored(out, to)
+    }
+
+    private fun graphicSave(b: Node, out: Out, unit: EqUnit, name: String?, replace: Boolean): Answer {
+        val sent = b.node(Tags.EqPreset.gains)?.let { Graphic.from(it) }
+        if (sent != null && sent.bands.size != GRAPHIC_BANDS) return Answer.Fail(Err.badValue, "gains out of range")
+        val n = name ?: graphicNext()
+        if (!AutoEq.validName(n)) return Answer.Fail(Err.badValue, "invalid name")
+        val clash = graphicPresets.entries.firstOrNull { AutoEq.foldKey(it.value.name) == AutoEq.foldKey(n) }?.key
+        if (clash != null && !replace) return Answer.Fail(Err.exists, "exists")
+        val to = clash ?: (GRAPHIC_DIR + n + ".ini")
+        graphicPresets[to] = GraphicPreset(graphicPresets[to]?.name ?: n, sent?.bands?.map { it.gain10 } ?: gainsOf(unit) ?: List(GRAPHIC_BANDS) { 0 })
+        unit.graphicKey = to
+        unit.mode = Enums.EqMode.graphic
+        return eqStored(out, to)
+    }
+
+    private fun graphicNext(): String = generateSequence(1) { it + 1 }.map { "Preset $it" }.first { n ->
+        graphicPresets.values.none { AutoEq.foldKey(it.name) == AutoEq.foldKey(n) } && GRAPHIC_DIR + n + ".ini" !in graphicPresets
+    }
+
+    private fun graphicEdit(out: Out, op: Int, path: String, name: String?, replace: Boolean): Answer {
+        val was = graphicPresets.getValue(path)
+        if (op == Enums.EqPresetOp.remove) {
+            graphicPresets.remove(path)
+            allUnits().filter { it.graphicKey == path }.forEach { it.graphicKey = "off" }
+            return eqStored(out, null)
+        }
+        val n = name ?: return Answer.Fail(Err.badValue, "missing tag")
+        if (n == was.name) return eqStored(out, path)
+        if (!AutoEq.validName(n)) return Answer.Fail(Err.badValue, "invalid name")
+        val clash = graphicPresets.entries.firstOrNull { it.key != path && AutoEq.foldKey(it.value.name) == AutoEq.foldKey(n) }?.key
+        if (clash != null && !replace) return Answer.Fail(Err.exists, "exists")
+        val to = clash ?: (GRAPHIC_DIR + n + ".ini")
+        graphicPresets.remove(path)
+        graphicPresets[to] = GraphicPreset(n, was.gains)
+        allUnits().filter { it.graphicKey == path }.forEach { it.graphicKey = to }
         return eqStored(out, to)
     }
 

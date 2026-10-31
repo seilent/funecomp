@@ -104,6 +104,7 @@ class Faults(specs: List<String>) {
     var favsBusyText = "busy"
     var staleState = false
     val eqHidden = HashSet<String>()
+    var eqHeadsetAt: Pair<String?, Long>? = null
     var lyricsLate: Long? = null
     val lyricsAbsent = HashSet<String>()
     var newlog = false
@@ -209,6 +210,8 @@ class Faults(specs: List<String>) {
                 }
                 "stale-state" -> staleState = true
                 "eq-hidden" -> eqHidden += v
+                "eq-headset" -> eqHeadsetAt = v.substringBeforeLast('@') to (v.substringAfterLast('@', "").toLongOrNull() ?: throw IllegalArgumentException("eq-headset: delay missing in $v"))
+                "eq-headset-off" -> eqHeadsetAt = null to (v.removePrefix("@").toLongOrNull() ?: throw IllegalArgumentException("eq-headset-off: delay missing in $v"))
                 "lyrics-late" -> lyricsLate = v.toLong()
                 "lyrics-absent" -> lyricsAbsent += v
                 "newlog" -> newlog = true
@@ -328,6 +331,7 @@ class Options(
     val updKeys: Set<String>? = null,
     val updSeq: Long = 0,
     val services: List<SvcInfo> = emptyList(),
+    val eqHeadset: String? = null,
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
@@ -337,7 +341,8 @@ class Options(
         if (minor < 8) faults.features = faults.features and Groups.mask("artPick").inv()
         if (minor < 9) faults.features = faults.features and Groups.mask("imgOrigin").inv()
         if (minor < 10) faults.features = faults.features and Groups.mask("stateClock").inv()
-        if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig", "liveRows").inv()
+        if (minor < 12) faults.features = faults.features and Groups.mask("eqSlots", "eqGraphic").inv()
+        if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig", "liveRows", "eqStages").inv()
         if (minor < 16) faults.features = faults.features and Groups.mask("svcLogin").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")

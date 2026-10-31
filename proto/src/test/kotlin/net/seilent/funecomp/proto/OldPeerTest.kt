@@ -271,7 +271,8 @@ class OldPeerTest {
         assertEquals(Enums.Output.speaker, speaker.output)
         assertFalse(Enums.Output.speaker in enumValues("/proto-1.11.txt", "OUTPUT"))
         assertFalse(Enums.Output.usbDac in enumValues("/proto-1.11.txt", "OUTPUT"))
-        for (f in listOf(Feature.eqSlots, Feature.eqGraphic, Feature.eqPass, Feature.outputKinds, Feature.rowConfirm)) assertEquals(0L, Groups.all and (1L shl f))
+        for (f in listOf(Feature.eqPass, Feature.outputKinds, Feature.rowConfirm)) assertEquals(0L, Groups.all and (1L shl f))
+        for (f in listOf(Feature.eqSlots, Feature.eqGraphic, Feature.eqStages)) assertEquals(1L shl f, Groups.all and (1L shl f))
     }
 
     @Test
@@ -391,7 +392,7 @@ class OldPeerTest {
         assertArrayEquals(body("playlog_get_reply"), log.encode())
 
         for (f in listOf(Feature.lyricsOffset, Feature.playLog, Feature.genres, Feature.queueAdd)) assertEquals(1L shl f, Groups.all and (1L shl f))
-        for (f in 15..20) assertEquals(0L, Groups.all and (1L shl f))
+        for (f in 17..20) assertEquals(0L, Groups.all and (1L shl f))
         assertEquals(Groups.members.keys.filter { it !in Groups.unserved }.fold(0L) { m, g -> m or (1L shl Groups.bit(g)!!) }, Groups.all)
         assertTrue(Groups.allowed(Msg.LYR_OFFSET, Groups.all))
     }

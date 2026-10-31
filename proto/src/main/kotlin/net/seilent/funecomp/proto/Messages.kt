@@ -45,8 +45,6 @@ object Groups {
         "svcLogin" to setOf(Msg.SVC_LOGIN, Msg.SVC_LOGIN_END, Msg.SVC_PKCE, Msg.SVC_KEYS),
     )
     val unserved: Set<String> = setOf(
-        "eqSlots",
-        "eqGraphic",
         "eqPass",
         "outputKinds",
         "rowConfirm",
@@ -54,7 +52,6 @@ object Groups {
         "receiver",
         "phoneFiles",
         "imgSource",
-        "eqStages",
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 

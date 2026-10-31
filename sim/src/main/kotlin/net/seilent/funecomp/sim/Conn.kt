@@ -279,10 +279,11 @@ class Conn(
         if (h.major != faults.major) return bye(Enums.ByeReason.version, faults.major, Proto.minor)
         if (faults.bye == Enums.ByeReason.refused) return bye(Enums.ByeReason.refused)
         device.linked(this, appFeatures)
-        reply(f, device.helloReply(appFeatures).encode())
+        reply(f, device.helloReply(this).encode())
         helloDone = true
         device.greet(this, at)
         faults.bye?.let { return bye(it) }
+        faults.eqHeadsetAt?.let { (name, ms) -> ticker.schedule({ device.eqHeadset(name, this) }, ms, TimeUnit.MILLISECONDS) }
         faults.askPick?.let { (name, ms) ->
             if (picks) ticker.schedule({ ask(Msg.ART_PICK, ArtPick(name, device.lib.tracks.firstNotNullOfOrNull { it.mbidOf(name) }).encode(), Proto.requestTimeoutMs.toLong()) {} }, ms, TimeUnit.MILLISECONDS)
         }

@@ -9,7 +9,7 @@ import kotlin.system.exitProcess
 private const val USAGE = "usage: sim --board ap80|v1|r1 (--listen <port> | --connect <host:port>) [--lib <file>] " +
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--upd-keys <hex>,...] [--upd-seq <n>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
-    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... " +
+    "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--eq-headset <name>] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... " +
     "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--headset] [--companion] [--svc <id>:<name>:<secret>+...[:pkce]]... [--quiet]"
 
 fun main(args: Array<String>) {
@@ -44,6 +44,7 @@ fun main(args: Array<String>) {
     var playLogCap: Int? = null
     var receiver = false
     var phone: String? = null
+    var eqHeadset: String? = null
     var headset = false
     var companion = false
     val services = ArrayList<SvcInfo>()
@@ -76,6 +77,7 @@ fun main(args: Array<String>) {
             "--backdrop" -> backdrop = value()
             "--card-eq" -> cardEq += value().split(',').filter { it.isNotEmpty() }
             "--source" -> source = value()
+            "--eq-headset" -> eqHeadset = value()
             "--rescan-lib" -> rescanLib = value()
             "--version" -> version = value()
             "--lyr-offset" -> value().let { lyrOffsets[it.substringBefore(':').toULong().toLong()] = it.substringAfter(':').toInt() }
@@ -138,6 +140,7 @@ fun main(args: Array<String>) {
         updKeys = updKeys,
         updSeq = updSeq ?: base.updSeq,
         services = services,
+        eqHeadset = eqHeadset,
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {
