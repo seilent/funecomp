@@ -70,7 +70,7 @@ class Main : ComponentActivity() {
     private var lyricsMode by mutableStateOf(false)
     private var spec by mutableStateOf<String?>(null)
     private var sources by mutableStateOf(Sources())
-    internal var shell by mutableStateOf(Shell(Nav(listOf(Page.Connection)), gated = true))
+    internal var shell by mutableStateOf(Shell(Nav(listOf(Page.Connection)), gated = true, front = false))
         private set
     private var name by mutableStateOf<String?>(null)
     private val companionUuid = UUID.fromString(Proto.uuid)
@@ -101,7 +101,7 @@ class Main : ComponentActivity() {
         if (uri == null) done(Previewed.Closed) else Remote.galleryPicked({ GalleryRead.read(contentResolver, uri) }, done)
     }
 
-    private val control = object : Control by Remote {
+    internal val control = object : Control by Remote {
         override fun bonded(): List<Bonded> {
             if (!linkAllowed()) return emptyList()
             val adapter = getSystemService(BluetoothManager::class.java)?.adapter ?: return emptyList()
@@ -231,8 +231,15 @@ class Main : ComponentActivity() {
         override fun firmwareStopSend() = Firmwares.stopSend()
 
         override fun svcOpen(service: String, seq: Long) {
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
             val l = Remote.device.logins.open[service]?.takeIf { it.seq == seq && it.ok } ?: return
             if (!browse(l.uri ?: return)) Log.i(Remote.TAG, "svc login no browser")
+        }
+
+        override fun svcContinue() {
+            if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+            val t = Svc.begin() ?: return
+            startActivity(Intent(this@Main, SvcLogin::class.java).putExtra(Svc.EXTRA_TOKEN, t))
         }
 
         override fun secure(on: Boolean) {
@@ -273,7 +280,7 @@ class Main : ComponentActivity() {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
                     } catch (_: ActivityNotFoundException) {
                     }
-                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing, liveDevice = { Remote.device })
+                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing, svc = Svc.view, liveDevice = { Remote.device })
             }
         }
     }
@@ -290,9 +297,10 @@ class Main : ComponentActivity() {
         Log.i(Remote.TAG, "onNewIntent action=${intent.action} open=$open")
         if (!open) return
         if (!shell.gated && !paged) {
-            Remote.cancelPick()
+            val signIn = intent.action == ACTION_SIGN_IN
+            if (!signIn) Remote.cancelPick()
             shell.sheet.close(dismissed = false)
-            shell.nav.reset(listOf(Page.Home, Page.NowPlaying))
+            if (!signIn) shell.nav.reset(listOf(Page.Home, Page.NowPlaying))
         }
         pickFrom(intent)
         svcFrom(intent)
@@ -309,7 +317,7 @@ class Main : ComponentActivity() {
         Remote.pickAsk = { target ->
             (!shell.gated && !shell.sheet.shown && shell.pick == null && !askBattery() && !reconnectAsk).also { if (it) shell.pick = target }
         }
-        Remote.svcShown = { !shell.gated && !shell.sheet.shown && shell.pick == null && !askBattery() && !reconnectAsk }
+        Remote.svcShown = { shell.front }
         Scrobbles.opener = { browse(it) }
         launched()
     }
@@ -318,6 +326,13 @@ class Main : ComponentActivity() {
         super.onResume()
         battery = readBattery()
         Scrobbles.resumed()
+        shell.front = true
+    }
+
+    override fun onPause() {
+        super.onPause()
+        shell.front = false
+        Remote.svcAway()
     }
 
     override fun onStop() {
@@ -388,7 +403,7 @@ class Main : ComponentActivity() {
         intent?.getStringExtra(EXTRA_LINK)?.let { store(it) }
         val pages = intent?.getStringExtra(EXTRA_PAGE)?.let { debugPages(it) } ?: return false
         Remote.cancelPick()
-        shell = Shell(Nav(pages))
+        shell = Shell(Nav(pages), front = false)
         return true
     }
 
@@ -403,6 +418,7 @@ class Main : ComponentActivity() {
     private fun svcFrom(intent: Intent?) {
         if (intent?.action != ACTION_SIGN_IN || !SvcNotice.take(this, intent.getStringExtra(EXTRA_SIGN_IN_NONCE))) return
         Remote.svcUnseen()
+        Svc.tapped()
     }
 
     private fun deviceName(spec: String?): String? {

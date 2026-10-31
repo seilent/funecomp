@@ -23,8 +23,11 @@ import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.state.DeviceState
 
 val ONLINE_PIVOTS = listOf("art", "lyrics", "scrobbling")
+
+fun onlinePivots(device: DeviceState) = ONLINE_PIVOTS + listOfNotNull(STREAMING.takeIf { services(device).isNotEmpty() })
 private const val MOVE_UP = "move up"
 private const val MOVE_DOWN = "move down"
 private const val KEY = "key"
@@ -107,14 +110,18 @@ fun OnlinePage(
     scrobble: ScrobbleView = ScrobbleView(),
     lyrics: LyricSources = LyricSources(),
     labels: Boolean = true,
+    keys: KeysFlow = KeysFlow(),
 ) {
     var pivot by rememberSaveable { mutableIntStateOf(page.pivot) }
+    val words = onlinePivots(ctx.device)
+    val at = pivot.takeIf { it < words.size } ?: ONLINE_ART
     val pivots = rememberSaveableStateHolder()
-    HubPage("online", { ctx.nav.pop() }, ONLINE_PIVOTS, pivot, { pivot = it }) { shown ->
+    HubPage("online", { ctx.nav.pop() }, words, at, { pivot = it }) { shown ->
         pivots.SaveableStateProvider(shown) {
             when (shown) {
                 ONLINE_LYRICS -> LyricsRows(ctx, lyrics)
                 ONLINE_SCROBBLING -> ScrobbleRows(ctx, scrobble, labels)
+                ONLINE_STREAMING -> StreamingRows(ctx, keys)
                 else -> ArtRows(ctx, sources, onSources, credits, blocked, picks)
             }
         }

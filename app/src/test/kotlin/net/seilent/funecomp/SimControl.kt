@@ -12,8 +12,10 @@ import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
+import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.proto.ArtGetReply
 import net.seilent.funecomp.proto.EqPresetReply
+import net.seilent.funecomp.proto.ErrorReply
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.LyrOffsetReply
@@ -22,6 +24,8 @@ import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.QueueOpReply
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.SvcInfo
+import net.seilent.funecomp.proto.SvcKey
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
@@ -35,6 +39,7 @@ import net.seilent.funecomp.sim.Out
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.PhoneKey
+import net.seilent.funecomp.state.SvcOpens
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.ui.Bonded
@@ -57,8 +62,9 @@ class SimControl(
     cardEq: List<String> = emptyList(),
     schema: String? = null,
     private val appFeatures: Long = LINK_FEATURES,
+    services: List<SvcInfo> = emptyList(),
 ) : Control {
-    val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, Faults(faults), artDir = artDir, minor = minor, cardEq = cardEq), lib, now)
+    val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, Faults(faults), artDir = artDir, minor = minor, cardEq = cardEq, services = services), lib, now)
     var device by mutableStateOf(DeviceState())
     val sent = ArrayList<String>()
     val pushed = ArrayList<Int>()
@@ -267,6 +273,70 @@ class SimControl(
     var btSettings = 0
 
     override fun bonded() = bonds
+
+    val svc = ArrayList<String>()
+    var secured = false
+    var holdKeys = false
+    var keysReply: (() -> Unit)? = null
+
+    override fun svcSeen(service: String, seq: Long) {
+        svc += "seen $service $seq"
+        device = device.copy(logins = device.logins.seen(service, seq))
+    }
+
+    override fun svcSheet() {
+        svc += "sheet"
+    }
+
+    override fun svcOpen(service: String, seq: Long) {
+        svc += "open $service $seq"
+    }
+
+    var continued: () -> Unit = {}
+
+    override fun svcContinue() {
+        svc += "continue"
+        continued()
+    }
+
+    val opens = SvcOpens()
+
+    override fun svcTake(service: String, seq: Long, link: String, host: String?, listed: Boolean): SvcOpens.Verdict {
+        val v = opens.take(service, seq, link, listed, host != null && opens.known(service, host), SvcOpens.Kind.OPEN, 0L)
+        svc += "take $service $seq ${v.name.lowercase()}"
+        return v
+    }
+
+    override fun svcKnown(service: String, host: String) {
+        svc += "known $service $host"
+        opens.remember(service, host)
+    }
+
+    var cancelled: () -> Unit = {}
+
+    override fun svcCancel() {
+        svc += "cancel"
+        cancelled()
+    }
+
+    override fun svcKeys(service: String, keys: List<SvcKey>, done: (String) -> Unit) {
+        svc += "keys $service ${keys.map { it.name }}"
+        val finish = {
+            val r = when (val a = req(Msg.SVC_KEYS, Req.svcKeys(service, keys))) {
+                is Answer.Ok -> Session.Result.Ok(Node("SVC_KEYS.reply", emptyList()))
+                is Answer.Fail -> Session.Result.Failed(ErrorReply(a.code, a.text))
+            }
+            done(Svc.keysLine(r))
+        }
+        if (holdKeys) keysReply = finish else finish()
+    }
+
+    val secures = ArrayList<Boolean>()
+
+    override fun secure(on: Boolean) {
+        secured = on
+        secures += on
+    }
 
     override fun openBluetoothSettings() {
         btSettings++

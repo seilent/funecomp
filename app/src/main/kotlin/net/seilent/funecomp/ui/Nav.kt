@@ -30,6 +30,7 @@ private const val SKIA_CAMERA_UNIT = 72f
 const val ONLINE_ART = 0
 const val ONLINE_LYRICS = 1
 const val ONLINE_SCROBBLING = 2
+const val ONLINE_STREAMING = 3
 
 sealed interface Page {
     data object NowPlaying : Page
@@ -117,6 +118,7 @@ fun debugPages(name: String): List<Page>? {
         "firmware" -> base + Page.Settings + Page.Firmware
         "lyrics" -> base + Page.Online(ONLINE_LYRICS)
         "online" -> base + Page.Online()
+        "streaming" -> base + Page.Online(ONLINE_STREAMING)
         else -> when {
             name.startsWith("artist:") -> base + Page.Music + Page.Artist(name.removePrefix("artist:"))
             name.startsWith("browse:") -> base + Page.Online() + Page.Browse(PickFor(name.removePrefix("browse:")))

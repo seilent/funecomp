@@ -27,6 +27,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -98,6 +99,7 @@ fun HubPage(
     active: Int = 0,
     onPivot: (Int) -> Unit = {},
     count: String? = null,
+    keepEnd: Boolean = false,
     content: @Composable (Int) -> Unit,
 ) {
     var shift by remember { mutableFloatStateOf(0f) }
@@ -143,7 +145,16 @@ fun HubPage(
         if (pivots.isNotEmpty()) PivotStrip(pivots, active, onPivot) { shift = it }
         if (count != null) {
             val d = rememberDip(count)
-            RoleText(d.shown, Roles.listCount, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(ui.pivotBaseline)).dip(d).testTag("count"))
+            val x = ui.px(Tok.hubEdge)
+            val room = ui.px(ui.w) - 2 * x
+            val measurer = rememberTextMeasurer()
+            if (keepEnd && measurer.measure(shown(d.shown, Roles.listCount.case), textStyle(Roles.listCount, white(Roles.listCount.alpha))).size.width > room) {
+                Box(Modifier.at(x, 0f).size(room.dp(), ui.px(ui.h).dp()).clipToBounds()) {
+                    RoleText(d.shown, Roles.listCount, Modifier.atBaseline(room, ui.px(ui.pivotBaseline), ax = 1f).dip(d).testTag("count"))
+                }
+            } else {
+                RoleText(d.shown, Roles.listCount, Modifier.atBaseline(x, ui.px(ui.pivotBaseline)).dip(d).testTag("count"))
+            }
         }
     }
 }

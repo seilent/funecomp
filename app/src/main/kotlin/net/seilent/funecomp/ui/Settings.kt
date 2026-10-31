@@ -662,7 +662,11 @@ fun SecretEntry(start: String, done: (String) -> Unit) {
                 isSaveEnabled = false
                 setText(start)
                 setOnEditorActionListener { v, action, event ->
-                    if (if (event == null) action == EditorInfo.IME_ACTION_DONE else event.action == KeyEvent.ACTION_DOWN) latest(v.text.toString())
+                    if (if (event == null) action == EditorInfo.IME_ACTION_DONE else event.action == KeyEvent.ACTION_DOWN) {
+                        val text = v.text.toString()
+                        v.clearFocus()
+                        latest(text)
+                    }
                     event != null || action == EditorInfo.IME_ACTION_DONE
                 }
                 setOnFocusChangeListener { v, has -> if (has) v.windowInsetsController?.show(WindowInsets.Type.ime()) }

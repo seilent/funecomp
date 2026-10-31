@@ -139,6 +139,7 @@ interface Control {
     fun pickHandled(name: String) {}
     fun svcSeen(service: String, seq: Long) {}
     fun svcSheet() {}
+    fun svcLineShown(id: Int) {}
     fun svcOpen(service: String, seq: Long) {}
     fun svcContinue() {}
     fun svcTake(service: String, seq: Long, link: String, host: String?, listed: Boolean): SvcOpens.Verdict = SvcOpens.Verdict.ASK

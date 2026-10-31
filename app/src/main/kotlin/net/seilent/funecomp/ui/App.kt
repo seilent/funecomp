@@ -54,9 +54,12 @@ class Shell(
     val sheet: SheetState = SheetState(),
     val toast: ToastState = ToastState(),
     gated: Boolean = false,
+    front: Boolean = true,
 ) {
     var gated by mutableStateOf(gated)
+    var front by mutableStateOf(front)
     var pick by mutableStateOf<PickFor?>(null)
+    val keys = KeysFlow()
     var offset by mutableStateOf<OffsetEdit?>(null)
 }
 
@@ -70,7 +73,7 @@ fun homeItems(device: DeviceState, link: LinkView): List<HomeItem> {
         HomeItem("music", "artists albums songs", Page.Music),
         HomeItem("connection", if (link.phase == Phase.LIVE) link.device ?: device.hello?.board ?: "" else statusText(link), Page.Connection),
         HomeItem("playlists", if (playlists != null && playlists > 0) (if (playlists == 1L) "1 playlist" else "$playlists playlists") else if (playlists == 0L) "0 playlists" else "", Page.Playlists),
-        HomeItem("online", ONLINE_PIVOTS.joinToString(" "), Page.Online()),
+        HomeItem("online", onlinePivots(device).joinToString(" "), Page.Online()),
         HomeItem("settings", pivots.joinToString(" "), Page.Settings),
     )
 }
@@ -93,6 +96,7 @@ fun App(
     picks: List<ArtPicks.Pick> = emptyList(),
     galleryMissing: Set<String> = emptySet(),
     scrobbleLabels: Boolean = true,
+    svc: SvcView = SvcView(),
     insets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     ime: WindowInsets = WindowInsets.ime,
     liveDevice: () -> DeviceState = { device },
@@ -157,6 +161,7 @@ fun App(
                     pickSheet(ctx, pick)
                 }
             }
+            SvcSheets(ctx, shell, svc, ime.getBottom(density) > 0)
             if (link.phase == Phase.LIVE) libList(device, control, Enums.View.playlists, "")
             BackHandler(shell.sheet.shown || nav.stack.size > 1) {
                 if (shell.sheet.shown) {
@@ -174,7 +179,7 @@ fun App(
                     Page.Playlists -> Playlists(ctx)
                     Page.Settings -> SettingsPage(ctx, firmware)
                     Page.Connection -> ConnectionPage(ctx, link, gated = shell.gated)
-                    is Page.Online -> OnlinePage(ctx, page, sources, onSources, credits, onCredit, blocked, picks, scrobble, link.lyrics, scrobbleLabels)
+                    is Page.Online -> OnlinePage(ctx, page, sources, onSources, credits, onCredit, blocked, picks, scrobble, link.lyrics, scrobbleLabels, shell.keys)
                     Page.ArtPicked -> ArtPickedPage(ctx, picks, galleryMissing)
                     Page.ArtBlocked -> ArtBlockedPage(ctx, blocked)
                     Page.ArtCredits -> ArtCreditsPage(ctx, credits, onCredit)

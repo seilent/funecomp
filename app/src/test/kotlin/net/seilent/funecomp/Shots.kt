@@ -51,6 +51,8 @@ import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Row
+import net.seilent.funecomp.proto.SvcInfo
+import net.seilent.funecomp.proto.SvcLogin
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tok
@@ -76,10 +78,14 @@ import net.seilent.funecomp.ui.Preview
 import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.ScrobbleView
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.SvcAsk
+import net.seilent.funecomp.ui.SvcLine
+import net.seilent.funecomp.ui.SvcView
 import net.seilent.funecomp.ui.TextEntry
 import net.seilent.funecomp.ui.browseCols
 import net.seilent.funecomp.ui.ONLINE_LYRICS
 import net.seilent.funecomp.ui.ONLINE_SCROBBLING
+import net.seilent.funecomp.ui.ONLINE_STREAMING
 import net.seilent.funecomp.ui.flatBand
 import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
@@ -132,6 +138,8 @@ class Shot(
     val labels: Boolean = true,
     val white: Boolean = false,
     val lib: net.seilent.funecomp.sim.Library? = null,
+    val services: List<SvcInfo> = emptyList(),
+    val svc: SvcView = SvcView(),
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -679,7 +687,33 @@ private val THUMB_SHOTS = listOf(
     "home", "music-artists", "music-songs", "artist", "album", "queue", "playlists", "settings-output", "settings-pick-maxvolume", "sheet-song",
     "eq", "connection", "autoeq-list", "autoeq-jump", "firmware", "online-art", "online-lyrics", "online-scrobbling", "artcredits", "pick-browse",
 ).map { it to 400L } + listOf("lyr-plain" to 900L)
-private val ENTRY_SHOTS = setOf("settings-sleep-entry", "eq-entry", "eqp-rename", "eqp-saveas", "pick-entry", "online-art-key", "online-art-key-filled", "online-scrobbling-entry", "online-scrobbling-entry-filled")
+private val ENTRY_SHOTS = setOf("settings-sleep-entry", "eq-entry", "eqp-rename", "eqp-saveas", "pick-entry", "online-art-key", "online-art-key-filled", "online-scrobbling-entry", "online-scrobbling-entry-filled", "svc-key-entry")
+
+private val TIDAL = SvcInfo("tidal", "TIDAL", listOf("client_id", "client_secret", "pkce_client_id", "pkce_client_secret"), true)
+private val SVC = listOf(TIDAL, SvcInfo("svcdemo", "SVCDEMO", emptyList(), false))
+private val STREAMING = HOME + Page.Online(ONLINE_STREAMING)
+
+private fun svcLogin(uri: String = "https://link.svcdemo.test/ABCDE"): (SimControl) -> Unit = { c ->
+    playing(c)
+    c.push(Msg.SVC_LOGIN, SvcLogin("tidal", uri, "link.svcdemo.test", "ABCDE", 300, 7).encode())
+}
+
+private fun Shots.svcKeys() {
+    tapRow("svc.tidal")
+    rule.onNodeWithTag("sheet.item.0").performClick()
+    settle(600)
+}
+
+private fun Shots.svcKey(text: String?) {
+    svcKeys()
+    rule.onNodeWithTag("sheet.item.0").performClick()
+    settle(600)
+    if (text == null) return
+    secretField().append(text)
+    secretField().onEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE)
+}
+
+private fun svcToast(line: String) = Shot("svc-toast-${line.replace(' ', '-')}", board = "v1", pages = NP, prep = ::playing, services = SVC, svc = SvcView(line = SvcLine("TIDAL", line, 1)), after = 600)
 
 private val CLAMPED = SimControl.HD650.replace("Preamp: -6.1 dB", "Preamp: 1.5 dB").replace("Gain 6.4 dB", "Gain 14.0 dB").replace("Fc 5332 Hz Gain -1.1 dB Q 5.75", "Fc 22000 Hz Gain -30.0 dB Q 12.00")
 
@@ -1267,6 +1301,30 @@ val SHOTS = listOf(
     },
     Shot("settings-about-nostate", pages = HOME + Page.Settings, prep = state { it.copy(battery = null, charging = null, cardFreeMiB = null, cardTotalMiB = null) }) { about() },
     Shot("settings-about-longversion", pages = HOME + Page.Settings, prep = { it.device = it.device.copy(hello = it.device.hello?.copy(version = LONG_VERSION)) }) { about() },
+    Shot("svc-home", pages = HOME, prep = ::playing, services = SVC),
+    Shot("svc-login", board = "v1", pages = NP, services = SVC, prep = svcLogin()),
+    Shot("svc-login-refused", board = "v1", pages = NP, services = SVC, prep = svcLogin("link.svcdemo.test/ABCDE"), svc = SvcView(line = SvcLine("TIDAL", Svc.LINK_REFUSED, 1)), after = 600),
+    Shot("svc-pkce", board = "v1", pages = NP, prep = ::playing, services = SVC, svc = SvcView(SvcAsk("tidal", "TIDAL", 7, "login.svcdemo.test", "https://login.svcdemo.test/auth"))),
+    Shot("svc-pkce-refused", board = "v1", pages = NP, prep = ::playing, services = SVC, svc = SvcView(line = SvcLine("TIDAL", Svc.LINK_REFUSED, 1)), after = 600),
+    Shot("svc-online-art", pages = HOME + Page.Online(), services = SVC),
+    Shot("svc-streaming", board = "v1", pages = STREAMING, services = SVC),
+    Shot("svc-row-sheet", board = "v1", pages = STREAMING, services = SVC) { tapRow("svc.tidal") },
+    Shot("svc-row-sheet-svcdemo", board = "v1", pages = STREAMING, services = SVC) { tapRow("svc.svcdemo") },
+    Shot("svc-keys", board = "v1", pages = STREAMING, services = SVC) { svcKeys() },
+    Shot("svc-key-entry", board = "v1", pages = STREAMING, services = SVC, ime = AEQ_IME) { svcKey(null) },
+    Shot("svc-keys-filled", board = "v1", pages = STREAMING, services = SVC) { svcKey("0123456789abcdef") },
+    Shot("svc-keys-waiting", board = "v1", pages = STREAMING, services = SVC, prep = { it.holdKeys = true }) {
+        svcKey("0123456789abcdef")
+        settle(600)
+        rule.onNodeWithTag("sheet.item.4").performClick()
+    },
+    svcToast("signed in"),
+    svcToast("sign in ended"),
+    svcToast("sign in link too long"),
+    svcToast("keys sent"),
+    svcToast("refused on the dap"),
+    svcToast("streaming is off on the dap"),
+    svcToast("the dap refused a key"),
 )
 
 @RunWith(RobolectricTestRunner::class)
@@ -1361,7 +1419,7 @@ class Shots {
     }
 
     private fun load(shot: Shot, size: Size, ime: Float) {
-        val c = SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
+        val c = SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq, services = shot.services)
         shotClock(c)
         shot.prep(c)
         if (shot.gated) c.device = DeviceState()
@@ -1384,7 +1442,7 @@ class Shots {
             key(f, imeShare) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
                     val held = f.first.artEntry?.let { BackdropArt(if (f.first.white) whiteBg else backdrop ?: plain, null, it, f.first.wrong) }
-                    App(c.device, f.first.link, c, shell, sources, { sources = it }, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, scrobbleLabels = f.first.labels, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * if (shell.sheet.shown && shell.sheet.entry == null) 0f else imeShare).dp))
+                    App(c.device, f.first.link, c, shell, sources, { sources = it }, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, scrobbleLabels = f.first.labels, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, svc = f.first.svc, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * if (shell.sheet.shown && shell.sheet.entry == null) 0f else imeShare).dp))
                 }
             }
         }

@@ -676,6 +676,11 @@ object Remote : Control {
         app?.let { SvcNotice.clear(it) }
     }
 
+    override fun svcLineShown(id: Int) {
+        Svc.view.line?.takeIf { it.id == id }?.let { Log.i(TAG, "svc line shown ${it.line}") }
+        Svc.lineShown(id)
+    }
+
     override fun svcCancel() {
         Svc.cancel()
         if (device.logins.shown == null) app?.let { SvcNotice.clear(it) }
