@@ -229,7 +229,7 @@ class SimControl(
     }
 
     override fun eqSet(output: Int, key: String?, ints: Profile?) {
-        req(Msg.EQ_SET, Req.eqSet(output, key, ints))
+        req(Msg.EQ_SET, Req.eqSet(output = output, key = key, ints = ints))
     }
 
     val presets = ArrayList<Node>()

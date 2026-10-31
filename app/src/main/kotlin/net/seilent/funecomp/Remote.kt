@@ -1285,7 +1285,7 @@ object Remote : Control {
         send(Msg.DRAFT, Req.draft(kind, value, minutes = minutes, unixS = unixS, zoneS = zoneS), "draft ${Enums.DraftKind.names[kind]}", done = { code, text -> main.post { done(code, text) } })
 
     override fun eqSet(output: Int, key: String?, ints: Profile?) =
-        send(Msg.EQ_SET, Req.eqSet(output, key, ints), "eq set output=$output key=$key")
+        send(Msg.EQ_SET, Req.eqSet(output = output, key = key, ints = ints), "eq set output=$output key=$key")
 
     override fun eqPreset(op: Int, output: Int?, key: String?, name: String?, ints: Profile?, replace: Boolean, done: (Int?, String?) -> Unit) {
         var saved: String? = null

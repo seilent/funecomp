@@ -593,6 +593,41 @@ class OldPeerTest {
     }
 
     @Test
+    fun eqSlotBuildersMatchTheVectors() {
+        val ints = Profile(-30, listOf(Band(Enums.BandType.peak, 34, 1000000, -20, 141)))
+        val gains = listOf(40, 30, 10, 0, -10, -20, 0, 10, 30, 60).mapIndexed { i, g -> GraphicBand(4 + 6 * i, g) }
+        assertArrayEquals(body("eq_set_slot"), Req.eqSet(slot = "bluetooth", ints = ints))
+        assertArrayEquals(body("eq_set_mode"), Req.eqSet(slot = "headphones", mode = Enums.EqMode.graphic))
+        assertArrayEquals(body("eq_set_gains"), Req.eqSet(slot = "headphones", mode = Enums.EqMode.graphic, gains = gains))
+        assertArrayEquals(body("eq_set_graphic_key"), Req.eqSet(slot = "headphones", mode = Enums.EqMode.graphic, graphicKey = "flat"))
+        assertArrayEquals(body("eq_preset_slot"), Req.eqPreset(Enums.EqPresetOp.save, name = "HD 650", slot = "headphones"))
+        assertArrayEquals(body("eq_preset_graphic_save"), Req.eqPreset(Enums.EqPresetOp.save, name = "Rock", slot = "headphones", mode = Enums.EqMode.graphic, gains = gains))
+    }
+
+    @Test
+    fun stageFramesRoundTripAndReadAsUnknownTagsWithThe114Table() {
+        val page = Eq(null, "custom", listOf(EqName("default", "DEFAULT (CUSTOM)"), EqName("custom", "CUSTOM")), null, PageInfo(0, 2, false), slot = "earbluetooth", on = false, target = 7, headset = "WH-1000XM4")
+        val bytes = page.encode()
+        val back = Eq.from(Node.decode("EQ", bytes))
+        assertEquals(page, back)
+        assertArrayEquals(bytes, back.encode())
+        assertEquals(listOf(15, 16, 17), Node.decode("EQ", bytes, v1_14).unknownTags)
+        assertEquals(page.copy(on = null, target = null, headset = null), Eq.from(Node.decode("EQ", bytes, v1_14)))
+
+        val set = Node.decode("EQ_SET", Req.eqSet(slot = "earbluetooth", on = true, target = 7))
+        assertEquals("earbluetooth", set.str(Tags.EqSet.slot))
+        assertEquals(true, set.bool(Tags.EqSet.on))
+        assertEquals(7L, set.long(Tags.EqSet.target))
+        assertNull(set.str(Tags.EqSet.key))
+        assertEquals(listOf(8, 9), Node.decode("EQ_SET", Req.eqSet(slot = "earbluetooth", on = true, target = 7), v1_14).unknownTags)
+
+        val st = State(eqSlot = "bluetooth", eqEarSlot = "earbluetooth")
+        assertEquals(st, State.from(Node.decode("STATE", st.encode())))
+        assertEquals(listOf(50), Node.decode("STATE", st.encode(), v1_14).unknownTags)
+        assertNull(State.from(Node.decode("STATE", st.encode(), v1_14)).eqEarSlot)
+    }
+
+    @Test
     fun eqPresetIsGatedByItsOwnBit() {
         assertFalse(Groups.allowed(Msg.EQ_PRESET, Groups.mask("eq")))
         assertTrue(Groups.allowed(Msg.EQ_PRESET, Groups.mask("eq", "eqPresets")))

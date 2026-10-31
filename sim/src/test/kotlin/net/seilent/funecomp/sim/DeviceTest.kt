@@ -439,9 +439,9 @@ class DeviceTest {
     @Test
     fun eqSetKeysAndRanges() {
         val d = device()
-        assertEquals(Err.badValue, fail(req(d, Msg.EQ_SET, Req.eqSet(Enums.EqOutput.wired, "/etc/passwd"))).code)
+        assertEquals(Err.badValue, fail(req(d, Msg.EQ_SET, Req.eqSet(output = Enums.EqOutput.wired, key = "/etc/passwd"))).code)
         val out = Sink()
-        ok(req(d, Msg.EQ_SET, Req.eqSet(Enums.EqOutput.bt, "autoeq/oratory1990/Headphone Model 007.txt"), out))
+        ok(req(d, Msg.EQ_SET, Req.eqSet(output = Enums.EqOutput.bt, key = "autoeq/oratory1990/Headphone Model 007.txt"), out))
         val pages = out.of(Msg.EQ).map { Eq.from(it) }
         assertTrue(pages.size >= 2)
         assertTrue(pages.all { it.output == Enums.EqOutput.bt && it.key == "autoeq/oratory1990/Headphone Model 007.txt" })
@@ -449,10 +449,10 @@ class DeviceTest {
         assertFalse(pages.last().page.more)
         assertEquals(200, pages.sumOf { it.names.size })
         val bad = Profile(-10, listOf(Band(Enums.BandType.peak, -1, 1_000_000, 200, 141)))
-        assertEquals(Err.badValue, fail(req(d, Msg.EQ_SET, Req.eqSet(Enums.EqOutput.wired, ints = bad))).code)
+        assertEquals(Err.badValue, fail(req(d, Msg.EQ_SET, Req.eqSet(output = Enums.EqOutput.wired, ints = bad))).code)
         val good = Profile(-35, listOf(Band(Enums.BandType.peak, -1, 3_150_000, -25, 200)))
         val o2 = Sink()
-        ok(req(d, Msg.EQ_SET, Req.eqSet(Enums.EqOutput.wired, ints = good), o2))
+        ok(req(d, Msg.EQ_SET, Req.eqSet(output = Enums.EqOutput.wired, ints = good), o2))
         assertEquals(good, Eq.from(o2.of(Msg.EQ).first()).ints)
         assertEquals("custom", Eq.from(o2.of(Msg.EQ).first()).key)
     }

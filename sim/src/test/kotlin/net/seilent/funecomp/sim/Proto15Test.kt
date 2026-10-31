@@ -150,7 +150,7 @@ class Proto15Test {
     fun saveWithoutNameOrIntsTakesTheLowestFreePresetAndTheCustom() {
         val d = device()
         val custom = Profile(-35, listOf(Band(Enums.BandType.peak, -1, 3_150_000, -25, 200)))
-        d.request(Msg.EQ_SET, Node.decode("EQ_SET", Req.eqSet(wired, ints = custom)), Sink())
+        d.request(Msg.EQ_SET, Node.decode("EQ_SET", Req.eqSet(output = wired, ints = custom)), Sink())
         assertEquals("/data/funeos/eq/Preset 1.txt", key(save(d, null, p = null)))
         assertEquals(custom, profileOf(d))
         assertEquals("/data/funeos/eq/Preset 2.txt", key(save(d, null, output = bt, p = null)))

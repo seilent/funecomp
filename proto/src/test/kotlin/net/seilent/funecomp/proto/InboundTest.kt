@@ -63,7 +63,7 @@ class InboundTest {
     @Test
     fun nestedUnknownEnumInRequestGetsBadValue() {
         val p = Profile(0, listOf(Band(77, -1, 1000000, 0, 141)))
-        val r = Inbound.classify(Frame(Msg.EQ_SET, Proto.flagWant, 1, Req.eqSet(Enums.EqOutput.wired, ints = p)))
+        val r = Inbound.classify(Frame(Msg.EQ_SET, Proto.flagWant, 1, Req.eqSet(output = Enums.EqOutput.wired, ints = p)))
         assertEquals(Err.badValue, (r as Inbound.Reply).code)
     }
 

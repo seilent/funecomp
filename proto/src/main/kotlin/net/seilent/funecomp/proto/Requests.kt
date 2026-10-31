@@ -38,19 +38,31 @@ object Req {
         bool(Tags.Draft.automatic, automatic)
     }
 
-    fun eqSet(output: Int, key: String? = null, ints: Profile? = null) = tlv {
+    fun eqSet(slot: String? = null, output: Int? = null, key: String? = null, ints: Profile? = null, mode: Int? = null, graphicKey: String? = null, gains: List<GraphicBand>? = null, on: Boolean? = null, target: Long? = null) = tlv {
+        require(slot == null || output == null)
         enum(Tags.EqSet.output, output)
+        str(Tags.EqSet.slot, slot)
         str(Tags.EqSet.key, key)
         ints?.let { p -> rec(Tags.EqSet.ints) { p.write(this) } }
+        enum(Tags.EqSet.mode, mode)
+        str(Tags.EqSet.graphicKey, graphicKey)
+        gains?.let { g -> rec(Tags.EqSet.gains) { g.forEach { b -> rec(Tags.Graphic.band) { b.write(this) } } } }
+        bool(Tags.EqSet.on, on)
+        u32(Tags.EqSet.target, target)
     }
 
-    fun eqPreset(op: Int, output: Int? = null, key: String? = null, name: String? = null, ints: Profile? = null, replace: Boolean? = null) = tlv {
+    fun eqPreset(op: Int, output: Int? = null, key: String? = null, name: String? = null, ints: Profile? = null, replace: Boolean? = null, slot: String? = null, mode: Int? = null, gains: List<GraphicBand>? = null, target: Long? = null) = tlv {
+        require(slot == null || output == null)
         enum(Tags.EqPreset.op, op)
         enum(Tags.EqPreset.output, output)
         str(Tags.EqPreset.key, key)
         str(Tags.EqPreset.name, name)
+        str(Tags.EqPreset.slot, slot)
+        enum(Tags.EqPreset.mode, mode)
         ints?.let { p -> rec(Tags.EqPreset.ints) { p.write(this) } }
+        gains?.let { g -> rec(Tags.EqPreset.gains) { g.forEach { b -> rec(Tags.Graphic.band) { b.write(this) } } } }
         bool(Tags.EqPreset.replace, replace)
+        u32(Tags.EqPreset.target, target)
     }
 
     fun play(view: Int? = null, parent: String? = null, libRev: Long? = null, start: Long? = null, shuffle: Boolean? = null, tracks: List<Long> = emptyList(), snapRev: Long? = null, phoneList: Long? = null) = tlv {

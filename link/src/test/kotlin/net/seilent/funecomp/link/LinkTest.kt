@@ -274,7 +274,7 @@ class LinkTest {
         val rec = Recorder()
         val s = session(sim(), rec)
         assertTrue(rec.hello.await(5, TimeUnit.SECONDS))
-        val eq = s.call(Msg.EQ_SET, Req.eqSet(Enums.EqOutput.wired, "nope"))
+        val eq = s.call(Msg.EQ_SET, Req.eqSet(output = Enums.EqOutput.wired, key = "nope"))
         assertEquals(Err.badValue, (eq as Session.Result.Failed).error.code)
         val seek = s.call(Msg.TRANSPORT, Req.transport(Enums.TransportCmd.seek, seekMs = 99_999_999))
         assertEquals(Err.badValue, (seek as Session.Result.Failed).error.code)

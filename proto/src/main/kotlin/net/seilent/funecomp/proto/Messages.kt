@@ -272,6 +272,7 @@ data class State(
     val aheadMs: Long? = null,
     val imgHold: Boolean? = null,
     val updHold: Boolean? = null,
+    val eqEarSlot: String? = null,
     val service: String? = null,
     val serviceKey: Long? = null,
 ) {
@@ -327,6 +328,7 @@ data class State(
         u32(Tags.State.aheadMs, aheadMs)
         bool(Tags.State.imgHold, imgHold)
         bool(Tags.State.updHold, updHold)
+        str(Tags.State.eqEarSlot, eqEarSlot)
         str(Tags.State.service, service)
         u64(Tags.State.serviceKey, serviceKey)
     }
@@ -382,6 +384,7 @@ data class State(
             n.long(Tags.State.aheadMs),
             n.bool(Tags.State.imgHold),
             n.bool(Tags.State.updHold),
+            n.str(Tags.State.eqEarSlot),
             n.str(Tags.State.service),
             n.long(Tags.State.serviceKey),
         )
@@ -573,6 +576,9 @@ data class Eq(
     val gains: Graphic? = null,
     val graphicOffset: Long? = null,
     val graphicTotal: Long? = null,
+    val on: Boolean? = null,
+    val target: Long? = null,
+    val headset: String? = null,
 ) {
     fun encode() = tlv {
         enum(Tags.Eq.output, output)
@@ -589,6 +595,9 @@ data class Eq(
         graphicNames.forEach { e -> rec(Tags.Eq.graphicName) { e.write(this) } }
         u32(Tags.Eq.graphicOffset, graphicOffset)
         u32(Tags.Eq.graphicTotal, graphicTotal)
+        bool(Tags.Eq.on, on)
+        u32(Tags.Eq.target, target)
+        str(Tags.Eq.headset, headset)
     }
 
     companion object {
@@ -607,6 +616,9 @@ data class Eq(
             n.node(Tags.Eq.gains)?.let { Graphic.from(it) },
             n.long(Tags.Eq.graphicOffset),
             n.long(Tags.Eq.graphicTotal),
+            n.bool(Tags.Eq.on),
+            n.long(Tags.Eq.target),
+            n.str(Tags.Eq.headset),
         )
     }
 }
