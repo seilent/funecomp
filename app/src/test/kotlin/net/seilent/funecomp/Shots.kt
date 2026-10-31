@@ -49,7 +49,10 @@ import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.Band
+import net.seilent.funecomp.proto.Eq
+import net.seilent.funecomp.proto.GraphicBand
 import net.seilent.funecomp.proto.LyrLine
+import net.seilent.funecomp.proto.PageInfo
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.SvcInfo
@@ -533,7 +536,7 @@ private const val LONG_NAME = "Sennheiser HD 650 (2020, worn earpads, oratory199
 private const val NAME_64 = "Beyerdynamic DT 1990 PRO (B pads, analytical, 2024 measure)abcde"
 
 private fun Shots.import() {
-    rule.onNodeWithTag("eq.import").performClick()
+    tapRow("eq.import")
     settle(600)
     rule.onNodeWithTag("sheet.item.0").performClick()
     settle(600)
@@ -686,6 +689,29 @@ private fun Shots.pickThrough(shell: Shell) {
 private val EQ = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)
 
 private val AEQ = EQ + Page.AutoEq(EqSlots.HEADPHONES)
+private val EQ_EAR = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired, EqStage.CORRECTION)
+private val EQ_EAR_BT = HOME + Page.Settings + Page.Eq(Enums.EqOutput.bt, EqStage.CORRECTION)
+private val EQ_GAINS = listOf(40, 30, 10, 0, -10, -20, 0, 10, 30, 60).mapIndexed { i, g -> GraphicBand(4 + 6 * i, g) }
+private const val EQ_HEADSET = "WH-1000XM4"
+private const val EQ_HEADSET_NEXT = "Momentum 4"
+private const val EQ_HEADSET_LONG = "Sennheiser Momentum 4 Wireless Special Edition"
+private const val EQ_CARD = "autoeq/oratory1990/Headphone Model 001.txt"
+private const val EQ_ROCK = "/data/funeos/eq/graphic/Rock.ini"
+
+private fun eqGraphic(key: String): (SimControl) -> Unit = { c -> c.eqSet(EqSlots.HEADPHONES, mode = Enums.EqMode.graphic, graphicKey = key) }
+
+private fun eqBands(n: Int): (SimControl) -> Unit = { c -> c.eqSet(EqSlots.HEADPHONES, ints = Profile(-64, (0 until n).map { flatBand(it) })) }
+
+private fun eqFollow(prep: (SimControl) -> Unit = {}): (SimControl) -> Unit = { c ->
+    prep(c)
+    c.eqHeadset(EQ_HEADSET)
+}
+
+private fun eqMissing(c: SimControl) {
+    eqGraphic("flat")(c)
+    val m = c.device.eq.getValue(EqSlots.HEADPHONES)
+    c.device = c.device.withEq(Eq(null, m.key, m.names, m.ints, PageInfo(0, m.total, false), slot = EqSlots.HEADPHONES, mode = Enums.EqMode.graphic, graphicKey = "/data/funeos/eq/graphic/Gone.ini", graphicNames = m.graphicNames, graphicOffset = 0, graphicTotal = m.graphicNames.size.toLong(), on = m.on, target = m.target))
+}
 
 private const val AEQ_IME = 0.4f
 private const val TALL_IME = 736f / 1080f
@@ -953,18 +979,56 @@ val SHOTS = listOf(
         }
     },
     Shot("eq", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)),
-    Shot("eq-custom", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired), prep = ::custom) { rule.onNodeWithTag("eq.band.0").performClick() },
+    Shot("eq-custom", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired), prep = ::custom) { tapRow("eq.band.0") },
     Shot("eq-entry", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired), prep = ::custom) {
-        rule.onNodeWithTag("eq.band.0").performClick()
+        tapRow("eq.band.0")
         settle(600)
-        rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("eq.band.0.gain"))
-        rule.mainClock.autoAdvance = false
-        settle(100)
-        rule.onNodeWithTag("eq.band.0.gain").performClick()
+        tapRow("eq.band.0.gain")
     },
-    Shot("eq-profile", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)) { rule.onNodeWithTag("eq.profile").performClick() },
-    Shot("autoeq-source", pages = EQ) { rule.onNodeWithTag("eq.import").performClick() },
+    Shot("eq-profile", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)) { tapRow("eq.profile") },
+    Shot("eq-user", pages = EQ, prep = ::custom),
+    Shot("eq-correction", pages = EQ_EAR),
+    Shot("eq-correction-headset", pages = EQ_EAR_BT, prep = eqFollow()) { tapRow("eq.profile") },
+    Shot("eq-correction-headset-graphic", pages = EQ_EAR_BT, prep = eqFollow { it.eqSet(EqSlots.EAR_BLUETOOTH, mode = Enums.EqMode.graphic, graphicKey = "flat") }) { tapRow("eq.preset") },
+    Shot("eq-correction-headset-long", pages = EQ_EAR_BT, prep = { c -> c.eqHeadset(EQ_HEADSET_LONG) }) { tapRow("eq.profile") },
+    Shot("eq-headset-change-1", pages = EQ_EAR_BT, prep = eqFollow()) { tapRow("eq.profile") },
+    Shot("eq-headset-change-2", pages = EQ_EAR_BT, prep = eqFollow()) {
+        tapRow("eq.profile")
+        control!!.eqHeadset(EQ_HEADSET_NEXT)
+        settle(1000)
+    },
+    Shot("eq-headset-change-3", pages = EQ_EAR_BT, prep = eqFollow()) {
+        tapRow("eq.profile")
+        control!!.eqHeadset(EQ_HEADSET_NEXT)
+        settle(1000)
+        tapRow("eq.profile")
+    },
+    Shot("eq-enable-sheet", pages = EQ, prep = ::custom) { tapRow("eq.enable") },
+    Shot("eq-mode-sheet", pages = EQ, prep = ::custom) { tapRow("eq.mode") },
+    Shot("eq-graphic", pages = EQ, prep = { c -> c.eqSet(EqSlots.HEADPHONES, mode = Enums.EqMode.graphic, gains = EQ_GAINS) }),
+    Shot("eq-graphic-off", pages = EQ, prep = eqGraphic("off")),
+    Shot("eq-graphic-missing", pages = EQ, prep = ::eqMissing),
+    Shot("eq-graphic-typed", pages = EQ, prep = { c -> c.eqSet(EqSlots.HEADPHONES, mode = Enums.EqMode.graphic, gains = EQ_GAINS) }) {
+        tapRow("eq.gband.3")
+    },
+    Shot("eq-graphic-preset-sheet", pages = EQ, prep = eqGraphic("flat")) { tapRow("eq.preset") },
+    Shot("eq-bands-1", pages = EQ, prep = eqBands(1)),
+    Shot("eq-bands-10", pages = EQ, prep = eqBands(10)) { scrollTo("eq.remove") },
+    Shot("eq-add-band", pages = EQ, prep = eqBands(1)) {
+        tapRow("eq.add")
+        settle(600)
+        scrollTo("eq.band.1.q")
+    },
+    Shot("eq-type-sheet", pages = EQ, prep = eqBands(1)) {
+        tapRow("eq.band.0")
+        settle(600)
+        tapRow("eq.band.0.type")
+    },
+    Shot("eq-two-slot", pages = EQ, prep = ::custom, minor = 14),
+    Shot("eq-default-custom", pages = EQ_EAR_BT, prep = eqFollow { it.eqSet(EqSlots.EAR_BLUETOOTH, ints = Profile(-30, listOf(flatBand(0).copy(type = Enums.BandType.lowShelf, gain10 = 55, q100 = 70)))) }),
+    Shot("eq-default-file", pages = EQ_EAR_BT, prep = eqFollow { it.eqSet(EqSlots.EAR_BLUETOOTH, key = EQ_CARD) }),
+    Shot("eq-default-graphic", pages = EQ_EAR_BT, prep = eqFollow { it.eqSet(EqSlots.EAR_BLUETOOTH, mode = Enums.EqMode.graphic, graphicKey = EQ_ROCK) }),
+    Shot("autoeq-source", pages = EQ) { tapRow("eq.import") },
     Shot("autoeq-list", pages = AEQ),
     Shot("autoeq-dividers", pages = AEQ) {
         jump(25)
@@ -1023,17 +1087,17 @@ val SHOTS = listOf(
         rule.onNodeWithTag("aeq.row.Sennheiser HD 650 (2020, worn earpads)").performClick()
     },
     Shot("autoeq-confirm", pages = EQ) {
-        rule.onNodeWithTag("eq.import").performClick()
+        tapRow("eq.import")
         settle(600)
         rule.onNodeWithTag("sheet.item.0").performClick()
     },
     Shot("autoeq-clamped", pages = EQ, prep = { it.eqText = CLAMPED }) {
-        rule.onNodeWithTag("eq.import").performClick()
+        tapRow("eq.import")
         settle(600)
         rule.onNodeWithTag("sheet.item.0").performClick()
     },
     Shot("autoeq-refused", pages = EQ, prep = { it.eqText = (1..11).joinToString("\n") { i -> "Filter $i: ON PK Fc ${i * 100} Hz Gain 1 dB Q 1" } }) {
-        rule.onNodeWithTag("eq.import").performClick()
+        tapRow("eq.import")
         settle(600)
         rule.onNodeWithTag("sheet.item.0").performClick()
     },
@@ -1043,8 +1107,8 @@ val SHOTS = listOf(
     Shot("eqp-preset-bt", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.bt), prep = preset("Sennheiser HD 650", Enums.EqOutput.bt)),
     Shot("eqp-preset-long", pages = EQ, prep = preset(LONG_NAME)),
     Shot("eqp-preset-64", pages = EQ, prep = preset(NAME_64)),
-    Shot("eqp-delete", pages = EQ, prep = preset("Sennheiser HD 650")) { rule.onNodeWithTag("eq.delete").performClick() },
-    Shot("eqp-rename", pages = EQ, prep = preset("Sennheiser HD 650")) { rule.onNodeWithTag("eq.rename").performClick() },
+    Shot("eqp-delete", pages = EQ, prep = preset("Sennheiser HD 650")) { tapRow("eq.delete") },
+    Shot("eqp-rename", pages = EQ, prep = preset("Sennheiser HD 650")) { tapRow("eq.rename") },
     Shot("eqp-apply", pages = EQ) { import() },
     Shot("eqp-apply-long", pages = EQ, prep = { it.eqFileName = "$LONG_NAME ParametricEQ.txt" }) { import() },
     Shot("eqp-replace", pages = EQ, prep = preset("Sennheiser HD 650")) { apply() },
