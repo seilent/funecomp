@@ -297,7 +297,7 @@ class NetEaseTest {
         val f = Fixtures()
         f.queued[search("Alpha Beta")] = ArrayDeque(List(3) { songs("Other" to 200_000) })
         assertNull(netease(f).get(stub))
-        assertEquals("$wall\nrule=1", file(stub, "miss").readText())
+        assertEquals("$wall\nrule=1\nnames=2", file(stub, "miss").readText())
         now += Lrclib.MISS_MS - 1
         assertNull(netease(f).get(stub))
         assertEquals(1, f.calls.size)
@@ -317,7 +317,7 @@ class NetEaseTest {
         val got = netease(f).get(stub)!!
         assertEquals(Lrclib.Found("a\nb\nc", false, "netease"), got)
         assertEquals("rule=1\na\nb\nc", file(stub, "txt").readText())
-        assertEquals("$wall\nrule=1", file(stub, "miss").readText())
+        assertEquals("$wall\nrule=1\nnames=2", file(stub, "miss").readText())
         assertEquals(got, netease(f).get(stub))
         assertEquals(2, f.calls.size)
     }
@@ -424,7 +424,7 @@ class NetEaseTest {
     @Test
     fun aCachedRejectedPlainIsMarkedAndItsMissDropped() {
         file(stub, "txt").writeText("rule=1\n" + (1..5).joinToString("\n") { "あめが 视る$it" })
-        file(stub, "miss").writeText("$wall\nrule=1")
+        file(stub, "miss").writeText("$wall\nrule=1\nnames=2")
         val f = Fixtures()
         candidates(f, five)
         val store = Recording(FileStore(tmp.root))
@@ -547,5 +547,30 @@ class NetEaseTest {
         } finally {
             locked.setReadable(true)
         }
+    }
+
+    @Test
+    fun aMissWithoutTheNamesLineIsLookedUpAgain() {
+        for (txt in listOf(false, true)) {
+            tmp.root.listFiles()?.forEach { it.delete() }
+            if (txt) file(stub, "txt").writeText("rule=1\nold")
+            file(stub, "miss").writeText("$wall\nrule=1")
+            val f = Fixtures()
+            stubbed(f, 200_000)
+            assertEquals(five, netease(f).get(stub)!!.text)
+            assertEquals(2, f.calls.size)
+            assertEquals(setOf("${stub.key}.ne.lrc"), tmp.root.list()!!.toSet())
+        }
+    }
+
+    @Test
+    fun aMarkerBesideAKeyIsLeftByTheLookup() {
+        file(stub, "miss").writeText("$wall\nrule=1")
+        file(stub, "bad").writeText("1\nhan")
+        val f = Fixtures()
+        stubbed(f, 200_000)
+        assertEquals(five, netease(f).get(stub)!!.text)
+        assertEquals("1\nhan", file(stub, "bad").readText())
+        assertEquals("rule=1\n$five", file(stub, "lrc").readText())
     }
 }

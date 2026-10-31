@@ -48,7 +48,7 @@ class NetEase(
         }
         store.read(miss)?.let { m ->
             val lines = m.lines()
-            if (lines.getOrNull(1) == RULE && clock() - (lines[0].trim().toLongOrNull() ?: 0) in 0 until Lrclib.MISS_MS) {
+            if (lines.getOrNull(1) == RULE && lines.getOrNull(2) == NAMES && clock() - (lines[0].trim().toLongOrNull() ?: 0) in 0 until Lrclib.MISS_MS) {
                 val t = store.read(txt) ?: return null
                 val plain = cached(t)
                 if (plain != null && !rejected(store, q.key, plain)) return Lrclib.Found(plain, false, LyricSources.NETEASE)
@@ -62,7 +62,7 @@ class NetEase(
         when {
             found == null -> {
                 store.delete(txt)
-                store.save(miss, "${clock()}\n$RULE")
+                store.save(miss, "${clock()}\n$RULE\n$NAMES")
             }
             found.synced -> {
                 store.save(hit, "$RULE\n${found.text}")
@@ -71,7 +71,7 @@ class NetEase(
             }
             else -> {
                 store.save(txt, "$RULE\n${found.text}")
-                store.save(miss, "${clock()}\n$RULE")
+                store.save(miss, "${clock()}\n$RULE\n$NAMES")
             }
         }
         return found
@@ -187,6 +187,7 @@ class NetEase(
         const val CAP = 3
         private const val OK = 200L
         private const val RULE = "rule=1"
+        private const val NAMES = "names=2"
         private const val MIN_LINES = 5
         private val HEADERS = mapOf("Referer" to "https://music.163.com/", "Content-Type" to "application/x-www-form-urlencoded")
 
