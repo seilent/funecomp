@@ -1,0 +1,197 @@
+package net.seilent.funecomp
+
+import android.os.SystemClock
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.unit.dp
+import net.seilent.funecomp.proto.LyrLine
+import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.state.LyricsFetch
+import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.LinkView
+import net.seilent.funecomp.ui.LocalTurnProbe
+import net.seilent.funecomp.ui.LocalUptime
+import net.seilent.funecomp.ui.Nav
+import net.seilent.funecomp.ui.Page
+import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.Shell
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import java.awt.image.BufferedImage
+import kotlin.math.abs
+
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35], qualifiers = "w411dp-h960dp-420dpi")
+class StackTurnTest {
+    @get:Rule
+    val rule = createComposeRule()
+
+    private val shell = Shell(Nav(listOf(Page.Home)))
+
+    private var frame = -1L
+
+    private fun settle(ms: Long) {
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(ms)
+        rule.waitForIdle()
+    }
+
+    private fun capture(): BufferedImage = rule.onRoot().pixels().also { System.gc() }
+
+    private fun top(img: BufferedImage): Int {
+        var m = 0
+        for (y in 0 until img.height) for (x in 0 until img.width) {
+            val p = img.getRGB(x, y)
+            m = maxOf(m, p shr 16 and 0xff, p shr 8 and 0xff, p and 0xff)
+            if (m > BLANK) return m
+        }
+        return m
+    }
+
+    private fun same(a: BufferedImage, b: BufferedImage): Boolean {
+        if (a.width != b.width || a.height != b.height) return false
+        for (y in 0 until a.height) for (x in 0 until a.width) if (a.getRGB(x, y) != b.getRGB(x, y)) return false
+        return true
+    }
+
+    private fun turn(name: String, act: () -> Unit, keep: List<Long> = emptyList()): Map<Long, BufferedImage> {
+        val start = rule.mainClock.currentTime
+        act()
+        val kept = HashMap<Long, BufferedImage>()
+        var seen = frame
+        var frames = 0
+        while (rule.mainClock.currentTime - start < TURN) {
+            rule.mainClock.advanceTimeBy(1, ignoreFrameDuration = true)
+            if (frame == seen) continue
+            seen = frame
+            frames++
+            val t = rule.mainClock.currentTime - start
+            val img = capture()
+            assertTrue("$name frame at $t ms is blank", top(img) > BLANK)
+            keep.firstOrNull { it <= t && it !in kept }?.let { kept[it] = img }
+        }
+        assertTrue("$name drew $frames frames", frames > TURN / FRAME / 2)
+        return kept
+    }
+
+    @Test
+    fun noFrameOfAPushOrPopIsBlankAndTheInLegRunsThenRests() {
+        val c = SimControl("ap80")
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            LaunchedEffect(Unit) { while (true) withFrameMillis { frame = it } }
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), c, shell) }
+        }
+        settle(1500)
+        val kept = turn("push settings", { shell.nav.push(Page.Settings) }, listOf(MID, REST))
+        settle(REST + REST_AGAIN - TURN)
+        val later = capture()
+        assertFalse("the in leg is still turning at $MID ms", same(kept.getValue(MID), later))
+        assertTrue("settled from $REST ms", same(kept.getValue(REST), later))
+        settle(1000)
+        turn("pop settings", { shell.nav.pop() })
+        settle(1000)
+        turn("push now playing", { shell.nav.push(Page.NowPlaying) })
+    }
+
+    private val drawn = ArrayList<Triple<Long, String, Float>>()
+
+    private val ticks = ArrayList<Long>()
+
+    private val wrong = ArrayList<String>()
+
+    private fun expect(ok: Boolean, what: String) {
+        if (!ok) wrong += what
+    }
+
+    private fun junction(name: String, act: () -> Unit, push: Boolean) {
+        settle(1000)
+        drawn.clear()
+        ticks.clear()
+        val start = rule.mainClock.currentTime
+        act()
+        while (rule.mainClock.currentTime - start < TURN) rule.mainClock.advanceTimeBy(1, ignoreFrameDuration = true)
+        val reports = drawn.groupBy { it.first }
+        var last: Triple<Long, String, Float>? = null
+        val frames = ticks.mapNotNull { t ->
+            reports[t]?.let { last = it.last() }
+            last?.let { Triple(t, it.second, it.third) }
+        }
+        val out = frames.first().second
+        val outs = frames.filter { it.second == out }
+        val ins = frames.filter { it.second != out }
+        val outEnd = if (push) Tok.motion_turnstileOutAngle else Tok.motion_turnstileInAngle
+        val inStart = if (push) Tok.motion_turnstileInAngle else Tok.motion_turnstileOutAngle
+        expect(abs(outs.last().third - outEnd) < POSE, "$name: the last frame of the outgoing page draws ${outs.last().third}, not $outEnd")
+        expect(outs.none { abs(it.third - inStart) < POSE }, "$name: the outgoing page drawn at the in angle $inStart")
+        expect(ins.size > 1, "$name: ${ins.size} incoming frames")
+        if (ins.size < 2) return
+        expect(abs(ins[0].third - inStart) < POSE, "$name: the first frame of the incoming page draws ${ins[0].third}, not $inStart")
+        expect(abs(ins[1].third) < abs(ins[0].third) - POSE, "$name: the in leg has not moved on its second frame (${ins[0].third}, ${ins[1].third})")
+    }
+
+    @Test
+    fun theJunctionFrameDrawsTheOutLegsEndPose() {
+        val c = SimControl("ap80")
+        var lyrics by mutableStateOf<LyricsFetch.Show>(LyricsFetch.Show.Off)
+        val probe: (String, Float) -> Unit = { k, a -> drawn += Triple(frame, k, a) }
+        val uptime = { rule.mainClock.currentTime }
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            LaunchedEffect(Unit) {
+                while (true) withFrameMillis {
+                    frame = it
+                    ticks += it
+                }
+            }
+            CompositionLocalProvider(LocalUptime provides uptime, LocalTurnProbe provides probe) {
+                Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), c, shell, lyrics = lyrics) }
+            }
+        }
+        settle(1500)
+        junction("push settings", { shell.nav.push(Page.Settings) }, push = true)
+        junction("push eq", { shell.nav.push(Page.Eq(0)) }, push = true)
+        junction("pop to settings", { shell.nav.pop() }, push = false)
+        junction("back to home", { shell.nav.pop() }, push = false)
+        junction("push now playing", { shell.nav.push(Page.NowPlaying) }, push = true)
+        junction("back to home from now playing", { shell.nav.pop() }, push = false)
+        c.transport(Enums.TransportCmd.next)
+        c.transport(Enums.TransportCmd.seek, seekMs = 61_000)
+        c.mode = true
+        val s = c.device.playback.state
+        c.device = c.device.withState(s.copy(playing = false, positionMs = 61_000, lyrics = true, lyricsPlain = false, lyricsCrc = 1), SystemClock.elapsedRealtime())
+        val lines = (0 until 8).map { LyrLine(54_000L + 4_000L * it, "line $it") }
+        lyrics = LyricsFetch.Show.Lines(c.device.playback.state.track!!, LyricsFetch.Copy(1, Enums.LyricsKind.synced, lines))
+        junction("lyrics open", { shell.nav.push(Page.NowPlaying) }, push = true)
+        expect(rule.onAllNodes(hasTestTag("np.lyrics")).fetchSemanticsNodes().isNotEmpty(), "lyrics open: no lyrics view")
+        assertTrue(wrong.joinToString("; "), wrong.isEmpty())
+    }
+
+    private companion object {
+        const val POSE = 0.5f
+        const val BLANK = 8
+        const val FRAME = 16L
+        const val TURN = 800L
+        const val MID = 400L
+        const val REST = 700L
+        const val REST_AGAIN = 500L
+    }
+}

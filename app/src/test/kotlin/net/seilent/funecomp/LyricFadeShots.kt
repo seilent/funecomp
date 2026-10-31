@@ -191,6 +191,7 @@ class LyricFadeShots {
         FadeCase(false, "open60", "follow/", TURN_FRAMES, true, true, listOf(Page.Home), events = listOf(0L to { shell.nav.push(Page.NowPlaying) }), stepMs = TURN_STEP),
         FadeCase(false, "open-normal", "follow/", TURN_FRAMES, false, true, listOf(Page.Home), events = listOf(0L to { shell.nav.push(Page.NowPlaying) }), stepMs = TURN_STEP),
         FadeCase(false, "settings", "follow/", TURN_FRAMES, false, true, listOf(Page.Home), events = listOf(0L to { shell.nav.push(Page.Settings) }), stepMs = TURN_STEP),
+        FadeCase(false, "pop-page", "follow/", TURN_FRAMES, false, true, listOf(Page.Home, Page.Settings, Page.Eq(0)), events = listOf(0L to { shell.nav.pop() }), stepMs = TURN_STEP),
         FadeCase(false, "pop-home", "follow/", TURN_FRAMES, false, true, listOf(Page.Home, Page.Settings), events = listOf(0L to { shell.nav.pop() }), stepMs = TURN_STEP),
     )
 
