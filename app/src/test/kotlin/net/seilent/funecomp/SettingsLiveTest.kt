@@ -97,6 +97,7 @@ class SettingsLiveTest {
         start(c)
         scrollTo("set.sampleRate")
         shows("set.sampleRate", "AUTO")
+        pivot("effects")
         scrollTo("set.eq")
         shows("set.eq", "OFF")
         pivot("library")

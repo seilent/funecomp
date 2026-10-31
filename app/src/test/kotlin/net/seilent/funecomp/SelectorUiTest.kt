@@ -174,10 +174,10 @@ class SelectorUiTest {
     @Test
     fun aValueSheetScrollsItsRowAboveThePanel() {
         val c = start()
-        tap("crossfeed")
+        tap("playThrough")
         assertTrue(shell.sheet.shown)
-        clearsThePanel("crossfeed", 411, 960)
-        val row = rule.onNodeWithTag("set.crossfeed").fetchSemanticsNode().boundsInRoot
+        clearsThePanel("playThrough", 411, 960)
+        val row = rule.onNodeWithTag("set.playThrough").fetchSemanticsNode().boundsInRoot
         assertTrue(row.top >= rule.onNodeWithTag("rows").fetchSemanticsNode().boundsInRoot.top)
         shell.sheet.close()
         settle(600)

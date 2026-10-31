@@ -136,7 +136,7 @@ class LiveSimTest {
     fun emptyValuesHaveNoLine() {
         val l = device("v1", version = "a\nb")
         val live = peer(l).lives().single()
-        assertEquals(setOf("dateTime", "rescan", "about", "folders", "sampleRate", "eq"), lines(live).keys)
+        assertEquals(setOf("dateTime", "rescan", "about", "folders", "sampleRate", "eqEar", "eq"), lines(live).keys)
         assertTrue(live.text.lines().none { it.endsWith("=") })
         assertEquals("a b", lines(live)["about"])
         assertEquals(listOf("a\nb"), Sink().also { l.greet(it) }.rows().single { it.key == "about" }.words)

@@ -826,7 +826,15 @@ val SHOTS = listOf(
     },
     Shot("settings-output", pages = HOME + Page.Settings),
     Shot("settings-output-v1", board = "v1", pages = HOME + Page.Settings),
-    Shot("settings-crossfeed", pages = HOME + Page.Settings) { scrollTo("set.crossfeed") },
+    Shot("settings-effects", pages = HOME + Page.Settings) {
+        rule.onNodeWithTag("pivot.effects").performClick()
+        settle(1000)
+    },
+    Shot("settings-crossfeed", pages = HOME + Page.Settings) {
+        rule.onNodeWithTag("pivot.effects").performClick()
+        settle(1000)
+        scrollTo("set.crossfeed")
+    },
     Shot("settings-edit", pages = HOME + Page.Settings) {
         scrollTo("set.balance")
         rule.onNodeWithTag("set.balance").performClick()
@@ -846,6 +854,8 @@ val SHOTS = listOf(
         rule.onNodeWithTag("set.powerOnVolume").performClick()
     },
     Shot("settings-pick-crossfeed", pages = HOME + Page.Settings) {
+        rule.onNodeWithTag("pivot.effects").performClick()
+        settle(1000)
         scrollTo("set.crossfeed")
         rule.onNodeWithTag("set.crossfeed").performClick()
     },

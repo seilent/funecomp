@@ -117,7 +117,7 @@ class DeviceTest {
             val out = Sink()
             d.greet(out)
             val pages = out.of(Msg.SCHEMA).map { Schema.from(it) }
-            assertEquals(6, pages.last().pivotCount)
+            assertEquals(7, pages.last().pivotCount)
             assertTrue(pages.last().last)
             assertEquals(d.schemaRows().size, pages.sumOf { it.rows.size })
             val text = Settings.from(out.of(Msg.SETTINGS).single()).text
@@ -140,8 +140,8 @@ class DeviceTest {
 
     @Test
     fun rowCountsAtTheDefaultsAndWithEveryRuntimeRowShown() {
-        for ((b, n) in listOf("ap80" to 46, "v1" to 54, "r1" to 49)) assertEquals(b, n, device(b).schemaRows().size)
-        for ((b, n) in listOf("ap80" to 49, "v1" to 57, "r1" to 52)) {
+        for ((b, n) in listOf("ap80" to 47, "v1" to 55, "r1" to 50)) assertEquals(b, n, device(b).schemaRows().size)
+        for ((b, n) in listOf("ap80" to 50, "v1" to 58, "r1" to 53)) {
             val d = Device(Options(Board.of(b), headset = true, companion = true), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
             assertEquals(b, n, d.schemaRows().size)

@@ -849,7 +849,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         "dateTime" -> wallClock()
         "folders" -> "1 ON"
         "sampleRate" -> "AUTO"
-        "eq" -> eqWord()
+        "eq" -> eqWord(playingUser())
+        "eqEar" -> eqWord(playingEar())
         "scale" -> "1.5"
         else -> null
     }
@@ -860,7 +861,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         return java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm").format(java.time.Instant.ofEpochMilli(ms).atZone(zone))
     }
 
-    private fun eqWord(): String = when (val k = eqUnits.getValue(EqSlots.HEADPHONES).key) {
+    private fun eqWord(slot: String): String = when (val k = eqUnits.getValue(slot).takeIf { it.on }?.key ?: "off") {
         "off" -> "OFF"
         "custom" -> "CUSTOM"
         else -> (eqNames.firstOrNull { it.key == k }?.name ?: k).uppercase()

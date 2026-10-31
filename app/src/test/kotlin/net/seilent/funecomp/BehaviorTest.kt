@@ -398,6 +398,8 @@ class BehaviorTest {
 
     private fun deviceRows(board: String, brightness: String) {
         val (_, shell) = start(listOf(Page.Home, Page.Settings), board = board)
+        rule.onNodeWithTag("pivot.effects").performClick()
+        settle(1000)
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.crossfeed"))
         rule.mainClock.autoAdvance = false

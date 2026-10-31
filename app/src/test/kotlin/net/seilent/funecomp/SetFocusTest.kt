@@ -214,7 +214,7 @@ class SetFocusTest {
         pivot("display")
         focusOn("scale")
         assertTrue(barOn("scale"))
-        repeat(2) {
+        repeat(3) {
             rule.onNodeWithTag("hub.settings").performTouchInput { swipeRight() }
             settle(1000)
         }
