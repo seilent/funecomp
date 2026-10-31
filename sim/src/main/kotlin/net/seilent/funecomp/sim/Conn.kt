@@ -12,6 +12,10 @@ import net.seilent.funecomp.proto.Hello
 import net.seilent.funecomp.proto.Inbound
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.ProtoException
+import net.seilent.funecomp.proto.SvcLogin
+import net.seilent.funecomp.proto.SvcLoginEnd
+import net.seilent.funecomp.proto.SvcPkce
+import net.seilent.funecomp.proto.SvcPkceReply
 import net.seilent.funecomp.proto.Tlv
 import net.seilent.funecomp.proto.TlvWriter
 import net.seilent.funecomp.proto.gen.Enums
@@ -46,7 +50,7 @@ class Conn(
     private var asked = false
     private val ticker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "sim-tick-$id").apply { isDaemon = true } }
 
-    private class Ask(val type: Int, val seq: Int, val deadline: Long, val done: (String) -> Unit)
+    private class Ask(val type: Int, val seq: Int, val deadline: Long, val done: (String) -> Unit, val svcSeq: Long? = null)
 
     private var ask: Ask? = null
 
@@ -54,13 +58,24 @@ class Conn(
 
     val picks: Boolean get() = Groups.allowed(Msg.ART_PICK, appFeatures) && Groups.allowed(Msg.ART_PICK, faults.features)
 
-    fun ask(type: Int, body: ByteArray, timeoutMs: Long, done: (String) -> Unit): Boolean {
+    val svc: Boolean get() = device.svcBoth(appFeatures)
+
+    fun ask(type: Int, body: ByteArray, timeoutMs: Long, svcSeq: Long? = null, done: (String) -> Unit): Boolean {
         val s = synchronized(lock) {
             if (closed != null || ask != null) return false
-            nextSeq().also { ask = Ask(type, it, clock() + timeoutMs, done) }
+            nextSeq().also { ask = Ask(type, it, clock() + timeoutMs, done, svcSeq) }
         }
         write(Frame(type, Proto.flagWant, s, body))
         return true
+    }
+
+    fun pkce(q: SvcPkce, done: (String) -> Unit): Boolean = ask(Msg.SVC_PKCE, q.encode(), Proto.svcPkceMs.toLong(), q.seq, done)
+
+    fun svcEnd(e: SvcLoginEnd) {
+        push(Msg.SVC_LOGIN_END, e.encode())
+        val a = synchronized(lock) { ask?.takeIf { it.type == Msg.SVC_PKCE && it.svcSeq == e.seq }?.also { ask = null } } ?: return
+        log("ask ${name(a.type)} seq=${a.seq} -> ended")
+        a.done("ended")
     }
 
     private fun answered(seq: Int?, result: String) {
@@ -202,6 +217,7 @@ class Conn(
                     when {
                         f.isError -> ErrorReply.from(body).let { "error ${it.code} ${it.text ?: ""}".trim() }
                         f.type == Msg.ART_PICK -> "ok shown=${ArtPickReply.from(body).shown}"
+                        f.type == Msg.SVC_PKCE -> "ok len=${SvcPkceReply.from(body).redirect?.length ?: 0}"
                         else -> "ok"
                     },
                 )
@@ -263,16 +279,31 @@ class Conn(
         if (h.major != faults.major) return bye(Enums.ByeReason.version, faults.major, Proto.minor)
         if (faults.bye == Enums.ByeReason.refused) return bye(Enums.ByeReason.refused)
         device.linked(this, appFeatures)
-        reply(f, device.helloReply().encode())
+        reply(f, device.helloReply(appFeatures).encode())
         helloDone = true
         device.greet(this, at)
         faults.bye?.let { return bye(it) }
         faults.askPick?.let { (name, ms) ->
             if (picks) ticker.schedule({ ask(Msg.ART_PICK, ArtPick(name, device.lib.tracks.firstNotNullOfOrNull { it.mbidOf(name) }).encode(), Proto.requestTimeoutMs.toLong()) {} }, ms, TimeUnit.MILLISECONDS)
         }
+        svcFaults()
+        faults.replaceMs?.let { ms -> ticker.schedule({ bye(Enums.ByeReason.replaced) }, ms, TimeUnit.MILLISECONDS) }
         if (faults.noRead) {
             silent = true
             log("no-read: silent")
         }
+    }
+
+    private fun svcFaults() {
+        if (!svc || faults.svcOff) return
+        val id = opts.services.firstOrNull()?.id ?: "svc"
+        fun later(ms: Long, f: () -> Unit) = ticker.schedule({ if (closed == null) f() }, ms, TimeUnit.MILLISECONDS)
+        for (e in faults.svcLoginEnds) later(e.ms) { svcEnd(SvcLoginEnd(id, e.seq, e.result)) }
+        for (e in faults.svcPkceEnds) later(e.ms) { svcEnd(SvcLoginEnd(id, e.seq, e.result)) }
+        for (l in faults.svcLogins) {
+            val uri = if (faults.svcLoginBare) "${l.host}/${l.code}" else "https://${l.host}/${l.code}"
+            later(l.ms) { push(Msg.SVC_LOGIN, SvcLogin(id, uri, l.host, l.code, 300, l.seq).encode()) }
+        }
+        for (p in faults.svcPkces) later(p.ms) { pkce(SvcPkce(id, "https://login.${p.host}/auth", "login.${p.host}", "https://${p.host}/cb", p.seq)) {} }
     }
 }

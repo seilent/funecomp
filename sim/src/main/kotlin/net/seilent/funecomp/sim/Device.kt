@@ -31,6 +31,7 @@ import net.seilent.funecomp.proto.SetReply
 import net.seilent.funecomp.proto.SourceJpeg
 import net.seilent.funecomp.proto.Settings
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.SvcKeys
 import net.seilent.funecomp.proto.UpdAbort
 import net.seilent.funecomp.proto.UpdBeginReply
 import net.seilent.funecomp.proto.listView
@@ -515,11 +516,14 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         push = null
     }
 
-    fun helloReply() = HelloReply(
+    fun helloReply(app: Long = 0) = HelloReply(
         faults.major, opts.minor, board.name, opts.version ?: "sim.${board.name}", board.screenW, board.screenH,
         board.backdropW, board.backdropH, Proto.maxPayload, opts.idleMs, opts.busyMs, faults.features, lib.rev, settingsRev,
         if (v13) lib.snapRev else null,
+        services = if (svcBoth(app)) opts.services else emptyList(),
     )
+
+    fun svcBoth(app: Long) = allowed(Msg.SVC_LOGIN) && Groups.allowed(Msg.SVC_LOGIN, app)
 
     private fun allowed(type: Int) = Groups.allowed(type, faults.features)
 
@@ -872,8 +876,18 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Msg.UPD_END -> updEnd(body)
             Msg.PLAYLOG_GET -> playLogGet(body)
             Msg.PLAYLOG_ACK -> playLogAck(body)
+            Msg.SVC_KEYS -> svcKeys(body)
             else -> Answer.Fail(Err.unknown, "unknown")
         }.also { follow() }
+    }
+
+    private fun svcKeys(b: Node): Answer {
+        val k = SvcKeys.from(b)
+        val svc = opts.services.firstOrNull { it.id == k.service }
+        opts.log("svc keys ${k.service} names=${k.keys.map { it.name }} bytes=${k.encode().size}")
+        if (faults.svcOff) return Answer.Fail(Err.off, "streaming is off")
+        if (svc == null || k.keys.isEmpty() || k.keys.any { it.name.isNullOrEmpty() || it.value.isNullOrEmpty() || it.name !in svc.secrets }) return Answer.Fail(Err.badValue, "bad key")
+        return Answer.Ok()
     }
 
     private fun playLogGet(b: Node): Answer {

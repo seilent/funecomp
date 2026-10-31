@@ -441,10 +441,10 @@ class OldPeerTest {
         assertEquals(13, Err.cancelled)
         assertEquals("svcLogin", Feature.names[32])
         assertEquals(listOf("done", "expired", "cancelled"), (0..2).map { Enums.SvcLoginResult.names.getValue(it) })
-        assertEquals(0L, Groups.all and (1L shl Feature.svcLogin))
+        assertEquals(1L shl Feature.svcLogin, Groups.all and (1L shl Feature.svcLogin))
         for (m in listOf(Msg.SVC_LOGIN, Msg.SVC_LOGIN_END, Msg.SVC_PKCE, Msg.SVC_KEYS)) {
             assertEquals("svcLogin", Groups.group(m))
-            assertFalse(Groups.allowed(m, Groups.all))
+            assertFalse(Groups.allowed(m, Groups.all and Groups.mask("svcLogin").inv()))
             assertTrue(Groups.allowed(m, Groups.mask("svcLogin")))
         }
     }

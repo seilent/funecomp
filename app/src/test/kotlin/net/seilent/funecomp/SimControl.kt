@@ -139,7 +139,7 @@ class SimControl(
     }
 
     init {
-        device = device.withHello(HelloReply.from(Node.decode("HELLO.reply", sim.helloReply().encode())))
+        device = device.withHello(HelloReply.from(Node.decode("HELLO.reply", sim.helloReply(appFeatures).encode())))
         sim.linked(out, appFeatures)
         sim.greet(out)
     }

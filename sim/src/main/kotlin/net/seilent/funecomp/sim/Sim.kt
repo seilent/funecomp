@@ -2,6 +2,9 @@ package net.seilent.funecomp.sim
 
 import net.seilent.funecomp.proto.ArtBlock
 import net.seilent.funecomp.proto.ArtPick
+import net.seilent.funecomp.proto.SvcLogin
+import net.seilent.funecomp.proto.SvcLoginEnd
+import net.seilent.funecomp.proto.SvcPkce
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
@@ -101,6 +104,18 @@ class Sim(private val opts: Options, lib: Library = Library.synthetic()) {
         val c = current?.takeIf { it.closed == null && it.picks } ?: error("no connection with art pick")
         val done = CompletableFuture<String>()
         check(c.ask(Msg.ART_PICK, q.encode(), Proto.requestTimeoutMs.toLong()) { done.complete(it) }) { "an ask is pending" }
+        return done.get()
+    }
+
+    private fun svcConn() = current?.takeIf { it.closed == null && it.svc } ?: error("no connection with svc login")
+
+    fun svcLogin(l: SvcLogin) = svcConn().push(Msg.SVC_LOGIN, l.encode())
+
+    fun svcEnd(e: SvcLoginEnd) = svcConn().svcEnd(e)
+
+    fun askPkce(q: SvcPkce): String {
+        val done = CompletableFuture<String>()
+        check(svcConn().pkce(q) { done.complete(it) }) { "an ask is pending" }
         return done.get()
     }
 

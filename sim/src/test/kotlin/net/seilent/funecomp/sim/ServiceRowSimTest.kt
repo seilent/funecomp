@@ -26,6 +26,7 @@ class ServiceRowSimTest {
         listOf(Library.track("Band", "Stream", "Song", 1, 200_000, service = "tidal", serviceKey = 167)),
     )
     private val svcApp = Groups.all or (1L shl Feature.svcLogin)
+    private val plain = Groups.all and (1L shl Feature.svcLogin).inv()
 
     private class Sink : Out {
         val frames = ArrayList<Pair<Int, ByteArray>>()
@@ -36,7 +37,7 @@ class ServiceRowSimTest {
 
     private val app = Sink()
 
-    private fun device(vararg faults: String, features: Long = Groups.all) =
+    private fun device(vararg faults: String, features: Long = plain) =
         Device(Options(Board.of("v1"), Faults(faults.toList()), wall = { wall }), lib) { t }.also { it.linked(app, features) }
 
     private fun req(d: Device, type: Int, payload: ByteArray, out: Out = Sink()) = d.request(type, Node.decode(Msg.info.getValue(type).name, payload), out)

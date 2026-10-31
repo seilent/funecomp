@@ -1,5 +1,6 @@
 package net.seilent.funecomp.sim
 
+import net.seilent.funecomp.proto.SvcInfo
 import net.seilent.funecomp.proto.gen.Enums
 import java.io.File
 import java.time.LocalTime
@@ -9,7 +10,7 @@ private const val USAGE = "usage: sim --board ap80|v1|r1 (--listen <port> | --co
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--upd-keys <hex>,...] [--upd-seq <n>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
     "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... " +
-    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--headset] [--companion] [--quiet]"
+    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--headset] [--companion] [--svc <id>:<name>:<secret>+...[:pkce]]... [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -45,6 +46,7 @@ fun main(args: Array<String>) {
     var phone: String? = null
     var headset = false
     var companion = false
+    val services = ArrayList<SvcInfo>()
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -85,6 +87,7 @@ fun main(args: Array<String>) {
             "--quiet" -> quiet = true
             "--headset" -> headset = true
             "--companion" -> companion = true
+            "--svc" -> services += Options.svc(value())
             else -> {
                 System.err.println(USAGE)
                 exitProcess(2)
@@ -134,6 +137,7 @@ fun main(args: Array<String>) {
         companion = companion,
         updKeys = updKeys,
         updSeq = updSeq ?: base.updSeq,
+        services = services,
     )
     val sim = Sim(opts, lib?.let { Library.load(File(it)) } ?: Library.synthetic())
     listen?.let {

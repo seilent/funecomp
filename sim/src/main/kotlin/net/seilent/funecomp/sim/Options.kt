@@ -2,6 +2,7 @@ package net.seilent.funecomp.sim
 
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.PlayEntry
+import net.seilent.funecomp.proto.SvcInfo
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
@@ -30,6 +31,10 @@ class Board(
 }
 
 class EnumFault(val type: Int, val tag: Int, val value: Int)
+
+class SvcAt(val seq: Long, val host: String, val code: String, val ms: Long)
+
+class SvcEndAt(val seq: Long, val result: Int, val ms: Long)
 
 class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
     sealed interface Start {
@@ -129,6 +134,13 @@ class Faults(specs: List<String>) {
     var scanMs: Long? = null
     var sigBad: String? = null
     val sigBadLeft = AtomicInteger(0)
+    val svcLogins = ArrayList<SvcAt>()
+    var svcLoginBare = false
+    val svcLoginEnds = ArrayList<SvcEndAt>()
+    val svcPkces = ArrayList<SvcAt>()
+    val svcPkceEnds = ArrayList<SvcEndAt>()
+    var svcOff = false
+    var replaceMs: Long? = null
 
     init {
         val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
@@ -229,6 +241,26 @@ class Faults(specs: List<String>) {
                     sigBad = v.substringBefore(':').ifEmpty { throw IllegalArgumentException("sig-bad: text missing in $v") }
                     sigBadLeft.set(if (':' in v) v.substringAfter(':').toIntOrNull() ?: throw IllegalArgumentException("sig-bad: bad count in $v") else 1)
                 }
+                "svc-login" -> {
+                    val (seq, rest) = svcSeq(k, v)
+                    svcLogins += SvcAt(seq, rest.substringBefore(':'), rest.substringAfter(':', "").ifEmpty { throw IllegalArgumentException("svc-login: code missing in $v") }, svcMs(k, v))
+                }
+                "svc-login-bare" -> svcLoginBare = true
+                "svc-login-end" -> {
+                    val (seq, rest) = svcSeq(k, v)
+                    val result = Enums.SvcLoginResult.names.entries.firstOrNull { it.value == rest }?.key ?: throw IllegalArgumentException("svc-login-end: unknown result in $v")
+                    svcLoginEnds += SvcEndAt(seq, result, svcMs(k, v))
+                }
+                "svc-pkce" -> {
+                    val (seq, rest) = svcSeq(k, v)
+                    svcPkces += SvcAt(seq, rest.ifEmpty { SVC_HOST }, "", svcMs(k, v))
+                }
+                "svc-pkce-end" -> svcPkceEnds += SvcEndAt(svcSeq(k, v).first, Enums.SvcLoginResult.cancelled, svcMs(k, v))
+                "svc-keys" -> {
+                    fail[Msg.SVC_KEYS] = v.substringBefore(':').toIntOrNull() ?: throw IllegalArgumentException("svc-keys: code missing in $v")
+                    if (':' in v) failLeft[Msg.SVC_KEYS] = AtomicInteger(v.substringAfter(':').toIntOrNull() ?: throw IllegalArgumentException("svc-keys: bad count in $v"))
+                }
+                "svc-off" -> svcOff = true
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')
@@ -238,10 +270,26 @@ class Faults(specs: List<String>) {
                         ?: throw IllegalArgumentException("enum: $msg has no field $field")
                     enums += EnumFault(type, tag, v.substringAfter('=').toInt())
                 }
-                else -> throw IllegalArgumentException("unknown fault $k")
+                else -> if (k.startsWith("replace@")) {
+                    replaceMs = k.substringAfter('@').toLongOrNull() ?: throw IllegalArgumentException("replace: delay missing in $k")
+                } else {
+                    throw IllegalArgumentException("unknown fault $k")
+                }
             }
         }
         if (cardRun != null && cardSeq.isNotEmpty()) throw IllegalArgumentException("card-run and card-seq together")
+    }
+
+    private fun svcSeq(k: String, v: String): Pair<Long, String> {
+        val head = v.substringBeforeLast('@')
+        val seq = head.substringBefore(':').toLongOrNull() ?: throw IllegalArgumentException("$k: seq missing in $v")
+        return seq to head.substringAfter(':', "")
+    }
+
+    private fun svcMs(k: String, v: String) = v.substringAfterLast('@', "").toLongOrNull() ?: throw IllegalArgumentException("$k: delay missing in $v")
+
+    companion object {
+        const val SVC_HOST = "svcdemo.test"
     }
 }
 
@@ -279,6 +327,7 @@ class Options(
     val companion: Boolean = false,
     val updKeys: Set<String>? = null,
     val updSeq: Long = 0,
+    val services: List<SvcInfo> = emptyList(),
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
@@ -289,12 +338,20 @@ class Options(
         if (minor < 9) faults.features = faults.features and Groups.mask("imgOrigin").inv()
         if (minor < 10) faults.features = faults.features and Groups.mask("stateClock").inv()
         if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig", "liveRows").inv()
+        if (minor < 16) faults.features = faults.features and Groups.mask("svcLogin").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }
 
     companion object {
         const val IMG_CAP = 128L shl 20
+
+        fun svc(v: String): SvcInfo {
+            val p = v.split(':')
+            require(p.size in 3..4 && p[0].isNotEmpty() && p[1].isNotEmpty()) { "svc must be <id>:<name>:<secrets>[:pkce], not $v" }
+            require(p.size == 3 || p[3] == "pkce") { "svc: the fourth part is pkce, not ${p[3]}" }
+            return SvcInfo(p[0], p[1], p[2].split('+').filter { it.isNotEmpty() }, p.size == 4)
+        }
     }
 }
 
