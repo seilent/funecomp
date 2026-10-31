@@ -17,6 +17,7 @@ import net.seilent.funecomp.proto.ImgEntry
 import net.seilent.funecomp.proto.ImgListReply
 import net.seilent.funecomp.proto.Lib
 import net.seilent.funecomp.proto.Live
+import net.seilent.funecomp.proto.LrcReply
 import net.seilent.funecomp.proto.LyrGetReply
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.LyrOffsetReply
@@ -2029,19 +2030,33 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         phone[track] = text
         opts.log("stored lrc track=${java.lang.Long.toUnsignedString(track)} bytes=${text.size} kind=${if (synced) "synced" else "plain"}")
         if (!same && offsets.remove(track) != null) opts.log("lyr offset reset track=${java.lang.Long.toUnsignedString(track)}")
-        return Answer.Ok(state = queue.getOrNull(slot) == track)
+        return Answer.Ok(lrcFlags(track), state = queue.getOrNull(slot) == track)
     }
+
+    private fun lrcFlags(track: Long) = if (opts.minor >= 15) LrcReply(hasSynced(track), hasPlain(track)).encode() else ByteArray(0)
 
     private fun lrcDel(b: Node): Answer {
         val track = b.long(Tags.LrcDel.track) ?: return Answer.Fail(Err.badValue, "no track")
-        opts.lrcDir?.let { File(it, "${java.lang.Long.toUnsignedString(track)}.lrc").delete() }
+        val id = java.lang.Long.toUnsignedString(track)
+        if (faults.delUntagged) {
+            opts.log("lrc del untagged track=$id")
+            return Answer.Ok()
+        }
+        opts.lrcDir?.let { File(it, "$id.lrc").delete() }
         phone.remove(track)
-        return Answer.Ok(state = lyrs.remove(track) != null && queue.getOrNull(slot) == track)
+        if (faults.delBeside) {
+            opts.log("lrc del track=$id beside")
+            return Answer.Ok(lrcFlags(track))
+        }
+        val had = lyrs.remove(track) != null
+        opts.log("lrc del track=$id had=$had")
+        return Answer.Ok(lrcFlags(track), state = had && queue.getOrNull(slot) == track)
     }
 
     private fun lyrGet(b: Node): Answer {
         val track = b.long(Tags.LyrGet.track) ?: return Answer.Fail(Err.badValue, "no track")
         if (track !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
+        if (faults.lyrGetAbsent) return Answer.Fail(Err.notFound, "not found")
         val l = served(track) ?: return Answer.Fail(Err.notFound, "not found")
         val offset = b.long(Tags.LyrGet.offset) ?: 0
         val have = b.long(Tags.LyrGet.have)

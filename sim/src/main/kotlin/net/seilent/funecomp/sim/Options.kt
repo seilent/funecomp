@@ -107,6 +107,9 @@ class Faults(specs: List<String>) {
     var eqHeadsetAt: Pair<String?, Long>? = null
     var lyricsLate: Long? = null
     val lyricsAbsent = HashSet<String>()
+    var delUntagged = false
+    var delBeside = false
+    var lyrGetAbsent = false
     var newlog = false
     var svcRowZero = false
     val dropAck = java.util.concurrent.atomic.AtomicBoolean(false)
@@ -214,6 +217,9 @@ class Faults(specs: List<String>) {
                 "eq-headset-off" -> eqHeadsetAt = null to (v.removePrefix("@").toLongOrNull() ?: throw IllegalArgumentException("eq-headset-off: delay missing in $v"))
                 "lyrics-late" -> lyricsLate = v.toLong()
                 "lyrics-absent" -> lyricsAbsent += v
+                "del-untagged" -> delUntagged = true
+                "del-beside" -> delBeside = true
+                "lyrget-absent" -> lyrGetAbsent = true
                 "newlog" -> newlog = true
                 "svc-row-zero" -> svcRowZero = true
                 "drop-ack" -> dropAck.set(true)
