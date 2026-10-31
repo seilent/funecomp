@@ -1,0 +1,55 @@
+gate-below-30	あめが ふる0\nそらを みる1\n视线时间\n视线时间\n视线时间\n视线时间\n视线时间\n视线时间\n视线时间\n视线时间	ok
+gate-at-30	あめが ふる0\nそらを みる1\nほしが ひかる2\n视线时间\n视线时间\n视线时间\n视线时间\n视线时间\n视线时间\n视线时间	translation
+gate-two-lines	花が 视る\n空が 视る	ok
+gate-three-lines	花が 视る\n空が 视る\n星が 视る	han
+dot-not-kana	视・线\n视・线\n视・线\n时・间	ok
+bar-not-kana	视ー线\n视ー线\n视ー线\n时ー间	ok
+halfwidth-bar-not-kana	视ｰ线\n视ｰ线\n视ｰ线	ok
+translation-3-lines	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\nうみへ いく4\nよるに なる5\nあさが くる6\nつきが でる7\nあめが ふる8\nそらを みる9\nほしが ひかる10\nかぜが ふく11\nうみへ いく12\nよるに なる13\nあさが くる14\nつきが でる15\nあめが ふる16\nそらを みる17\nほしが ひかる18\nかぜが ふく19\n视线时间\n视线时间\n视线时间	han
+translation-4-lines	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\nうみへ いく4\nよるに なる5\nあさが くる6\nつきが でる7\nあめが ふる8\nそらを みる9\nほしが ひかる10\nかぜが ふく11\nうみへ いく12\nよるに なる13\nあさが くる14\nつきが でる15\nあめが ふる16\nそらを みる17\nほしが ひかる18\nかぜが ふく19\n视线时间\n视线时间\n视线时间\n视线时间	translation
+translation-under-10-pct	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\nうみへ いく4\nよるに なる5\nあさが くる6\nつきが でる7\nあめが ふる8\nそらを みる9\nほしが ひかる10\nかぜが ふく11\nうみへ いく12\nよるに なる13\nあさが くる14\nつきが でる15\nあめが ふる16\nそらを みる17\nほしが ひかる18\nかぜが ふく19\nうみへ いく20\nよるに なる21\nあさが くる22\nつきが でる23\nあめが ふる24\nそらを みる25\nほしが ひかる26\nかぜが ふく27\nうみへ いく28\nよるに なる29\nあさが くる30\nつきが でる31\nあめが ふる32\nそらを みる33\nほしが ひかる34\nかぜが ふく35\nうみへ いく36\n视线时间\n视线时间\n视线时间\n视线时间	han
+translation-at-10-pct	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\nうみへ いく4\nよるに なる5\nあさが くる6\nつきが でる7\nあめが ふる8\nそらを みる9\nほしが ひかる10\nかぜが ふく11\nうみへ いく12\nよるに なる13\nあさが くる14\nつきが でる15\nあめが ふる16\nそらを みる17\nほしが ひかる18\nかぜが ふく19\nうみへ いく20\nよるに なる21\nあさが くる22\nつきが でる23\nあめが ふる24\nそらを みる25\nほしが ひかる26\nかぜが ふく27\nうみへ いく28\nよるに なる29\nあさが くる30\nつきが でる31\nあめが ふる32\nそらを みる33\nほしが ひかる34\nかぜが ふく35\n视线时间\n视线时间\n视线时间\n视线时间	translation
+kanji-line-inside-set	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\nうみへ いく4\nよるに なる5\n日本山川\n日本山川\n日本山川\n日本山川	ok
+latin-line-not-chinese	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\nうみへ いく4\nよるに なる5\nLOVE 视线\nLOVE 视线\nLOVE 视线\nLOVE 视线	han
+one-han-outside-not-chinese	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\nうみへ いく4\nよるに なる5\n视\n视\n视\n视	han
+furigana-5-groups	雨(あめ)が\n雨(あめ)が\n雨(あめ)が\n雨(あめ)が\n雨(あめ)が\n空が\n空が\n空が	ok
+furigana-6-groups	雨(あめ)が\n雨(あめ)が\n雨(あめ)が\n雨(あめ)が\n雨(あめ)が\n雨(あめ)が\n空が\n空が\n空が	furigana
+furigana-under-share	雨(あめ)と空(そら)と星(ほし)\n雨(あめ)と空(そら)と星(ほし)\n空が\n空が\n空が\n空が\n空が\n空が\n空が	ok
+furigana-at-share	雨(あめ)と空(そら)と星(ほし)\n雨(あめ)と空(そら)と星(ほし)\n空が\n空が\n空が\n空が\n空が\n空が	furigana
+furigana-line-end	空が 雨(あめ\n空が 雨(あめ\n空が 雨(あめ\n空が 雨(あめ\n空が 雨(あめ\n空が 雨(あめ	furigana
+furigana-full-width	雨（あめ）が\n雨（あめ）が\n雨（あめ）が\n雨（あめ）が\n雨（あめ）が\n雨（あめ）が	furigana
+furigana-mixed-parens	雨(あめ）が\n空（そら)へ\n雨(あめ）が\n空（そら)へ\n雨(あめ）が\n空（そら)へ	furigana
+furigana-katakana-not-counted	孤独(コドク)の\n孤独(コドク)の\n孤独(コドク)の\n孤独(コドク)の\n孤独(コドク)の\n孤独(コドク)の\n孤独(コドク)の\n孤独(コドク)の	ok
+furigana-mixed-not-counted	雨(あメ)が\n雨(あメ)が\n雨(あメ)が\n雨(あメ)が\n雨(あメ)が\n雨(あメ)が\n雨(あメ)が\n雨(あメ)が	ok
+furigana-space-not-counted	雨(あめ が\n雨(あめ が\n雨(あめ が\n雨(あめ が\n雨(あめ が\n雨(あめ が\n雨(あめ が\n雨(あめ が	ok
+furigana-iteration-mark	時々(ときどき)の\n時々(ときどき)の\n時々(ときどき)の\n時々(ときどき)の\n時々(ときどき)の\n時々(ときどき)の	furigana
+iteration-and-zero-not-han	時々の 〇\n時々の 〇\n時々の 〇\n時々の 〇	ok
+credit-ratio-colon	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n作词∶视线	ok
+credit-presentation-colon	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n作曲︰视线	ok
+credit-ascii-colon	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n作词: 视线	ok
+credit-bare-label	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n编曲 UNIT视	ok
+credit-bare-label-kana	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n编曲 あ视	han
+credit-list	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n作词、作曲、编曲：视线	ok
+credit-concatenated	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n翻译时轴校对：视线	ok
+credit-by	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n翻唱by: 视线	ok
+credit-short-ending	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n実词：视线\n実曲：视线	ok
+credit-ampersand	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\nMusic&Lyrics：视线	ok
+credit-mid-body	あめが ふる0\nそらを みる1\n作词：视线\nあめが ふる0\nそらを みる1	ok
+credit-label-with-kana	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\nうた作词：视线	han
+credit-colon-first	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n：视线	han
+credit-unknown-label	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n视线：视线	han
+tag-alone	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n【华】	ok
+tag-then-text	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n【华】花が さく	ok
+tag-then-credit	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n【华】作词：视线	ok
+tag-mid-line	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n花が さく【视线	han
+tag-unclosed	あめが ふる0\nそらを みる1\nほしが ひかる2\nかぜが ふく3\n【华 花が	han
+chinese-body	视线时间\n爱这们给\n经过时间\n颜鲜间侧\n她哪词\n视线时间	ok
+hangul-body	사랑해 视线\n하늘 别\n바다 时间\n별빛 们	ok
+english-body	love you\nunder the sky\nsee the stars	ok
+supplementary-inside	あめが ふる0\nそらを みる1\nほしが ひかる2\n𠮟る 𠀋	ok
+supplementary-outside	あめが ふる0\nそらを みる1\nほしが ひかる2\n𠀀る	han
+stamps	[00:01.00]あめが ふる0\n[00:01.00]そらを みる1\n[00:01.00]ほしが ひかる2\n[00:04.00][00:30.50]视る	han
+stamps-colon-fraction	[00:01:00]あめが ふる0\n[00:01:00]そらを みる1\n[00:01:00]ほしが ひかる2\n[00:05:00]作词：视线	ok
+crlf	あめが ふる0\r\nそらを みる1\r\nほしが ひかる2\r\n【华】\r\n作词：视\r	ok
+blank-lines	あめが ふる0\nそらを みる1\nほしが ひかる2\n\n 　 \n\t	ok
+space-trim	　あめが ふる0 \n　そらを みる1 \n　ほしが ひかる2 	ok

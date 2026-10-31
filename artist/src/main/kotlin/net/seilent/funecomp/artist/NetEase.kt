@@ -126,7 +126,7 @@ class NetEase(
         private val STAMPS = Regex("(?s)^((?:\\[[0-9]+:[0-9]+(?:[.:][0-9]+)?\\])+)(.*)$")
         private val FIRST = Regex("^\\[([0-9]+):([0-9]+)")
         private val COLON = Regex("\\[([0-9]+):([0-9]{1,2}):([0-9]{1,3})\\]")
-        private val LABELS = setOf(
+        internal val LABELS = setOf(
             "作词", "作詞", "作曲", "编曲", "編曲", "词", "詞", "曲", "词曲", "制作人", "混音", "母带", "和声", "吉他", "贝斯", "鼓",
             "弦乐", "录音", "监制", "出品", "发行", "原唱", "歌唱", "演唱", "演唱者", "唄", "翻译", "打击乐", "音乐总监", "op", "sp",
             "lyrics", "composer", "arranger",
