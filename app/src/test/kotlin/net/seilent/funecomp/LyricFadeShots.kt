@@ -83,7 +83,7 @@ internal fun shotPhoto(): ImageBitmap = System.getProperty("shots.backdrop")?.le
     BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size()).asImageBitmap()
 }
 
-class FadeCase(val lead: Boolean, val name: String, val dir: String, val frames: Int, val mode: Boolean, val lyrics: Boolean?, val pages: List<Page>, val pre: () -> Unit = {}, val events: List<Pair<Long, () -> Unit>>)
+class FadeCase(val lead: Boolean, val name: String, val dir: String, val frames: Int, val mode: Boolean, val lyrics: Boolean?, val pages: List<Page>, val pre: () -> Unit = {}, val events: List<Pair<Long, () -> Unit>>, val stepMs: Long? = null)
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -188,6 +188,10 @@ class LyricFadeShots {
         FadeCase(false, "skip3", "follow/", 73, true, false, NP_PAGES, events = listOf(0L to { song(false) }, 304L to { song(false) }, 608L to { song(true) })),
         FadeCase(false, "late", "follow/", 73, true, false, NP_PAGES, events = listOf(0L to { song(null) }, 1504L to { flags(true) })),
         FadeCase(false, "open", "follow/", 67, true, true, listOf(Page.Home), events = listOf(0L to { shell.nav.push(Page.NowPlaying) })),
+        FadeCase(false, "open60", "follow/", TURN_FRAMES, true, true, listOf(Page.Home), events = listOf(0L to { shell.nav.push(Page.NowPlaying) }), stepMs = TURN_STEP),
+        FadeCase(false, "open-normal", "follow/", TURN_FRAMES, false, true, listOf(Page.Home), events = listOf(0L to { shell.nav.push(Page.NowPlaying) }), stepMs = TURN_STEP),
+        FadeCase(false, "settings", "follow/", TURN_FRAMES, false, true, listOf(Page.Home), events = listOf(0L to { shell.nav.push(Page.Settings) }), stepMs = TURN_STEP),
+        FadeCase(false, "pop-home", "follow/", TURN_FRAMES, false, true, listOf(Page.Home, Page.Settings), events = listOf(0L to { shell.nav.pop() }), stepMs = TURN_STEP),
     )
 
     private val stills = listOf(
@@ -237,7 +241,7 @@ class LyricFadeShots {
                 val ev = k.events.toMutableList()
                 val ms = ArrayList<Long>()
                 for (n in 0 until k.frames) {
-                    val t = (n * 1000.0 / 30).roundToLong()
+                    val t = k.stepMs?.let { n * it } ?: (n * 1000.0 / 30).roundToLong()
                     while (ev.isNotEmpty() && ev.first().first <= t) {
                         val e = ev.removeAt(0)
                         go(e.first)
@@ -258,7 +262,7 @@ class LyricFadeShots {
                     ms += lastFrame - base
                 }
                 val names = (0 until k.frames).joinToString(", ") { "\"f%04d.png\"".format(it) }
-                File(out, "anim.json").writeText("{\"fps\": 30, \"frames\": [$names], \"ms\": [${ms.joinToString(", ")}]}\n")
+                File(out, "anim.json").writeText("{\"fps\": ${k.stepMs?.let { 1000.0 / it } ?: 30}, \"frames\": [$names], \"ms\": [${ms.joinToString(", ")}]}\n")
             }
             for (k in stills) {
                 if (only.isNotEmpty() && only.split(',').none { k.name == it }) continue
@@ -273,3 +277,5 @@ class LyricFadeShots {
 }
 
 private val NP_PAGES = listOf(Page.Home, Page.NowPlaying)
+private const val TURN_FRAMES = 44
+private const val TURN_STEP = 16L
