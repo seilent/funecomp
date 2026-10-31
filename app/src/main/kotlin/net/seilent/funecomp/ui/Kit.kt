@@ -222,6 +222,8 @@ fun Rows(
     size: ((Int) -> Float)? = null,
     tail: Int = 0,
     under: WindowInsets? = null,
+    head: Int = 0,
+    lead: Float = 0f,
     content: LazyListScope.() -> Unit,
 ) {
     val ui = LocalUi.current
@@ -239,20 +241,21 @@ fun Rows(
             userScrollEnabled = scroll,
             content = content,
         )
-        ListBar(state, focus, ui.px(barX), focusKey, rebuild)
+        ListBar(state, focus, ui.px(barX), focusKey, rebuild, head)
         val span = remember(state, show) { ListSpan() }
         val density = LocalDensity.current
-        ScrollThumb(show, { state.isScrollInProgress }, { span.of(state, size, tail, under?.getBottom(density) ?: 0, past.roundToInt()) })
+        val leadPx = ui.px(lead).roundToInt()
+        ScrollThumb(show, { state.isScrollInProgress }, { span.of(state, size, tail, under?.getBottom(density) ?: 0, past.roundToInt(), head, leadPx) })
     }
 }
 
 @Composable
-fun ListBar(state: LazyListState, focus: Int, x: Float, focusKey: Any? = null, rebuild: Any? = null) {
+fun ListBar(state: LazyListState, focus: Int, x: Float, focusKey: Any? = null, rebuild: Any? = null, head: Int = 0) {
     if (focus < 0) return
-    val info by remember(state, focus, focusKey) {
+    val info by remember(state, focus, focusKey, head) {
         derivedStateOf {
             val items = state.layoutInfo.visibleItemsInfo
-            focusKey?.let { k -> items.firstOrNull { it.key == k } } ?: items.firstOrNull { it.index == focus }
+            focusKey?.let { k -> items.firstOrNull { it.key == k } } ?: items.firstOrNull { it.index == focus + head }
         }
     }
     val item = info ?: return

@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import net.seilent.funecomp.proto.gen.Tok
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
@@ -120,14 +121,17 @@ class ThumbFade {
 class ListSpan {
     private var seen = IntArray(0)
 
-    fun of(state: LazyListState, size: ((Int) -> Float)?, tail: Int = 0, under: Int = 0, past: Int = 0): ThumbSpan? {
+    fun of(state: LazyListState, size: ((Int) -> Float)?, tail: Int = 0, under: Int = 0, past: Int = 0, head: Int = 0, lead: Int = 0): ThumbSpan? {
         val info = state.layoutInfo
-        val rows = info.totalItemsCount - tail
-        val view = info.viewportSize.height - under - past
+        val rows = info.totalItemsCount - tail - head
+        val full = info.viewportSize.height - under - past
+        val folded = state.firstVisibleItemIndex < head
+        val top = if (folded) lead - min(state.firstVisibleItemScrollOffset, lead) else 0
+        val view = full - top
         if (rows <= 0 || view <= 0) return null
         if (seen.size != rows) seen = IntArray(rows)
-        info.visibleItemsInfo.forEach { if (it.index < rows) seen[it.index] = it.size }
-        val first = state.firstVisibleItemIndex.coerceIn(0, rows)
+        info.visibleItemsInfo.forEach { val r = it.index - head; if (r in 0 until rows) seen[r] = it.size }
+        val first = (state.firstVisibleItemIndex - head).coerceIn(0, rows)
         var content = 0.0
         var before = 0.0
         if (size != null) {
@@ -148,8 +152,9 @@ class ListSpan {
                 if (i < first) before += h
             }
         }
-        val offset = state.firstVisibleItemScrollOffset
-        return ThumbSpan(0, view, view.toLong(), content.roundToLong(), before.roundToLong() + offset, (first.toLong() shl 32) or offset.toLong())
+        if (lead > 0 && content <= full) return null
+        val offset = if (folded) 0 else state.firstVisibleItemScrollOffset
+        return ThumbSpan(top, top + view, view.toLong(), content.roundToLong(), before.roundToLong() + offset, (first.toLong() shl 32) or state.firstVisibleItemScrollOffset.toLong())
     }
 }
 

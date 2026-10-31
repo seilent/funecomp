@@ -4,12 +4,16 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -21,6 +25,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.rememberTextMeasurer
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import net.seilent.funecomp.art.Thumbs
@@ -101,16 +108,26 @@ class RowSpec(
 )
 
 @Composable
-fun Pane(ctx: Ctx, view: Int, parent: String, top: Float? = null, x: Float = 0f, spec: (Int, LibRow, LibList) -> RowSpec) {
+fun Pane(
+    ctx: Ctx,
+    view: Int,
+    parent: String,
+    top: Float? = null,
+    x: Float = 0f,
+    state: LazyListState = rememberLazyListState(),
+    head: Int = 0,
+    lead: Float = 0f,
+    spec: (Int, LibRow, LibList) -> RowSpec,
+) {
     val ui = LocalUi.current
     val list = libList(ctx.device, ctx.control, view, parent)
     var focus by rememberSaveable(view, parent) { mutableIntStateOf(0) }
-    val state = rememberLazyListState()
-    Rows(top ?: ui.contentTop, state, x, focus = focus, show = view to parent) {
+    Rows(top ?: ui.contentTop, state, x, focus = focus, show = view to parent, head = head, lead = lead) {
+        repeat(head) { item { Spacer(Modifier.size((ui.px(ui.w) - ui.px(x)).dp(), ui.px(lead).dp())) } }
         val n = (list?.total ?: 0L).toInt()
         items(n) { i ->
             val r = list?.row(i, ctx.control, view, parent)
-            Box(Modifier.enter { i - state.firstVisibleItemIndex }) {
+            Box(Modifier.enter { i + head - state.firstVisibleItemIndex }) {
                 if (r == null) {
                     Box(Modifier.size((ui.px(ui.w) - ui.px(x)).dp(), ui.px(Tok.rowHeight).dp()))
                 } else {
@@ -328,23 +345,40 @@ fun ArtistDetail(ctx: Ctx, page: Page.Artist) {
     }
 }
 
+private const val ALBUM_HEAD = 1
+private const val DESCENT_PROBE = "x"
+
 @Composable
 fun AlbumDetail(ctx: Ctx, page: Page.Album) {
     val ui = LocalUi.current
+    val state = rememberLazyListState()
+    val lead = ui.albumLead
+    val prior = remember { floatArrayOf(lead) }
+    if (prior[0] == 0f && lead > 0f && state.firstVisibleItemIndex == ALBUM_HEAD && state.firstVisibleItemScrollOffset < ui.px(lead)) state.requestScrollToItem(0, state.firstVisibleItemScrollOffset)
+    SideEffect { prior[0] = lead }
+    val y by remember(state, ui) { derivedStateOf { if (state.firstVisibleItemIndex == 0) min(state.firstVisibleItemScrollOffset / ui.u, lead) else lead } }
+    val dock = albumDock(y)
+    val side = albumSide(y)
+    val measurer = rememberTextMeasurer()
+    val albumStyle = textStyle(Roles.npAlbum, white(Roles.npAlbum.alpha))
+    val rise = remember(albumStyle, ui) {
+        val m = measurer.measure(DESCENT_PROBE, albumStyle)
+        max(1f, ui.albumArtTop - ui.albumTitleBaseline - (m.size.height - m.firstBaseline) / ui.u)
+    }
     Box(Modifier.fillMaxSize().background(Black).testTag("album")) {
-        Pane(ctx, Enums.View.albumTracks, page.key, ui.albumRowsTop, ui.albumRowsX) { i, r, _ ->
+        Pane(ctx, Enums.View.albumTracks, page.key, ui.albumRowsTop - lead, ui.albumRowsX, state, ALBUM_HEAD, lead) { i, r, _ ->
             val play = { playAndShow(ctx, Enums.View.albumTracks, page.key, i.toLong()) }
             RowSpec(r.name ?: "", number = "${i + 1}", playing = r.first != null && r.first == ctx.device.playback.state.library, tap = play) { songSheet(ctx, r, play) }
         }
-        Box(Modifier.at(0f, 0f).size(ui.px(ui.w).dp(), ui.px(ui.albumRowsTop).dp()).background(Black).press({}))
-        val textX = ui.px(ui.albumTextX)
+        Box(Modifier.at(0f, 0f).size(ui.px(ui.w).dp(), ui.px(ui.albumRowsTop - y).dp()).background(Black).press({}))
+        val textX = ui.px(ui.albumLineX(dock, rise))
         val textW = ui.px(ui.w - Tok.edge) - textX
         RoleText(page.artist, Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.albumArtistBaseline), textW))
         RoleText(page.title, Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.albumTitleBaseline), textW).testTag("album.title"))
         val track = page.key.toULongOrNull()?.toLong()
         val px = ui.px(Tok.tileL).roundToInt()
         LaunchedEffect(track, px, ctx.device.hello) { if (track != null) ctx.control.wantArt(Thumbs.TILE, track, px, page.title) }
-        Box(Modifier.at(ui.px(Tok.albumArtX), ui.px(ui.albumArtTop)).size(ui.px(Tok.tileL).dp()).background(Color(Tok.color_tile)).testTag("album.art")) {
+        Box(Modifier.at(ui.px(Tok.albumArtX), ui.px(ui.albumArtTop - dock)).size(ui.px(side).dp()).background(Color(Tok.color_tile)).testTag("album.art")) {
             track?.let { ctx.control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("album.art.image"), contentScale = ContentScale.Crop) }
         }
         Status(ctx.device)

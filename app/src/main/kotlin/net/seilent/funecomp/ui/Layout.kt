@@ -200,6 +200,16 @@ val Ui.albumRowsTop: Float get() = when (shape) {
     Shape.P, Shape.SN, Shape.SW -> albumArtTop + Tok.tileL + Tok.albumRowsGap
     Shape.L -> contentTop
 }
+val Ui.albumLead: Float get() = when (shape) {
+    Shape.P, Shape.L -> 0f
+    Shape.SN, Shape.SW -> Tok.tileL - Tok.tileS + albumArtTop - albumArtistBaseline + Tok.capHeight * Roles.npArtist.size
+}
+fun albumSide(y: Float) = Tok.tileL - min(y, Tok.tileL - Tok.tileS)
+fun albumDock(y: Float) = max(0f, y - (Tok.tileL - Tok.tileS))
+fun Ui.albumLineX(dock: Float, rise: Float): Float = when (shape) {
+    Shape.P, Shape.L -> albumTextX
+    Shape.SN, Shape.SW -> albumTextX + (Tok.albumArtX + Tok.tileS + Tok.tileLGutter - albumTextX) * min(dock, rise) / rise
+}
 val Ui.albumRowsX: Float get() = when (shape) {
     Shape.P, Shape.SN, Shape.SW -> 0f
     Shape.L -> NP_COLUMN_RIGHT - Tok.hubEdge
