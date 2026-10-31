@@ -13,10 +13,18 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
+import androidx.test.espresso.Espresso
+import net.seilent.funecomp.proto.LyrLine
+import net.seilent.funecomp.proto.Node
+import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.sim.Out
+import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LayoutTok
@@ -28,6 +36,7 @@ import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.npProgressY
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -37,6 +46,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
+import java.util.zip.CRC32
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -51,6 +61,12 @@ class NowPlayingIdleTest {
 
     private lateinit var c: SimControl
 
+    private val body = (0 until 12).joinToString("") { "[00:%02d.00]line %d\n".format(it * 4, it) }
+
+    private val sink = object : Out {
+        override fun push(type: Int, payload: ByteArray) = c.push(type, payload)
+    }
+
     private fun start(wrap: (SimControl) -> Control = { it }): SimControl {
         c = SimControl("ap80")
         val control = wrap(c)
@@ -61,6 +77,34 @@ class NowPlayingIdleTest {
         }
         settle(1000)
         return c
+    }
+
+    private fun shown(): LyricsFetch.Show {
+        val s = c.device.playback.state
+        val t = s.track ?: return LyricsFetch.Show.Off
+        val off = s.lyricsOffsetMs ?: 0
+        val lines = (0 until 12).map { LyrLine((it * 4000L - off).coerceAtLeast(0), "line $it") }
+        return LyricsFetch.Show.Lines(t, LyricsFetch.Copy(s.lyricsCrc ?: 1, Enums.LyricsKind.synced, lines))
+    }
+
+    private fun startLyrics() {
+        c = SimControl("ap80", now = { SystemClock.elapsedRealtime() })
+        body.toByteArray().let {
+            c.sim.request(Msg.LRC_PUT, Node.decode("LRC_PUT", Req.lrcPut(c.device.playback.state.track!!, c.device.playback.state.libRev, it, CRC32().apply { update(it) }.value)), sink)
+        }
+        c.transport(Enums.TransportCmd.seek, seekMs = 9_950)
+        c.push(Msg.STATE, c.sim.state())
+        c.offsets.clear()
+        rule.mainClock.autoAdvance = false
+        rule.setUptimeContent {
+            Box(Modifier.requiredSize(411.dp, 960.dp)) {
+                App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), c, shell, lyrics = shown(), liveDevice = { c.device })
+            }
+        }
+        settle(1000)
+        rule.onNodeWithTag("np.art").performClick()
+        settle(1000)
+        assertTrue(exists("np.lyrics"))
     }
 
     private fun settle(ms: Long) {
@@ -205,6 +249,83 @@ class NowPlayingIdleTest {
         }
     }
 
+    @Test
+    fun theVolumePathRestoresAnIdlePage() {
+        start()
+        val woke = wake()
+        until(woke + RESTORED)
+        val st = status()
+        val status = luma(st)
+        idle(woke)
+        dimmed("idle", status, luma(st))
+        val at = rule.mainClock.currentTime
+        shell.overlay.show()
+        until(at + OVERLAY_GONE)
+        assertFalse(exists("overlay"))
+        assertEquals(status, luma(st))
+    }
+
+    private fun openOffset(begin: Boolean) {
+        rule.onNodeWithTag("np.lyrics").performClick()
+        settle(400)
+        assertTrue(shell.sheet.shown && shell.offset != null)
+        if (begin) {
+            rule.onNodeWithTag("sheet.item.0").performClick()
+            settle(400)
+            assertTrue(shell.offset!!.editing)
+        }
+    }
+
+    private fun closeOffset() {
+        Espresso.pressBack()
+        settle(400)
+        Espresso.pressBack()
+        settle(400)
+        assertFalse(shell.sheet.shown)
+    }
+
+    @Test
+    fun anOffsetEditBeginRestoresAnIdlePage() {
+        startLyrics()
+        val st = status()
+        val status = luma(st)
+        openOffset(begin = false)
+        settle(IDLE)
+        rule.onNodeWithTag("sheet.item.0").performClick()
+        settle(400)
+        assertTrue(shell.offset!!.editing)
+        closeOffset()
+        assertEquals(status, luma(st))
+    }
+
+    @Test
+    fun anOffsetStepRestoresAnIdlePage() {
+        startLyrics()
+        val st = status()
+        val status = luma(st)
+        openOffset(begin = true)
+        settle(IDLE)
+        rule.onNodeWithTag("sheet.item.0").performTouchInput { click(centerRight.copy(x = width * 0.75f)) }
+        settle(300)
+        assertEquals(100, c.offsets.last())
+        closeOffset()
+        assertEquals(status, luma(st))
+    }
+
+    @Test
+    fun anOffsetCoarseStepRestoresAnIdlePage() {
+        startLyrics()
+        val st = status()
+        val status = luma(st)
+        openOffset(begin = true)
+        settle(IDLE)
+        shell.offset!!.coarse(1)
+        settle(300)
+        assertEquals(1000, c.offsets.last())
+        closeOffset()
+        assertEquals(status, luma(st))
+    }
+
     private companion object {
         val SEEK_MID = (LayoutTok.npSeekBandBottom - LayoutTok.npProgressY) / 2
         const val DRAG_STEPS = 5
@@ -215,6 +336,7 @@ class NowPlayingIdleTest {
         val DIMMED = (Tok.motion_idle + Tok.motion_idleFade).toLong() + FRAMES
         val IDLE = DIMMED + 100L
         val MID_FADE = Tok.motion_idle.toLong() + FRAMES / 2 + Tok.motion_idleFade.toLong() / 2
+        val OVERLAY_GONE = (Tok.motion_volumeHide + Tok.motion_volumeFade).toLong() + 300L
         const val DIM_TOLERANCE = 0.02f
     }
 }

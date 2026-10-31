@@ -15,9 +15,9 @@ private const val SHEET = "lyrics"
 private const val ITEM = "offset"
 private const val UNIT = "ms"
 
-fun lyricsSheet(shell: Shell, control: Control, track: Long, shown: Int, phone: PhoneKey? = null) {
+fun lyricsSheet(shell: Shell, control: Control, track: Long, shown: Int, phone: PhoneKey? = null, input: () -> Unit = {}) {
     lateinit var e: OffsetEdit
-    e = OffsetEdit(track, shown, control, { line, title -> shell.toast.show(line, title) }, phone = phone) {
+    e = OffsetEdit(track, shown, control, { line, title -> shell.toast.show(line, title) }, phone = phone, input = input) {
         if (shell.offset === e) shell.offset = null
         shell.sheet.closeIf(e)
     }
@@ -34,6 +34,7 @@ class OffsetEdit(
     private val control: Control,
     private val toast: (String, String) -> Unit = { _, _ -> },
     val phone: PhoneKey? = null,
+    private val input: () -> Unit = {},
     private val closed: () -> Unit = {},
 ) {
     private val send = OffsetSend(track, shown)
@@ -104,6 +105,7 @@ class OffsetEdit(
     }
 
     fun press(i: Int, x: Float) {
+        input()
         when {
             i != 0 -> if (editing) keep()
             editing -> step(if (x < 0.5f) -1 else 1)
@@ -148,7 +150,10 @@ class OffsetEdit(
 
     fun step(d: Int) = run(send.step(d))
 
-    fun coarse(d: Int) = run(send.coarse(d))
+    fun coarse(d: Int) {
+        input()
+        run(send.coarse(d))
+    }
 
     fun typed(ms: Int) = run(send.typed(ms))
 

@@ -479,7 +479,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
     }
     var touches by remember { mutableIntStateOf(0) }
     var idle by remember { mutableStateOf(false) }
-    LaunchedEffect(touches) {
+    LaunchedEffect(touches, overlay.shows) {
         idle = false
         delay(Tok.motion_idle.toLong())
         idle = true
@@ -537,8 +537,8 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
             val c = copyFor(lyrics, k, s)
             if (shell != null && c?.kind == Enums.LyricsKind.synced && fade == null && !reversing && lyricTarget && sheet?.shown != true && swapNow() == null) {
                 when (k) {
-                    is NpKey.Lib -> if (offsets && s.source == Enums.Source.local) lyricsSheet(shell, control, k.track, s.lyricsOffsetMs ?: 0)
-                    is NpKey.Phone -> lyricsSheet(shell, control, 0, 0, k.key)
+                    is NpKey.Lib -> if (offsets && s.source == Enums.Source.local) lyricsSheet(shell, control, k.track, s.lyricsOffsetMs ?: 0) { touches++ }
+                    is NpKey.Phone -> lyricsSheet(shell, control, 0, 0, k.key) { touches++ }
                     is NpKey.Service, null -> {}
                 }
             }
