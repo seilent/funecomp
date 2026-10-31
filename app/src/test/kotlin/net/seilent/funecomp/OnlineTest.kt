@@ -591,6 +591,8 @@ class OnlineTest {
     @Test
     fun anEntryAfterAValueSheetOnAnotherPageStillRises() {
         val (_, shell) = start(listOf(Page.Home, Page.Settings), w = 960, h = 411)
+        rule.onNodeWithTag("pivot.library").performClick()
+        settle(1000)
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.resume"))
         rule.mainClock.autoAdvance = false

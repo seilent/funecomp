@@ -208,7 +208,7 @@ class SetFocusTest {
     @Test
     fun eachPivotKeepsItsOwnFocus() {
         start()
-        val top = bounds("set.output").top
+        val top = bounds("set.outputPriority").top
         focusOn("powerOnVolume")
         pivot("library")
         pivot("display")
@@ -219,7 +219,7 @@ class SetFocusTest {
             settle(1000)
         }
         assertTrue(barOn("powerOnVolume"))
-        assertEquals(top, bounds("set.output").top, 0.5f)
+        assertEquals(top, bounds("set.outputPriority").top, 0.5f)
         pivot("library")
         pivot("display")
         assertTrue(barOn("scale"))
@@ -328,7 +328,7 @@ class SetFocusTest {
         schema(c) { all }
         val seen = (1..30).mapNotNull {
             frame()
-            assertFalse(exists("set.output") || exists("set.brightness") || exists("set.usbMode"))
+            assertFalse(exists("set.outputPriority") || exists("set.brightness") || exists("set.usbMode"))
             if (exists("set.lockKnob")) bounds("set.lockKnob").left else null
         }
         assertTrue(seen.size >= 29)

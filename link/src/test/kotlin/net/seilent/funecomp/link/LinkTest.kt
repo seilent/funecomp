@@ -125,7 +125,7 @@ class LinkTest {
         waitFor { rec.state.schema.rev != null && rec.state.eq.values.count { it.complete } == 2 && rec.state.settings.rev > 0 }
         val filter = rec.state.schema.rows.first { it.key == "digitalFilter" }
         assertEquals(8, filter.values.size)
-        assertEquals("auto", rec.state.settings.values["output"])
+        assertEquals("0", rec.state.settings.values["balance"])
         assertEquals(200, rec.state.eq.getValue(EqSlots.HEADPHONES).names.size)
         assertTrue(rec.pushes.count { it == Msg.EQ } >= 4)
 

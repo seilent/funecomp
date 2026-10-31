@@ -138,22 +138,23 @@ class SelectorUiTest {
 
     @Test
     fun theLastValueRowScrollsPastTheEndAndBack() {
-        val c = start()
-        val before = scrolledTo("resume")
-        rule.onNodeWithTag("set.resume").performClick()
+        val c = start("ap80", "library", "display")
+        val before = scrolledTo("navBar")
+        rule.onNodeWithTag("set.navBar").performClick()
         settle(600)
         assertTrue(shell.sheet.shown)
-        clearsThePanel("resume", 411, 960)
+        assertTrue(top("set.navBar") < before)
+        clearsThePanel("navBar", 411, 960)
         shell.sheet.close()
         settle(1000)
-        assertEquals(before, top("set.resume"), 1.5f)
+        assertEquals(before, top("set.navBar"), 1.5f)
         assertEquals(emptyList<String>(), writes(c))
     }
 
     @Test
     @Config(qualifiers = "w362dp-h400dp-420dpi")
     fun theCoverScreenRowClearsTheGutterInWholePixels() {
-        startAt((948 / 2.625f).dp, (1048 / 2.625f).dp)
+        startAt((948 / 2.625f).dp, (1048 / 2.625f).dp, "ap80", "library")
         scrolledTo("resume")
         rule.onNodeWithTag("set.resume").performClick()
         settle(600)
@@ -163,7 +164,7 @@ class SelectorUiTest {
 
     @Test
     fun aLandscapeSheetTallerThanTheRoomLeavesTheLastRowInPlace() {
-        startAt(960, 411)
+        startAt(960, 411, "ap80", "library")
         val before = scrolledTo("resume")
         rule.onNodeWithTag("set.resume").performClick()
         settle(600)
@@ -173,11 +174,13 @@ class SelectorUiTest {
 
     @Test
     fun aValueSheetScrollsItsRowAboveThePanel() {
-        val c = start()
-        tap("playThrough")
+        val c = start("ap80", "library", "display")
+        val before = top("set.quickplay")
+        tap("quickplay")
         assertTrue(shell.sheet.shown)
-        clearsThePanel("playThrough", 411, 960)
-        val row = rule.onNodeWithTag("set.playThrough").fetchSemanticsNode().boundsInRoot
+        assertTrue(top("set.quickplay") < before)
+        clearsThePanel("quickplay", 411, 960)
+        val row = rule.onNodeWithTag("set.quickplay").fetchSemanticsNode().boundsInRoot
         assertTrue(row.top >= rule.onNodeWithTag("rows").fetchSemanticsNode().boundsInRoot.top)
         shell.sheet.close()
         settle(600)

@@ -189,7 +189,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private val tok = TokBoard.of(board.name)
     private val prefs = linkedMapOf(
-        "output" to "auto", "volumeStep" to whole(Tok.volume_stepDefault),
+        "volumeStep" to whole(Tok.volume_stepDefault),
         "accentHue" to whole(Tok.accent_hueDefault), "saverSeconds" to whole(Tok.settings_saverDefault),
         "screenOffSeconds" to whole(Tok.settings_screenOffDefault),
         "idleShutdownMinutes" to whole(Tok.settings_idleDefault), "lockKnob" to "off", "screenOffKeys" to "all",
@@ -838,7 +838,6 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private fun structure(r: Row): Row = when (r.key) {
-        "output" -> if (opts.headset || prefs["output"] == "bluetooth") r else r.copy(values = r.values.dropLast(1), words = r.words.dropLast(1))
         "usbOutput" -> if (opts.headset || prefs["usbOutput"] == "bluetooth") r else r.copy(values = r.values.dropLast(1), words = r.words.dropLast(1))
         else -> r
     }

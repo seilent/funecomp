@@ -140,8 +140,8 @@ class DeviceTest {
 
     @Test
     fun rowCountsAtTheDefaultsAndWithEveryRuntimeRowShown() {
-        for ((b, n) in listOf("ap80" to 47, "v1" to 55, "r1" to 50)) assertEquals(b, n, device(b).schemaRows().size)
-        for ((b, n) in listOf("ap80" to 50, "v1" to 58, "r1" to 53)) {
+        for ((b, n) in listOf("ap80" to 46, "v1" to 54, "r1" to 49)) assertEquals(b, n, device(b).schemaRows().size)
+        for ((b, n) in listOf("ap80" to 49, "v1" to 57, "r1" to 52)) {
             val d = Device(Options(Board.of(b), headset = true, companion = true), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
             assertEquals(b, n, d.schemaRows().size)
@@ -168,10 +168,9 @@ class DeviceTest {
         out.frames.clear()
         d.tick(out)
         assertTrue(out.of(Msg.SCHEMA).isEmpty())
-        ok(req(d, Msg.SET, Req.set("navBar=off\noutput=headphones\n"), out))
+        ok(req(d, Msg.SET, Req.set("navBar=off\n"), out))
         d.tick(out)
-        assertTrue(d.schemaRows().none { it.key in setOf("navOrder", "navButton", "outputPriority", "companionPair") })
-        ok(req(d, Msg.SET, Req.set("output=auto\n"), out))
+        assertTrue(d.schemaRows().none { it.key in setOf("navOrder", "navButton", "companionPair") })
         assertTrue(d.schemaRows().any { it.key == "outputPriority" })
         val pair = Device(Options(Board.of("v1"), companion = true), Library.synthetic()) { t }
         assertTrue(pair.schemaRows().any { it.key == "companionPair" })
@@ -249,12 +248,9 @@ class DeviceTest {
         val off = device("v1", "rows-off=checkCard+usbStorage", "rows-off=wifi")
         assertTrue(off.schemaRows().none { it.key in setOf("checkCard", "usbStorage", "wifi") })
         val d = device("v1")
-        assertEquals(listOf("auto", "headphones"), d.schemaRows().single { it.key == "output" }.values)
+        assertTrue(d.schemaRows().none { it.key == "output" })
         assertEquals(listOf("JACK"), d.schemaRows().single { it.key == "usbOutput" }.words)
-        ok(req(d, Msg.SET, Req.set("output=bluetooth\n")))
-        assertEquals(listOf("AUTO", "JACK", "BLUETOOTH"), d.schemaRows().single { it.key == "output" }.words)
         val h = Device(Options(Board.of("v1"), headset = true), Library.synthetic()) { t }
-        assertEquals(listOf("auto", "headphones", "bluetooth"), h.schemaRows().single { it.key == "output" }.values)
         assertEquals(listOf("headphones", "bluetooth"), h.schemaRows().single { it.key == "usbOutput" }.values)
     }
 
