@@ -18,7 +18,7 @@ class NetEase(
     random: Random = Random.Default,
     private val log: (String) -> Unit = {},
 ) {
-    private class Song(val id: Long, val names: List<String>, val dt: Long)
+    private class Song(val id: Long, val names: List<String>, val dt: Long, val artists: List<String>)
 
     private sealed interface Lyric {
         class Body(val found: Lrclib.Found) : Lyric
@@ -26,6 +26,56 @@ class NetEase(
         data object Skip : Lyric
 
         data object End : Lyric
+
+        data object Unanswered : Lyric
+    }
+
+    private class Pick(val found: Lrclib.Found, val id: Long, val lookup: Int, val evidence: String?)
+
+    private inner class Get(private val durationMs: Long) {
+        private val searches = HashMap<String, List<Song>>()
+        val tried = HashSet<Long>()
+        var asked = 0
+        var ended = false
+        private var strict = false
+
+        fun songs(title: String, artist: String): List<Song> {
+            val songs = search("$title $artist").toMutableList()
+            if (songs.none { abs(it.dt - durationMs) <= NEAR_MS }) {
+                val ids = songs.map { it.id }.toSet()
+                songs += search(title).filter { it.id !in ids }
+            }
+            return songs
+        }
+
+        private fun search(q: String) = searches.getOrPut(q) { this@NetEase.search(q) }
+
+        fun matches(s: Song, tc: String) = abs(s.dt - durationMs) <= MATCH_MS && s.names.any { core(it) == tc }
+
+        fun loop(candidates: List<Pair<Song, String?>>, lookup: Int): Pick? {
+            for ((s, name) in candidates) {
+                if (asked == CAP) return null
+                asked++
+                tried += s.id
+                val found = when (val l = lyric(s.id)) {
+                    is Lyric.Body -> l.found
+                    Lyric.Skip -> continue
+                    Lyric.End -> {
+                        if (lookup == 1) ended = true
+                        return null
+                    }
+                    Lyric.Unanswered -> return null
+                }
+                val v = NeMix.check(found.text, strict) as? NeMix.Verdict.Reject
+                if (v == null) {
+                    if (!found.synced && !strict) strict = NeMix.check(found.text, true) == NeMix.Verdict.Ok
+                    return Pick(found, s.id, lookup, name)
+                }
+                strict = true
+                log("netease reject ${s.id} ${v.reason} ${v.counts}")
+            }
+            return null
+        }
     }
 
     data class Swept(val files: Int, val rejected: Int, val errors: Int = 0)
@@ -118,32 +168,34 @@ class NetEase(
     private fun ruled(line: String) = line.startsWith("rule=") && line.length > 5 && line.substring(5).all { it in '0'..'9' }
 
     private fun lookup(q: Lrclib.Query, durationMs: Long): Lrclib.Found? {
+        val g = Get(durationMs)
         val pair = LyricNames.split(q.track, q.artist)
         val title = pair?.first ?: LyricNames.tails(q.track)
-        val artist = pair?.second ?: q.artists.firstOrNull { it.isNotBlank() } ?: q.artist
+        val device = q.artists.firstOrNull { it.isNotBlank() } ?: q.artist
+        val artist = pair?.second ?: device
         val tc = core(title)
-        if (tc.isEmpty()) return null
-        val songs = search("$title $artist").toMutableList()
-        if (songs.none { abs(it.dt - durationMs) <= NEAR_MS }) {
-            val ids = songs.map { it.id }.toSet()
-            songs += search(title).filter { it.id !in ids }
-        }
-        var asked = 0
-        var strict = false
-        for (s in songs) {
-            if (abs(s.dt - durationMs) > MATCH_MS || s.names.none { core(it) == tc }) continue
-            if (asked == CAP) return null
-            asked++
-            val found = when (val l = lyric(s.id)) {
-                is Lyric.Body -> l.found
-                Lyric.Skip -> continue
-                Lyric.End -> return null
-            }
-            val v = NeMix.check(found.text, strict) as? NeMix.Verdict.Reject ?: return found
-            strict = true
-            log("netease reject ${s.id} ${v.reason} ${v.counts}")
-        }
-        return null
+        val first = if (tc.isEmpty()) null else g.loop(g.songs(title, artist).filter { g.matches(it, tc) }.map { it to null }, 1)
+        if (g.ended) return null
+        if (first?.found?.synced == true || g.asked == CAP) return picked(first)
+        val c = LyricNames.clean(q.track, q.artist)
+        val other = c.artist ?: c.tags.firstOrNull() ?: device
+        val oc = core(c.title)
+        if (c.title.isEmpty() || (c.title == title && other == artist) || oc.isEmpty()) return picked(first)
+        val keys = evidence(q, c)
+        val candidates = g.songs(c.title, other).filter { g.matches(it, oc) && it.id !in g.tried }
+            .mapNotNull { s -> s.artists.firstOrNull { LyricNames.artistKey(it) in keys }?.let { s to it } }
+        val second = g.loop(candidates, 2)
+        return picked(if (second?.found?.synced == true) second else first ?: second)
+    }
+
+    private fun evidence(q: Lrclib.Query, c: LyricNames.Clean): Set<String> {
+        val parts = c.artist?.split(',', '、', '&', '×')?.filter { it.isNotBlank() }.orEmpty()
+        return (parts + c.tags + q.artists + q.artist + listOfNotNull(Names.bare(q.artist))).map(LyricNames::artistKey).filter { it.isNotEmpty() }.toSet()
+    }
+
+    private fun picked(p: Pick?): Lrclib.Found? {
+        if (p != null) log("netease pick ${p.id} lookup ${p.lookup} ${if (p.found.synced) "synced" else "plain"}${p.evidence?.let { " evidence $it" } ?: ""}")
+        return p?.found
     }
 
     private fun search(q: String): List<Song> {
@@ -151,12 +203,14 @@ class NetEase(
         return j["result"]["songs"].list.mapNotNull { s ->
             val id = s["id"].long ?: return@mapNotNull null
             val names = listOf(s["name"].str ?: "") + s["alia"].list.mapNotNull { it.str } + s["tns"].list.mapNotNull { it.str }
-            Song(id, names, s["dt"].long ?: 0)
+            val ar = s["ar"].list
+            val artists = ar.map { it["name"].str ?: "" } + ar.flatMap { a -> a["alia"].list.mapNotNull { it.str } + a["tns"].list.mapNotNull { it.str } }
+            Song(id, names, s["dt"].long ?: 0, artists)
         }
     }
 
     private fun lyric(id: Long): Lyric {
-        val j = post(LYRIC, mapOf("id" to id.toString(), "lv" to "1", "tv" to "-1")) ?: return Lyric.End
+        val j = post(LYRIC, mapOf("id" to id.toString(), "lv" to "1", "tv" to "-1")) ?: return Lyric.Unanswered
         if (j["nolyric"].bool == true) return Lyric.End
         if (j["uncollected"].bool == true) return Lyric.Skip
         val raw = j["lrc"]["lyric"].str ?: ""

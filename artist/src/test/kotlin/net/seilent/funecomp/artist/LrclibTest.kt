@@ -417,7 +417,7 @@ class LrclibTest {
     fun theCoverTagsGetTheirCapturedLyrics() {
         val f = Fixtures()
         val l = lrclib(f)
-        val rows = Fixtures.text("lyc-expect.tsv").lineSequence().filter { it.isNotBlank() }.map { it.split('\t') }.toList()
+        val rows = Fixtures.text("lyc-expect.tsv").lineSequence().filter { it.isNotBlank() }.map { it.split('\t') }.filter { it[3].isNotEmpty() }.toList()
         assertEquals(70, rows.size)
         for (r in rows) {
             val before = f.calls.size

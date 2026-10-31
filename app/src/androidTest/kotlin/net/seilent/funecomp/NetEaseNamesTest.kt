@@ -31,19 +31,23 @@ class NetEaseNamesTest {
         }
     }
 
+    private fun count(column: Int) = rows().single { it[0] == "count" }[column].toInt()
+
     private fun sha(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8)).joinToString("") { "%02x".format(it) }
 
     @Test
     fun theCoreFoldMatchesTheJvmOnTheDevice() {
         val core = rows().filter { it[0] == "core" }
-        assertTrue(core.size > 2000)
+        assertTrue(core.isNotEmpty())
+        assertEquals(count(1), core.size)
         for (r in core) assertEquals(r[1], r[2], NetEase.core(r[1]))
     }
 
     @Test
     fun theLyricTextRulesMatchTheJvmOnTheDevice() {
         val text = rows().filter { it[0] == "text" }
-        assertEquals(40, text.size)
+        assertTrue(text.isNotEmpty())
+        assertEquals(count(2), text.size)
         for (r in text) {
             val got = NetEase.text(r[2])
             assertEquals(r[1], r[3], if (got == null) "miss" else if (got.synced) "synced" else "plain")

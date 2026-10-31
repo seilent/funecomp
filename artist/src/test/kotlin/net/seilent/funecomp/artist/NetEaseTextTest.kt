@@ -18,7 +18,7 @@ class NetEaseTextTest {
     @Test
     fun colonStampsComeOutWithDotFractionsTheDeviceParses() {
         val colon = bodies().filter { (_, raw) -> stamp.findAll(raw!!).any { it.groupValues[3] == ":" } }
-        assertEquals(7, colon.size)
+        assertEquals(13, colon.size)
         for ((name, raw) in colon) {
             val got = NetEase.text(raw!!) ?: continue
             assertTrue(name, got.synced)

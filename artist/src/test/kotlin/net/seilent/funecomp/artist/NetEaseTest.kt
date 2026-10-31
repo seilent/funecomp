@@ -118,7 +118,7 @@ class NetEaseTest {
             val got = n.get(t.query)
             val made = f.calls.drop(before)
             assertTrue(t.title, made.isNotEmpty())
-            assertTrue(t.title, made.count { it.startsWith("POST ${NetEase.SEARCH} ") } <= 2)
+            assertTrue(t.title, made.count { it.startsWith("POST ${NetEase.SEARCH} ") } <= 4)
             assertTrue(t.title, made.count { it.startsWith("POST ${NetEase.LYRIC} ") } <= NetEase.CAP)
             assertEquals(t.title, e[2], picked(made) ?: "none")
             assertEquals(t.title, e[3], if (got == null) "miss" else if (got.synced) "synced" else "plain")
@@ -126,12 +126,37 @@ class NetEaseTest {
             assertEquals(t.title, e[5], got?.text?.split("\n")?.first()?.let(::h12) ?: "")
             if (got != null) assertEquals("netease", got.source)
         }
-        assertEquals(129, expect.count { it[3] == "synced" })
-        assertEquals(139, expect.count { it[2] != "none" })
+        assertEquals(132, expect.count { it[3] == "synced" })
+        assertEquals(142, expect.count { it[2] != "none" })
         assertEquals(0, expect.count { it[3] == "plain" })
         assertTrue(f.calls.all { it.startsWith("POST https://music.163.com/api/") })
         val calls = f.calls.size
         for (t in tags) n.get(t.query)
+        assertEquals(calls, f.calls.size)
+    }
+
+    @Test
+    fun theCoverTagsGetTheirReplayedPicks() {
+        val f = Fixtures()
+        val n = netease(f)
+        val rows = Fixtures.text("lyc-expect.tsv").lineSequence().filter { it.isNotBlank() }.map { it.split('\t') }.toList()
+        assertEquals(118, rows.size)
+        for (r in rows) {
+            val before = f.calls.size
+            logs.clear()
+            val got = n.get(Query(r[1], r[0], null, r[2].toLong(), deviceSplit(r[0], r[6])))
+            val made = f.calls.drop(before)
+            assertEquals(r[1], r[7], if (got == null) "miss" else if (got.synced) "synced" else "plain")
+            assertEquals(r[1], r[11].ifEmpty { null }, got?.text?.lineSequence()?.first())
+            assertEquals(r[1], r[12].toInt(), made.count { it.startsWith("POST ${NetEase.SEARCH} ") })
+            assertEquals(r[1], r[13].toInt(), made.count { it.startsWith("POST ${NetEase.LYRIC} ") })
+            val pick = if (got == null) emptyList() else listOf("netease pick ${r[8]} lookup ${r[9]} ${r[7]}" + if (r[10].isEmpty()) "" else " evidence ${r[10]}")
+            assertEquals(r[1], pick, logs.filter { it.startsWith("netease pick ") })
+        }
+        assertEquals(listOf(43, 24, 51), listOf("" to "miss", "1" to "synced", "2" to "synced").map { (l, k) -> rows.count { it[9] == l && it[7] == k } })
+        assertEquals(14, rows.count { it[0] == "meimei" && it[7] == "synced" })
+        val calls = f.calls.size
+        for (r in rows) n.get(Query(r[1], r[0], null, r[2].toLong(), deviceSplit(r[0], r[6])))
         assertEquals(calls, f.calls.size)
     }
 
@@ -547,6 +572,235 @@ class NetEaseTest {
         } finally {
             locked.setReadable(true)
         }
+    }
+
+    private fun ar(name: String, vararg alia: String) = "{\"name\":\"$name\",\"alia\":[${alia.joinToString(",") { "\"$it\"" }}],\"tns\":[]}"
+
+    private fun song(id: Long, name: String, vararg ar: String, dt: Long = 200_000, alia: String? = null) =
+        "{\"id\":$id,\"name\":\"$name\",\"alia\":[${alia?.let { "\"$it\"" } ?: ""}],\"tns\":[],\"ar\":[${ar.joinToString(",")}],\"dt\":$dt}"
+
+    private fun result(vararg songs: String) = Response(200, "{\"result\":{\"songs\":[${songs.joinToString(",")}]},\"code\":200}".toByteArray())
+
+    private val cover = Query("Song #Orig", "Cover", null, 200_000, listOf("Cover"))
+
+    private val firstSearch = search("Song #Orig Cover")
+
+    private val secondSearch = search("Song Orig")
+
+    private fun covers(f: Fixtures, one: List<String>, two: List<String>?, vararg bodies: Pair<Long, Response>) {
+        f.queued[firstSearch] = ArrayDeque(listOf(result(*(one + song(98, "Other")).toTypedArray())))
+        if (two != null) f.queued[secondSearch] = ArrayDeque(listOf(result(*(two + song(99, "Other")).toTypedArray())))
+        for ((id, r) in bodies) f.queued[lyric(id)] = ArrayDeque(listOf(r))
+    }
+
+    private val japanesePlain = (1..5).joinToString("\n") { "あめが 見る$it" }
+
+    private fun picks() = logs.filter { it.startsWith("netease pick ") }
+
+    @Test
+    fun aSecondLookupFindsTheSongByItsHashtagArtist() {
+        val f = Fixtures()
+        covers(f, emptyList(), listOf(song(1, "Song", ar("Orig"))), 1L to lyrics(five))
+        assertEquals(Lrclib.Found(five, true, "netease"), netease(f).get(cover))
+        assertEquals(listOf(firstSearch, secondSearch, lyric(1)), f.calls)
+        assertEquals(listOf("netease pick 1 lookup 2 synced evidence Orig"), picks())
+    }
+
+    @Test
+    fun aSecondLookupCandidateWithoutArtistEvidenceIsNotAsked() {
+        val f = Fixtures()
+        covers(f, emptyList(), listOf(song(1, "Song", ar("Someone"))))
+        assertNull(netease(f).get(cover))
+        assertEquals(listOf(firstSearch, secondSearch), f.calls)
+        assertEquals("$wall\nrule=1\nnames=2", file(cover, "miss").readText())
+    }
+
+    @Test
+    fun theEvidenceComparesArtistKeys() {
+        val f = Fixtures()
+        covers(f, emptyList(), listOf(song(1, "Song", ar("ORIG."))), 1L to lyrics(five))
+        assertEquals(five, netease(f).get(cover)!!.text)
+        assertEquals(listOf("netease pick 1 lookup 2 synced evidence ORIG."), picks())
+    }
+
+    @Test
+    fun theEvidencePassesThroughAnArtistAlias() {
+        val f = Fixtures()
+        covers(f, emptyList(), listOf(song(1, "Song", ar("Someone", "Orig"))), 1L to lyrics(five))
+        assertEquals(five, netease(f).get(cover)!!.text)
+        assertEquals(listOf("netease pick 1 lookup 2 synced evidence Orig"), picks())
+    }
+
+    @Test
+    fun theEvidenceTakesTheDeviceArtistsAndTheBareTagArtist() {
+        val f = Fixtures()
+        f.queued[search("Song #X Dev")] = ArrayDeque(listOf(result(song(98, "Other"))))
+        f.queued[search("Song X")] = ArrayDeque(listOf(result(song(1, "Song", ar("Chan")), song(2, "Song", ar("Dev")), song(3, "Song", ar("Someone")))))
+        f.queued[lyric(1)] = ArrayDeque(listOf(json("{\"uncollected\":true,\"code\":200}")))
+        f.queued[lyric(2)] = ArrayDeque(listOf(lyrics(five)))
+        assertEquals(five, netease(f).get(Query("Song #X", "Chan official", null, 200_000, listOf("Dev")))!!.text)
+        assertEquals(listOf(lyric(1), lyric(2)), lyricCalls(f))
+        assertEquals(listOf("netease pick 2 lookup 2 synced evidence Dev"), picks())
+    }
+
+    @Test
+    fun anIdAskedInTheFirstLookupIsNotAskedAgain() {
+        for (asked in listOf(json("{\"uncollected\":true,\"code\":200}"), lyrics(mixed))) {
+            tmp.root.listFiles()?.forEach { it.delete() }
+            val f = Fixtures()
+            val both = song(1, "Song", ar("Orig"), alia = "Song #Orig")
+            covers(f, listOf(both), listOf(both, song(2, "Song", ar("Orig"))), 1L to asked, 2L to lyrics(clean))
+            assertEquals(clean, netease(f).get(cover)!!.text)
+            assertEquals(listOf(firstSearch, lyric(1), secondSearch, lyric(2)), f.calls)
+        }
+    }
+
+    @Test
+    fun anInstrumentalMarkInTheFirstLookupEndsTheGet() {
+        for (end in listOf(nolyric, lyrics("[00:01.00]纯音乐，x"))) {
+            tmp.root.listFiles()?.forEach { it.delete() }
+            val f = Fixtures()
+            covers(f, listOf(song(1, "Song #Orig")), null, 1L to end)
+            assertNull(netease(f).get(cover))
+            assertEquals(listOf(firstSearch, lyric(1)), f.calls)
+            assertTrue(file(cover, "miss").isFile)
+        }
+    }
+
+    @Test
+    fun aNullPostInTheFirstLookupStillRunsTheSecond() {
+        val f = Fixtures()
+        covers(f, listOf(song(1, "Song #Orig")), listOf(song(2, "Song", ar("Orig"))), 1L to Response(404, ByteArray(0)), 2L to lyrics(five))
+        assertEquals(five, netease(f).get(cover)!!.text)
+        assertEquals(listOf(firstSearch, lyric(1), secondSearch, lyric(2)), f.calls)
+    }
+
+    @Test
+    fun aSkipInTheSecondLookupMovesToItsNextCandidate() {
+        val f = Fixtures()
+        covers(f, emptyList(), listOf(song(1, "Song", ar("Orig")), song(2, "Song", ar("Orig"))), 1L to lyrics(creditOnly), 2L to lyrics(five))
+        assertEquals(five, netease(f).get(cover)!!.text)
+        assertEquals(listOf(lyric(1), lyric(2)), lyricCalls(f))
+    }
+
+    @Test
+    fun anInstrumentalMarkInTheSecondLookupEndsOnlyThatLookup() {
+        for (end in listOf(nolyric, lyrics("[00:01.00]纯音乐，x"))) {
+            tmp.root.listFiles()?.forEach { it.delete() }
+            logs.clear()
+            val f = Fixtures()
+            covers(f, listOf(song(1, "Song #Orig")), listOf(song(2, "Song", ar("Orig")), song(3, "Song", ar("Orig"))), 1L to lyrics(japanesePlain), 2L to end, 3L to lyrics(five))
+            assertEquals(Lrclib.Found(japanesePlain, false, "netease"), netease(f).get(cover))
+            assertEquals(listOf(lyric(1), lyric(2)), lyricCalls(f))
+            assertEquals(setOf("${cover.key}.ne.txt", "${cover.key}.ne.miss"), tmp.root.list()!!.toSet())
+            assertEquals(listOf("netease pick 1 lookup 1 plain"), picks())
+        }
+    }
+
+    @Test
+    fun aSyncedSecondLookupWinsOverAPlainFirst() {
+        val f = Fixtures()
+        covers(f, listOf(song(1, "Song #Orig")), listOf(song(2, "Song", ar("Orig"))), 1L to lyrics(japanesePlain), 2L to lyrics(clean))
+        assertEquals(Lrclib.Found(clean, true, "netease"), netease(f).get(cover))
+        assertEquals(listOf("netease pick 2 lookup 2 synced evidence Orig"), picks())
+    }
+
+    @Test
+    fun aPlainFirstLookupStandsWhenTheSecondMisses() {
+        val f = Fixtures()
+        covers(f, listOf(song(1, "Song #Orig")), listOf(song(2, "Song", ar("Someone"))), 1L to lyrics(japanesePlain))
+        assertEquals(Lrclib.Found(japanesePlain, false, "netease"), netease(f).get(cover))
+        assertEquals(listOf("netease pick 1 lookup 1 plain"), picks())
+        assertEquals("rule=1\n$japanesePlain", file(cover, "txt").readText())
+        assertEquals("$wall\nrule=1\nnames=2", file(cover, "miss").readText())
+    }
+
+    @Test
+    fun aPlainFirstLookupStandsOverAPlainSecond() {
+        val f = Fixtures()
+        covers(f, listOf(song(1, "Song #Orig")), listOf(song(2, "Song", ar("Orig"))), 1L to lyrics(japanesePlain), 2L to lyrics((1..5).joinToString("\n") { "かぜが ふく$it" }))
+        assertEquals(Lrclib.Found(japanesePlain, false, "netease"), netease(f).get(cover))
+        assertEquals(listOf(lyric(1), lyric(2)), lyricCalls(f))
+        assertEquals(listOf("netease pick 1 lookup 1 plain"), picks())
+    }
+
+    @Test
+    fun aSyncedFirstLookupSendsNoSecondSearch() {
+        val f = Fixtures()
+        covers(f, listOf(song(1, "Song #Orig")), null, 1L to lyrics(five))
+        assertEquals(five, netease(f).get(cover)!!.text)
+        assertEquals(listOf(firstSearch, lyric(1)), f.calls)
+        assertEquals(listOf("netease pick 1 lookup 1 synced"), picks())
+    }
+
+    @Test
+    fun theSecondLookupReusesASearchTheFirstSent() {
+        val f = Fixtures()
+        f.queued[search("Song Orig #Tag")] = ArrayDeque(listOf(result()))
+        f.queued[search("Song")] = ArrayDeque(listOf(result(song(1, "Song", ar("Orig")))))
+        f.queued[search("Song Orig")] = ArrayDeque(listOf(result()))
+        f.queued[lyric(1)] = ArrayDeque(listOf(json("{\"uncollected\":true,\"code\":200}")))
+        assertNull(netease(f).get(Query("Song / Orig #Tag", "Cover", null, 200_000, listOf("Cover"))))
+        assertEquals(listOf(search("Song Orig #Tag"), search("Song"), lyric(1), search("Song Orig")), f.calls)
+    }
+
+    @Test
+    fun theCapIsSharedByBothLookups() {
+        val f = Fixtures()
+        covers(f, listOf(song(1, "Song #Orig"), song(2, "Song #Orig")), listOf(song(3, "Song", ar("Orig")), song(4, "Song", ar("Orig"))), 1L to lyrics(""), 2L to lyrics(""), 3L to lyrics(""), 4L to lyrics(five))
+        assertNull(netease(f).get(cover))
+        assertEquals(listOf(lyric(1), lyric(2), lyric(3)), lyricCalls(f))
+    }
+
+    @Test
+    fun aFirstLookupThatSpendsTheCapSendsNoSecondSearch() {
+        val f = Fixtures()
+        covers(f, listOf(song(1, "Song #Orig"), song(2, "Song #Orig"), song(3, "Song #Orig")), null, 1L to lyrics(""), 2L to lyrics(mixed), 3L to lyrics(""))
+        assertNull(netease(f).get(cover))
+        assertEquals(listOf(firstSearch, lyric(1), lyric(2), lyric(3)), f.calls)
+    }
+
+    @Test
+    fun aSamePairRunsNoSecondLookup() {
+        val f = Fixtures()
+        f.queued[search("Alpha Beta")] = ArrayDeque(listOf(result(song(1, "Alpha", ar("Beta")), song(2, "Alpha", ar("Beta")))))
+        f.queued[lyric(1)] = ArrayDeque(listOf(Response(404, ByteArray(0))))
+        f.queued[lyric(2)] = ArrayDeque(listOf(lyrics(five)))
+        assertNull(netease(f).get(stub))
+        assertEquals(listOf(search("Alpha Beta"), lyric(1)), f.calls)
+    }
+
+    @Test
+    fun secondLookupCandidatesKeepTheDurationAndTitleRules() {
+        val f = Fixtures()
+        covers(f, emptyList(), listOf(song(1, "Song", ar("Orig"), dt = 203_001), song(2, "Other Song", ar("Orig")), song(3, "Song", ar("Orig"), dt = 197_000)), 1L to lyrics(five), 2L to lyrics(five), 3L to lyrics(five))
+        assertEquals(five, netease(f).get(cover)!!.text)
+        assertEquals(listOf(lyric(3)), lyricCalls(f))
+    }
+
+    @Test
+    fun aRejectInTheFirstLookupMakesAChineseSecondBodyALangReject() {
+        val f = Fixtures()
+        covers(f, listOf(song(1, "Song #Orig")), listOf(song(2, "Song", ar("Orig"))), 1L to lyrics(mixed), 2L to lyrics(chinese))
+        assertNull(netease(f).get(cover))
+        assertTrue(logs.any { it.startsWith("netease reject 2 lang ") })
+    }
+
+    @Test
+    fun aJapanesePlainFromTheFirstLookupMakesAChineseSecondBodyALangReject() {
+        val f = Fixtures()
+        covers(f, listOf(song(1, "Song #Orig")), listOf(song(2, "Song", ar("Orig"))), 1L to lyrics(japanesePlain), 2L to lyrics(chinese))
+        assertEquals(Lrclib.Found(japanesePlain, false, "netease"), netease(f).get(cover))
+        assertTrue(logs.any { it.startsWith("netease reject 2 lang ") })
+        assertEquals(listOf("netease pick 1 lookup 1 plain"), picks())
+    }
+
+    @Test
+    fun withNeitherAChineseSecondBodyIsKept() {
+        val f = Fixtures()
+        covers(f, emptyList(), listOf(song(2, "Song", ar("Orig"))), 2L to lyrics(chinese))
+        assertEquals(Lrclib.Found(chinese, true, "netease"), netease(f).get(cover))
+        assertTrue(logs.none { it.startsWith("netease reject") })
     }
 
     @Test
