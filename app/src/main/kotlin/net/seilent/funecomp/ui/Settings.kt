@@ -65,6 +65,8 @@ import net.seilent.funecomp.proto.gen.Tok
 import kotlinx.coroutines.delay
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.EqSlots
+import net.seilent.funecomp.state.EqStage
 import net.seilent.funecomp.state.Rows as RowRules
 import net.seilent.funecomp.state.SleepLeft
 import java.util.Locale
@@ -214,7 +216,7 @@ fun activeEqOutput(device: net.seilent.funecomp.state.DeviceState) =
     if (device.playback.state.output == Enums.Output.btHeadset) Enums.EqOutput.bt else Enums.EqOutput.wired
 
 fun profileName(device: net.seilent.funecomp.state.DeviceState, output: Int): String {
-    val eq = device.eq[output]
+    val eq = device.eq[EqSlots.of(EqStage.USER, output)]
     return when (val k = eq?.key ?: "off") {
         "off" -> "off"
         "custom" -> "custom"
@@ -478,7 +480,7 @@ fun EqPage(ctx: Ctx, page: Page.Eq) {
 @Composable
 private fun EqRows(ctx: Ctx, output: Int) {
     val ui = LocalUi.current
-    val eq = ctx.device.eq[output]
+    val eq = ctx.device.eq[EqSlots.of(EqStage.USER, output)]
     val key = eq?.key ?: "off"
     val ints = eq?.ints ?: Profile(0, emptyList())
     var open by rememberSaveable(output) { mutableIntStateOf(-1) }

@@ -2,6 +2,7 @@ package net.seilent.funecomp.state
 
 import net.seilent.funecomp.proto.Eq
 import net.seilent.funecomp.proto.EqName
+import net.seilent.funecomp.proto.Graphic
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Lib
 import net.seilent.funecomp.proto.LibRow
@@ -17,6 +18,7 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.SvcLogin
 import net.seilent.funecomp.proto.SvcLoginEnd
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.listView
 
@@ -48,7 +50,21 @@ data class EqMirror(
     val names: List<EqName> = emptyList(),
     val total: Long = 0,
     val complete: Boolean = false,
-)
+    val mode: Int? = null,
+    val graphicKey: String? = null,
+    val graphicNames: List<EqName> = emptyList(),
+    val graphicTotal: Long = 0,
+    val gains: Graphic? = null,
+    val on: Boolean? = null,
+    val target: Long? = null,
+    val headset: String? = null,
+) {
+    val graphicComplete: Boolean get() = graphicTotal > 0 && graphicNames.size.toLong() >= graphicTotal
+
+    val graphic: Boolean get() = mode == Enums.EqMode.graphic
+
+    fun defaultForm(): EqDefault? = EqSlots.defaultForm((if (graphic) graphicNames else names).firstOrNull { it.key == EqSlots.DEFAULT }?.name)
+}
 
 data class QueueMirror(val rev: Long? = null, val total: Long = 0, val items: Map<Long, QueueItem> = emptyMap())
 
@@ -94,12 +110,13 @@ data class DeviceState(
     val schema: SchemaMirror = SchemaMirror(),
     val settings: SettingsMirror = SettingsMirror(),
     val liveRows: LiveMirror = LiveMirror(),
-    val eq: Map<Int, EqMirror> = emptyMap(),
+    val eq: Map<String, EqMirror> = emptyMap(),
     val queue: QueueMirror = QueueMirror(),
     val lib: LibMirror = LibMirror(),
     val clock: DeviceClock = DeviceClock(),
     val card: CardView = CardView(),
     val logins: SvcLogins = SvcLogins(),
+    val appFeatures: Long = 0,
 ) {
     val cardDown: Boolean get() = card.down
 
@@ -147,7 +164,35 @@ data class DeviceState(
         else -> this
     }
 
-    fun withHello(h: HelloReply) = DeviceState(hello = h, lib = LibMirror(h.libRev, snap = h.snapRev))
+    fun withHello(h: HelloReply, app: Long = 0) = DeviceState(hello = h, lib = LibMirror(h.libRev, snap = h.snapRev), appFeatures = app)
+
+    private fun both(bit: Int) = hello?.let { (it.features ushr bit) and 1L == 1L } == true && (appFeatures ushr bit) and 1L == 1L
+
+    val eqForm: EqForm get() {
+        val n = hello?.eqSlots?.size ?: 0
+        return when {
+            !both(Feature.eqSlots) || n < 2 -> EqForm.OUTPUT
+            both(Feature.eqStages) && n >= 4 -> EqForm.STAGES
+            else -> EqForm.SLOTS
+        }
+    }
+
+    val eqSlots: List<String> get() = when (eqForm) {
+        EqForm.OUTPUT -> listOf(EqSlots.HEADPHONES, EqSlots.BLUETOOTH)
+        EqForm.SLOTS -> hello!!.eqSlots.take(2).mapNotNull { it.key }
+        EqForm.STAGES -> hello!!.eqSlots.mapNotNull { it.key }
+    }
+
+    val playingEqOutput: Int get() = if (playback.state.output == Enums.Output.btHeadset) Enums.EqOutput.bt else Enums.EqOutput.wired
+
+    fun playingEqSlot(stage: EqStage): String? {
+        val s = playback.state
+        return when {
+            stage == EqStage.CORRECTION -> if (eqForm == EqForm.STAGES) s.eqEarSlot ?: EqSlots.of(stage, playingEqOutput) else null
+            eqForm == EqForm.OUTPUT -> EqSlots.of(stage, playingEqOutput)
+            else -> s.eqSlot ?: EqSlots.of(stage, playingEqOutput)
+        }
+    }
 
     fun withRtt(ms: Long) = copy(rttMs = rttMs?.let { minOf(it, ms) } ?: ms)
 
@@ -194,10 +239,34 @@ data class DeviceState(
     fun withQueueRev(rev: Long) = if (rev <= (queue.rev ?: -1)) this else copy(queue = QueueMirror(rev))
 
     fun withEq(e: Eq): DeviceState {
-        val output = e.output ?: -1
-        val old = eq[output] ?: EqMirror()
-        val names = if (e.page.offset == 0L) e.names else old.names + e.names
-        return copy(eq = eq + (output to EqMirror(e.key, e.ints, names, e.page.total, !e.page.more)))
+        val slot = e.slot ?: EqSlots.ofOutput(e.output) ?: return this
+        val first = e.page.offset == 0L
+        val cur = eq[slot] ?: EqMirror()
+        val old = if (first) EqMirror() else cur
+        val graphicNames = when (e.graphicOffset) {
+            null -> cur.graphicNames
+            0L -> e.graphicNames
+            else -> cur.graphicNames + e.graphicNames
+        }
+        return copy(
+            eq = eq + (
+                slot to EqMirror(
+                    e.key ?: old.key,
+                    e.ints ?: old.ints,
+                    if (first) e.names else old.names + e.names,
+                    e.page.total,
+                    !e.page.more,
+                    e.mode ?: old.mode,
+                    e.graphicKey ?: old.graphicKey,
+                    graphicNames,
+                    e.graphicTotal ?: cur.graphicTotal,
+                    e.gains ?: old.gains,
+                    e.on ?: old.on,
+                    e.target ?: old.target,
+                    e.headset ?: old.headset,
+                )
+                ),
+        )
     }
 
     fun withQueue(q: Queue): DeviceState {

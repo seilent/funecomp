@@ -1428,7 +1428,7 @@ object Remote : Control {
                 (hello.snapRev ?: hello.libRev)?.let { t.rev(it) }
                 t.session()
             }
-            update { it.withHello(hello) }
+            update { it.withHello(hello, LINK_FEATURES) }
             backdropSeen(hello)
             synchronized(asked) { asked.clear() }
             bye = null

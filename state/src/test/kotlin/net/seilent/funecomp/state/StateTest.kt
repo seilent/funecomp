@@ -110,12 +110,12 @@ class StateTest {
         val a = Eq(Enums.EqOutput.wired, "off", listOf(EqName("off", "OFF"), EqName("custom", "CUSTOM")), null, PageInfo(0, 3, true))
         val b = Eq(Enums.EqOutput.wired, "off", listOf(EqName("p/a.txt", "a")), null, PageInfo(2, 3, false))
         val d = DeviceState().withEq(a).withEq(b)
-        val m = d.eq.getValue(Enums.EqOutput.wired)
+        val m = d.eq.getValue(EqSlots.HEADPHONES)
         assertEquals(3, m.names.size)
         assertTrue(m.complete)
         val fresh = d.withEq(a)
-        assertEquals(2, fresh.eq.getValue(Enums.EqOutput.wired).names.size)
-        assertFalse(fresh.eq.getValue(Enums.EqOutput.wired).complete)
+        assertEquals(2, fresh.eq.getValue(EqSlots.HEADPHONES).names.size)
+        assertFalse(fresh.eq.getValue(EqSlots.HEADPHONES).complete)
     }
 
     @Test

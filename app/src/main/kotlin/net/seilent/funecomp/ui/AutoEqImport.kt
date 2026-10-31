@@ -38,6 +38,8 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.Clamp
+import net.seilent.funecomp.state.EqSlots
+import net.seilent.funecomp.state.EqStage
 import net.seilent.funecomp.state.Section
 import kotlin.math.roundToInt
 
@@ -214,7 +216,7 @@ private fun imported(ctx: Ctx) {
 
 private fun clash(ctx: Ctx, output: Int, name: String, ints: Profile) {
     val fold = AutoEq.foldKey(name)
-    val hit = ctx.device.eq[output]?.names.orEmpty().firstOrNull { AutoEq.foldKey(it.name ?: "") == fold }
+    val hit = ctx.device.eq[EqSlots.of(EqStage.USER, output)]?.names.orEmpty().firstOrNull { AutoEq.foldKey(it.name ?: "") == fold }
     when {
         hit == null -> ctx.toast.show(NOT_SAVED, NAME_TAKEN)
         hit.preset == true -> ctx.sheet.open(REPLACE_TITLE, listOf(REPLACE, KEEP), 1, listOf(name)) { if (it == 0) savePreset(ctx, output, name, ints, true) }

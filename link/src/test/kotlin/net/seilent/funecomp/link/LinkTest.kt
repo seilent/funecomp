@@ -13,6 +13,7 @@ import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
 import org.junit.After
@@ -125,7 +126,7 @@ class LinkTest {
         val filter = rec.state.schema.rows.first { it.key == "digitalFilter" }
         assertEquals(8, filter.values.size)
         assertEquals("auto", rec.state.settings.values["output"])
-        assertEquals(200, rec.state.eq.getValue(Enums.EqOutput.wired).names.size)
+        assertEquals(200, rec.state.eq.getValue(EqSlots.HEADPHONES).names.size)
         assertTrue(rec.pushes.count { it == Msg.EQ } >= 4)
 
         val first = rec.state.playback.state.track
