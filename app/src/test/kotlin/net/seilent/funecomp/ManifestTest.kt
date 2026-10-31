@@ -21,4 +21,11 @@ class ManifestTest {
         assertFalse(s.exported)
         assertEquals(app.packageName, s.processName)
     }
+
+    @Test
+    fun theLoginPageIsNotExportedAndRunsInItsOwnProcess() {
+        val a = app.packageManager.getActivityInfo(ComponentName(app, SvcLogin::class.java), 0)
+        assertFalse(a.exported)
+        assertEquals("${app.packageName}:login", a.processName)
+    }
 }
