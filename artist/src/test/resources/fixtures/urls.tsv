@@ -1087,3 +1087,9 @@ https://musicbrainz.org/ws/2/artist/2bbcc070-62f8-4669-b77c-fdaa2d7c3f4a?inc=url
 https://www.youtube.com/results?search_query=Risa%20Yuzuki&sp=EgIQAg%253D%253D	yt-search-5f5b50bb4ef5.html
 https://www.youtube.com/results?search_query=%E6%9F%9A%E6%9C%A8%E6%A2%A8%E6%B2%99&sp=EgIQAg%253D%253D	yt-search-eeffcaba5cd1.html
 https://www.youtube.com/results?search_query=Risa%20Yuzuki&sp=EgIQAg%253D%253D&hl=en&gl=US	yt-search-97dc48fc5ee7.html
+POST https://music.163.com/api/song/lyric id=1398320466&lv=1&tv=-1	ne-l-1398320466.json
+POST https://music.163.com/api/song/lyric id=1476480198&lv=1&tv=-1	ne-l-1476480198.json
+POST https://music.163.com/api/song/lyric id=1845152215&lv=1&tv=-1	ne-l-1845152215.json
+POST https://music.163.com/api/song/lyric id=1966491891&lv=1&tv=-1	ne-l-1966491891.json
+POST https://music.163.com/api/song/lyric id=1966816735&lv=1&tv=-1	ne-l-1966816735.json
+POST https://music.163.com/api/song/lyric id=2119750602&lv=1&tv=-1	ne-l-2119750602.json

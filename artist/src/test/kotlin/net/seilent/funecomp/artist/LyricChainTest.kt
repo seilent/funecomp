@@ -6,10 +6,16 @@ import net.seilent.funecomp.artist.LyricChain.Outcome
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertThrows
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import java.io.IOException
+import kotlin.random.Random
 
 class LyricChainTest {
+    @get:Rule
+    val tmp = TemporaryFolder()
+
     private val q = Query("t", "a", null, 200_000)
     private val asked = ArrayList<String>()
     private val lrSynced = Found("[00:01.00]l", true)
@@ -97,5 +103,21 @@ class LyricChainTest {
         val thrown = assertThrows(LyricsFileException::class.java) { chain({ throw e }, { neSynced }).get(q) }
         assertSame(e, thrown)
         assertEquals(listOf("lrclib"), asked)
+    }
+
+    @Test
+    fun aRejectedNeteaseBodyLeavesTheLrclibPlainInBothOrders() {
+        for (order in listOf(listOf("lrclib", "netease"), listOf("netease", "lrclib"))) {
+            tmp.root.listFiles()?.forEach { it.delete() }
+            val f = Fixtures()
+            f.queued["POST ${NetEase.SEARCH} s=t+a&type=1&limit=10&offset=0"] = ArrayDeque(listOf(Response(200, "{\"result\":{\"songs\":[{\"id\":1,\"name\":\"t\",\"alia\":[],\"tns\":[],\"dt\":200000}]},\"code\":200}".toByteArray())))
+            f.queued["POST ${NetEase.LYRIC} id=1&lv=1&tv=-1"] = ArrayDeque(listOf(Response(200, "{\"lrc\":{\"lyric\":\"${(1..5).joinToString("\\n") { "[00:0$it.00]あめが 视る$it" }}\"},\"code\":200}".toByteArray())))
+            val time = FakeTime()
+            val n = NetEase(tmp.root, f, "0", { true }, { 0 }, time.sleep, { time.now }, Random(1))
+            val c = LyricChain(LyricSources(order = order), { lrPlain }, n::get).get(q)
+            assertEquals("$order", lrPlain, c.found)
+            assertEquals("$order", mapOf("lrclib" to Outcome.Answered, "netease" to Outcome.Answered), c.outcome)
+            assertEquals(emptyList<String>(), f.missing)
+        }
     }
 }

@@ -16,8 +16,19 @@ class NetEase(
     sleep: (Long) -> Unit = { Thread.sleep(it) },
     mono: () -> Long = { System.nanoTime() / 1_000_000 },
     random: Random = Random.Default,
+    private val log: (String) -> Unit = {},
 ) {
     private class Song(val id: Long, val names: List<String>, val dt: Long)
+
+    private sealed interface Lyric {
+        class Body(val found: Lrclib.Found) : Lyric
+
+        data object Skip : Lyric
+
+        data object End : Lyric
+    }
+
+    data class Swept(val files: Int, val rejected: Int, val errors: Int = 0)
 
     private val files = FileStore(dir)
 
@@ -32,14 +43,19 @@ class NetEase(
         val miss = "${q.key}.ne.miss"
         store.read(hit)?.let { h ->
             val t = cached(h)
-            if (t != null) return Lrclib.Found(t, true, LyricSources.NETEASE)
+            if (t != null && !rejected(store, q.key, t)) return Lrclib.Found(t, true, LyricSources.NETEASE)
             store.delete(hit)
         }
         store.read(miss)?.let { m ->
             val lines = m.lines()
             if (lines.getOrNull(1) == RULE && clock() - (lines[0].trim().toLongOrNull() ?: 0) in 0 until Lrclib.MISS_MS) {
                 val t = store.read(txt) ?: return null
-                cached(t)?.let { return Lrclib.Found(it, false, LyricSources.NETEASE) }
+                val plain = cached(t)
+                if (plain != null && !rejected(store, q.key, plain)) return Lrclib.Found(plain, false, LyricSources.NETEASE)
+                if (plain != null) {
+                    store.delete(txt)
+                    store.delete(miss)
+                }
             }
         }
         val found = lookup(q, d)
@@ -63,6 +79,44 @@ class NetEase(
 
     private fun cached(text: String): String? = if (text.startsWith("$RULE\n")) text.substring(RULE.length + 1) else null
 
+    private fun rejected(store: LyricStore, key: String, text: String): Boolean {
+        val v = NeMix.check(text) as? NeMix.Verdict.Reject ?: return false
+        store.save("$key.ne.bad", "${clock()}\n${v.reason}")
+        log("nemix bad $key ${v.reason}")
+        return true
+    }
+
+    @Synchronized
+    fun sweep(): Swept {
+        val names = dir.list()?.filter { it.endsWith(".ne.lrc") || it.endsWith(".ne.txt") }?.sorted() ?: emptyList()
+        var bad = 0
+        var errors = 0
+        for (name in names) {
+            try {
+                val text = files.read(name) ?: continue
+                val nl = text.indexOf('\n')
+                if (nl < 0 || !ruled(text.substring(0, nl))) continue
+                val key = name.substring(0, name.length - ".ne.lrc".length)
+                if (!rejected(files, key, text.substring(nl + 1))) continue
+                files.delete(name)
+                if (name.endsWith(".ne.txt")) files.delete("$key.ne.miss")
+                bad++
+            } catch (e: LyricsFileException) {
+                errors++
+                log("nemix sweep $name: $e")
+            }
+        }
+        log("nemix sweep ${names.size} $bad${if (errors > 0) " errors $errors" else ""}")
+        return Swept(names.size, bad, errors)
+    }
+
+    fun marked(key: String): String? = files.read("$key.ne.bad")?.substringAfter('\n', "")
+
+    @Synchronized
+    fun unmark(keys: Collection<String>) = keys.forEach { files.delete("$it.ne.bad") }
+
+    private fun ruled(line: String) = line.startsWith("rule=") && line.length > 5 && line.substring(5).all { it in '0'..'9' }
+
     private fun lookup(q: Lrclib.Query, durationMs: Long): Lrclib.Found? {
         val pair = LyricNames.split(q.track, q.artist)
         val title = pair?.first ?: LyricNames.tails(q.track)
@@ -74,8 +128,22 @@ class NetEase(
             val ids = songs.map { it.id }.toSet()
             songs += search(title).filter { it.id !in ids }
         }
-        val pick = songs.firstOrNull { s -> abs(s.dt - durationMs) <= MATCH_MS && s.names.any { core(it) == tc } } ?: return null
-        return lyric(pick.id)
+        var asked = 0
+        var strict = false
+        for (s in songs) {
+            if (abs(s.dt - durationMs) > MATCH_MS || s.names.none { core(it) == tc }) continue
+            if (asked == CAP) return null
+            asked++
+            val found = when (val l = lyric(s.id)) {
+                is Lyric.Body -> l.found
+                Lyric.Skip -> continue
+                Lyric.End -> return null
+            }
+            val v = NeMix.check(found.text, strict) as? NeMix.Verdict.Reject ?: return found
+            strict = true
+            log("netease reject ${s.id} ${v.reason} ${v.counts}")
+        }
+        return null
     }
 
     private fun search(q: String): List<Song> {
@@ -87,10 +155,13 @@ class NetEase(
         }
     }
 
-    private fun lyric(id: Long): Lrclib.Found? {
-        val j = post(LYRIC, mapOf("id" to id.toString(), "lv" to "1", "tv" to "-1")) ?: return null
-        if (j["nolyric"].bool == true || j["uncollected"].bool == true) return null
-        return text(j["lrc"]["lyric"].str ?: "")
+    private fun lyric(id: Long): Lyric {
+        val j = post(LYRIC, mapOf("id" to id.toString(), "lv" to "1", "tv" to "-1")) ?: return Lyric.End
+        if (j["nolyric"].bool == true) return Lyric.End
+        if (j["uncollected"].bool == true) return Lyric.Skip
+        val raw = j["lrc"]["lyric"].str ?: ""
+        if ("纯音乐" in raw) return Lyric.End
+        return text(raw)?.let { Lyric.Body(it) } ?: Lyric.Skip
     }
 
     private fun post(url: String, form: Map<String, String>): J? {
@@ -113,6 +184,7 @@ class NetEase(
         private const val TRIES = 4
         private const val NEAR_MS = 5000L
         private const val MATCH_MS = 3000L
+        const val CAP = 3
         private const val OK = 200L
         private const val RULE = "rule=1"
         private const val MIN_LINES = 5
