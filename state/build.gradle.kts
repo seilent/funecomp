@@ -20,4 +20,5 @@ dependencies {
 
 tasks.test {
     inputs.file(rootProject.file("app/src/androidTest/resources/lrc-cases.tsv")).withPropertyName("lrcCases").withPathSensitivity(PathSensitivity.RELATIVE)
+    inputs.file(rootProject.file("app/src/androidTest/resources/svc-cases.tsv")).withPropertyName("svcCases").withPathSensitivity(PathSensitivity.RELATIVE)
 }

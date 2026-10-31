@@ -14,6 +14,8 @@ import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.Schema
 import net.seilent.funecomp.proto.Settings
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.SvcLogin
+import net.seilent.funecomp.proto.SvcLoginEnd
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.listView
@@ -97,6 +99,7 @@ data class DeviceState(
     val lib: LibMirror = LibMirror(),
     val clock: DeviceClock = DeviceClock(),
     val card: CardView = CardView(),
+    val logins: SvcLogins = SvcLogins(),
 ) {
     val cardDown: Boolean get() = card.down
 
@@ -139,6 +142,8 @@ data class DeviceState(
         Msg.EQ -> withEq(Eq.from(body))
         Msg.QUEUE -> withQueue(Queue.from(body))
         Msg.LIB -> withLib(Lib.from(body))
+        Msg.SVC_LOGIN -> if (has(SVC)) copy(logins = logins.login(SvcLogin.from(body))) else this
+        Msg.SVC_LOGIN_END -> if (has(SVC)) copy(logins = logins.end(SvcLoginEnd.from(body))) else this
         else -> this
     }
 
@@ -217,6 +222,7 @@ data class DeviceState(
 
     companion object {
         const val RECEIVER = "bluetooth receiver"
+        const val SVC = "svcLogin"
     }
 }
 
