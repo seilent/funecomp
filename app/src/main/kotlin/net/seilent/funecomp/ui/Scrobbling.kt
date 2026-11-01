@@ -75,7 +75,9 @@ fun ScrobbleRows(ctx: Ctx, view: ScrobbleView, labels: Boolean = true) {
                     val sel = row.selector(live.settings.values[SCROBBLE_KEY], 0)
                     ctx.sheet.open((row.label ?: SCROBBLE_KEY).lowercase(), sel.items, sel.focus, sel.info, owner = sheet, keep = keep(i)) { k ->
                         val r = live.schema.rows.firstOrNull { it.key == SCROBBLE_KEY }.takeIf { live.hello != null } ?: return@open
-                        (r.picked(k, live.settings.values[SCROBBLE_KEY], 0) as? Send.Set)?.let { ctx.control.set(it.key, it.value) }
+                        (r.picked(k, live.settings.values[SCROBBLE_KEY], 0) as? Send.Set)?.let {
+                            ctx.control.set(it.key, it.value) { code -> r.refused(code)?.let { f -> ctx.toast.show(f.field, f.range) } }
+                        }
                     }
                 },
             )

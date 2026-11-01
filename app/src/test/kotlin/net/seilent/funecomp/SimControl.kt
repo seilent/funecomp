@@ -65,8 +65,10 @@ class SimControl(
     schema: String? = null,
     private val appFeatures: Long = LINK_FEATURES,
     services: List<SvcInfo> = emptyList(),
+    btRole: Int = Enums.BtRole.receiver,
 ) : Control {
-    val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, Faults(faults), artDir = artDir, minor = minor, cardEq = cardEq, services = services), lib, now)
+    private val faultSet = Faults(faults)
+    val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, faultSet, artDir = artDir, minor = minor, cardEq = cardEq, services = services, btRole = btRole), lib, now)
     var device by mutableStateOf(DeviceState())
     val sent = ArrayList<String>()
     val pushed = ArrayList<Int>()
@@ -159,6 +161,7 @@ class SimControl(
 
     private fun call(type: Int, payload: ByteArray): Answer {
         sent += Msg.info.getValue(type).name
+        faultSet.fail[type]?.let { code -> if ((faultSet.failLeft[type]?.getAndDecrement() ?: 1) > 0) return Answer.Fail(code, "fault $code").also { failed += code } }
         return sim.request(type, Node.decode(Msg.info.getValue(type).name, payload), out).also { if (it is Answer.Fail) failed += it.code }
     }
 
@@ -226,12 +229,16 @@ class SimControl(
         }
     }
 
-    override fun set(key: String, value: String) {
-        req(Msg.SET, Req.set("$key=$value\n"))
+    override fun set(key: String, value: String, done: (Int?) -> Unit) {
+        done((req(Msg.SET, Req.set("$key=$value\n")) as? Answer.Fail)?.code)
     }
 
-    override fun draft(kind: Int, value: String?, minutes: Long?, unixS: Long?, zoneS: Int?, done: (Int?, String?) -> Unit) {
-        val a = req(Msg.DRAFT, Req.draft(kind, value, minutes = minutes, unixS = unixS, zoneS = zoneS))
+    val draftBodies = ArrayList<Node>()
+
+    override fun draft(kind: Int, value: String?, role: Int?, minutes: Long?, unixS: Long?, zoneS: Int?, done: (Int?, String?) -> Unit) {
+        val payload = Req.draft(kind, value, role, minutes = minutes, unixS = unixS, zoneS = zoneS)
+        draftBodies += Node.decode("DRAFT", payload)
+        val a = req(Msg.DRAFT, payload)
         if (a is Answer.Fail) done(a.code, a.text) else done(null, null)
     }
 

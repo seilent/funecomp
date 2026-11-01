@@ -82,6 +82,9 @@ private const val EQ_KEY = "eq"
 private const val EQ_EAR_KEY = "eqEar"
 private const val CLOCK_KEY = "dateTime"
 private const val SLEEP_KEY = "sleep"
+private const val BT_CODEC_KEY = "btCodec"
+private const val BT_CODEC_HEADPHONES_KEY = "btCodecHeadphones"
+private const val REFUSED_ON_DAP = "refused on the dap"
 private const val HALF_DB = 0.5f
 private const val GRID_CENTER = 34
 private const val GRID_STEPS_PER_OCTAVE = 6f
@@ -167,8 +170,12 @@ fun Row.step(v: String?, dir: Int): String {
     return (lo + next * st).coerceIn(lo, max ?: Int.MAX_VALUE).toString()
 }
 
-fun draftKind(key: String?): Int? =
-    if (key == CLOCK_KEY) Enums.DraftKind.clock else Enums.DraftKind.names.entries.firstOrNull { it.value == key }?.key
+fun draftKind(key: String?): Pair<Int, Int?>? = when (key) {
+    CLOCK_KEY -> Enums.DraftKind.clock to null
+    BT_CODEC_KEY -> Enums.DraftKind.btCodec to Enums.BtRole.receiver
+    BT_CODEC_HEADPHONES_KEY -> Enums.DraftKind.btCodec to Enums.BtRole.headphones
+    else -> Enums.DraftKind.names.entries.firstOrNull { it.value == key }?.let { it.key to null }
+}
 
 private class Edit(val key: String, val original: String?)
 
@@ -176,7 +183,7 @@ class Selector(val items: List<String>, val focus: Int, val info: List<String>, 
 
 sealed class Send {
     data class Set(val key: String, val value: String) : Send()
-    data class Draft(val kind: Int, val value: String) : Send()
+    data class Draft(val kind: Int, val value: String, val role: Int? = null) : Send()
     data class Minutes(val minutes: Long) : Send()
     data class Refuse(val field: String, val range: String) : Send()
 }
@@ -200,11 +207,13 @@ fun Row.picked(i: Int, live: String?, minutes: Int): Send? {
         return if (m == 0L && minutes == 0) null else Send.Minutes(m)
     }
     if (v == live) return null
-    if (kind == Enums.RowKind.draft) return draftKind(key)?.let { Send.Draft(it, v) }
+    if (kind == Enums.RowKind.draft) return draftKind(key)?.let { (k, role) -> Send.Draft(k, v, role) }
     return key?.let { Send.Set(it, v) }
 }
 
 fun Row.refusal() = Send.Refuse((label ?: key ?: "").lowercase(), "${min ?: 0} to ${max ?: min ?: 0}")
+
+fun Row.refused(code: Int?) = if (code == Err.refused) Send.Refuse((label ?: key ?: "").lowercase(), REFUSED_ON_DAP) else null
 
 fun Row.typedMinutes(text: String, minutes: Int): Send? {
     val lo = min ?: 0
@@ -291,8 +300,8 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
     fun minutesLeft() = SleepLeft.minutes(live.sleepLeftMs(SystemClock.elapsedRealtime()))
     fun send(s: Send?, row: Row) {
         when (s) {
-            is Send.Set -> ctx.control.set(s.key, s.value)
-            is Send.Draft -> ctx.control.draft(s.kind, value = s.value)
+            is Send.Set -> ctx.control.set(s.key, s.value) { code -> send(row.refused(code), row) }
+            is Send.Draft -> ctx.control.draft(s.kind, value = s.value, role = s.role) { code, _ -> send(row.refused(code), row) }
             is Send.Minutes -> ctx.control.draft(Enums.DraftKind.sleep, minutes = s.minutes) { code, _ ->
                 if (code == Err.badValue) row.refusal().let { ctx.toast.show(it.field, it.range) }
             }

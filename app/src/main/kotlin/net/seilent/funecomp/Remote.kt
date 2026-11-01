@@ -1278,13 +1278,13 @@ object Remote : Control {
         )
     }
 
-    override fun set(key: String, value: String) = send(Msg.SET, Req.set("$key=$value\n"), "set $key=$value", ok = { body ->
+    override fun set(key: String, value: String, done: (Int?) -> Unit) = send(Msg.SET, Req.set("$key=$value\n"), "set $key=$value", ok = { body ->
         val r = SetReply.from(body)
         update { it.withSetReply(r.rev) }
-    })
+    }, done = { code, _ -> main.post { done(code) } })
 
-    override fun draft(kind: Int, value: String?, minutes: Long?, unixS: Long?, zoneS: Int?, done: (Int?, String?) -> Unit) =
-        send(Msg.DRAFT, Req.draft(kind, value, minutes = minutes, unixS = unixS, zoneS = zoneS), "draft ${Enums.DraftKind.names[kind]}", done = { code, text -> main.post { done(code, text) } })
+    override fun draft(kind: Int, value: String?, role: Int?, minutes: Long?, unixS: Long?, zoneS: Int?, done: (Int?, String?) -> Unit) =
+        send(Msg.DRAFT, Req.draft(kind, value, role, minutes = minutes, unixS = unixS, zoneS = zoneS), "draft ${Enums.DraftKind.names[kind]}", done = { code, text -> main.post { done(code, text) } })
 
     override fun eqSet(slot: String, key: String?, ints: Profile?, mode: Int?, graphicKey: String?, gains: List<GraphicBand>?, on: Boolean?, done: (Int?) -> Unit) =
         send(Msg.EQ_SET, EqSlots.setRequest(device, slot, key, ints, mode, graphicKey, gains, on), "eq set slot=$slot key=$key graphicKey=$graphicKey on=$on", done = { code, _ -> main.post { done(code) } })

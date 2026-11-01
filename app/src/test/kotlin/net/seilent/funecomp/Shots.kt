@@ -147,6 +147,7 @@ class Shot(
     val lib: net.seilent.funecomp.sim.Library? = null,
     val services: List<SvcInfo> = emptyList(),
     val svc: SvcView = SvcView(),
+    val btRole: Int = Enums.BtRole.receiver,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
 )
@@ -965,6 +966,25 @@ val SHOTS = listOf(
         rule.onNodeWithTag("entry").performTextInput("1000")
         rule.onNodeWithTag("entry").performImeAction()
     },
+    Shot("settings-bootlogo-refused", board = "v1", pages = HOME + Page.Settings) {
+        for (p in listOf("library", "display")) {
+            rule.onNodeWithTag("pivot.$p").performClick()
+            settle(1000)
+        }
+        scrollTo("set.bootLogo")
+        rule.onNodeWithTag("set.bootLogo").performClick()
+        settle(600)
+        it.sheet.accept(2)
+    },
+    Shot("settings-codec-headphones", board = "v1", pages = HOME + Page.Settings, btRole = Enums.BtRole.headphones) {
+        for (p in listOf("library", "display", "power", "system", "bluetooth")) {
+            rule.onNodeWithTag("pivot.$p").performClick()
+            settle(1000)
+        }
+        rule.onNodeWithTag("set.btCodecHeadphones").performClick()
+        settle(600)
+        it.sheet.accept(1)
+    },
     Shot("settings-sleep-wide", pages = HOME + Page.Settings, prep = sleep(120, 0)) { power(this) },
     Shot("settings-sleep-wide-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(120, 0)) { power(this) },
     Shot("settings-system", pages = HOME + Page.Settings) {
@@ -1506,7 +1526,7 @@ class Shots {
     }
 
     private fun load(shot: Shot, size: Size, ime: Float) {
-        val c = SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq, services = shot.services)
+        val c = SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq, services = shot.services, btRole = shot.btRole)
         shotClock(c)
         shot.prep(c)
         if (shot.gated) c.device = DeviceState()

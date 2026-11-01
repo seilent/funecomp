@@ -415,6 +415,9 @@ class DeviceTest {
         val r = device("v1")
         assertEquals(listOf("btCodec"), r.schemaRows().filter { it.pivot == "bluetooth" }.map { it.key })
         assertEquals(Err.refused, fail(req(r, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "aac", role = Enums.BtRole.headphones))).code)
+        r.btRole = Enums.BtRole.headphones
+        assertEquals(listOf("btAudio", "btCodecHeadphones"), r.schemaRows().filter { it.pivot == "bluetooth" }.map { it.key })
+        assertEquals(Err.refused, fail(req(r, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "aac", role = Enums.BtRole.receiver))).code)
     }
 
     @Test

@@ -356,6 +356,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     class Upd(val board: String, val size: Long, val md5: String, val part: File, val sha256: String?, val sig: String?)
     @Volatile var droppedData = 0
         private set
+    @Volatile var btRole = opts.btRole
     private val streamFrames = java.util.concurrent.atomic.AtomicInteger()
     val imgDuringStream: Int get() = streamFrames.get()
 
@@ -847,7 +848,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun structure(r: Row): List<Row> = when (r.key) {
         "usbOutput" -> listOf(if (opts.headset || prefs["usbOutput"] == "bluetooth") r else r.copy(values = r.values.dropLast(1), words = r.words.dropLast(1)))
-        "btCodec" -> if (opts.btRole == Enums.BtRole.headphones) listOf(BT_AUDIO_ROW, BT_CODEC_HEADPHONES_ROW) else listOf(r)
+        "btCodec" -> if (btRole == Enums.BtRole.headphones) listOf(BT_AUDIO_ROW, BT_CODEC_HEADPHONES_ROW) else listOf(r)
         else -> listOf(r)
     }
 
@@ -1263,8 +1264,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 prefs["usbMode"] = v
             }
             Enums.DraftKind.btCodec -> {
-                val role = b.int(Tags.Draft.role) ?: opts.btRole
-                if (role != opts.btRole) return Answer.Fail(Err.refused, "refused")
+                val role = b.int(Tags.Draft.role) ?: btRole
+                if (role != btRole) return Answer.Fail(Err.refused, "refused")
                 val key = if (role == Enums.BtRole.headphones) "btCodecHeadphones" else "btCodec"
                 val codecs = structureRows().firstOrNull { it.key == key }?.values.orEmpty()
                 val v = b.str(Tags.Draft.`value`)?.takeIf { it in codecs } ?: return Answer.Fail(Err.badValue, "bad codec")

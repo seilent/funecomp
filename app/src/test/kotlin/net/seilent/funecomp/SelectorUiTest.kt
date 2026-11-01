@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Tags
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -46,12 +47,14 @@ class SelectorUiTest {
 
     private val shell = Shell(Nav(listOf(Page.Home, Page.Settings)))
 
+    private var role = Enums.BtRole.receiver
+
     private fun start(board: String = "ap80", vararg pivots: String): SimControl = startAt(411, 960, board, *pivots)
 
     private fun startAt(w: Int, h: Int, board: String = "ap80", vararg pivots: String): SimControl = startAt(w.dp, h.dp, board, *pivots)
 
     private fun startAt(w: Dp, h: Dp, board: String = "ap80", vararg pivots: String): SimControl {
-        val c = SimControl(board)
+        val c = SimControl(board, btRole = role)
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(w, h)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
@@ -259,7 +262,22 @@ class SelectorUiTest {
         assertEquals(listOf("AUTO", "APTX", "AAC", "SBC"), shell.sheet.items)
         pick(2)
         assertEquals(listOf("DRAFT"), writes(c))
+        assertEquals(Enums.BtRole.receiver, c.draftBodies.single().int(Tags.Draft.role))
         assertEquals("aac", c.device.settings.values["btCodec"])
+    }
+
+    @Test
+    fun theHeadphonesCodecPickIsADraftWithItsRole() {
+        role = Enums.BtRole.headphones
+        val c = start("v1", "library", "display", "power", "system", "bluetooth")
+        tap("btCodecHeadphones")
+        assertEquals("codec", shell.sheet.title)
+        assertEquals(listOf("AUTO", "LDAC", "APTX", "AAC", "SBC"), shell.sheet.items)
+        pick(1)
+        assertEquals(listOf("DRAFT"), writes(c))
+        assertEquals(Enums.BtRole.headphones, c.draftBodies.single().int(Tags.Draft.role))
+        assertEquals("ldac", c.device.settings.values["btCodecHeadphones"])
+        shows("btCodecHeadphones", "LDAC")
     }
 
     @Test

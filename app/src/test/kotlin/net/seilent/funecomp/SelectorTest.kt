@@ -18,6 +18,7 @@ class SelectorTest {
     private val crossfeed = Row("crossfeed", "CROSSFEED", "output", Enums.RowKind.choice, listOf("off", "default", "chuMoy", "janMeier"), words = listOf("OFF", "DEFAULT", "CHU MOY", "JAN MEIER"))
     private val usb = Row("usbMode", "USB MODE", "system", Enums.RowKind.draft, listOf("storage", "dock", "audio"), words = listOf("STORAGE", "DOCK", "AUDIO"))
     private val codec = Row("btCodec", "BLUETOOTH CODEC", "output", Enums.RowKind.draft, listOf("auto", "aptx", "aac", "sbc"), words = listOf("AUTO", "APTX", "AAC", "SBC"), flags = listOf(Enums.RowFlag.restart))
+    private val codecHeadphones = Row("btCodecHeadphones", "CODEC", "bluetooth", Enums.RowKind.draft, listOf("auto", "ldac", "aptx", "aac", "sbc"), words = listOf("AUTO", "LDAC", "APTX", "AAC", "SBC"), flags = listOf(Enums.RowFlag.restart))
     private val quickplay = Row("quickplay", "QUICKPLAY", "display", Enums.RowKind.toggle, listOf("off", "on"), words = listOf("OFF", "ON"))
     private val phone = Row("companion", "PHONE APP", "system", Enums.RowKind.toggle, listOf("off", "on"), words = listOf("OFF", "ON"), flags = listOf(Enums.RowFlag.readOnly))
     private val balance = Row("balance", "BALANCE", "output", Enums.RowKind.range, min = -20, max = 20, step = 1)
@@ -80,9 +81,10 @@ class SelectorTest {
 
     @Test
     fun draftRowsSendDraftNotSet() {
-        assertEquals(Send.Draft(Enums.DraftKind.usbMode, "dock"), usb.picked(1, "storage", 0))
+        assertEquals(Send.Draft(Enums.DraftKind.usbMode, "dock", null), usb.picked(1, "storage", 0))
         assertNull(usb.picked(0, "storage", 0))
-        assertEquals(Send.Draft(Enums.DraftKind.btCodec, "aac"), codec.picked(2, "auto", 0))
+        assertEquals(Send.Draft(Enums.DraftKind.btCodec, "aac", Enums.BtRole.receiver), codec.picked(2, "auto", 0))
+        assertEquals(Send.Draft(Enums.DraftKind.btCodec, "ldac", Enums.BtRole.headphones), codecHeadphones.picked(1, "auto", 0))
     }
 
     @Test
