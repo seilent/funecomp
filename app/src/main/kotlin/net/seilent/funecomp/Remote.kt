@@ -34,6 +34,7 @@ import net.seilent.funecomp.artist.ArtistArt
 import net.seilent.funecomp.artist.Backdrop
 import net.seilent.funecomp.artist.BrowseFeed
 import net.seilent.funecomp.artist.Clock
+import net.seilent.funecomp.artist.Crop
 import net.seilent.funecomp.artist.FullPush
 import net.seilent.funecomp.artist.GalleryStore
 import net.seilent.funecomp.artist.Http
@@ -810,12 +811,12 @@ object Remote : Control {
                 offer.src?.let { preview(it, w, hh) }?.let { Preview(offer, it) }
             }
         }
-        return if (shown.isEmpty()) Previewed.Refused(PickLink.TOO_SMALL) else Previewed.Ok(shown)
+        return if (shown.isEmpty()) Previewed.Refused(PickLink.NOT_IMAGE) else Previewed.Ok(shown)
     }
 
     internal fun preview(src: ByteArray, w: Int, h: Int, decode: (ByteArray, (() -> Pair<Double, Double>?) -> Pair<Double, Double>?) -> Pair<Bitmap, Pair<Double, Double>?>? = faced): ImageBitmap? {
         val (bmp, face) = decode(src) { it() } ?: return null
-        val r = Backdrop.crop(bmp.width, bmp.height, w, h, face) ?: return null
+        val r = Crop.rect(bmp.width, bmp.height, w, h, face?.second)
         val crop = Bitmap.createBitmap(bmp, r.x, r.y, r.w, r.h)
         if (crop !== bmp) bmp.recycle()
         val side = maxOf(Resources.getSystem().displayMetrics.run { maxOf(widthPixels, heightPixels) }, maxOf(w, h) * 4)

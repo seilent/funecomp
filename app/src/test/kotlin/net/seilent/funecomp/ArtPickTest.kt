@@ -69,6 +69,8 @@ class ArtPickTest {
     private val avatar = "https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ=s900-c-k-c0x00ffffff-no-rj"
     private val picked = jpeg(java.awt.Color(30, 160, 60))
     private val slow = "https://example.org/slow.jpg"
+    private val steam = "https://example.org/steam.jpg"
+    private val square = "https://example.org/square.jpg"
     private val gate = CountDownLatch(1)
     private val http = Http { url, _ ->
         when {
@@ -83,6 +85,8 @@ class ArtPickTest {
             url == dz -> Response(200, jpeg(java.awt.Color(200, 40, 40)))
             url == thumb || url == "$thumb/small" -> Response(200, jpeg(java.awt.Color(40, 40, 200)))
             url == avatar -> Response(200, picked)
+            url == steam -> Response(200, structured(1920, 1210))
+            url == square -> Response(200, structured(900, 900))
             else -> Response(404, ByteArray(0))
         }
     }
@@ -129,9 +133,9 @@ class ArtPickTest {
 
     private fun track(id: Long, artist: String, mbid: String = "") = Track(id, artist, listOf(artist), "Album $id", artist, "Song $id", 200_000, "a$id", "a$id.flac", listOf(mbid))
 
-    private fun sim(vararg tracks: Track, faults: List<String> = emptyList()): Sim {
+    private fun sim(vararg tracks: Track, faults: List<String> = emptyList(), board: Board = Board.of("v1")): Sim {
         Remote.artist(app, http)
-        val s = Sim(Options(Board.of("v1"), Faults(faults), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }), Library(tracks.toList()))
+        val s = Sim(Options(board, Faults(faults), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }), Library(tracks.toList()))
         sims += s
         return s
     }
@@ -466,5 +470,81 @@ class ArtPickTest {
         val small = ByteArrayOutputStream().also { javax.imageio.ImageIO.write(java.awt.image.BufferedImage(300, 200, java.awt.image.BufferedImage.TYPE_INT_RGB), "jpg", it) }.toByteArray()
         assertEquals("image too small", (previewed { Remote.galleryPicked({ Gallery(small, "s.jpg") }, it) } as Previewed.Refused).reason)
         assertTrue(File(app.filesDir, "pickimg").list().isNullOrEmpty())
+    }
+
+    private val wide = Board.of("r1").withBackdrop(720, 1280)
+
+    private fun liveWide(): Pair<Sim, org.robolectric.android.controller.ServiceController<LinkService>> {
+        val s = sim(track(1, "TSUKI"), faults = listOf("img-source"), board = wide)
+        Remote.shown(true)
+        val c = link(s)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.hello?.backdropW == 720 }
+        return s to c
+    }
+
+    private fun size(b: androidx.compose.ui.graphics.ImageBitmap?) = b!!.width to b.height
+
+    @Test
+    fun aPickBelowTheBackdropPreviewsAtTheDeviceAspect() {
+        val (_, c) = liveWide()
+        val link = previewed { Remote.pickLink(steam, "TSUKI", it) } as Previewed.Ok
+        assertEquals(680 to 1210, size(link.previews.single().image))
+        val g = previewed { Remote.galleryPicked({ Gallery(structured(1920, 1210), "IMG_2.jpg") }, it) } as Previewed.Ok
+        assertEquals(680 to 1210, size(g.previews.single().image))
+        val tile = previewed { Remote.takeTile(Tile(Sources.DEEZER, "TSUKI", ByteArray(0), square, "sq", null), it) } as Previewed.Ok
+        assertEquals(506 to 900, size(tile.previews.single().image))
+        c.destroy()
+    }
+
+    @Test
+    fun aMusicBrainzLinkWhosePhotoIsBelowTheBackdropPreviewsIt() {
+        val (_, c) = liveWide()
+        val mb = previewed { Remote.pickLink("https://musicbrainz.org/artist/$pinned", "TSUKI", it) } as Previewed.Ok
+        assertEquals(ArtPicks.ARTIST, mb.previews.single().offer.kind)
+        assertNotNull(mb.previews.single().image)
+        c.destroy()
+    }
+
+    @Test
+    fun aPreviewCropBelowTheBackdropIsKept() {
+        val shown = Remote.preview(structured(1920, 1210), 720, 1280) { b, _ -> BitmapCodec().faced(b, 2048) { null } }
+        assertEquals(680 to 1210, size(shown))
+    }
+
+    @Test
+    fun aPreviewThatCannotDecodeIsNotAnImage() {
+        Remote.artist(app, http)
+        val before = Remote.faced
+        try {
+            Remote.faced = { _, _ -> null }
+            assertEquals("not an image", (previewed { Remote.galleryPicked({ Gallery(structured(1920, 1210), "IMG_3.jpg") }, it) } as Previewed.Refused).reason)
+        } finally {
+            Remote.faced = before
+        }
+    }
+
+    @Test
+    fun aPickOnALargeBackdropPushesTheFullSource() {
+        val (_, c) = liveWide()
+        val g = previewed { Remote.galleryPicked({ Gallery(structured(1920, 1210), "IMG_4.jpg") }, it) } as Previewed.Ok
+        Remote.pick(PickFor("TSUKI"), g.previews.single().offer)
+        waitFor { lines.any { it.startsWith("stored source name=TSUKI 1920x1210 ") } }
+        c.destroy()
+    }
+
+    @Test
+    fun whileThePhonePlaysBluetoothAPickOnALargeBackdropPushesACropAtTheBackdrop() {
+        val before = Remote.phoneA2dp
+        try {
+            Remote.phoneA2dp = { true }
+            val (_, c) = liveWide()
+            val g = previewed { Remote.galleryPicked({ Gallery(structured(1920, 1210), "IMG_5.jpg") }, it) } as Previewed.Ok
+            Remote.pick(PickFor("TSUKI"), g.previews.single().offer)
+            waitFor { lines.any { it.startsWith("stored name=TSUKI ") && " 720x1280 " in it && "source=gallery" in it } }
+            assertTrue(lines.none { it.startsWith("stored source name=TSUKI 1920x1210 ") })
+            c.destroy()
+        } finally {
+            Remote.phoneA2dp = before
+        }
     }
 }
