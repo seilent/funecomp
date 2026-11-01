@@ -94,6 +94,7 @@ interface Control {
     fun lastFmSignIn() {}
     fun signOut(service: String) {}
     fun openListenBrainzToken() {}
+    fun openSupport() {}
     fun listenBrainzToken(token: String) {}
     fun eqFile(done: (String, String?) -> Unit) {}
     fun autoEqList(done: (AutoEqList?) -> Unit) {}

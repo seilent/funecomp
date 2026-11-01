@@ -158,7 +158,7 @@ class SheetTest {
     fun landscapeCapKeepsTheAutoEqActionsReachable() = capKeepsTheLastItemReachable(eqLines, listOf("cancel", "apply"), 3)
 
     @Test
-    fun landscapeCapKeepsTheAboutItemReachable() = capKeepsTheLastItemReachable(listOf("funeOS dev", "seilent", "board", "dap battery", "card"), listOf("update firmware"), 4)
+    fun landscapeCapKeepsTheAboutItemReachable() = capKeepsTheLastItemReachable(listOf("funeOS dev", "seilent", "board", "dap battery", "card"), listOf("update firmware", "support me"), 3)
 
     @Test
     fun aLongListOpensAtItsTopWhileTheFocusFitsTheWindow() {

@@ -74,6 +74,7 @@ class SimControl(
     val actions = ArrayList<Pair<Int, Long?>>()
     var usage: Map<String?, ArtCache.Usage> = emptyMap()
     val cleared = ArrayList<String?>()
+    var supports = 0
     private val heart = Heart()
     private var toast: ((String, String) -> Unit)? = null
     var holdReply = false
@@ -102,6 +103,10 @@ class SimControl(
     }
 
     fun push(type: Int, payload: ByteArray) = out.push(type, payload)
+
+    override fun openSupport() {
+        supports++
+    }
 
     override fun lyricsOffset(track: Long, ms: Int?, done: (Int?, Int?) -> Unit) {
         offsets += ms

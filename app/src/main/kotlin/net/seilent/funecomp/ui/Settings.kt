@@ -96,6 +96,7 @@ private const val ABOUT_KEY = "about"
 private const val SYSTEM = "system"
 private const val CREDIT = "seilent"
 private const val UPDATE_FIRMWARE = "update firmware"
+private const val SUPPORT_ME = "support me"
 
 fun Row.word(v: String?): String {
     if (v == null) return words.firstOrNull() ?: ""
@@ -240,7 +241,7 @@ fun settingsPivots(rows: List<Row>) = settingsRows(rows).mapNotNull { it.pivot }
 fun aboutSheet(ctx: Ctx, device: () -> DeviceState, firmware: () -> FirmwareView) {
     ctx.sheet.open(
         ABOUT_KEY,
-        listOf(UPDATE_FIRMWARE),
+        listOf(UPDATE_FIRMWARE, SUPPORT_ME),
         infoLines = {
             val h = device().hello
             if (h == null) listOf(CREDIT) else listOf("funeOS ${h.version ?: ""}".trim(), CREDIT, "board", "dap battery", "card")
@@ -252,8 +253,8 @@ fun aboutSheet(ctx: Ctx, device: () -> DeviceState, firmware: () -> FirmwareView
             if (h == null) emptyList() else listOf("", "", h.board ?: "", if (st.battery != null) batteryText(st) else "", cardText(st) ?: "")
         },
         infoMixed = { if (device().hello == null) listOf(true) else listOf(true, true) },
-        itemValues = { listOf(firmwareText(firmware())) },
-    ) { ctx.nav.push(Page.Firmware) }
+        itemValues = { listOf(firmwareText(firmware()), "") },
+    ) { if (it == 0) ctx.nav.push(Page.Firmware) else ctx.control.openSupport() }
 }
 
 @Composable

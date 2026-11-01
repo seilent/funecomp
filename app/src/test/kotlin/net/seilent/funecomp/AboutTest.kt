@@ -93,8 +93,21 @@ class AboutTest {
         assertEquals(listOf("funeOS ${h.version}", "seilent", "board", "dap battery", "card"), shell.sheet.info)
         assertEquals(listOf("", "", h.board, if (st.battery != null) batteryText(st) else "", cardText(st) ?: ""), shell.sheet.infoValues)
         assertEquals(listOf(true, true), shell.sheet.infoMixed)
-        assertEquals(listOf("update firmware"), shell.sheet.items)
-        assertEquals(listOf(firmwareText(firmware)), shell.sheet.itemValues)
+        assertEquals(listOf("update firmware", "support me"), shell.sheet.items)
+        assertEquals(listOf(firmwareText(firmware), ""), shell.sheet.itemValues)
+    }
+
+    @Test
+    fun theSupportItemOpensKofi() {
+        val c = start()
+        system()
+        tapAbout()
+        rule.onNode(hasText("SUPPORT ME") and hasAnyAncestor(hasTestTag("sheet.item.1")), useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag("sheet.item.1").performClick()
+        settle(1000)
+        assertEquals(1, c.supports)
+        assertFalse(shell.sheet.shown)
+        assertEquals(listOf(Page.Home, Page.Settings), shell.nav.stack.toList())
     }
 
     @Test
@@ -104,7 +117,7 @@ class AboutTest {
         tapAbout()
         firmware = FirmwareView(send = "firmware 42%")
         settle(300)
-        assertEquals(listOf("42%"), shell.sheet.itemValues)
+        assertEquals(listOf("42%", ""), shell.sheet.itemValues)
         rule.onNode(hasText("42%") and hasAnyAncestor(hasTestTag("sheet.item.0")), useUnmergedTree = true).assertExists()
         rule.onNodeWithTag("sheet.item.0").performClick()
         settle(1000)
@@ -141,7 +154,7 @@ class AboutTest {
         system()
         tapAbout()
         assertEquals(listOf("seilent"), shell.sheet.info)
-        assertEquals(listOf("update firmware"), shell.sheet.items)
+        assertEquals(listOf("update firmware", "support me"), shell.sheet.items)
     }
 
     @Test

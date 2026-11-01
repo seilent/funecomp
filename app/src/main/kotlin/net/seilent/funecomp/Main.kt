@@ -155,6 +155,10 @@ class Main : ComponentActivity() {
 
         override fun openListenBrainzToken() = Scrobbles.listenBrainzOpen()
 
+        override fun openSupport() {
+            if (!browse(SUPPORT_URL)) Log.i(Remote.TAG, "support no browser")
+        }
+
         override fun listenBrainzToken(token: String) = Scrobbles.listenBrainzToken(token)
 
         override fun eqFile(done: (String, String?) -> Unit) {
@@ -456,6 +460,7 @@ class Main : ComponentActivity() {
     }
 
     companion object {
+        const val SUPPORT_URL = "https://ko-fi.com/seilent"
         const val EXTRA_LINK = "link"
         const val EXTRA_PAGE = "page"
         const val ACTION_OPEN = "net.seilent.funecomp.OPEN"
