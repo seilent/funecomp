@@ -1,7 +1,7 @@
 output	outputPriority	choice	PRIORITY	newest,headphones,bluetooth	NEWEST,JACK,BLUETOOTH	-	-	-
 output	volumeStep	steps	VOLUME STEP	2,5,10	2%,5%,10%	-	-	-
 output	maxVolume	steps	MAX VOLUME	50,55,60,65,70,75,80,85,90,95,100	50,55,60,65,70,75,80,85,90,95,100	-	-	-
-output	powerOnVolume	steps	POWER ON VOLUME	0,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	LAST,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-	-
+output	powerOnScale	steps	POWER ON VOLUME	0,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	LAST,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-	-
 output	balance	range	BALANCE	-	-	-20,20,1	-	-
 output	digitalFilter	choice	DIGITAL FILTER	0,1,2,3,4,5,6,7	LINEAR FAST,LINEAR SLOW,MIN FAST,MIN SLOW,APOD FAST,APOD SLOW,HYBRID FAST,BRICK WALL	-	-	-
 output	sampleRate	info	SAMPLE RATE	-	-	-	readOnly	-
@@ -39,7 +39,7 @@ power	idleShutdownMinutes	steps	IDLE SHUTDOWN	0,5,10,30,60	OFF,5 MIN,10 MIN,30 M
 power	lockKnob	toggle	LOCK VOLUME	off,on	OFF,ON	-	-	-
 power	screenOffKeys	choice	SCREEN OFF KEYS	all,play,none	ALL,PLAY ONLY,NONE	-	-	-
 power	inlineRemote	toggle	IN-LINE REMOTE	off,on	OFF,ON	-	-	-
-system	usbMode	draft	USB MODE	storage,dock,audio	STORAGE,DOCK,AUDIO	-	-	-
+system	usbMode	draft	USB MODE	prompt,storage,dock,audio	PROMPT,STORAGE,DOCK,AUDIO	-	-	-
 system	usbStorage	action	USB STORAGE	-	-	-	readOnly	-
 system	dateTime	draft	DATE/TIME	-	-	-	-	-
 system	companion	toggle	PHONE APP	off,on	OFF,ON	-	readOnly,boardOnly	-

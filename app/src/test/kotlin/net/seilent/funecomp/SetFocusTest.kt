@@ -209,7 +209,7 @@ class SetFocusTest {
     fun eachPivotKeepsItsOwnFocus() {
         start()
         val top = bounds("set.outputPriority").top
-        focusOn("powerOnVolume")
+        focusOn("powerOnScale")
         pivot("library")
         pivot("display")
         focusOn("scale")
@@ -218,7 +218,7 @@ class SetFocusTest {
             rule.onNodeWithTag("hub.settings").performTouchInput { swipeRight() }
             settle(1000)
         }
-        assertTrue(barOn("powerOnVolume"))
+        assertTrue(barOn("powerOnScale"))
         assertEquals(top, bounds("set.outputPriority").top, 0.5f)
         pivot("library")
         pivot("display")

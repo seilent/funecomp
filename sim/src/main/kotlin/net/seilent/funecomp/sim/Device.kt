@@ -77,7 +77,7 @@ sealed class Answer {
 }
 
 private const val FULL_VOLUME = 255
-private const val V1_SPAN = 132
+private const val VOLUME_SPAN = 132
 private const val ART_QUALITY = 0.85f
 private const val UPDATE_BATTERY_MIN = 50
 private const val PREV_RESTART_MS = 3000L
@@ -125,6 +125,11 @@ class Lyr(val kind: Int, val lines: List<LyrLine>) {
 private val MD5 = Regex("^[0-9a-f]{32}$")
 private const val EQ_DIR = "/data/funeos/eq/"
 private const val GRAPHIC_DIR = "/data/funeos/eq/graphic/"
+private val BT_AUDIO_ROW = Row("btAudio", "BLUETOOTH", "bluetooth", Enums.RowKind.toggle, listOf("off", "on"), words = listOf("OFF", "ON"))
+private val BT_CODEC_HEADPHONES_ROW = Row(
+    "btCodecHeadphones", "CODEC", "bluetooth", Enums.RowKind.draft, listOf("auto", "ldac", "aptx", "aac", "sbc"),
+    words = listOf("AUTO", "LDAC", "APTX", "AAC", "SBC"), flags = listOf(Enums.RowFlag.restart),
+)
 private val FRESH_BAND = Band(Enums.BandType.peak, 34, 1_000_000, 0, 140)
 private const val GRAPHIC_BANDS = 10
 private const val GRAPHIC_FIRST_GRID = 4
@@ -195,8 +200,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         "screenOffSeconds" to whole(Tok.settings_screenOffDefault),
         "idleShutdownMinutes" to whole(Tok.settings_idleDefault), "lockKnob" to "off", "screenOffKeys" to "all",
         "inlineRemote" to "on", "clock" to "24h", "batteryPercent" to "off", "playThrough" to "off",
-        "usbMode" to "storage", "btCodec" to "auto", "btCodecHeadphones" to "auto", "digitalFilter" to "0",
-        "balance" to "0", "maxVolume" to whole(Tok.settings_maxVolumeDefault), "powerOnVolume" to "0", "replaygain" to "off",
+        "usbMode" to "prompt", "btCodec" to "auto", "btCodecHeadphones" to "auto", "digitalFilter" to "0",
+        "balance" to "0", "maxVolume" to whole(Tok.settings_maxVolumeDefault), "powerOnScale" to "0", "replaygain" to "off",
         "quickplay" to "on", "resume" to "position", "autoNowPlaying" to "off",
         "crossfade" to whole(Tok.settings_crossfadeDefault), "crossfeed" to "off", "artistPhoto" to "on",
         "saverLyrics" to "on", "brightness" to whole(tok.settings_brightnessDefault),
@@ -204,9 +209,10 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         "led" to "high", "saverDrift" to "on", "statusVolume" to "off", "navBar" to "off", "navOrder" to "backLeft",
         "navButton" to "play", "whenIdle" to "powerOff", "chargeLimit" to "off", "usbFeedback" to "on", "usbOutput" to "headphones",
         "companion" to if (opts.companion) "on" else "off", "scrobble" to "phone", "size" to "standard",
+        "bootLogo" to "fune", "streaming" to if (opts.services.isNotEmpty()) "on" else "off", "btAudio" to "on",
     ).apply {
-        if (board.name == "r1") put("usbMode", "dock")
-        keys.retainAll(rows.mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones"))
+        if (board.name == "r1") put("outputGain", "low")
+        keys.retainAll(rows.mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones", "btAudio"))
         val steps = tok.settings_maxVolumeSteps.split(',').map { it.toInt() }
         opts.maxPct?.let { n -> put("maxVolume", steps.minBy { kotlin.math.abs(it - n) }.toString()) }
     }
@@ -788,7 +794,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     fun schemaRows(): List<Row> = synchronized(lock) { legacy(structureRows()) }
 
     private fun structureRows(): List<Row> =
-        rows.filter { r -> r.key !in faults.rowsOff && conditions[r.key]?.let { (k, v) -> prefs[k] == v } != false }.map { structure(it) }
+        rows.filter { r -> r.key !in faults.rowsOff && conditions[r.key]?.let { (k, v) -> prefs[k] == v } != false && (r.key != "streaming" || opts.services.isNotEmpty()) }
+            .flatMap { structure(it) }
 
     private fun legacy(rows: List<Row>): List<Row> = rows.map { r -> liveWord(r)?.let { r.copy(words = listOf(it)) } ?: r }
 
@@ -838,10 +845,13 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
     }
 
-    private fun structure(r: Row): Row = when (r.key) {
-        "usbOutput" -> if (opts.headset || prefs["usbOutput"] == "bluetooth") r else r.copy(values = r.values.dropLast(1), words = r.words.dropLast(1))
-        else -> r
+    private fun structure(r: Row): List<Row> = when (r.key) {
+        "usbOutput" -> listOf(if (opts.headset || prefs["usbOutput"] == "bluetooth") r else r.copy(values = r.values.dropLast(1), words = r.words.dropLast(1)))
+        "btCodec" -> if (opts.btRole == Enums.BtRole.headphones) listOf(BT_AUDIO_ROW, BT_CODEC_HEADPHONES_ROW) else listOf(r)
+        else -> listOf(r)
     }
+
+    fun streamingOff(): Boolean = prefs["streaming"] == "off"
 
     private fun liveWord(r: Row): String? = if (r.words.isNotEmpty() || r.kind == Enums.RowKind.range) null else when (r.key) {
         "about" -> opts.version ?: "sim.${board.name}"
@@ -1045,7 +1055,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val k = SvcKeys.from(b)
         val svc = opts.services.firstOrNull { it.id == k.service }
         opts.log("svc keys ${k.service} names=${k.keys.map { it.name }} bytes=${k.encode().size}")
-        if (faults.svcOff) return Answer.Fail(Err.off, "streaming is off")
+        if (faults.svcOff || streamingOff()) return Answer.Fail(Err.off, "streaming is off")
         if (svc == null || k.keys.isEmpty() || k.keys.any { it.name.isNullOrEmpty() || it.value.isNullOrEmpty() || it.name !in svc.secrets }) return Answer.Fail(Err.badValue, "bad key")
         return Answer.Ok()
     }
@@ -1109,10 +1119,10 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private val steps: IntArray = IntArray(101).also { t ->
-        var n = FULL_VOLUME - V1_SPAN
+        var n = FULL_VOLUME - VOLUME_SPAN
         for (s in 1..100) {
             t[s] = n
-            n += if (s <= V1_SPAN - 99) 2 else 1
+            n += if (s <= VOLUME_SPAN - 99) 2 else 1
         }
     }
 
@@ -1149,7 +1159,52 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private val readOnlyToSet = setOf("usbMode", "btCodec", "btCodecHeadphones")
 
+    private fun scaleN(at: Int, top: Int): Int {
+        val p = at.coerceIn(0, 100)
+        if (!opts.curve) return percentVolume(p)
+        if (p == 0) return 0
+        val m = maxOf(1, volumePercent(top))
+        val x = 99 + (p - 1) * (m - 1)
+        val s = x / 99
+        val r = x % 99
+        return if (r != 0) steps[s] + r * (steps[s + 1] - steps[s]) / 99 else steps[s]
+    }
+
+    private fun powerOnN(power: Int, max: Int) = scaleN(power, percentVolume(max))
+
+    private fun powerOnAt(n: Int, max: Int): Int {
+        var best = -1
+        for (s in tok.settings_powerOnSteps.split(',').map { it.toInt() }) {
+            if (s > 0 && (best < 0 || (powerOnN(s, max) <= n && powerOnN(s, max) > powerOnN(best, max)))) best = s
+        }
+        return best
+    }
+
+    private fun powerOnKeep(next: MutableMap<String, String>) {
+        val power = next["powerOnScale"]?.toIntOrNull() ?: return
+        val before = prefs["maxVolume"]?.toIntOrNull() ?: return
+        val max = next["maxVolume"]?.toIntOrNull() ?: return
+        if (max == before || power <= 0) return
+        next["powerOnScale"] = powerOnAt(powerOnN(power, before), max).toString()
+    }
+
+    private fun gainDb(v: String?) = when (v) {
+        "high" -> 0
+        "mid" -> -12
+        else -> -24
+    }
+
+    private fun gainRaise(next: MutableMap<String, String>) {
+        if ("outputGain" !in next) return
+        val raise = gainDb(next["outputGain"]) - gainDb(prefs["outputGain"])
+        val power = next["powerOnScale"]?.toIntOrNull() ?: return
+        val max = next["maxVolume"]?.toIntOrNull() ?: return
+        if (raise <= 0 || power <= 0) return
+        next["powerOnScale"] = powerOnAt(powerOnN(power, max) - raise, max).toString()
+    }
+
     private fun accept(key: String, value: String): String? {
+        if (key == "bootLogo" && value == "picture") return null
         val r = rows.firstOrNull { it.key == key } ?: return null
         if (Enums.RowFlag.readOnly in r.flags || key in readOnlyToSet) return null
         return when (r.kind) {
@@ -1187,6 +1242,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             }
         }
         if (kept.isEmpty()) return Answer.Fail(Err.refused, "refused", refused)
+        if ("powerOnScale" !in kept) powerOnKeep(next)
+        gainRaise(next)
         val differs = next != prefs
         if (differs) {
             prefs.putAll(next)
@@ -1206,10 +1263,12 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 prefs["usbMode"] = v
             }
             Enums.DraftKind.btCodec -> {
-                val role = b.int(Tags.Draft.role) ?: Enums.BtRole.receiver
-                if (role != Enums.BtRole.receiver) return Answer.Fail(Err.refused, "refused")
-                val v = b.str(Tags.Draft.`value`)?.takeIf { it in rows.first { r -> r.key == "btCodec" }.values } ?: return Answer.Fail(Err.badValue, "bad codec")
-                prefs["btCodec"] = v
+                val role = b.int(Tags.Draft.role) ?: opts.btRole
+                if (role != opts.btRole) return Answer.Fail(Err.refused, "refused")
+                val key = if (role == Enums.BtRole.headphones) "btCodecHeadphones" else "btCodec"
+                val codecs = structureRows().firstOrNull { it.key == key }?.values.orEmpty()
+                val v = b.str(Tags.Draft.`value`)?.takeIf { it in codecs } ?: return Answer.Fail(Err.badValue, "bad codec")
+                prefs[key] = v
             }
             Enums.DraftKind.sleep -> {
                 val m = b.long(Tags.Draft.minutes) ?: return Answer.Fail(Err.badValue, "no minutes")

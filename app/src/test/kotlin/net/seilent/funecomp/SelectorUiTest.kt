@@ -234,14 +234,14 @@ class SelectorUiTest {
     fun usbModePickSendsOneDraft() {
         val c = start("ap80", "library", "display", "power", "system")
         tap("usbMode")
-        assertEquals(listOf("STORAGE", "DOCK", "AUDIO"), shell.sheet.items)
+        assertEquals(listOf("PROMPT", "STORAGE", "DOCK", "AUDIO"), shell.sheet.items)
         assertEquals(0, shell.sheet.focus)
-        pick(1)
+        pick(2)
         assertEquals(listOf("DRAFT"), writes(c))
         assertEquals("dock", c.device.settings.values["usbMode"])
         tap("usbMode")
-        assertEquals(1, shell.sheet.focus)
-        pick(1)
+        assertEquals(2, shell.sheet.focus)
+        pick(2)
         assertEquals(1, drafts(c))
         shows("usbMode", "DOCK")
     }

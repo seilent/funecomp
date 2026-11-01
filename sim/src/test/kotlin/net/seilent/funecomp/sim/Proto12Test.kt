@@ -50,7 +50,7 @@ class Proto12Test {
 
     private fun opts(board: String = "v1", minor: Int = Proto.minor, battery: Battery = Battery(87, 87, 0), maxPct: Int? = null, freeMiB: Long = 158_234) =
         Options(Board.of(board), Faults(emptyList()), minor = minor, artDir = File(tmp.root, "art"), lrcDir = File(tmp.root, "lrc"),
-            updDir = File(tmp.root, "upd"), battery = battery, cardFreeMiB = freeMiB, curve = board == "v1", maxPct = maxPct)
+            updDir = File(tmp.root, "upd"), battery = battery, cardFreeMiB = freeMiB, maxPct = maxPct)
 
     private fun req(d: Device, type: Int, payload: ByteArray, out: Sink = Sink()) =
         d.request(type, Node.decode(Msg.info.getValue(type).name, payload), out).also { if (it is Answer.Ok && it.state) out.push(Msg.STATE, d.state()) }
@@ -104,7 +104,7 @@ class Proto12Test {
     }
 
     @Test
-    fun volumePercentOnTheV1CurveAndTheCap() {
+    fun volumePercentOnTheV1AndR1CurveAndTheCap() {
         val d = device(opts(maxPct = 80))
         ok(req(d, Msg.VOLUME, Req.volume(percent = 34)))
         assertEquals(189, state(d).volume)
@@ -116,6 +116,11 @@ class Proto12Test {
         assertEquals(235, state(d).volume)
         ok(req(d, Msg.VOLUME, Req.volume(step = 0)))
         assertEquals(235, state(d).volume)
+        val r1 = device(opts(board = "r1"))
+        ok(req(r1, Msg.VOLUME, Req.volume(percent = 1)))
+        assertEquals(123, state(r1).volume)
+        ok(req(r1, Msg.VOLUME, Req.volume(percent = 34)))
+        assertEquals(189, state(r1).volume)
         val linear = device(opts(board = "ap80"))
         ok(req(linear, Msg.VOLUME, Req.volume(percent = 50)))
         assertEquals(128, state(linear).volume)

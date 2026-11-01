@@ -14,6 +14,8 @@ import net.seilent.funecomp.proto.Schema
 import net.seilent.funecomp.proto.SetReply
 import net.seilent.funecomp.proto.Settings
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.SvcInfo
+import net.seilent.funecomp.proto.SvcKey
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
@@ -133,16 +135,16 @@ class DeviceTest {
         }
         assertEquals(8, device("ap80").rows.first { it.key == "digitalFilter" }.values.size)
         assertEquals(listOf("FAST", "FAST PHASE", "SLOW", "SLOW PHASE", "NOS"), device("v1").rows.first { it.key == "digitalFilter" }.words)
-        assertEquals(4, device("r1").rows.first { it.key == "digitalFilter" }.values.size)
+        assertEquals(5, device("r1").rows.first { it.key == "digitalFilter" }.values.size)
         assertTrue(listOf("ap80", "v1", "r1").all { b -> device(b).rows.none { it.key == "dre" } })
         assertEquals(listOf(Enums.RowFlag.readOnly, Enums.RowFlag.boardOnly), device("v1").rows.first { it.key == "companion" }.flags)
     }
 
     @Test
     fun rowCountsAtTheDefaultsAndWithEveryRuntimeRowShown() {
-        for ((b, n) in listOf("ap80" to 46, "v1" to 54, "r1" to 49)) assertEquals(b, n, device(b).schemaRows().size)
-        for ((b, n) in listOf("ap80" to 49, "v1" to 57, "r1" to 52)) {
-            val d = Device(Options(Board.of(b), headset = true, companion = true), Library.synthetic()) { t }
+        for ((b, n) in listOf("ap80" to 46, "v1" to 55, "r1" to 54)) assertEquals(b, n, device(b).schemaRows().size)
+        for ((b, n) in listOf("ap80" to 49, "v1" to 59, "r1" to 58)) {
+            val d = Device(Options(Board.of(b), headset = true, companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
             assertEquals(b, n, d.schemaRows().size)
             assertEquals(b, d.rows.size, d.schemaRows().size)
@@ -255,18 +257,21 @@ class DeviceTest {
     }
 
     @Test
-    fun anR1IsDockOnlyAndNamesItsUpdate() {
+    fun anR1HasTheClearedUsbRowsAndNamesItsUpdate() {
         val d = device("r1")
         val hello = d.helloReply()
         assertEquals("r1", hello.board)
         assertEquals(480 to 800, hello.screenW to hello.screenH)
         val usb = d.schemaRows().single { it.key == "usbMode" }
-        assertEquals(listOf("dock"), usb.values)
-        assertTrue(Enums.RowFlag.readOnly in usb.flags)
-        assertEquals(Err.refused, fail(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.usbMode, "storage"))).code)
-        assertTrue(d.schemaRows().none { it.key in setOf("usbFeedback", "usbOutput", "wifi", "whenIdle", "outputGain", "scale") })
+        assertEquals(listOf("prompt", "storage", "dock", "audio", "mtp"), usb.values)
+        assertTrue(Enums.RowFlag.readOnly !in usb.flags)
+        ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.usbMode, "storage")))
+        assertTrue(d.schemaRows().map { it.key }.containsAll(listOf("usbFeedback", "usbOutput", "wifi", "outputGain", "bootLogo")))
+        assertTrue(d.schemaRows().none { it.key in setOf("whenIdle", "scale", "streaming") })
+        assertEquals(5, d.rows.single { it.key == "digitalFilter" }.values.size)
         assertTrue(d.schemaRows().any { it.key == "size" } && d.schemaRows().any { it.key == "led" } && d.schemaRows().any { it.key == "chargeLimit" })
-        assertEquals(listOf("storage", "dock", "audio", "mtp"), device("v1").rows.single { it.key == "usbMode" }.values)
+        assertEquals(listOf("prompt", "storage", "dock", "audio", "mtp"), device("v1").rows.single { it.key == "usbMode" }.values)
+        assertEquals(listOf("prompt", "storage", "dock", "audio"), device("ap80").rows.single { it.key == "usbMode" }.values)
     }
     @Test
     fun crossfeedBrightnessAndArtistPhotoRowsOnEveryBoard() {
@@ -353,6 +358,83 @@ class DeviceTest {
         assertTrue("size=standard" in Settings.from(out.of(Msg.SETTINGS).single()).text.lines())
         assertEquals(listOf("size"), fail(req(v1, Msg.SET, Req.set("size=large\n"))).refused)
     }
+    private fun pref(d: Device, key: String): String? {
+        val out = Sink()
+        d.greet(out)
+        return Settings.from(out.of(Msg.SETTINGS).last()).text.lines().firstOrNull { it.startsWith("$key=") }?.substringAfter('=')
+    }
+
+    private val tidal = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))
+
+    @Test
+    fun priorityDropsNewestWithoutAJackSwitch() {
+        assertEquals(listOf("headphones", "bluetooth"), device("v1").schemaRows().single { it.key == "outputPriority" }.values)
+        for (b in listOf("ap80", "r1")) assertEquals(b, listOf("newest", "headphones", "bluetooth"), device(b).schemaRows().single { it.key == "outputPriority" }.values)
+    }
+
+    @Test
+    fun bootLogoOnTheV1AndR1AndPictureIsRefused() {
+        assertTrue(device("ap80").schemaRows().none { it.key == "bootLogo" })
+        for (b in listOf("v1", "r1")) {
+            val d = device(b)
+            assertEquals(b, listOf("fune", "stock", "picture"), d.schemaRows().single { it.key == "bootLogo" }.values)
+            assertEquals("fune", pref(d, "bootLogo"))
+            assertEquals(listOf("bootLogo"), fail(req(d, Msg.SET, Req.set("bootLogo=picture\n"))).refused)
+            ok(req(d, Msg.SET, Req.set("bootLogo=stock\n")))
+            assertEquals("stock", pref(d, "bootLogo"))
+        }
+    }
+
+    @Test
+    fun streamingShowsWithServicesAndOffRefusesTheKeys() {
+        assertTrue(device("v1").schemaRows().none { it.key == "streaming" })
+        assertTrue(Device(Options(Board.of("ap80"), services = tidal), Library.synthetic()) { t }.schemaRows().none { it.key == "streaming" })
+        for (b in listOf("v1", "r1")) {
+            val d = Device(Options(Board.of(b), services = tidal), Library.synthetic()) { t }
+            assertTrue(b, d.schemaRows().any { it.key == "streaming" })
+            assertEquals("on", pref(d, "streaming"))
+            ok(req(d, Msg.SVC_KEYS, Req.svcKeys("tidal", listOf(SvcKey("client_id", "x")))))
+            ok(req(d, Msg.SET, Req.set("streaming=off\n")))
+            assertEquals(Err.off, fail(req(d, Msg.SVC_KEYS, Req.svcKeys("tidal", listOf(SvcKey("client_id", "x"))))).code)
+        }
+    }
+
+    @Test
+    fun theHeadphonesRoleListsBluetoothAndItsCodec() {
+        val d = Device(Options(Board.of("v1"), btRole = Enums.BtRole.headphones), Library.synthetic()) { t }
+        val bt = d.schemaRows().filter { it.pivot == "bluetooth" }
+        assertEquals(listOf("btAudio", "btCodecHeadphones"), bt.map { it.key })
+        assertEquals(listOf("auto", "ldac", "aptx", "aac", "sbc"), bt[1].values)
+        assertEquals("on", pref(d, "btAudio"))
+        assertEquals(Err.refused, fail(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "aac", role = Enums.BtRole.receiver))).code)
+        assertEquals(Err.badValue, fail(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "opus", role = Enums.BtRole.headphones))).code)
+        ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "ldac", role = Enums.BtRole.headphones)))
+        assertEquals("ldac", pref(d, "btCodecHeadphones"))
+        ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "aptx")))
+        assertEquals("aptx", pref(d, "btCodecHeadphones"))
+        val r = device("v1")
+        assertEquals(listOf("btCodec"), r.schemaRows().filter { it.pivot == "bluetooth" }.map { it.key })
+        assertEquals(Err.refused, fail(req(r, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "aac", role = Enums.BtRole.headphones))).code)
+    }
+
+    @Test
+    fun aMaxVolumeSetKeepsThePowerOnLevelAndAGainRaiseLowersIt() {
+        val v = device("v1")
+        ok(req(v, Msg.SET, Req.set("powerOnScale=50\n")))
+        ok(req(v, Msg.SET, Req.set("maxVolume=50\n")))
+        assertTrue(pref(v, "powerOnScale")!!.toInt() > 50)
+        ok(req(v, Msg.SET, Req.set("maxVolume=100\npowerOnScale=50\n")))
+        assertEquals("50", pref(v, "powerOnScale"))
+        ok(req(v, Msg.SET, Req.set("outputGain=low\n")))
+        assertEquals("50", pref(v, "powerOnScale"))
+        ok(req(v, Msg.SET, Req.set("outputGain=high\n")))
+        assertTrue(pref(v, "powerOnScale")!!.toInt() < 50)
+        val a = device("ap80")
+        ok(req(a, Msg.SET, Req.set("powerOnScale=50\n")))
+        ok(req(a, Msg.SET, Req.set("maxVolume=60\n")))
+        assertEquals("50", pref(a, "powerOnScale"))
+    }
+
     @Test
     fun setMergesPlainRowsOnly() {
         val d = device()
@@ -365,7 +447,7 @@ class DeviceTest {
         assertTrue("balance=20" in s.text.lines())
         assertTrue("volumeStep=5" in s.text.lines())
         assertTrue("clock=24h" in s.text.lines())
-        assertTrue("usbMode=storage" in s.text.lines())
+        assertTrue("usbMode=prompt" in s.text.lines())
         val hue = Sink()
         ok(req(d, Msg.SET, Req.set("accentHue=237\n"), hue))
         assertTrue("accentHue=240" in Settings.from(hue.of(Msg.SETTINGS).single()).text.lines())

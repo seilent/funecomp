@@ -1,9 +1,10 @@
 output	outputPriority	choice	PRIORITY	newest,headphones,bluetooth	NEWEST,JACK,BLUETOOTH	-	-	-
 output	volumeStep	steps	VOLUME STEP	2,5,10	2%,5%,10%	-	-	-
 output	maxVolume	steps	MAX VOLUME	5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-	-
-output	powerOnVolume	steps	POWER ON VOLUME	0,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	LAST,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-	-
+output	powerOnScale	steps	POWER ON VOLUME	0,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	LAST,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	-	-	-
 output	balance	range	BALANCE	-	-	-20,20,1	-	-
-output	digitalFilter	choice	DIGITAL FILTER	0,1,2,3	FAST,FAST PHASE,SLOW,SLOW PHASE	-	-	-
+output	outputGain	choice	GAIN	high,mid,low	HIGH,MID,LOW	-	boardOnly	-
+output	digitalFilter	choice	DIGITAL FILTER	0,1,2,3,4	FAST,FAST PHASE,SLOW,SLOW PHASE,NOS	-	-	-
 output	dsdOutput	choice	DSD OUTPUT	dop,pcm	DOP,PCM	-	boardOnly	-
 output	sampleRate	info	SAMPLE RATE	-	-	-	readOnly	-
 effects	eqEar	info	CORRECTION EQ	-	-	-	readOnly	-
@@ -23,6 +24,7 @@ library	autoNowPlaying	toggle	AUTO NOW PLAYING	off,on	OFF,ON	-	-	-
 display	brightness	steps	BRIGHTNESS	10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	10%,15%,20%,25%,30%,35%,40%,45%,50%,55%,60%,65%,70%,75%,80%,85%,90%,95%,100%	-	-	-
 display	led	choice	LED	off,low,mid,high	OFF,LOW,MID,HIGH	-	boardOnly	-
 display	accentHue	range	ACCENT	-	-	0,350,10	-	-
+display	bootLogo	choice	BOOT LOGO	fune,stock,picture	FUNE,STOCK,PICTURE	-	boardOnly	-
 display	size	draft	SIZE	standard,large	STANDARD,LARGE	-	readOnly,boardOnly,restart	-
 display	saverSeconds	steps	SAVER	10,15,30,60,120,300	10 S,15 S,30 S,1 MIN,2 MIN,5 MIN	-	-	-
 display	saverLyrics	toggle	SAVER LYRICS	off,on	OFF,ON	-	-	-
@@ -42,9 +44,13 @@ power	chargeLimit	choice	CHARGE LIMIT	off,4200	OFF,4.20 V	-	boardOnly	-
 power	lockKnob	toggle	LOCK VOLUME	off,on	OFF,ON	-	-	-
 power	screenOffKeys	choice	SCREEN OFF KEYS	all,play,none	ALL,PLAY ONLY,NONE	-	-	-
 power	inlineRemote	toggle	IN-LINE REMOTE	off,on	OFF,ON	-	-	-
-system	usbMode	draft	USB MODE	dock	DOCK	-	readOnly	-
+system	usbMode	draft	USB MODE	prompt,storage,dock,audio,mtp	PROMPT,STORAGE,DOCK,AUDIO,MTP	-	-	-
+system	usbFeedback	toggle	USB DAC FEEDBACK	off,on	OFF,ON	-	boardOnly	-
+system	usbOutput	choice	USB DAC OUTPUT	headphones,bluetooth	JACK,BLUETOOTH	-	boardOnly	-
 system	usbStorage	action	USB STORAGE	-	-	-	readOnly	-
 system	dateTime	draft	DATE/TIME	-	-	-	-	-
+system	wifi	info	WI-FI	-	-	-	readOnly,boardOnly	-
+system	streaming	toggle	STREAMING	off,on	OFF,ON	-	boardOnly	-
 system	companion	toggle	PHONE APP	off,on	OFF,ON	-	readOnly,boardOnly	-
 system	companionPair	action	PAIR PHONE APP	-	-	-	readOnly	companion=on
 system	scrobble	choice	SCROBBLE	phone,card,off	PHONE,CARD LOG,OFF	-	-	-

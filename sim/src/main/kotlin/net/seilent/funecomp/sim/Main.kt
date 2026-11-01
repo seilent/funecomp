@@ -10,7 +10,7 @@ private const val USAGE = "usage: sim --board ap80|v1|r1 (--listen <port> | --co
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--upd-keys <hex>,...] [--upd-seq <n>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
     "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--source local|phone] [--eq-headset <name>] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... " +
-    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--headset] [--companion] [--svc <id>:<name>:<secret>+...[:pkce]]... [--quiet]"
+    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--headset] [--bt-role receiver|headphones] [--companion] [--svc <id>:<name>:<secret>+...[:pkce]]... [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -46,6 +46,7 @@ fun main(args: Array<String>) {
     var phone: String? = null
     var eqHeadset: String? = null
     var headset = false
+    var btRole = Enums.BtRole.receiver
     var companion = false
     val services = ArrayList<SvcInfo>()
     var i = 0
@@ -88,6 +89,11 @@ fun main(args: Array<String>) {
             "--phone" -> phone = value()
             "--quiet" -> quiet = true
             "--headset" -> headset = true
+            "--bt-role" -> btRole = when (value()) {
+                "receiver" -> Enums.BtRole.receiver
+                "headphones" -> Enums.BtRole.headphones
+                else -> throw IllegalArgumentException("--bt-role receiver|headphones")
+            }
             "--companion" -> companion = true
             "--svc" -> services += Options.svc(value())
             else -> {
@@ -123,7 +129,7 @@ fun main(args: Array<String>) {
         battery?.let { Battery.parse(it) } ?: base.battery,
         card?.substringBefore(':')?.toLong() ?: base.cardFreeMiB,
         card?.substringAfter(':')?.toLong() ?: base.cardTotalMiB,
-        curve?.let { it == "v1" } ?: (b.name == "v1"),
+        curve?.let { it == "v1" } ?: (b.name == "v1" || b.name == "r1"),
         maxPct?.toInt(),
         cardEq,
         source?.let { v -> Enums.Source.names.entries.firstOrNull { it.value == v }?.key ?: throw IllegalArgumentException("source must be local or phone, not $v") } ?: base.source,
@@ -136,6 +142,7 @@ fun main(args: Array<String>) {
         phone = phone?.let { PhoneLine.load(File(it)) }.orEmpty(),
         receiver = receiver,
         headset = headset,
+        btRole = btRole,
         companion = companion,
         updKeys = updKeys,
         updSeq = updSeq ?: base.updSeq,

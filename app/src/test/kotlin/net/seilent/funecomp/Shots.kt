@@ -885,9 +885,9 @@ val SHOTS = listOf(
         scrollTo("set.maxVolume")
         rule.onNodeWithTag("set.maxVolume").performClick()
     },
-    Shot("settings-pick-poweron", pages = HOME + Page.Settings, prep = { it.set("powerOnVolume", "70") }) {
-        scrollTo("set.powerOnVolume")
-        rule.onNodeWithTag("set.powerOnVolume").performClick()
+    Shot("settings-pick-poweron", pages = HOME + Page.Settings, prep = { it.set("powerOnScale", "70") }) {
+        scrollTo("set.powerOnScale")
+        rule.onNodeWithTag("set.powerOnScale").performClick()
     },
     Shot("settings-pick-crossfeed", pages = HOME + Page.Settings) {
         rule.onNodeWithTag("pivot.effects").performClick()

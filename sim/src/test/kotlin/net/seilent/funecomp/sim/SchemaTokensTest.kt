@@ -19,7 +19,7 @@ class SchemaTokensTest {
             val want = mapOf(
                 "volumeStep" to Tok.settings_volumeSteps,
                 "maxVolume" to tok.settings_maxVolumeSteps,
-                "powerOnVolume" to tok.settings_powerOnSteps,
+                "powerOnScale" to tok.settings_powerOnSteps,
                 "brightness" to Tok.settings_brightnessSteps,
                 "saverSeconds" to Tok.settings_saverSteps,
                 "screenOffSeconds" to Tok.settings_screenOffSteps,
@@ -30,9 +30,9 @@ class SchemaTokensTest {
             for ((key, list) in want) assertEquals("$b $key", steps(list), rows.getValue(key).values)
             assertEquals("$b maxVolume words", steps(tok.settings_maxVolumeSteps), rows.getValue("maxVolume").words)
             assertEquals(
-                "$b powerOnVolume words",
+                "$b powerOnScale words",
                 steps(tok.settings_powerOnSteps).map { if (it.toInt() > 0) it else "LAST" },
-                rows.getValue("powerOnVolume").words,
+                rows.getValue("powerOnScale").words,
             )
         }
     }

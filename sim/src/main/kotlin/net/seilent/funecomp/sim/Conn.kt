@@ -296,7 +296,7 @@ class Conn(
     }
 
     private fun svcFaults() {
-        if (!svc || faults.svcOff) return
+        if (!svc || faults.svcOff || device.streamingOff()) return
         val id = opts.services.firstOrNull()?.id ?: "svc"
         fun later(ms: Long, f: () -> Unit) = ticker.schedule({ if (closed == null) f() }, ms, TimeUnit.MILLISECONDS)
         for (e in faults.svcLoginEnds) later(e.ms) { svcEnd(SvcLoginEnd(id, e.seq, e.result)) }
