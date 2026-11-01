@@ -28,6 +28,8 @@ object Backdrop {
 
     fun fits(s: Size, w: Int, h: Int): Boolean = crop(s.w, s.h, w, h, null) != null
 
+    fun floor(w: Int, h: Int) = Size(minOf(w, ArtistArt.PICK_W), minOf(h, ArtistArt.PICK_H))
+
     fun side(src: Size, window: Size, floor: Int, cap: Int): Int {
         val long = maxOf(src.w, src.h)
         val f = listOf(window, Size(window.h, window.w)).maxOf { t ->

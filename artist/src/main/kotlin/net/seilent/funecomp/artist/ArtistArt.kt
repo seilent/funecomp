@@ -506,8 +506,9 @@ class ArtistArt(
         if (c.url.isEmpty() || blocks.blocked(key, c.source, c.id, name = display)) return null
         val (url, src) = fetch(c, targets().side) ?: return null
         if (blocks.blocked(key, c.source, "", ArtCache.sha256(src), display)) return null
-        val size = codec.bounds(src)?.takeIf { Backdrop.fits(it, w, h) } ?: return null
-        val jpeg = Backdrop.render(codec, src, w, h) ?: return null
+        val floor = Backdrop.floor(w, h)
+        val size = codec.bounds(src)?.takeIf { Backdrop.fits(it, floor.w, floor.h) } ?: return null
+        val jpeg = Backdrop.render(codec, src, w, h, upscale = true) ?: return null
         return Hit(c, url, src, size, jpeg)
     }
 
@@ -724,8 +725,9 @@ class ArtistArt(
                     }
                 }
                 if (blocks.blocked(key, c.source, "", ArtCache.sha256(src), display)) continue
-                val size = codec.bounds(src)?.takeIf { Backdrop.fits(it, w, h) } ?: continue
-                val jpeg = Backdrop.render(codec, src, w, h) ?: continue
+                val floor = Backdrop.floor(w, h)
+                val size = codec.bounds(src)?.takeIf { Backdrop.fits(it, floor.w, floor.h) } ?: continue
+                val jpeg = Backdrop.render(codec, src, w, h, upscale = true) ?: continue
                 return Hit(c, url, src, size, jpeg, base)
             }
         }
@@ -734,7 +736,7 @@ class ArtistArt(
     }
 
     private fun steps(name: String, id: String?, a: MbArtist?, w: Int, h: Int, on: Set<String>, t: Targets) = mapOf<String, (() -> Sequence<Candidate>)?>(
-        Wikimedia.SOURCE to a?.takeIf { Wikimedia.SOURCE in on }?.let { { wikimedia.candidates(it, w, h, targets = t).asSequence() } },
+        Wikimedia.SOURCE to a?.takeIf { Wikimedia.SOURCE in on }?.let { m -> { Backdrop.floor(w, h).let { f -> wikimedia.candidates(m, f.w, f.h, targets = t) }.asSequence() } },
         Sources.THE_AUDIO_DB to id?.takeIf { Sources.THE_AUDIO_DB in on }?.let { { audioDb.candidates(it).asSequence() } },
         Sources.FANART_TV to id?.takeIf { Sources.FANART_TV in on }?.let { { fanartTv.candidates(it).asSequence() } },
         Sources.DISCOGS to a?.takeIf { Sources.DISCOGS in on }?.let { { discogs.candidates(it).asSequence() } },
@@ -764,10 +766,11 @@ class ArtistArt(
             bytes += src.size
             if (blocks.blocked(e.key, c.source, "", ArtCache.sha256(src), e.name)) return
             if (c.source == Sources.DEEZER && deezer.placeholder(src)) return
-            val s = codec.bounds(src)?.takeIf { Backdrop.fits(it, w, h) } ?: return
+            val floor = Backdrop.floor(w, h)
+            val s = codec.bounds(src)?.takeIf { Backdrop.fits(it, floor.w, floor.h) } ?: return
             val score = t.score(s.w, s.h)
             if (score <= top || (c.id != e.id && score < 1.0)) return
-            val jpeg = Backdrop.render(codec, src, w, h) ?: return
+            val jpeg = Backdrop.render(codec, src, w, h, upscale = true) ?: return
             best = Hit(c, url, src, s, jpeg)
             top = score
         }

@@ -2,6 +2,7 @@ package net.seilent.funecomp.artist
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -769,5 +770,91 @@ class SizeTest {
         val c = commons(Triple("Wide.jpg", 6000, 4000)).single()
         assertEquals("https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Wide.jpg/1280px-Wide.jpg", c.url)
         assertNull(c.alt)
+    }
+
+    private fun deezerAt(spec: String) {
+        targets = Targets(Size(720, 1280))
+        deezer(one)
+        serve(dz(one), spec)
+        http.queued[dz(one, 1500)] = ArrayDeque(listOf(Response(403, ByteArray(0))))
+    }
+
+    @Test
+    fun aCandidateAboveTheFloorIsTakenAndRenderedAtTheCallSize() {
+        deezerAt("900x900@5")
+        val a = art().get(name, null, 720, 1280)!!
+        assertEquals(720 to 1280, a.w to a.h)
+        assertEquals(720 to 1280, Images.size(a.jpeg))
+        assertNotNull(cache.hit("name:sztest"))
+        assertNull(cache.miss("name:sztest"))
+        assertTrue(http.missing.isEmpty())
+    }
+
+    @Test
+    fun aLookupAtTheDeviceSizeLeavesNoMissForTheFloorSize() {
+        deezerAt("900x900@5")
+        art().get(name, null, 720, 1280)
+        val calls = http.calls.size
+        assertEquals(360 to 480, art().get(name, null, 360, 480)!!.let { it.w to it.h })
+        assertEquals(calls, http.calls.size)
+    }
+
+    @Test
+    fun aCandidateBelowTheFloorStaysRefusedAt360x480() {
+        deezerAt("300x400@5")
+        assertNull(art().get(name, null, 360, 480))
+    }
+
+    @Test
+    fun aCandidateFillingA240x320CallStaysTaken() {
+        deezerAt("300x400@5")
+        assertEquals(240 to 320, art().get(name, null, 240, 320)!!.let { it.w to it.h })
+    }
+
+    @Test
+    fun anUpgradeTakesTheSameImageLargerThatStillDoesNotFillTheDevice() {
+        targets = Targets(Size(720, 1280))
+        val e = hit(kobasolo, Sources.YOUTUBE, og, "900x900@5", kobasolo)
+        serve(yt(0), "1080x1080@5")
+        val a = art()
+        assertTrue(a.upgradable(e))
+        assertTrue(a.upgrade(e, 720, 1280).replaced)
+        val n = cache.hit(kobasolo)!!
+        assertEquals(yt(0), n.url)
+        assertEquals(1080 to 1080, n.w to n.h)
+        assertEquals(listOf(yt(0)), http.calls)
+        assertTrue(http.missing.isEmpty())
+    }
+
+    @Test
+    fun aMusicBrainzPreviewAtTheDeviceSizeTakesAPhotoAboveTheFloor() {
+        deezerAt("900x900@5")
+        mbArtist()
+        assertEquals(900 to 900, Images.size(art().previewArtist(name, artist, 720, 1280)!!))
+    }
+
+    @Test
+    fun aCommonsFileAboveTheFloorIsAPreviewAtTheDeviceSize() {
+        targets = Targets(Size(720, 1280))
+        mbArtist("image" to "https://commons.wikimedia.org/wiki/File:Mid.jpg")
+        infoOf(Triple("Mid.jpg", 900, 1200))
+        val before = http.answer
+        http.answer = { u -> if (u.startsWith("https://upload.wikimedia.org/")) Response(200, Fixtures.gen("900x1200@5")) else before(u) }
+        assertEquals(900 to 1200, Images.size(art().previewArtist(name, artist, 720, 1280)!!))
+    }
+
+    @Test
+    fun aChannelAvatarAboveTheFloorIsTakenAndRenderedAtTheCallSize() {
+        targets = Targets(Size(720, 1280))
+        sources = Sources.COMMONS.copy(youtube = true, order = Sources.ORDER)
+        val tag = "UCartsmallAvatarCase0001"
+        page(YouTube.channelUrl(tag), "<meta property=\"og:image\" content=\"https://yt3.googleusercontent.com/ytc/artsmall=s900-c-k-c0x00ffffff-no-rj\">")
+        val before = http.answer
+        http.answer = { u -> if (u.startsWith("https://yt3.googleusercontent.com/ytc/artsmall")) Response(200, Fixtures.gen("900x900@5")) else before(u) }
+        val a = art().get(tag, null, 720, 1280)!!
+        assertEquals(Sources.YOUTUBE, a.source)
+        assertEquals(720 to 1280, a.w to a.h)
+        assertEquals(720 to 1280, Images.size(a.jpeg))
+        assertEquals(tag, cache.hit("name:${Names.fold(tag)}")!!.channel)
     }
 }
