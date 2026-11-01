@@ -66,6 +66,7 @@ class SimControl(
     private val appFeatures: Long = LINK_FEATURES,
     services: List<SvcInfo> = emptyList(),
     btRole: Int = Enums.BtRole.receiver,
+    private val stateNow: () -> Long = now,
 ) : Control {
     private val faultSet = Faults(faults)
     val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, faultSet, artDir = artDir, minor = minor, cardEq = cardEq, services = services, btRole = btRole), lib, now)
@@ -96,7 +97,7 @@ class SimControl(
             val body = Node.decode(Msg.info.getValue(type).name, payload)
             val e = edit
             val mark = if (type == Msg.STATE) e?.mark() else null
-            device = device.reduce(type, body, now())
+            device = device.reduce(type, body, stateNow())
             if (type == Msg.STATE) {
                 show(heart.state(State.from(body)))
                 e?.state(State.from(body), mark)

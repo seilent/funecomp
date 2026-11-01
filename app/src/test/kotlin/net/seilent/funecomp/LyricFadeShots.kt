@@ -204,7 +204,7 @@ class LyricFadeShots {
     )
 
     private fun begin(k: FadeCase, sz: Size) {
-        c = SimControl("v1", artDir = covers)
+        c = SimControl("v1", artDir = covers, stateNow = SHOT_CLOCK)
         c.transport(Enums.TransportCmd.next)
         c.transport(Enums.TransportCmd.seek, seekMs = 61_000)
         c.mode = k.mode

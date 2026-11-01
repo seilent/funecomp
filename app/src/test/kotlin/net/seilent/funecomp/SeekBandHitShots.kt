@@ -108,8 +108,7 @@ class SeekBandHitShots {
     }
 
     private fun show(shot: Shot, size: Size) {
-        val c = SimControl(shot.board, artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq)
-        shot.prep(c)
+        val c = shotControl(shot, if (shot.art) covers else null)
         control = c
         shell = Shell(Nav(shot.pages))
         frame = shot to size

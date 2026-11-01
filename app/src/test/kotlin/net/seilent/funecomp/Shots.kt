@@ -175,6 +175,14 @@ private const val LONG_TRACK_MS = 720_000L
 private const val LONG_TRACK_AT = 300_000L
 private val ALBUM_KEY = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim.Library.synthetic().tracks.first().id)
 
+internal val SHOT_CLOCK: () -> Long = SystemClock::elapsedRealtime
+
+internal fun shotControl(shot: Shot, artDir: File? = null) =
+    SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = artDir, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq, services = shot.services, btRole = shot.btRole, stateNow = SHOT_CLOCK).also {
+        shotClock(it)
+        shot.prep(it)
+    }
+
 internal fun shotClock(c: SimControl) {
     c.draft(Enums.DraftKind.clock, unixS = CLOCK_S, zoneS = 0) { _, _ -> }
     c.tick()
@@ -1545,9 +1553,7 @@ class Shots {
     }
 
     private fun load(shot: Shot, size: Size, ime: Float) {
-        val c = SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = if (shot.art) covers else null, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq, services = shot.services, btRole = shot.btRole)
-        shotClock(c)
-        shot.prep(c)
+        val c = shotControl(shot, if (shot.art) covers else null)
         if (shot.gated) c.device = DeviceState()
         sources = shot.sources
         browseCols = shot.cols ?: { Tok.gridCols.toInt() }
@@ -1616,7 +1622,7 @@ class Shots {
             for (strip in STRIPS) {
                 val name = "lyrslide-${strip.name}-${size.name}"
                 if (only.split(',').none { name.contains(it) }) continue
-                val c = SimControl("ap80")
+                val c = SimControl("ap80", stateNow = SHOT_CLOCK)
                 lyricsOn()(c)
                 pause(c, strip.from)
                 control = c
@@ -1645,7 +1651,7 @@ class Shots {
             for (hold in HOLDS) {
                 val name = "lyrhold-${hold.name}-${size.name}"
                 if (only.split(',').none { name.contains(it) }) continue
-                val c = SimControl("ap80")
+                val c = SimControl("ap80", stateNow = SHOT_CLOCK)
                 lyricsOn()(c)
                 pause(c, hold.from)
                 control = c

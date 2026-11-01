@@ -143,7 +143,7 @@ class VariantShots {
     }
 
     private fun begin(k: VariantCase, sz: Size) {
-        c = SimControl("v1", artDir = covers, minor = 15)
+        c = SimControl("v1", artDir = covers, minor = 15, stateNow = SHOT_CLOCK)
         c.transport(Enums.TransportCmd.next)
         c.transport(Enums.TransportCmd.seek, seekMs = 61_000)
         home = c.device.playback.state
