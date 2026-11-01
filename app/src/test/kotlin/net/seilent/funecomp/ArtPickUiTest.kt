@@ -54,6 +54,7 @@ import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.Preview
 import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.VariantMotion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -208,7 +209,7 @@ class ArtPickUiTest {
     private fun phone(c: SimControl) {
         c.sim.source(Enums.Source.phone)
         c.device = c.device.reduce(Msg.STATE, Node.decode("STATE", c.sim.state()), 0)
-        settle(300)
+        settle(VariantMotion.total(VariantMotion.Dir.In).toLong() + 300)
     }
 
     @Test

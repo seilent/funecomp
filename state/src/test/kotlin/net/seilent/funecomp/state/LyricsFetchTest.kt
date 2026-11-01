@@ -326,6 +326,12 @@ class LyricsFetchTest {
         DeviceState(hello(features)).withState(State(source = source, track = track, lyrics = lyrics, lyricsPlain = plain), 5)
 
     @Test
+    fun aStateStampedAtZeroIsSeen() {
+        val d = DeviceState(hello()).withState(State(source = Enums.Source.local, track = 7, lyrics = true, lyricsPlain = false), 0)
+        assertEquals(true, LyricsFetch.follow(d))
+    }
+
+    @Test
     fun followCountsTimedLyricsOnly() {
         assertNull(LyricsFetch.follow(DeviceState()))
         assertNull(LyricsFetch.follow(DeviceState().withHello(hello())))

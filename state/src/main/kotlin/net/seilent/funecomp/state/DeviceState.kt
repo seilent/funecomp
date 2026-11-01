@@ -22,7 +22,7 @@ import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.listView
 
-data class Playback(val state: State = State(), val receivedAt: Long = 0, val gateAt: Long? = null, val lateMs: Long = 0, val stoppedAt: Long? = null)
+data class Playback(val state: State = State(), val receivedAt: Long = 0, val gateAt: Long? = null, val lateMs: Long = 0, val stoppedAt: Long? = null, val seen: Boolean = receivedAt != 0L)
 
 data class SchemaMirror(
     val rev: Long? = null,
@@ -212,7 +212,7 @@ data class DeviceState(
         val sent = s.sentMs?.takeIf { s.sampleMs != null && has("stateClock") }
         val c = sent?.let { clock.add(now, now - it) } ?: clock
         val late = sent?.let { now - it - (c.offset ?: 0) } ?: 0
-        return copy(playback = Playback(s, now, gateAt, late, stoppedAt), queue = q, lib = l, clock = c, card = card.with(s.card))
+        return copy(playback = Playback(s, now, gateAt, late, stoppedAt, seen = true), queue = q, lib = l, clock = c, card = card.with(s.card))
     }
 
     fun withSchema(s: Schema): DeviceState {

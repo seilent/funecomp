@@ -109,7 +109,7 @@ private fun phone(d: DeviceState) = d.playback.state.source == Enums.Source.phon
 private fun phoneShow(d: DeviceState, show: LyricsFetch.Show) = (show as? LyricsFetch.Show.Phone)?.takeIf { it.key == PhoneKey.of(d.playback.state) }
 
 private fun npKey(d: DeviceState, show: LyricsFetch.Show): NpKey? = when {
-    d.playback.receivedAt == 0L -> null
+    !d.playback.seen -> null
     phone(d) -> phoneShow(d, show)?.key?.let { NpKey.Phone(it) }
     else -> when (val p = d.playing) {
         is Playing.Library -> NpKey.Lib(p.track)
@@ -121,12 +121,12 @@ private fun npKey(d: DeviceState, show: LyricsFetch.Show): NpKey? = when {
 private fun has(d: DeviceState, show: LyricsFetch.Show) = if (phone(d)) phoneShow(d, show)?.copy != null else LyricsFetch.has(d)
 
 private fun follow(d: DeviceState, show: LyricsFetch.Show): Boolean? = when {
-    d.playback.receivedAt == 0L -> null
+    !d.playback.seen -> null
     phone(d) -> phoneShow(d, show)?.follow ?: if (PhoneKey.of(d.playback.state) == null) false else null
     else -> LyricsFetch.follow(d)
 }
 
-private fun keyable(d: DeviceState, show: LyricsFetch.Show) = d.playback.receivedAt != 0L && if (phone(d)) phoneShow(d, show) != null else d.has(LyricsFetch.GROUP) && d.playback.state.library != null
+private fun keyable(d: DeviceState, show: LyricsFetch.Show) = d.playback.seen && if (phone(d)) phoneShow(d, show) != null else d.has(LyricsFetch.GROUP) && d.playback.state.library != null
 
 private fun copyFor(show: LyricsFetch.Show, key: NpKey?, s: State): LyricsFetch.Copy? = when (key) {
     is NpKey.Lib -> (show as? LyricsFetch.Show.Lines)?.takeIf { it.track == key.track && (it.held || it.copy.crc == s.lyricsCrc) }?.copy
@@ -234,7 +234,7 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
     val last = remember { Last(device, lyrics, cover) }
     val swap = remember(onPhone) {
         val from = last.device
-        val run = phone(from) != onPhone && from.playback.receivedAt != 0L && device.playback.receivedAt != 0L && active && !overlay.visible && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        val run = phone(from) != onPhone && from.playback.seen && device.playback.seen && active && !overlay.visible && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
         if (run) Swap(if (onPhone) VariantMotion.Dir.In else VariantMotion.Dir.Out, from, last.lyrics, last.cover) else null
     }
     var e by remember(swap) { mutableFloatStateOf(0f) }
@@ -286,7 +286,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
             !mode() -> false
             r.hand -> true
             r.track == null -> r.f
-            else -> liveNow().let { d -> if (d.playback.receivedAt == 0L) r.f else LyricsFetch.resolve(r.f, r.at, SystemClock.elapsedRealtime(), phone(d) || LyricsFetch.lyrflags(d)) }
+            else -> liveNow().let { d -> if (!d.playback.seen) r.f else LyricsFetch.resolve(r.f, r.at, SystemClock.elapsedRealtime(), phone(d) || LyricsFetch.lyrflags(d)) }
         }
     }
     var lyricTarget by remember { mutableStateOf(target() ?: false) }
@@ -421,7 +421,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
         lifecycle.addObserver(o)
         onDispose { lifecycle.removeObserver(o) }
     }
-    LaunchedEffect(npKey, device.playback.receivedAt == 0L, follow(device, lyrics), canLyrics) {
+    LaunchedEffect(npKey, device.playback.seen, follow(device, lyrics), canLyrics) {
         seen = record(device, lyrics, seen, false)
     }
     var source by remember { mutableStateOf(onPhone) }
@@ -436,14 +436,14 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
         motion.mutate { elapsed = 0f }
     }
     val blocked = sheet?.shown == true || pressing || !active
-    LaunchedEffect(seen, blocked, overlay.until, fade == null, device.playback.receivedAt == 0L) {
+    LaunchedEffect(seen, blocked, overlay.until, fade == null, device.playback.seen) {
         if (fade != null || blocked) return@LaunchedEffect
         while (true) {
             val r = seen
             val now = SystemClock.elapsedRealtime()
             var w = maxOf(r.calm - now, overlay.until - SystemClock.uptimeMillis())
             val d = liveNow()
-            if (r.track != null && r.f == null && d.playback.receivedAt != 0L && !phone(d) && !LyricsFetch.lyrflags(d)) w = maxOf(w, r.at + Proto.stateIntervalMs - now)
+            if (r.track != null && r.f == null && d.playback.seen && !phone(d) && !LyricsFetch.lyrflags(d)) w = maxOf(w, r.at + Proto.stateIntervalMs - now)
             if (w <= 0) break
             delay(w)
         }

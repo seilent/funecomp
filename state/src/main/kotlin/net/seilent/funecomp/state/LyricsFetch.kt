@@ -183,7 +183,7 @@ class LyricsFetch {
         fun follow(d: DeviceState): Boolean? {
             val s = d.playback.state
             return when {
-                d.playback.receivedAt == 0L -> null
+                !d.playback.seen -> null
                 !d.has(GROUP) || s.library == null || s.source == Enums.Source.phone -> false
                 s.lyrics == null -> null
                 else -> s.lyrics

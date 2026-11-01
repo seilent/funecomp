@@ -24,6 +24,15 @@ class StateTest {
         State(track = 1, durationMs = dur, positionMs = pos, sampleMs = sample, sentMs = sent, playing = true, output = Enums.Output.wired)
 
     @Test
+    fun aStateIsSeenWhateverItsTime() {
+        assertFalse(DeviceState().playback.seen)
+        assertTrue(DeviceState().withState(State(track = 7), 0).playback.seen)
+        assertTrue(DeviceState().withState(State(track = 7), 5_000).playback.seen)
+        assertFalse(Playback(State(track = 7)).seen)
+        assertTrue(Playback(State(track = 7), 10_000).seen)
+    }
+
+    @Test
     fun positionAddsLagHalfRttAndElapsed() {
         val d = DeviceState().withRtt(80).withRtt(40).withState(playing(10_000, 1_000, 1_030), now = 5_000)
         assertEquals(10_000 + 30 + 20, d.positionMs(5_000))
