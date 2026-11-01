@@ -142,8 +142,8 @@ class DeviceTest {
 
     @Test
     fun rowCountsAtTheDefaultsAndWithEveryRuntimeRowShown() {
-        for ((b, n) in listOf("ap80" to 46, "v1" to 55, "r1" to 54)) assertEquals(b, n, device(b).schemaRows().size)
-        for ((b, n) in listOf("ap80" to 49, "v1" to 59, "r1" to 58)) {
+        for ((b, n) in listOf("ap80" to 46, "v1" to 56, "r1" to 55)) assertEquals(b, n, device(b).schemaRows().size)
+        for ((b, n) in listOf("ap80" to 49, "v1" to 60, "r1" to 59)) {
             val d = Device(Options(Board.of(b), headset = true, companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
             assertEquals(b, n, d.schemaRows().size)
@@ -436,6 +436,42 @@ class DeviceTest {
         ok(req(a, Msg.SET, Req.set("powerOnScale=50\n")))
         ok(req(a, Msg.SET, Req.set("maxVolume=60\n")))
         assertEquals("50", pref(a, "powerOnScale"))
+    }
+
+    @Test
+    fun chargeSpeedFollowsChargeLimitOnV1AndR1() {
+        assertTrue(device("ap80").schemaRows().none { it.key == "chargeSpeed" })
+        for (b in listOf("v1", "r1")) {
+            val d = device(b)
+            val keys = d.schemaRows().map { it.key }
+            assertEquals(b, keys.indexOf("chargeLimit") + 1, keys.indexOf("chargeSpeed"))
+            val first = Sink()
+            ok(req(d, Msg.SET, Req.set("lockKnob=on\n"), first))
+            assertTrue(b, "chargeSpeed=normal" in Settings.from(first.of(Msg.SETTINGS).single()).text.lines())
+            val out = Sink()
+            assertEquals(b, listOf("chargeSpeed"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("chargeSpeed=300\n"), out)))).kept)
+            assertTrue(b, "chargeSpeed=300" in Settings.from(out.of(Msg.SETTINGS).single()).text.lines())
+            for (w in listOf("700", "780", "fast", "300 MA")) assertEquals("$b $w", listOf("chargeSpeed"), fail(req(d, Msg.SET, Req.set("chargeSpeed=$w\n"))).refused)
+            val kept = Sink()
+            ok(req(d, Msg.SET, Req.set("lockKnob=off\n"), kept))
+            assertTrue(b, "chargeSpeed=300" in Settings.from(kept.of(Msg.SETTINGS).single()).text.lines())
+            val back = Sink()
+            ok(req(d, Msg.SET, Req.set("chargeSpeed=normal\n"), back))
+            assertTrue(b, "chargeSpeed=normal" in Settings.from(back.of(Msg.SETTINGS).single()).text.lines())
+        }
+    }
+
+    @Test
+    fun aRowTheSimDoesNotSendRefusesItsSet() {
+        val d = device("v1", "rows-off=chargeSpeed")
+        assertTrue(d.schemaRows().none { it.key == "chargeSpeed" })
+        assertEquals(listOf("chargeSpeed"), fail(req(d, Msg.SET, Req.set("chargeSpeed=300\n"))).refused)
+        assertEquals(listOf("streaming"), fail(req(device("v1"), Msg.SET, Req.set("streaming=off\n"))).refused)
+        assertEquals(listOf("navOrder"), fail(req(device("v1"), Msg.SET, Req.set("navOrder=backRight\n"))).refused)
+        val n = device("v1")
+        val r = SetReply.from(Node.decode("SET.reply", ok(req(n, Msg.SET, Req.set("navBar=on\nnavOrder=backRight\n")))))
+        assertEquals(listOf("navBar"), r.kept)
+        assertEquals(listOf("navOrder"), r.refused)
     }
 
     @Test

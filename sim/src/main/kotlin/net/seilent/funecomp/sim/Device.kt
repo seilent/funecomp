@@ -208,7 +208,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         "saverLyrics" to "on", "brightness" to whole(tok.settings_brightnessDefault),
         "outputPriority" to "headphones", "outputGain" to "high", "dsdOutput" to "dop", "tube" to "off", "stereoWidth" to "off",
         "led" to "high", "saverDrift" to "on", "statusVolume" to "off", "navBar" to "off", "navOrder" to "backLeft",
-        "navButton" to "play", "whenIdle" to "powerOff", "chargeLimit" to "off", "usbFeedback" to "on", "usbOutput" to "headphones",
+        "navButton" to "play", "whenIdle" to "powerOff", "chargeLimit" to "off", "chargeSpeed" to "normal", "usbFeedback" to "on", "usbOutput" to "headphones",
         "companion" to if (opts.companion) "on" else "off", "scrobble" to "phone", "size" to "standard",
         "bootLogo" to "fune", "streaming" to if (opts.services.isNotEmpty()) "on" else "off", "btAudio" to "on",
     ).apply {
@@ -1207,7 +1207,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun accept(key: String, value: String): String? {
         if (key == "bootLogo" && value == "picture") return null
-        val r = rows.firstOrNull { it.key == key } ?: return null
+        val r = structureRows().firstOrNull { it.key == key } ?: return null
         if (Enums.RowFlag.readOnly in r.flags || key in readOnlyToSet) return null
         return when (r.kind) {
             Enums.RowKind.choice, Enums.RowKind.toggle -> value.takeIf { it in r.values }

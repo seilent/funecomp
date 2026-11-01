@@ -42,6 +42,7 @@ power	sleep	draft	SLEEP TIMER	0,15,30,45,60,90,120	OFF,15 MIN,30 MIN,45 MIN,60 M
 power	idleShutdownMinutes	steps	IDLE SHUTDOWN	0,5,10,30,60	OFF,5 MIN,10 MIN,30 MIN,60 MIN	-	-	-
 power	whenIdle	choice	WHEN IDLE	sleep,powerOff	SLEEP,POWER OFF	-	boardOnly	-
 power	chargeLimit	choice	CHARGE LIMIT	off,4200	OFF,4.20 V	-	boardOnly	-
+power	chargeSpeed	choice	CHARGE SPEED	normal,500,300	NORMAL,500 MA,300 MA	-	boardOnly	-
 power	lockKnob	toggle	LOCK VOLUME	off,on	OFF,ON	-	-	-
 power	screenOffKeys	choice	SCREEN OFF KEYS	all,play,none	ALL,PLAY ONLY,NONE	-	-	-
 power	inlineRemote	toggle	IN-LINE REMOTE	off,on	OFF,ON	-	-	-
