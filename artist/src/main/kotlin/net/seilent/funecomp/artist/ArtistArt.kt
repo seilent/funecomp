@@ -146,7 +146,8 @@ class ArtistArt(
 
     fun render(e: ArtCache.Entry, w: Int, h: Int): ByteArray? {
         cache.rendered(e.key, w, h)?.let { return it }
-        val jpeg = cache.source(e.key)?.let { Backdrop.render(codec, it, w, h, upscale = true) } ?: return null
+        val point = if (picked(e)) picks.byCache(e.key)?.let { picks.point(it) } else null
+        val jpeg = cache.source(e.key)?.let { Backdrop.render(codec, it, w, h, upscale = true, point = point) } ?: return null
         cache.putRendered(e.key, w, h, jpeg)
         return jpeg
     }
@@ -175,7 +176,7 @@ class ArtistArt(
         }
         if (!online()) throw IOException("offline")
         val src = api.get(p.url)?.body
-        val jpeg = src?.takeIf { check(it) == null }?.let { Backdrop.render(codec, it, w, h, upscale = true) }
+        val jpeg = src?.takeIf { check(it) == null }?.let { Backdrop.render(codec, it, w, h, upscale = true, point = picks.point(p)) }
         if (src == null || jpeg == null) {
             picks.failed(p, now)
             picks.save()
@@ -195,7 +196,7 @@ class ArtistArt(
 
     private fun gallery(p: ArtPicks.Pick, name: String, tag: String?, w: Int, h: Int): Art? {
         val src = gallery?.get(p.sha)
-        val jpeg = src?.let { Backdrop.render(codec, it, w, h, upscale = true) }
+        val jpeg = src?.let { Backdrop.render(codec, it, w, h, upscale = true, point = picks.point(p)) }
         if (src == null || jpeg == null) {
             if (synchronized(missingLogged) { missingLogged.add(p.sha) }) log("art pick gallery missing ${p.name}")
             return null
@@ -591,7 +592,7 @@ class ArtistArt(
 
     fun pushCrc(e: ArtCache.Entry): Long? = cache.full(e.key)?.crc
 
-    val full: FullSource = FullSource(cache, codec, log = log)
+    val full: FullSource = FullSource(cache, codec, log = log) { k -> picks.byCache(k)?.let { picks.point(it) } }
 
     fun forgetName(name: String) = cache.forgetName(name)
 

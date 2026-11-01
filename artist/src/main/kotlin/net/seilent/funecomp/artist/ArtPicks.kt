@@ -1,8 +1,9 @@
 package net.seilent.funecomp.artist
 
 import java.io.File
+import java.io.IOException
 
-class ArtPicks(private val file: File? = null, private val log: (String) -> Unit = {}) {
+class ArtPicks(private val file: File? = null, private val crops: ArtCrops = ArtCrops(), private val log: (String) -> Unit = {}) {
     data class Pick(
         val key: String,
         val key2: String?,
@@ -43,14 +44,21 @@ class ArtPicks(private val file: File? = null, private val log: (String) -> Unit
 
     @Synchronized
     fun add(p: Pick) {
+        val gone = picks.filter { it.keys.any { k -> k in p.keys } }
         picks.removeAll { it.keys.any { k -> k in p.keys } }
         picks += p
+        for (o in gone) if (o.id != p.id || o.at != p.at) crops.drop(o)
     }
 
     @Synchronized
     fun remove(p: Pick) {
         picks.removeAll { it.key == p.key && it.at == p.at }
+        crops.drop(p)
     }
+
+    fun point(p: Pick): Pair<Int, Int>? = crops.get(p)
+
+    fun setPoint(p: Pick, point: Pair<Int, Int>?) = crops.set(p, point)
 
     @Synchronized
     fun <T> ifCurrent(p: Pick, block: () -> T): T? = if (picks.any { it.key == p.key && it.at == p.at }) block() else null
@@ -88,6 +96,11 @@ class ArtPicks(private val file: File? = null, private val log: (String) -> Unit
 
     @Synchronized
     fun save() {
+        try {
+            crops.save()
+        } catch (e: IOException) {
+            log("artcrop save failed ${e.message}")
+        }
         val f = file ?: return
         val text = encode()
         f.parentFile?.mkdirs()

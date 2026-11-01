@@ -12,6 +12,7 @@ class FullSource(
     private val maxBytes: Int = Proto.imgSrcMaxBytes,
     private val maxSide: Int = Proto.imgSrcMaxSide,
     private val log: (String) -> Unit = {},
+    private val point: (String) -> Pair<Int, Int>? = { null },
 ) {
     fun of(key: String): Full? {
         val e = cache.hit(key) ?: return null
@@ -28,7 +29,7 @@ class FullSource(
         val copy = step == 0 && SourceJpeg.sendable(src, maxBytes, maxSide)
         val orientation = info?.orientation ?: 0
         val out = if (copy) Triple(src, info!!.w, info.h) else encode(src, orientation, step) ?: return null
-        val focus = focus(src, orientation)
+        val focus = point(key) ?: focus(src, orientation)
         val c = crc(out.first)
         cache.putFull(key, ArtCache.Full(c, out.second, out.third, enc, focus, copy), if (copy) null else out.first)
         log("art full ${e.name} ${if (copy) "copy" else "encode $step"} ${out.second}x${out.third} bytes=${out.first.size}")
