@@ -348,7 +348,7 @@ fun ListRow(
         label = "row",
     )
     Pressable({ onTap() }, modifier.size(rowW.dp(), rowH.dp()), onLong) {
-        if (ring) Ring(Tok.rowRing, GlyphName.PLAY, focused, Modifier.at(ui.px(Tok.hubEdge), rowH / 2, ay = 0.5f))
+        if (ring) Ring(Tok.rowRing, GlyphName.PLAY, Look.Focus(focused), Modifier.at(ui.px(Tok.hubEdge), rowH / 2, ay = 0.5f))
         Layout(
             content = {
                 RoleText(primary, primaryRole, Modifier.layoutId(ROW_PRIMARY).testTag(ROW_PRIMARY), color = c)

@@ -205,6 +205,11 @@ private fun playing(c: SimControl) {
     c.transport(Enums.TransportCmd.seek, seekMs = 61_000)
 }
 
+private fun opened(c: SimControl) {
+    c.transport(Enums.TransportCmd.next)
+    c.transport(Enums.TransportCmd.seek, seekMs = 61_000)
+}
+
 private fun sleep(minutes: Long, agoMs: Long): (SimControl) -> Unit = { c ->
     c.draft(Enums.DraftKind.sleep, minutes = minutes)
     val p = c.device.playback
@@ -800,6 +805,13 @@ val SHOTS = listOf(
     Shot("nowplaying-long", pages = NP, prep = { c -> playing(c); longTitle(c) }),
     Shot("nowplaying-longtrack", pages = NP, prep = { c -> playing(c); longTrack(c) }),
     Shot("nowplaying-idle", pages = NP, prep = ::playing, after = (Tok.motion_idle + Tok.motion_idleFade).toLong() + 100),
+    Shot("nowplaying-open", pages = NP, prep = ::opened),
+    Shot("nowplaying-open-playing", pages = NP, prep = { c -> opened(c); c.transport(Enums.TransportCmd.toggle) }),
+    Shot("nowplaying-open-idle", pages = NP, prep = ::opened, after = (Tok.motion_idle + Tok.motion_idleFade).toLong() + 100),
+    Shot("nowplaying-tap-play", pages = NP, prep = ::opened, after = 600) { rule.onNodeWithTag("np.toggle").performClick() },
+    Shot("nowplaying-tap-next", pages = NP, prep = ::opened, after = 600) { rule.onNodeWithTag("np.nextTrack").performClick() },
+    Shot("nowplaying-repeat-one", pages = NP, prep = { c -> opened(c); c.transport(Enums.TransportCmd.repeat, repeat = Enums.Repeat.one) }),
+    Shot("nowplaying-overlay-open", pages = NP, prep = ::opened, after = 450) { it.overlay.show() },
     Shot("heart-unlit", pages = NP, prep = ::playing),
     Shot("heart-lit", pages = NP, prep = ::favorite),
     Shot("heart-unknown", pages = NP, prep = ::playing, faults = listOf("favs-busy=1")),

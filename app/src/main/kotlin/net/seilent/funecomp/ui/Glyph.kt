@@ -75,14 +75,30 @@ fun Glyph(name: GlyphName, size: Float, color: Color, modifier: Modifier = Modif
     }
 }
 
+sealed interface Look {
+    data object Touch : Look
+
+    data class Toggle(val on: Boolean) : Look
+
+    data class Focus(val focused: Boolean) : Look
+}
+
+class RingStyle(val alpha: Float, val stroke: Float)
+
+fun ringLook(look: Look): RingStyle = when (look) {
+    Look.Touch -> RingStyle(Tok.alpha_full, Tok.ringStrokeIdle)
+    is Look.Toggle -> RingStyle(if (look.on) Tok.alpha_full else Tok.alpha_mid, Tok.ringStrokeIdle)
+    is Look.Focus -> if (look.focused) RingStyle(Tok.alpha_full, Tok.ringStrokeFocused) else RingStyle(Tok.alpha_mid, Tok.ringStrokeIdle)
+}
+
 @Composable
-fun Ring(size: Float, glyph: GlyphName, focused: Boolean, modifier: Modifier = Modifier, toggle: Boolean = false, on: Boolean = false, swaps: Int = 0, pressed: Boolean = false) {
+fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifier, swaps: Int = 0, pressed: Boolean = false) {
     val ui = LocalUi.current
     val side = ui.px(size)
     val dp = with(LocalDensity.current) { side.toDp() }
-    val stroke = ui.px(if (focused) Tok.ringStrokeFocused else Tok.ringStrokeIdle)
-    val lit = if (toggle) on else focused
-    val color = white(if (lit) Tok.alpha_full else Tok.alpha_mid)
+    val style = ringLook(look)
+    val stroke = ui.px(style.stroke)
+    val color = white(style.alpha)
     val scale = remember { Animatable(1f) }
     val alpha = remember { Animatable(1f) }
     val first = remember { booleanArrayOf(true) }

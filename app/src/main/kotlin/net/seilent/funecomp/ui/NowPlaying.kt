@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.runtime.key
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -222,7 +223,7 @@ fun BackRing(onBack: () -> Unit) {
         Modifier.size(ui.px(Tok.backRingX + Tok.backRing).dp(), ui.px(Tok.backRingY + Tok.backRing).dp()).clipToBounds()
             .press({ onBack() }).testTag("back"),
     ) {
-        Box(Modifier.at(ui.px(Tok.backRingX), ui.px(Tok.backRingY), unbounded = true)) { Ring(Tok.backRing, GlyphName.BACK, true) }
+        Box(Modifier.at(ui.px(Tok.backRingX), ui.px(Tok.backRingY), unbounded = true)) { Ring(Tok.backRing, GlyphName.BACK, Look.Focus(true)) }
     }
 }
 
@@ -486,7 +487,6 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
         idle = true
     }
     val idleAlpha by animateFloatAsState(if (idle) Tok.motion_idleAlpha else 1f, tween(Tok.motion_idleFade.toInt(), easing = Decel), label = "idle")
-    var ringFocus by remember { mutableIntStateOf(0) }
     var seekFraction by remember { mutableStateOf<Float?>(null) }
 
     val textX = ui.px(ui.npTextX)
@@ -593,15 +593,13 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                                 val hx = artX + artSide - inset - ring / 2
                                 val hy = ui.npHeartYPx(artY)
                                 val on = Heart.lit(s)
-                                val focused = ringFocus == HEART
                                 var swaps by remember { mutableIntStateOf(0) }
                                 var down by remember { mutableStateOf(false) }
-                                Box(Modifier.at(hx, hy, 0.5f, 0.5f).alpha(if (focused) 1f else idleAlpha).testTag(if (on) "np.heart.on" else "np.heart.off")) {
-                                    Ring(Tok.npRing, GlyphName.HEART, focused, toggle = true, on = on, swaps = swaps, pressed = down)
+                                Box(Modifier.at(hx, hy, 0.5f, 0.5f).alpha(idleAlpha).testTag(if (on) "np.heart.on" else "np.heart.off")) {
+                                    Ring(Tok.npRing, GlyphName.HEART, Look.Toggle(on), swaps = swaps, pressed = down)
                                 }
                                 Box(
                                     Modifier.at(hx, hy, 0.5f, 0.5f).size(ui.npHeartHitPx.dp()).testTag("np.heart").press({
-                                        ringFocus = HEART
                                         swaps++
                                         control.favorite(s) { line, title -> toast.show(line, title) }
                                     }, {}) { down = it },
@@ -669,7 +667,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         val cy = artY + artSide - (if (corner) ui.px(Tok.detailRingInset) else 0f) - ring / 2
                         var down by remember { mutableStateOf(false) }
                         Box(Modifier.at(cx, cy, 0.5f, 0.5f).testTag("np.mark")) {
-                            Ring(Tok.npRing, GlyphName.MIC, false, pressed = down)
+                            Ring(Tok.npRing, GlyphName.MIC, Look.Focus(false), pressed = down)
                         }
                         Box(Modifier.at(cx, cy, 0.5f, 0.5f).size(ring.dp()).press({ lyricsKey() }, longPress) { down = it }.testTag("np.mark.hit"))
                     }
@@ -689,30 +687,30 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
             items.forEach { (kind, x) ->
                 key(kind) {
                     val cx = ui.px(x)
-                    val focused = ringFocus == kind
-                    val alpha = if (focused) 1f else idleAlpha
-                    val hit = Modifier.at(cx, ringY, 0.5f, 0.5f).size(hitW.dp(), hitH.dp()).testTag(ITEM_TAGS.getValue(kind))
+                    val alpha = if (kind == SHUFFLE || kind == REPEAT) idleAlpha else 1f
+                    val tag = ITEM_TAGS.getValue(kind)
+                    val hit = Modifier.at(cx, ringY, 0.5f, 0.5f).size(hitW.dp(), hitH.dp()).testTag(tag)
                     if (kind == PREV || kind == NEXT) {
-                        Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(if (focused) Tok.alpha_full else Tok.alpha_mid), Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha))
+                        var down by remember { mutableStateOf(false) }
+                        val press by animateFloatAsState(if (down) Tok.motion_pressScale else 1f, tween(Tok.motion_press.toInt(), easing = LinearEasing), label = "glyphPress")
+                        Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx, ringY, 0.5f, 0.5f).scale(press).alpha(alpha).testTag("$tag.glyph"))
                         Box(
                             hit.press({
-                                ringFocus = kind
                                 control.transport(if (kind == PREV) Enums.TransportCmd.prev else Enums.TransportCmd.next)
-                            }),
+                            }) { down = it },
                         )
                     } else {
                         var swaps by remember { mutableIntStateOf(0) }
                         var down by remember { mutableStateOf(false) }
                         Box(Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha)) {
                             when (kind) {
-                                SHUFFLE -> Ring(Tok.npRing, GlyphName.SHUFFLE, focused, toggle = true, on = s.shuffle == true, swaps = swaps, pressed = down)
-                                REPEAT -> Ring(Tok.npRing, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, focused, toggle = true, on = repeat != Enums.Repeat.off, swaps = swaps, pressed = down)
-                                else -> Ring(ui.npPlayRing, if (playing) GlyphName.PAUSE else GlyphName.PLAY, focused, Modifier.testTag(if (playing) "np.toggle.pause" else "np.toggle.play"), pressed = down)
+                                SHUFFLE -> Ring(Tok.npRing, GlyphName.SHUFFLE, Look.Toggle(s.shuffle == true), swaps = swaps, pressed = down)
+                                REPEAT -> Ring(Tok.npRing, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, Look.Toggle(repeat != Enums.Repeat.off), swaps = swaps, pressed = down)
+                                else -> Ring(ui.npPlayRing, if (playing) GlyphName.PAUSE else GlyphName.PLAY, Look.Touch, Modifier.testTag(if (playing) "np.toggle.pause" else "np.toggle.play"), pressed = down)
                             }
                         }
                         Box(
                             hit.press({
-                                ringFocus = kind
                                 when (kind) {
                                     SHUFFLE -> {
                                         if (liveNow().transportRefusal(Enums.TransportCmd.shuffle) == null) swaps++

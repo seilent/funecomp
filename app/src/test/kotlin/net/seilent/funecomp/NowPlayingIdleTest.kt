@@ -178,7 +178,7 @@ class NowPlayingIdleTest {
     }
 
     @Test
-    fun theUnfocusedRingsAndStatusDimAfterTheIdleTimeAndTheFocusedRingStays() {
+    fun theTogglesAndStatusDimAfterTheIdleTimeAndThePlayControlsStay() {
         start()
         for (s in SIZES) {
             size = s
@@ -189,6 +189,7 @@ class NowPlayingIdleTest {
             val status = luma(st)
             val repeat = luma("np.repeat")
             val shuffle = luma("np.shuffle")
+            val controls = PLAY_CONTROLS.associateWith { luma(it) }
             until(at + Tok.motion_idle.toLong() - BEFORE_IDLE)
             assertEquals(s.name, status, luma(st))
             assertEquals(s.name, repeat, luma("np.repeat"))
@@ -198,7 +199,8 @@ class NowPlayingIdleTest {
             until(at + DIMMED)
             dimmed("${s.name} status", status, luma(st))
             dimmed("${s.name} repeat", repeat, luma("np.repeat"))
-            assertEquals(s.name, shuffle, luma("np.shuffle"))
+            dimmed("${s.name} shuffle", shuffle, luma("np.shuffle"))
+            for ((tag, full) in controls) assertEquals("${s.name} $tag", full, luma(tag))
         }
     }
 
@@ -338,5 +340,6 @@ class NowPlayingIdleTest {
         val MID_FADE = Tok.motion_idle.toLong() + FRAMES / 2 + Tok.motion_idleFade.toLong() / 2
         val OVERLAY_GONE = (Tok.motion_volumeHide + Tok.motion_volumeFade).toLong() + 300L
         const val DIM_TOLERANCE = 0.02f
+        val PLAY_CONTROLS = listOf("np.prev", "np.toggle", "np.nextTrack")
     }
 }

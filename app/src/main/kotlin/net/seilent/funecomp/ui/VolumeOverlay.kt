@@ -99,11 +99,11 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
             Modifier.atBaseline(edge, ui.px(ui.overlayNumberBaseline)).scale(pop.value).testTag("overlay.number"),
             alpha = Tok.overlayLit,
         )
+        Glyph(GlyphName.PREVIOUS, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx - off, ringY, 0.5f, 0.5f))
+        Ring(Tok.overlayRing, if (s.playing == true) GlyphName.PAUSE else GlyphName.PLAY, Look.Touch, Modifier.at(cx, ringY, 0.5f, 0.5f))
+        Glyph(GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx + off, ringY, 0.5f, 0.5f))
         Box(Modifier.fillMaxSize().alpha(Tok.overlayDim)) {
             RoleText("exit", Roles.overlayLabel, Modifier.at(edge, edge), alpha = Tok.alpha_full)
-            Glyph(GlyphName.PREVIOUS, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx - off, ringY, 0.5f, 0.5f))
-            Ring(Tok.overlayRing, if (s.playing == true) GlyphName.PAUSE else GlyphName.PLAY, true, Modifier.at(cx, ringY, 0.5f, 0.5f))
-            Glyph(GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx + off, ringY, 0.5f, 0.5f))
             RoleText("volume", Roles.overlayLabel, Modifier.at(cx, minusY + ui.px(Tok.overlayGlyph) / 2, ax = 0.5f), alpha = Tok.alpha_full)
             Lines(s.artist ?: "", s.title ?: "", textW)
         }
