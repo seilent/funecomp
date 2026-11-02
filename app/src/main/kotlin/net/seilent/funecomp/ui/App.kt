@@ -116,7 +116,9 @@ fun App(
         val base = LocalViewConfiguration.current
         val touch = remember(base, ui.u) { Touch(base, ui.px(Tok.touchSlop)) }
         val accent = accentFor(device.settings.values[ACCENT_KEY]?.toIntOrNull())
+        val slots = remember { PressSlots() }
         CompositionLocalProvider(
+            LocalPressSlots provides slots,
             LocalUi provides ui,
             LocalBleed provides bleed,
             LocalAccent provides accent,
@@ -129,11 +131,16 @@ fun App(
             val current by rememberUpdatedState(device)
             val ctx = Ctx(device, control, nav, shell.sheet, shell.toast, browse) { current }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
+            LaunchedEffect(shell.overlay.shows) { slots.drop() }
+            LaunchedEffect(shell.sheet.shown) { if (shell.sheet.shown) slots.drop() }
             DisposableEffect(control, shell.toast, lifecycle) {
                 val sink: (String, String) -> Unit = { line, title -> shell.toast.show(line, title) }
                 val started = LifecycleEventObserver { _, e ->
                     if (e == Lifecycle.Event.ON_START) control.refusals(sink)
-                    if (e == Lifecycle.Event.ON_STOP) control.refusals(null, sink)
+                    if (e == Lifecycle.Event.ON_STOP) {
+                        control.refusals(null, sink)
+                        slots.reset()
+                    }
                 }
                 lifecycle.addObserver(started)
                 onDispose {

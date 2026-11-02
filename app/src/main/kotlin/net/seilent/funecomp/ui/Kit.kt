@@ -13,6 +13,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -45,11 +47,15 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
+import androidx.compose.ui.input.pointer.PointerInputScope
+import androidx.compose.ui.input.pointer.isOutOfBounds
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Layout
@@ -80,29 +86,78 @@ private const val NS_PER_S = 1_000_000_000L
 @Composable
 fun Float.dp() = with(LocalDensity.current) { this@dp.toDp() }
 
-fun Modifier.press(onTap: (Offset) -> Unit, onLong: (() -> Unit)? = null, pressed: (Boolean) -> Unit = {}) = composed {
+fun Modifier.press(onTap: (Offset) -> Unit, onLong: (() -> Unit)? = null, press: PressState? = null) = composed {
     val tap by rememberUpdatedState(onTap)
     val long by rememberUpdatedState(onLong)
-    val down by rememberUpdatedState(pressed)
     val hasLong = onLong != null
-    pointerInput(hasLong) {
-        detectTapGestures(
-            onPress = {
-                down(true)
-                tryAwaitRelease()
-                down(false)
-            },
-            onLongPress = if (hasLong) { _: Offset -> long?.invoke() } else null,
-            onTap = { tap(it) },
-        )
+    if (press == null) {
+        pointerInput(hasLong) {
+            detectTapGestures(
+                onPress = { tryAwaitRelease() },
+                onLongPress = if (hasLong) { _: Offset -> long?.invoke() } else null,
+                onTap = { tap(it) },
+            )
+        }
+    } else {
+        pointerInput(hasLong, press) { pressGesture(press, hasLong, { long?.invoke() }) { tap(it) } }
+    }
+}
+
+private sealed interface Outcome {
+    class Up(val change: PointerInputChange) : Outcome
+
+    class Slop(val at: Long) : Outcome
+
+    data object Gone : Outcome
+}
+
+private suspend fun AwaitPointerEventScope.track(first: PointerInputChange, slop: Float): Outcome {
+    while (true) {
+        val c = awaitPointerEvent().changes.firstOrNull { it.id == first.id } ?: return Outcome.Gone
+        if (!c.pressed) return if (c.isConsumed) Outcome.Gone else Outcome.Up(c)
+        if (c.isConsumed || c.isOutOfBounds(size, extendedTouchPadding) || (c.position - first.position).getDistance() > slop) return Outcome.Slop(c.uptimeMillis)
+        val f = awaitPointerEvent(PointerEventPass.Final).changes.firstOrNull { it.id == first.id }
+        if (f != null && f.isConsumed) return Outcome.Slop(f.uptimeMillis)
+    }
+}
+
+private suspend fun AwaitPointerEventScope.untilUp(first: PointerInputChange, consume: Boolean) {
+    while (true) {
+        val c = awaitPointerEvent().changes.firstOrNull { it.id == first.id } ?: return
+        if (consume) c.consume()
+        if (!c.pressed) return
+    }
+}
+
+private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: Boolean, long: () -> Unit, tap: (Offset) -> Unit) = awaitEachGesture {
+    val first = awaitFirstDown()
+    first.consume()
+    press.down(first.uptimeMillis)
+    val slop = viewConfiguration.touchSlop
+    val outcome = if (hasLong) withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) { track(first, slop) } else track(first, slop)
+    when (outcome) {
+        null -> {
+            press.reset()
+            long()
+            untilUp(first, true)
+        }
+        is Outcome.Up -> {
+            press.tap(outcome.change.uptimeMillis)
+            outcome.change.consume()
+            tap(outcome.change.position)
+        }
+        is Outcome.Slop -> {
+            press.cancel(outcome.at)
+            untilUp(first, false)
+        }
+        Outcome.Gone -> press.reset()
     }
 }
 
 @Composable
 fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, content: @Composable () -> Unit) {
-    var down by remember { mutableStateOf(false) }
-    val s by animateFloatAsState(if (down) Tok.motion_pressScale else 1f, tween(Tok.motion_press.toInt(), easing = LinearEasing), label = "press")
-    Box(modifier.scale(s).press(onTap, onLong) { down = it }) { content() }
+    val p = rememberPress()
+    Box(modifier.press(onTap, onLong, p).pressScale(p)) { content() }
 }
 
 @Composable

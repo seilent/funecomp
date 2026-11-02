@@ -1,7 +1,6 @@
 package net.seilent.funecomp.ui
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -9,7 +8,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -24,6 +22,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
 
@@ -92,7 +91,7 @@ fun ringLook(look: Look): RingStyle = when (look) {
 }
 
 @Composable
-fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifier, swaps: Int = 0, pressed: Boolean = false) {
+fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifier, swaps: Int = 0, press: PressState? = null, tag: String? = null) {
     val ui = LocalUi.current
     val side = ui.px(size)
     val dp = with(LocalDensity.current) { side.toDp() }
@@ -114,9 +113,8 @@ fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifie
         alpha.snapTo(0f)
         alpha.animateTo(1f, tween(Tok.motion_toggleSwap.toInt(), easing = LinearEasing))
     }
-    val press by animateFloatAsState(if (pressed) Tok.motion_pressScale else 1f, tween(Tok.motion_press.toInt(), easing = LinearEasing), label = "ringPress")
-    Box(modifier.requiredSize(dp).scale(press)) {
-        Canvas(Modifier.requiredSize(dp)) {
+    Box(modifier.requiredSize(dp).pressScale(press)) {
+        Canvas(Modifier.requiredSize(dp).then(if (tag != null) Modifier.testTag("$tag.ring") else Modifier)) {
             drawCircle(color, radius = (side - stroke) / 2, style = Stroke(stroke))
         }
         Glyph(glyph, size / 2, color, Modifier.at(side / 2, side / 2, 0.5f, 0.5f).scale(scale.value).alpha(alpha.value))

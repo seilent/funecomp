@@ -198,17 +198,17 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                     (if (music < 0) 1f else homeBarAlpha(barFocus, music)) * Decel.transform((enterMs() / Tok.motion_homeEnter).coerceIn(0f, 1f))
                 }
                 if (music >= 0) {
-                    var down by remember { mutableStateOf(false) }
+                    val press = rememberPress()
                     val left = ui.px(ui.homeMenuX)
                     val top = ui.px(ui.homeSlotTop(music))
                     Box(
                         Modifier.at(left, top)
                             .size((ui.px(ui.homeRingHitRight) - left).dp(), (ui.px(ui.homeRingHitBottom(music)) - top).dp())
                             .graphicsLayer { alpha = homeRingEnter(ringMs()) }
-                            .press({ onShuffle() }) { down = it }
+                            .press({ onShuffle() }, press = press)
                             .testTag("home.ring"),
                     ) {
-                        Box(Modifier.at(ui.px(ui.homeRingX) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(Tok.homeRingSize, GlyphName.PLAY, Look.Focus(false), pressed = down) }
+                        Box(Modifier.at(ui.px(ui.homeRingX) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(Tok.homeRingSize, GlyphName.PLAY, Look.Focus(false), press = press, tag = "home.ring") }
                     }
                 }
                 items.forEachIndexed { i, item ->

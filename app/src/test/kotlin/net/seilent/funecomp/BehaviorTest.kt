@@ -837,6 +837,31 @@ class BehaviorTest {
     }
 
     @Test
+    fun autoEqGridLetterReturningFromADragKeepsItsValueAndAThirdLetterSnapsIt() {
+        openAutoEq()
+        openGrid()
+        val tile = width("jump.19")
+        val slop = Tok.touchSlop * Ui.of(411f * rule.density.density, 960f * rule.density.density).u
+        rule.onNodeWithTag("jump.19").performTouchInput { down(center) }
+        settle(100)
+        rule.onNodeWithTag("jump.19").performTouchInput { moveBy(Offset(slop * 3, 0f)) }
+        rule.onNodeWithTag("jump.19").performTouchInput { up() }
+        settle(20)
+        rule.onNodeWithTag("jump.20").performTouchInput { down(center) }
+        rule.mainClock.advanceTimeByFrame()
+        val back = width("jump.19") / tile
+        assertTrue("a returning letter keeps its value: $back", back > Tok.motion_pressScale + 0.005f && back < 0.995f)
+        rule.onNodeWithTag("jump.20").performTouchInput { moveBy(Offset(slop * 3, 0f)) }
+        rule.onNodeWithTag("jump.20").performTouchInput { up() }
+        rule.onNodeWithTag("jump.21").performTouchInput { down(center) }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals("a third letter snaps the returning one", tile, width("jump.19"), 0.5f)
+        assertTrue("the third letter starts from rest", width("jump.21") / tile > 0.99f)
+        rule.onNodeWithTag("jump.21").performTouchInput { up() }
+        settle(500)
+    }
+
+    @Test
     fun autoEqGridVerticalDragFromATileJumpsNowhere() {
         openAutoEq()
         openGrid()
@@ -903,7 +928,7 @@ class BehaviorTest {
     }
 
     @Test
-    fun autoEqGridJumpDropsThePressAndWritesNoStateAfterTheClose() {
+    fun autoEqGridJumpHoldsThePressThroughTheCloseAndWritesNoStateAfterIt() {
         openAutoEq()
         openGrid()
         val tile = width("jump.19")

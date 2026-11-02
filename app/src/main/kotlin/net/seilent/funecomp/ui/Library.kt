@@ -322,15 +322,15 @@ fun ArtistDetail(ctx: Ctx, page: Page.Artist) {
         val rings = listOf(GlyphName.PLAY to false, GlyphName.SHUFFLE to true)
         rings.forEach { (g, shuffle) ->
             val idx = if (shuffle) 2 else 0
-            var down by remember { mutableStateOf(false) }
+            val press = rememberPress()
             Box(
                 Modifier.at(ui.px(detailRingX(idx)) - ui.px(Tok.detailRingGap) / 2, ui.px(ui.detailRingTop) - ui.px(Tok.detailRingGap) / 2)
                     .size(ui.px(Tok.detailRing + Tok.detailRingGap).dp())
                     .press({
                         playSource(ctx, Enums.View.artistAlbums, page.name, page.songs ?: ctx.device.lib.pages[LibKey(Enums.View.artists, "")]?.rows?.values?.firstOrNull { (it.key ?: it.name) == page.name }?.count, shuffle)
-                    }) { down = it }.testTag(if (shuffle) "artist.shuffle" else "artist.play"),
+                    }, press = press).testTag(if (shuffle) "artist.shuffle" else "artist.play"),
             ) {
-                Box(Modifier.at(ui.px(Tok.detailRingGap) / 2, ui.px(Tok.detailRingGap) / 2)) { Ring(Tok.detailRing, g, Look.Touch, pressed = down) }
+                Box(Modifier.at(ui.px(Tok.detailRingGap) / 2, ui.px(Tok.detailRingGap) / 2)) { Ring(Tok.detailRing, g, Look.Touch, press = press, tag = if (shuffle) "artist.shuffle" else "artist.play") }
             }
         }
         RoleText("in collection", Roles.sectionLabel, Modifier.atBaseline(ui.px(ui.detailListX + Tok.hubEdge), ui.px(ui.detailLabelBaseline)))

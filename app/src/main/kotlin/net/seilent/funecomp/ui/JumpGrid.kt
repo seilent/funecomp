@@ -1,8 +1,5 @@
 package net.seilent.funecomp.ui
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -13,11 +10,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -38,10 +35,6 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.testTag
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.Section
 import kotlin.math.max
@@ -108,38 +101,38 @@ class JumpLayout(val cols: Int, val tile: Float, val left: Float) {
     }
 }
 
-private class JumpPress {
-    var item by mutableIntStateOf(JUMP_NONE)
-    val scale = Animatable(1f)
-    private var down: Job? = null
-    private var back: Job? = null
+private class JumpPress(private val a: PressState, private val b: PressState) {
+    private var itemA by mutableIntStateOf(JUMP_NONE)
+    private var itemB by mutableIntStateOf(JUMP_NONE)
+    private var cur = a
 
-    fun down(scope: CoroutineScope, i: Int) {
-        down?.cancel()
-        back?.cancel()
-        val again = item == i
-        item = i
-        down = scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            if (!again) scale.snapTo(1f)
-            scale.animateTo(Tok.motion_pressScale, tween(Tok.motion_press.toInt(), easing = LinearEasing))
+    fun down(i: Int, now: Long) {
+        cur = when (i) {
+            itemA -> a
+            itemB -> b
+            else -> (if (cur === a) b else a).also {
+                it.reset()
+                if (it === a) itemA = i else itemB = i
+            }
         }
+        cur.down(now)
     }
 
-    fun release(scope: CoroutineScope) {
-        back?.cancel()
-        back = scope.launch {
-            scale.animateTo(1f, tween(Tok.motion_press.toInt(), easing = LinearEasing))
-            item = JUMP_NONE
-        }
+    fun scale(i: Int) = when (i) {
+        itemA -> a.scale
+        itemB -> b.scale
+        else -> 1f
     }
 
-    fun drop(scope: CoroutineScope) {
-        down?.cancel()
-        back?.cancel()
-        back = scope.launch {
-            scale.snapTo(1f)
-            item = JUMP_NONE
-        }
+    fun tap(now: Long) = cur.tap(now)
+
+    fun release(now: Long) = cur.cancel(now)
+
+    fun drop() = cur.reset()
+
+    fun reset() {
+        a.reset()
+        b.reset()
     }
 }
 
@@ -169,7 +162,7 @@ private data class WhileElement(val shown: State<Boolean>, val props: SemanticsP
 private fun Modifier.semanticsWhile(shown: State<Boolean>, props: SemanticsPropertyReceiver.() -> Unit) = this then WhileElement(shown, props)
 
 private fun Modifier.pressed(press: JumpPress, i: Int) = graphicsLayer {
-    val s = if (press.item == i) press.scale.value else 1f
+    val s = press.scale(i)
     scaleX = s
     scaleY = s
 }
@@ -180,8 +173,18 @@ fun JumpGrid(avail: Set<Int>, focus: Int, open: Boolean, scroll: ScrollState, on
     val g = JumpLayout.of(ui)
     val tile = ui.px(g.tile)
     val shown = rememberUpdatedState(open)
-    val press = remember { JumpPress() }
-    val scope = rememberCoroutineScope()
+    val stackFrozen = LocalPressFrozen.current
+    val a = rememberPress()
+    val b = rememberPress()
+    val frozen = { !shown.value || stackFrozen() }
+    a.frozen = frozen
+    b.frozen = frozen
+    val press = remember(a, b) { JumpPress(a, b) }
+    val wasOpen = remember { booleanArrayOf(open) }
+    SideEffect {
+        if (open && !wasOpen[0]) press.reset()
+        wasOpen[0] = open
+    }
     val act = rememberUpdatedState { i: Int ->
         when {
             i == JUMP_EXIT -> onClose()
@@ -203,17 +206,19 @@ fun JumpGrid(avail: Set<Int>, focus: Int, open: Boolean, scroll: ScrollState, on
                     val first = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                     var live = if (scroll.isScrollInProgress) JUMP_NONE else hit(first.position.x, first.position.y)
                     val pressable = live != JUMP_EXIT && live != JUMP_NONE
-                    if (pressable) press.down(scope, live)
+                    if (pressable) press.down(live, first.uptimeMillis)
                     while (true) {
                         val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == first.id }
                         if (c == null || !c.pressed) {
                             val tap = c != null && !c.isConsumed && shown.value
-                            if (pressable && live != JUMP_NONE) press.drop(scope)
+                            if (pressable && live != JUMP_NONE) {
+                                if (tap) press.tap(c.uptimeMillis) else press.drop()
+                            }
                             if (tap && live != JUMP_NONE) act.value(live)
                             break
                         }
                         if (live != JUMP_NONE && (c.position - first.position).getDistance() > viewConfiguration.touchSlop) {
-                            if (pressable) press.release(scope)
+                            if (pressable) press.release(c.uptimeMillis)
                             live = JUMP_NONE
                         }
                     }

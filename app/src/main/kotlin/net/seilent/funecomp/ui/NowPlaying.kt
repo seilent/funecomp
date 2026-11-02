@@ -52,7 +52,6 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.runtime.key
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -219,11 +218,12 @@ private fun BackdropLayer(art: BackdropArt, alpha: Float) {
 @Composable
 fun BackRing(onBack: () -> Unit) {
     val ui = LocalUi.current
+    val press = rememberPress()
     Box(
         Modifier.size(ui.px(Tok.backRingX + Tok.backRing).dp(), ui.px(Tok.backRingY + Tok.backRing).dp()).clipToBounds()
-            .press({ onBack() }).testTag("back"),
+            .press({ onBack() }, press = press).testTag("back"),
     ) {
-        Box(Modifier.at(ui.px(Tok.backRingX), ui.px(Tok.backRingY), unbounded = true)) { Ring(Tok.backRing, GlyphName.BACK, Look.Focus(true)) }
+        Box(Modifier.at(ui.px(Tok.backRingX), ui.px(Tok.backRingY), unbounded = true)) { Ring(Tok.backRing, GlyphName.BACK, Look.Focus(true), press = press, tag = "back") }
     }
 }
 
@@ -233,6 +233,8 @@ fun NowPlaying(device: DeviceState, control: Control, toast: ToastState, overlay
     val onPhone = phone(device)
     val cover = if (onPhone) device.playback.state.phoneArtCrc?.let { crc -> control.phoneCover(crc)?.let { crc to it } } else null
     val last = remember { Last(device, lyrics, cover) }
+    val slots = LocalPressSlots.current
+    LaunchedEffect(onPhone) { slots?.drop() }
     val swap = remember(onPhone) {
         val from = last.device
         val run = phone(from) != onPhone && from.playback.seen && device.playback.seen && active && !overlay.visible && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
@@ -291,6 +293,8 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
         }
     }
     var lyricTarget by remember { mutableStateOf(target() ?: false) }
+    val slots = LocalPressSlots.current
+    LaunchedEffect(lyricTarget) { slots?.drop() }
     var fade by remember { mutableStateOf<LyricFade.Dir?>(null) }
     var reversing by remember { mutableStateOf(false) }
     var elapsed by remember { mutableFloatStateOf(0f) }
@@ -594,15 +598,15 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                                 val hy = ui.npHeartYPx(artY)
                                 val on = Heart.lit(s)
                                 var swaps by remember { mutableIntStateOf(0) }
-                                var down by remember { mutableStateOf(false) }
+                                val press = rememberPress()
                                 Box(Modifier.at(hx, hy, 0.5f, 0.5f).alpha(idleAlpha).testTag(if (on) "np.heart.on" else "np.heart.off")) {
-                                    Ring(Tok.npRing, GlyphName.HEART, Look.Toggle(on), swaps = swaps, pressed = down)
+                                    Ring(Tok.npRing, GlyphName.HEART, Look.Toggle(on), swaps = swaps, press = press, tag = "np.heart")
                                 }
                                 Box(
                                     Modifier.at(hx, hy, 0.5f, 0.5f).size(ui.npHeartHitPx.dp()).testTag("np.heart").press({
                                         swaps++
                                         control.favorite(s) { line, title -> toast.show(line, title) }
-                                    }, {}) { down = it },
+                                    }, {}, press),
                                 )
                             }
                         }
@@ -665,11 +669,11 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         val ring = ui.px(Tok.npRing)
                         val cx = if (corner) artX + artSide - ui.px(Tok.detailRingInset) - ring / 2 else artX + artSide + ui.px(Tok.tileLGutter) + ring / 2
                         val cy = artY + artSide - (if (corner) ui.px(Tok.detailRingInset) else 0f) - ring / 2
-                        var down by remember { mutableStateOf(false) }
+                        val press = rememberPress()
                         Box(Modifier.at(cx, cy, 0.5f, 0.5f).testTag("np.mark")) {
-                            Ring(Tok.npRing, GlyphName.MIC, Look.Focus(false), pressed = down)
+                            Ring(Tok.npRing, GlyphName.MIC, Look.Focus(false), press = press, tag = "np.mark")
                         }
-                        Box(Modifier.at(cx, cy, 0.5f, 0.5f).size(ring.dp()).press({ lyricsKey() }, longPress) { down = it }.testTag("np.mark.hit"))
+                        Box(Modifier.at(cx, cy, 0.5f, 0.5f).size(ring.dp()).press({ lyricsKey() }, longPress, press).testTag("np.mark.hit"))
                     }
                 }
             }
@@ -691,22 +695,21 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                     val tag = ITEM_TAGS.getValue(kind)
                     val hit = Modifier.at(cx, ringY, 0.5f, 0.5f).size(hitW.dp(), hitH.dp()).testTag(tag)
                     if (kind == PREV || kind == NEXT) {
-                        var down by remember { mutableStateOf(false) }
-                        val press by animateFloatAsState(if (down) Tok.motion_pressScale else 1f, tween(Tok.motion_press.toInt(), easing = LinearEasing), label = "glyphPress")
-                        Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx, ringY, 0.5f, 0.5f).scale(press).alpha(alpha).testTag("$tag.glyph"))
+                        val press = rememberPress()
+                        Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx, ringY, 0.5f, 0.5f).pressScale(press).alpha(alpha).testTag("$tag.glyph"))
                         Box(
                             hit.press({
                                 control.transport(if (kind == PREV) Enums.TransportCmd.prev else Enums.TransportCmd.next)
-                            }) { down = it },
+                            }, press = press),
                         )
                     } else {
                         var swaps by remember { mutableIntStateOf(0) }
-                        var down by remember { mutableStateOf(false) }
+                        val press = rememberPress()
                         Box(Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha)) {
                             when (kind) {
-                                SHUFFLE -> Ring(Tok.npRing, GlyphName.SHUFFLE, Look.Toggle(s.shuffle == true), swaps = swaps, pressed = down)
-                                REPEAT -> Ring(Tok.npRing, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, Look.Toggle(repeat != Enums.Repeat.off), swaps = swaps, pressed = down)
-                                else -> Ring(ui.npPlayRing, if (playing) GlyphName.PAUSE else GlyphName.PLAY, Look.Touch, Modifier.testTag(if (playing) "np.toggle.pause" else "np.toggle.play"), pressed = down)
+                                SHUFFLE -> Ring(Tok.npRing, GlyphName.SHUFFLE, Look.Toggle(s.shuffle == true), swaps = swaps, press = press, tag = "np.shuffle")
+                                REPEAT -> Ring(Tok.npRing, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, Look.Toggle(repeat != Enums.Repeat.off), swaps = swaps, press = press, tag = "np.repeat")
+                                else -> Ring(ui.npPlayRing, if (playing) GlyphName.PAUSE else GlyphName.PLAY, Look.Touch, Modifier.testTag(if (playing) "np.toggle.pause" else "np.toggle.play"), press = press, tag = "np.toggle")
                             }
                         }
                         Box(
@@ -727,7 +730,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                                     }
                                     else -> control.transport(Enums.TransportCmd.toggle)
                                 }
-                            }) { down = it },
+                            }, press = press),
                         )
                     }
                 }
