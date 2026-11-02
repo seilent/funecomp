@@ -217,6 +217,7 @@ object Remote : Control {
     private var artist: ArtistArt? = null
     private var pending: Pending? = null
     @Volatile private var art: ArtWorker? = null
+    internal val artIdle: Boolean get() = art?.idle != false
     @Volatile private var artKey: List<Any?>? = null
     @Volatile private var backdropFor: List<String>? = null
     @Volatile private var backdropRev = 0

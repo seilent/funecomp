@@ -29,6 +29,8 @@ class ArtWorker(
     private var http: HttpRun? = null
     private var thread: Thread? = null
 
+    val idle: Boolean get() = synchronized(lock) { thread == null }
+
     fun want() = synchronized(lock) {
         if (stopped) return
         wanted = true

@@ -469,10 +469,11 @@ class ArtBlockTest {
         Remote.shown(true)
         link(s.listen(0))
         waitFor(10_000) { ShadowLog.getLogsForTag(Remote.TAG).any { it.msg.startsWith("art current ") } }
-        prefs.edit().putBoolean("youtube", true).commit()
-        Remote.reordered()
+        waitFor(10_000) { Remote.artIdle }
         a.blocks.addPush(tag, null)
         a.blocks.save()
+        prefs.edit().putBoolean("youtube", true).commit()
+        Remote.reordered()
         Remote.sourcesChanged()
         waitFor(10_000) { afterUnblock.isNotEmpty() }
         assertEquals(true, afterUnblock.first())
