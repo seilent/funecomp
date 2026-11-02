@@ -22,6 +22,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.util.Log
+import androidx.core.content.ContextCompat
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.state.BatteryAlert
@@ -76,16 +77,19 @@ class LinkService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        val filter = IntentFilter().apply {
+        val stack = IntentFilter().apply {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
-            addAction(Intent.ACTION_SCREEN_ON)
-            addAction(ACTION_ALARM)
             addAction(BluetoothA2dp.ACTION_CONNECTION_STATE_CHANGED)
             addAction(BluetoothA2dp.ACTION_PLAYING_STATE_CHANGED)
+        }
+        val filter = IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_ON)
+            addAction(ACTION_ALARM)
             addAction(Intent.ACTION_TIME_CHANGED)
             addAction(Intent.ACTION_TIMEZONE_CHANGED)
         }
-        registerReceiver(receiver, filter, RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(this, receiver, stack, ContextCompat.RECEIVER_EXPORTED)
+        ContextCompat.registerReceiver(this, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         Remote.onPhase = { main.post { refresh() } }
         Remote.onState = { main.post { refresh() } }
         Remote.onMediaArt { main.post { refresh() } }
