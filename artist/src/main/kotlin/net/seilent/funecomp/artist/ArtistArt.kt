@@ -88,7 +88,8 @@ class ArtistArt(
         val m = cache.miss(key)
         val searchDue = step && searchDue(m, now)
         if (searchDue && !search) pending = true
-        if (m != null && now - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash && m.cleaned && !(searchDue && search)) {
+        val floor = Backdrop.floor(w, h)
+        if (m != null && now - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash && m.cleaned && m.answers(floor) && !(searchDue && search)) {
             due(m.at)
             return null
         }
@@ -98,9 +99,9 @@ class ArtistArt(
         if (found == null) {
             if (!kept) {
                 when (pass.answered) {
-                    true -> cache.putMiss(key, now, on, keyHash, now)
-                    false -> cache.putMiss(key, now, on, keyHash, m?.yt, now)
-                    null -> cache.putMiss(key, now, on, keyHash, m?.yt, m?.ytFailed)
+                    true -> cache.putMiss(key, now, on, floor, keyHash, now)
+                    false -> cache.putMiss(key, now, on, floor, keyHash, m?.yt, now)
+                    null -> cache.putMiss(key, now, on, floor, keyHash, m?.yt, m?.ytFailed)
                 }
                 if (pass.skipped.get() && blocks.drop(key, id, name.trim(), now)) blocks.save()
             } else if (hit != null) {
@@ -213,7 +214,7 @@ class ArtistArt(
         val hit = cache.hit(mbid)?.takeIf { it.source in on && !blocked(it) }
         if (hit != null) cache.source(mbid)?.let { return it }
         cache.miss(mbid)?.let { m ->
-            if (clock() - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash(on) && m.cleaned) return null
+            if (clock() - m.at < TTL_MS && m.sources.containsAll(on) && m.keyHash == keyHash(on) && m.cleaned && m.answers(Backdrop.floor(w, h))) return null
         }
         if (!online()) throw IOException("offline")
         return lookup(name, name, mbid, w, h, on, mbid, AtomicBoolean())?.src

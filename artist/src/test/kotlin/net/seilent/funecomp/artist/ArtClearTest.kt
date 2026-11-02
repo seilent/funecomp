@@ -39,7 +39,7 @@ class ArtClearTest {
         hit(utada, "宇多田ヒカル", Sources.DEEZER)
         hit(radiohead, "Radiohead", Sources.THE_AUDIO_DB)
         hit(pick, "TSUKI", Sources.DEEZER)
-        cache.putMiss(ado, time.now, setOf(Sources.DEEZER, Sources.THE_AUDIO_DB))
+        cache.putMiss(ado, time.now, setOf(Sources.DEEZER, Sources.THE_AUDIO_DB), Size(360, 480))
         cache.putMbid("Ado", ado, time.now)
         cache.putBare("Ado Official", ado, time.now)
         val a = art()
@@ -110,7 +110,7 @@ class ArtClearTest {
     @Test
     fun aMissAsksTheClearedSourceAgainOnlyWhileItIsOn() {
         sources = Sources.COMMONS.copy(deezer = true)
-        cache.putMiss(radiohead, time.now, sources.enabled)
+        cache.putMiss(radiohead, time.now, sources.enabled, Size(360, 480))
         assertNull(art().get("Radiohead", radiohead, 384, 480))
         assertTrue(http.calls.isEmpty())
         art().clearSource(Sources.DEEZER)

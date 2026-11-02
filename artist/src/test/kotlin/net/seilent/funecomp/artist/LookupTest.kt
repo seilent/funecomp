@@ -185,7 +185,7 @@ class LookupTest {
     fun corruptCacheMetaIsIgnored() {
         val dir = tmp.newFolder("bad")
         val c = ArtCache(dir)
-        c.putMiss("k", 5, setOf("commons"))
+        c.putMiss("k", 5, setOf("commons"), Size(240, 320))
         dir.listFiles()!!.filter { it.name.endsWith(".miss") }.forEach { it.writeText("state=miss\nat=zz\n") }
         assertEquals(0L, c.miss("k")!!.at)
         dir.listFiles()!!.filter { it.name.endsWith(".miss") }.forEach { it.writeText("state=hit\\u12") }
@@ -524,7 +524,7 @@ class LookupTest {
         sources = Sources.COMMONS.copy(deezer = true)
         val name = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
         val key = "name:${Names.fold(name)}"
-        cache.putMiss(key, time.now, sources.enabled)
+        cache.putMiss(key, time.now, sources.enabled, Size(240, 320))
         val f = java.io.File(tmp.root, "art").listFiles { x -> x.name.endsWith(".miss") }!!.single()
         f.writeText(f.readText().lines().filter { !it.startsWith("cleaned") }.joinToString("\n"))
         assertTrue(!cache.miss(key)!!.cleaned)
@@ -675,7 +675,7 @@ class LookupTest {
         sources = Sources.COMMONS.copy(deezer = true)
         val name = "DAZBEE official"
         val key = "name:${Names.fold(name)}"
-        cache.putMiss(key, time.now, sources.enabled)
+        cache.putMiss(key, time.now, sources.enabled, Size(240, 320))
         val f = java.io.File(tmp.root, "art").listFiles { x -> x.name.endsWith(".miss") }!!.single()
         f.writeText(f.readText().lines().map { if (it.startsWith("cleaned")) "cleaned=true" else it }.joinToString("\n"))
         assertFalse(cache.miss(key)!!.cleaned)

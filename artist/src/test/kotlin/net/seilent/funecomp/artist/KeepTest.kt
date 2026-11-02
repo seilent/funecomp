@@ -96,7 +96,7 @@ class KeepTest {
         keep()
         art().render(cache.hit(utada)!!, 256, 320)
         val before = files()
-        cache.putMiss(utada, time.now, setOf(Wikimedia.SOURCE))
+        cache.putMiss(utada, time.now, setOf(Wikimedia.SOURCE), Size(240, 320))
         assertNotNull(cache.hit(utada))
         assertEquals(setOf(Wikimedia.SOURCE), cache.miss(utada)!!.sources)
         assertTrue(files().containsAll(before))
@@ -104,12 +104,12 @@ class KeepTest {
 
     @Test
     fun anOldMissMetaIsReadThenReplacedByTheMissFile() {
-        cache.putMiss("k", 5, setOf(Wikimedia.SOURCE))
+        cache.putMiss("k", 5, setOf(Wikimedia.SOURCE), Size(240, 320))
         val miss = dir.listFiles { f -> f.name.endsWith(".miss") }!!.single()
         val meta = File(dir, miss.name.removeSuffix(".miss") + ".meta")
         assertTrue(miss.renameTo(meta))
         assertEquals(5L, cache.miss("k")!!.at)
-        cache.putMiss("k", 9, setOf(Wikimedia.SOURCE))
+        cache.putMiss("k", 9, setOf(Wikimedia.SOURCE), Size(240, 320))
         assertFalse(meta.exists())
         assertEquals(9L, cache.miss("k")!!.at)
         assertTrue(File(dir, miss.name).isFile)

@@ -25,7 +25,9 @@ class ArtCache(private val dir: File) {
         val bare: Boolean = false,
         val channel: String = "",
     )
-    class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false, val yt: Long? = null, val ytFailed: Long? = null)
+    class Miss(val at: Long, val sources: Set<String>, val keyHash: String = "", val cleaned: Boolean = false, val yt: Long? = null, val ytFailed: Long? = null, val floor: Size? = null) {
+        fun answers(f: Size) = floor == null || (floor.w <= f.w && floor.h <= f.h)
+    }
     class Looked(val mbid: String?, val at: Long)
     class Usage(val photos: Int, val bytes: Long)
     class Full(val crc: Long, val w: Int, val h: Int, val encode: String, val focus: Pair<Int, Int>?, val copy: Boolean)
@@ -149,7 +151,7 @@ class ArtCache(private val dir: File) {
         if (p.getProperty("state") != "miss") return null
         return Miss(
             p.getProperty("at")?.toLongOrNull() ?: 0, p.getProperty("sources", "").split(',').filter { it.isNotEmpty() }.toSet(), p.getProperty("keyHash", ""),
-            p.getProperty("cleaned") == CLEANED, p.getProperty("yt")?.toLongOrNull(), p.getProperty("ytFailed")?.toLongOrNull(),
+            p.getProperty("cleaned") == CLEANED, p.getProperty("yt")?.toLongOrNull(), p.getProperty("ytFailed")?.toLongOrNull(), Size.parse(p.getProperty("floor")),
         )
     }
 
@@ -274,7 +276,7 @@ class ArtCache(private val dir: File) {
     }
 
     @Synchronized
-    fun putMiss(key: String, at: Long, sources: Set<String>, keyHash: String = "", yt: Long? = null, ytFailed: Long? = null) {
+    fun putMiss(key: String, at: Long, sources: Set<String>, floor: Size, keyHash: String = "", yt: Long? = null, ytFailed: Long? = null) {
         listed = null
         val m = meta(key)
         if (load(m).getProperty("state") == "miss") m.delete()
@@ -287,6 +289,7 @@ class ArtCache(private val dir: File) {
         p.setProperty("cleaned", CLEANED)
         yt?.let { p.setProperty("yt", it.toString()) }
         ytFailed?.let { p.setProperty("ytFailed", it.toString()) }
+        p.setProperty("floor", floor.toString())
         save(missFile(key), p)
     }
 

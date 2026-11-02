@@ -79,7 +79,7 @@ class PreviewArtistTest {
 
     @Test
     fun aMissWithinItsTtlAnswersNoImage() {
-        cache.putMiss(mbid, time.now, sources.enabled)
+        cache.putMiss(mbid, time.now, sources.enabled, Size(240, 320))
         val before = files()
         assertNull(art().previewArtist("TSUKI", mbid, 240, 320))
         assertTrue(calls.isEmpty())
