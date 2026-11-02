@@ -16,11 +16,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -42,6 +44,10 @@ import net.seilent.funecomp.state.LyricsFetch
 private const val ACCENT_KEY = "accentHue"
 private const val BACKGROUND_INFO = "works with the screen off"
 private const val RECONNECT_INFO = "the link restarts by itself"
+private const val DETECTED = "detected"
+const val PROMPT_GUARD_MS = 1000L
+private const val PAIR = "pair"
+private const val CANCEL = "cancel"
 
 private class Touch(base: ViewConfiguration, private val slop: Float) : ViewConfiguration by base {
     override val longPressTimeoutMillis: Long get() = Tok.input_keyHoldMs.toLong()
@@ -100,6 +106,7 @@ fun App(
     insets: WindowInsets = WindowInsets.systemBars.union(WindowInsets.displayCutout),
     ime: WindowInsets = WindowInsets.ime,
     liveDevice: () -> DeviceState = { device },
+    detected: Detected? = null,
 ) {
     val density = LocalDensity.current
     val dir = LocalLayoutDirection.current
@@ -161,10 +168,26 @@ fun App(
                     pickSheet(ctx, pick)
                 }
             }
+            var prompted by remember { mutableStateOf<Detected?>(null) }
+            LaunchedEffect(detected) {
+                prompted?.takeIf { it != detected }?.let { shell.sheet.closeIf(it) }
+            }
+            LaunchedEffect(detected, link.phase, link.askBattery, link.askReconnect, shell.sheet.shown, shell.pick, nav.turning, shell.overlay.until) {
+                val d = detected ?: return@LaunchedEffect
+                if (shell.sheet.shown || shell.pick != null || nav.turning) return@LaunchedEffect
+                if ((link.askBattery || link.askReconnect) && link.phase == Phase.LIVE) return@LaunchedEffect
+                val wait = shell.overlay.until - SystemClock.uptimeMillis()
+                if (wait > 0) delay(wait)
+                prompted = d
+                shell.sheet.open(d.name.lowercase(), listOf(PAIR, CANCEL), info = listOf(DETECTED), owner = d, onDismiss = { control.laterBoard(d.address) }, guard = PROMPT_GUARD_MS) {
+                    if (it == 0) control.pairBoard(d.address) else control.cancelBoard(d.address)
+                }
+            }
             SvcSheets(ctx, shell, svc, ime.getBottom(density) > 0)
             if (link.phase == Phase.LIVE) libList(device, control, Enums.View.playlists, "")
             BackHandler(shell.sheet.shown || nav.stack.size > 1) {
                 if (shell.sheet.shown) {
+                    if (shell.sheet.armed) return@BackHandler
                     if (shell.offset?.back(shell.sheet) != true) shell.sheet.close()
                 } else {
                     nav.pop()

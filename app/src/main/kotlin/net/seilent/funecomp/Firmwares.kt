@@ -170,6 +170,7 @@ object Firmwares {
             set { it.copy(info = why, send = if (it.send.isEmpty()) "" else paused(it.send)) }
             return
         }
+        Remote.scanCancel?.invoke()
         sending = true
         set { it.copy(send = if (it.send.isEmpty()) "firmware 0%" else it.send, info = "") }
         sendExec.execute {

@@ -70,6 +70,8 @@ class Nav(start: List<Page> = listOf(Page.Home, Page.NowPlaying)) {
     val stack = mutableStateListOf<Page>().apply { addAll(start) }
     var forward by mutableStateOf(true)
         private set
+    var turning by mutableStateOf(false)
+        internal set
 
     val top: Page get() = stack.last()
 
@@ -202,6 +204,8 @@ fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Uni
         }
         angle.animateTo(0f, tween(Tok.motion_turnstileIn.toInt(), easing = ExpOut6))
     }
+    val turning = angle.isRunning || pinned != null || top != shown
+    SideEffect { nav.turning = turning }
     val camera = Tok.motion_perspectiveRatio * ui.px(ui.w) / SKIA_CAMERA_UNIT
     val probe = LocalTurnProbe.current
     val drawnKey = shownKey

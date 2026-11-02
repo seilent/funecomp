@@ -4,6 +4,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -30,7 +31,12 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import java.util.Locale
 
-private const val REMEDY = "settings > system > pair phone app"
+internal const val REMEDY = "settings > system > pair phone app"
+private const val PAIR_DEVICE = "pair a device"
+private const val PAIRING = "pairing"
+private const val PAIRED = "paired"
+private const val DETECTED_VALUE = "detected"
+private const val DEVICE_SHEET = "device.sheet"
 private const val PAIR_HINT = "pair on the device"
 const val BLOCKED = "blocked"
 const val CREDITS = "credits"
@@ -70,6 +76,8 @@ private const val MIB_PER_GB = 1024.0
 
 private class Line(val title: String, val value: String, val info: Boolean = false, val tag: String, val tap: (Int) -> Unit = {})
 
+private class Choice(val name: String, val address: String?, val value: String = "", val act: () -> Unit = {})
+
 @Composable
 fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
     val ui = LocalUi.current
@@ -80,22 +88,44 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
         bonded = read()
         onPauseOrDispose {}
     }
+    LaunchedEffect(Unit) { ctx.control.connectionShown() }
     val tryAgain: (Int) -> Unit = { if (link.permission) ctx.control.retry() else ctx.control.askPermission() }
     val scroll = rememberLazyListState()
     fun keep(i: Int) = Keep(scroll, i, ui.px(ui.contentTop))
+    var shownAt by remember { mutableStateOf(emptyList<String?>()) }
+    var shownRow by remember { mutableIntStateOf(0) }
+    fun choices(): List<Choice> {
+        val flight = ctx.control.flight
+        val boards = bonded.filter { (it.companion || it.name == link.device || it.address == link.device) && it.address != flight?.address }
+        val waiting = ctx.control.detectedBoards().filter { d -> d.address != flight?.address && boards.none { it.address == d.address } }
+        return buildList {
+            boards.forEach { b -> add(Choice(b.name, b.address) { ctx.control.choose(b.address) }) }
+            flight?.let { add(Choice(it.name, it.address, if (it.paired) PAIRED else PAIRING)) }
+            waiting.forEach { d -> add(Choice(d.name, d.address, DETECTED_VALUE) { ctx.control.pairBoard(d.address) }) }
+            if (flight == null && !ctx.control.picking) add(Choice(PAIR_DEVICE, null) { ctx.control.pairDevice() })
+        }
+    }
+    fun deviceSheet(i: Int, focused: String?) {
+        val list = choices()
+        val at = list.indexOfFirst { it.address != null && it.address == focused }.takeIf { it >= 0 }
+            ?: list.indexOfFirst { it.name == link.device || it.address == link.device }.coerceAtLeast(0)
+        shownAt = list.map { it.address }
+        shownRow = i
+        ctx.sheet.open("device", list.map { it.name }, at, owner = DEVICE_SHEET, itemValues = { list.map { it.value } }, keep = keep(i)) { list[it].act() }
+    }
+    val rev = ctx.control.boardRev
+    LaunchedEffect(rev) {
+        bonded = read()
+        if (ctx.sheet.owns(DEVICE_SHEET)) deviceSheet(shownRow, shownAt.getOrNull(ctx.sheet.focus))
+    }
     val lines = buildList {
         add(Line("device", link.device ?: "not set", tag = "device") { i ->
             if (!link.permission) {
                 ctx.control.askPermission()
             } else {
                 bonded = read()
-                val list = bonded.filter { it.companion || it.name == link.device || it.address == link.device }
-                if (list.isEmpty()) {
-                    ctx.control.openBluetoothSettings()
-                } else {
-                    val at = list.indexOfFirst { it.name == link.device || it.address == link.device }.coerceAtLeast(0)
-                    ctx.sheet.open("device", list.map { it.name }, at, keep = keep(i)) { ctx.control.choose(list[it].address) }
-                }
+                val list = choices()
+                if (list.size == 1 && list[0].address == null) ctx.control.pairDevice() else if (list.isNotEmpty()) deviceSheet(i, link.device)
             }
         })
         add(Line("status", statusText(link), tag = "status", tap = tryAgain))

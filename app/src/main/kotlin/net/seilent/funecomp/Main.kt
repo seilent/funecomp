@@ -3,7 +3,13 @@ package net.seilent.funecomp
 import android.Manifest
 import android.app.ActivityManager
 import android.app.Application
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
+import android.companion.AssociationInfo
+import android.companion.AssociationRequest
+import android.companion.BluetoothDeviceFilter
+import android.companion.CompanionDeviceManager
+import android.content.IntentSender
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
@@ -14,6 +20,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
@@ -23,7 +30,11 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.IntentCompat
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -44,8 +55,11 @@ import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Black
+import net.seilent.funecomp.ui.REMEDY
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.Control
+import net.seilent.funecomp.ui.Detected
+import net.seilent.funecomp.ui.Flight
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.OffsetEdit
@@ -57,6 +71,7 @@ import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.debugPages
 import java.util.UUID
+import java.util.regex.Pattern
 
 class Main : ComponentActivity() {
     private var launch = false
@@ -78,6 +93,16 @@ class Main : ComponentActivity() {
         granted = linkAllowed()
         name = deviceName(spec)
         if (granted && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) startLink()
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) scan.start()
+    }
+
+    private var scanAsk = false
+    private val scanPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+        if (it && lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) scan.start()
+    }
+    private val associate: ActivityResultLauncher<IntentSenderRequest> = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { associated(it) }
+    internal val scan: BoardScan by lazy {
+        BoardScan(this, Remote.boards, { spec?.removePrefix("rfcomm:") }, { Firmwares.sending || "art" in Remote.wakeHeld || Remote.phoneA2dp() }, { name, line -> shell.toast.show(name, line) }, { control.choose(it) })
     }
 
     private var picked: ((String, String?) -> Unit)? = null
@@ -116,6 +141,7 @@ class Main : ComponentActivity() {
             store("rfcomm:$address")
             Remote.userAction()
             startLink()
+            Remote.boards.bump()
         }
 
         override fun retry() {
@@ -125,6 +151,54 @@ class Main : ComponentActivity() {
 
         override fun openBluetoothSettings() {
             startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        }
+
+        override fun pairBoard(address: String) = scan.pair(address, Remote.boards.detected().firstOrNull { it.address == address }?.name ?: address)
+
+        override fun cancelBoard(address: String) = Remote.boards.cancel(address)
+
+        override fun laterBoard(address: String) = Remote.boards.later(address, SystemClock.elapsedRealtime())
+
+        override fun connectionShown() = scan.connectionOpened()
+
+        override val boardRev: Int get() = Remote.boards.rev
+
+        override val flight: Flight? get() = Remote.boards.flight
+
+        override val picking: Boolean get() = Remote.boards.picking
+
+        override fun detectedBoards(): List<Detected> = Remote.boards.detected()
+
+        override fun pairDevice() {
+            val cdm = getSystemService(CompanionDeviceManager::class.java) ?: return pickerFailed()
+            val filter = BluetoothDeviceFilter.Builder().setNamePattern(Pattern.compile(BOARD_NAME)).build()
+            val request = AssociationRequest.Builder().addDeviceFilter(filter).setSingleDevice(true).build()
+            Remote.boards.picking = true
+            scan.cancel()
+            try {
+                cdm.associate(request, object : CompanionDeviceManager.Callback() {
+                    @Suppress("OVERRIDE_DEPRECATION")
+                    override fun onDeviceFound(sender: IntentSender) {
+                        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                            Remote.boards.picking = false
+                            return
+                        }
+                        try {
+                            associate.launch(IntentSenderRequest.Builder(sender).build())
+                        } catch (_: IllegalStateException) {
+                            Remote.boards.picking = false
+                        }
+                    }
+
+                    override fun onFailure(error: CharSequence?) = pickerFailed()
+
+                    override fun onFailure(errorCode: Int, error: CharSequence?) {
+                        if (errorCode == CompanionDeviceManager.RESULT_USER_REJECTED || errorCode == CompanionDeviceManager.RESULT_CANCELED) Remote.boards.picking = false else pickerFailed()
+                    }
+                }, null)
+            } catch (_: RuntimeException) {
+                pickerFailed()
+            }
         }
 
         override fun disconnect() {
@@ -284,7 +358,7 @@ class Main : ComponentActivity() {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
                     } catch (_: ActivityNotFoundException) {
                     }
-                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing, svc = Svc.view, liveDevice = { Remote.device })
+                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing, svc = Svc.view, liveDevice = { Remote.device }, detected = Remote.boards.prompt)
             }
         }
     }
@@ -323,7 +397,15 @@ class Main : ComponentActivity() {
         }
         Remote.svcShown = { shell.front }
         Scrobbles.opener = { browse(it) }
+        scanAsk = checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED && !prefs().getBoolean(SCAN_ASKED, false)
+        if (scanAsk) prefs().edit().putBoolean(SCAN_ASKED, true).apply()
         launched()
+        if (deferred) startLink()
+        if (scanAsk) {
+            scanAsk = false
+            scanPermission.launch(Manifest.permission.BLUETOOTH_SCAN)
+        }
+        scan.start()
     }
 
     override fun onResume() {
@@ -344,9 +426,50 @@ class Main : ComponentActivity() {
         Remote.pickAsk = null
         Remote.svcShown = null
         Scrobbles.opener = null
+        scan.stop()
         if (!isChangingConfigurations) {
+            Remote.boards.away()
             shell.offset?.let { it.end(it.phone != null || Remote.device.has(OffsetEdit.GROUP)) }
             Remote.shown(false)
+        }
+    }
+
+    private fun ride(): List<String> {
+        if (!scanAsk) return emptyList()
+        scanAsk = false
+        return listOf(Manifest.permission.BLUETOOTH_SCAN)
+    }
+
+    private fun pickerFailed() {
+        Remote.boards.picking = false
+        control.openBluetoothSettings()
+        shell.toast.show(PAIR_A_DEVICE, REMEDY)
+    }
+
+    private fun associated(r: ActivityResult) {
+        Remote.boards.picking = false
+        if (r.resultCode != RESULT_OK) return
+        val data = r.data ?: return
+        val info = if (Build.VERSION.SDK_INT >= 33) IntentCompat.getParcelableExtra(data, CompanionDeviceManager.EXTRA_ASSOCIATION, AssociationInfo::class.java) else null
+        val mac = if (Build.VERSION.SDK_INT >= 33) info?.deviceMacAddress?.toString()?.uppercase() else null
+        val id = if (Build.VERSION.SDK_INT >= 33) info?.id else null
+        val adapter = getSystemService(BluetoothManager::class.java)?.adapter
+        @Suppress("DEPRECATION")
+        val d = IntentCompat.getParcelableExtra(data, CompanionDeviceManager.EXTRA_DEVICE, BluetoothDevice::class.java)
+            ?: mac?.let { adapter?.getRemoteDevice(it) } ?: return run { if (id != null) forget(null, id) }
+        val name = try {
+            d.name
+        } catch (_: SecurityException) {
+            null
+        } ?: d.address
+        scan.pair(d.address, name) { forget(d.address, id) }
+    }
+
+    private fun forget(address: String?, id: Int?) {
+        val cdm = getSystemService(CompanionDeviceManager::class.java) ?: return
+        try {
+            if (id != null && Build.VERSION.SDK_INT >= 33) cdm.disassociate(id) else if (address != null) @Suppress("DEPRECATION") cdm.disassociate(address)
+        } catch (_: RuntimeException) {
         }
     }
 
@@ -447,21 +570,33 @@ class Main : ComponentActivity() {
     private fun linkAllowed() = checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
 
     private fun startLink() {
+        deferred = false
         val spec = prefs().getString(EXTRA_LINK, null) ?: return
         if (!linkAllowed()) {
             val need = missing()
             if (asked == 0 && need.isNotEmpty()) {
                 asked = 1
-                permissions.launch(need.toTypedArray())
+                permissions.launch((need + ride()).toTypedArray())
             }
             return
         }
-        startForegroundService(Intent(this, LinkService::class.java).putExtra(EXTRA_LINK, spec))
+        try {
+            linkStart(this, Intent(this, LinkService::class.java).putExtra(EXTRA_LINK, spec))
+        } catch (e: IllegalStateException) {
+            deferred = true
+            Log.i(Remote.TAG, "link start deferred ${e.javaClass.simpleName}")
+        }
     }
 
     companion object {
+        internal val FOREGROUND: (Context, Intent) -> Unit = { c, i -> c.startForegroundService(i) }
+        internal var linkStart = FOREGROUND
+        @Volatile internal var deferred = false
         const val SUPPORT_URL = "https://ko-fi.com/seilent"
         const val EXTRA_LINK = "link"
+        const val SCAN_ASKED = "scanAsked"
+        const val BOARD_NAME = "^fune "
+        const val PAIR_A_DEVICE = "pair a device"
         const val EXTRA_PAGE = "page"
         const val ACTION_OPEN = "net.seilent.funecomp.OPEN"
         const val ACTION_PICK_ART = "net.seilent.funecomp.PICK_ART"

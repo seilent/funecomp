@@ -72,7 +72,7 @@ class SvcAutoTest {
         Svc.reset()
         scrobblesOff(app)
         debuggable(true)
-        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
+        shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS, Manifest.permission.BLUETOOTH_SCAN)
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
         MediaLink.controls(app, false)
         Remote.artist(app, Http { url, _ ->

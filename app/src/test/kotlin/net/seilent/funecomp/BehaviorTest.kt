@@ -167,20 +167,21 @@ class BehaviorTest {
         settle(1500)
         rule.onNodeWithTag("conn.device").performClick()
         settle(300)
-        assertEquals(listOf("TempoTec V1", "JBL Flip 6"), shell.sheet.items)
+        assertEquals(listOf("TempoTec V1", "JBL Flip 6", "pair a device"), shell.sheet.items)
         assertEquals(1, shell.sheet.focus)
         assertEquals(0, c.btSettings)
     }
 
     @Test
-    fun deviceTapWithNoCompanionBondOpensBluetoothSettings() {
+    fun deviceTapWithNoCompanionBondOpensThePicker() {
         val (c, shell) = start(listOf(Page.Home), LinkView(Phase.NONE))
         c.bonds = listOf(Bonded("JBL Flip 6", "00:00:00:00:00:04"))
         shell.nav.push(Page.Connection)
         settle(1500)
         rule.onNodeWithTag("conn.device").performClick()
         settle(300)
-        assertEquals(1, c.btSettings)
+        assertEquals(1, c.pairDevices)
+        assertEquals(0, c.btSettings)
         assertFalse(shell.sheet.shown)
     }
 

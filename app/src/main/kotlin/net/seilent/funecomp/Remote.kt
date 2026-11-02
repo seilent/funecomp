@@ -1021,6 +1021,7 @@ object Remote : Control {
 
     private fun gate(): Boolean {
         val open = PushGate.open(device, SystemClock.elapsedRealtime()) && !Firmwares.sending
+        if (open) scanCancel?.invoke()
         if (open) wake?.hold(ART, ART_WAKE_MS) else wake?.drop(ART)
         return open
     }
@@ -1029,8 +1030,14 @@ object Remote : Control {
 
     @Volatile var phoneA2dp: () -> Boolean = ::a2dpPlaying
 
+    @Volatile var mainA2dp: android.bluetooth.BluetoothA2dp? = null
+
+    @Volatile var scanCancel: (() -> Unit)? = null
+
+    val boards = Boards()
+
     internal fun a2dpPlaying(): Boolean {
-        val p = a2dp ?: return false
+        val p = a2dp ?: mainA2dp ?: return false
         return try {
             p.connectedDevices.any { p.isA2dpPlaying(it) }
         } catch (_: SecurityException) {

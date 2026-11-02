@@ -47,6 +47,8 @@ import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
+import net.seilent.funecomp.ui.Detected
+import net.seilent.funecomp.ui.Flight
 import net.seilent.funecomp.ui.LIB_PAGE
 import net.seilent.funecomp.ui.OffsetEdit
 import net.seilent.funecomp.ui.PickedFile
@@ -294,6 +296,47 @@ class SimControl(
     var btSettings = 0
 
     override fun bonded() = bonds
+
+    val paired = ArrayList<String>()
+    val boardCancels = ArrayList<String>()
+    var pairDevices = 0
+    var connectionShows = 0
+
+    val boardLaters = ArrayList<String>()
+    var boards: Boards? = null
+    var boardNow = 0L
+    var flightNow: Flight? = null
+    var detectedNow: List<Detected> = emptyList()
+    var pickingNow = false
+
+    override val flight: Flight? get() = flightNow
+
+    override val picking: Boolean get() = pickingNow
+
+    override fun detectedBoards(): List<Detected> = detectedNow
+
+    override fun pairBoard(address: String) {
+        paired += address
+        boards?.taken(address)
+    }
+
+    override fun cancelBoard(address: String) {
+        boardCancels += address
+        boards?.cancel(address)
+    }
+
+    override fun laterBoard(address: String) {
+        boardLaters += address
+        boards?.later(address, boardNow)
+    }
+
+    override fun pairDevice() {
+        pairDevices++
+    }
+
+    override fun connectionShown() {
+        connectionShows++
+    }
 
     val svc = ArrayList<String>()
     var secured = false

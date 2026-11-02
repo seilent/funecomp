@@ -72,6 +72,9 @@ import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Bonded
+import net.seilent.funecomp.ui.Detected
+import net.seilent.funecomp.ui.Flight
+import net.seilent.funecomp.ui.REMEDY
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.FirmwareView
 import net.seilent.funecomp.ui.LinkView
@@ -151,6 +154,7 @@ class Shot(
     val lib: net.seilent.funecomp.sim.Library? = null,
     val services: List<SvcInfo> = emptyList(),
     val svc: SvcView = SvcView(),
+    val detected: Detected? = null,
     val btRole: Int = Enums.BtRole.receiver,
     val prep: (SimControl) -> Unit = {},
     val act: Shots.(Shell) -> Unit = {},
@@ -171,6 +175,7 @@ val SIZES = listOf(
 private val HOME = listOf(Page.Home)
 private const val CLOCK_S = 1792584000L
 private val NP = HOME + Page.NowPlaying
+private val DETECTED_R1 = Detected("fune r1", "00:00:00:00:00:04")
 private const val LONG_TRACK_MS = 720_000L
 private const val LONG_TRACK_AT = 300_000L
 private val ALBUM_KEY = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim.Library.synthetic().tracks.first().id)
@@ -1216,6 +1221,15 @@ val SHOTS = listOf(
     Shot("connection-refused", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused)),
     Shot("connection-permission", pages = HOME + Page.Connection, link = LinkView(Phase.NONE, "AP80", permission = false)),
     Shot("connection-device", pages = HOME + Page.Connection) { rule.onNodeWithTag("conn.device").performClick() },
+    Shot("newboard-detected-home", pages = HOME, detected = DETECTED_R1),
+    Shot("newboard-detected-settings", pages = HOME + Page.Settings, detected = DETECTED_R1),
+    Shot("newboard-detected-connection", pages = listOf(Page.Connection), link = GATED, gated = true, detected = DETECTED_R1),
+    Shot("newboard-device-pairing", pages = HOME + Page.Connection, prep = { it.flightNow = Flight(DETECTED_R1.name, DETECTED_R1.address) }) { rule.onNodeWithTag("conn.device").performClick() },
+    Shot("newboard-device-paired", pages = HOME + Page.Connection, prep = { it.flightNow = Flight(DETECTED_R1.name, DETECTED_R1.address, paired = true) }) { rule.onNodeWithTag("conn.device").performClick() },
+    Shot("newboard-device-detected", pages = HOME + Page.Connection, prep = { it.detectedNow = listOf(DETECTED_R1) }) { rule.onNodeWithTag("conn.device").performClick() },
+    Shot("newboard-toast-pairfailed", pages = HOME + Page.Connection) { it.toast.show("fune r1", BoardScan.PAIR_FAILED) },
+    Shot("newboard-toast-phoneapp", pages = HOME + Page.Connection) { it.toast.show("fune r1", BoardScan.TURN_ON) },
+    Shot("newboard-toast-pairadevice", pages = HOME + Page.Connection) { it.toast.show(Main.PAIR_A_DEVICE, REMEDY) },
     Shot("connection-refused-nobond", pages = HOME + Page.Connection, link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused), prep = ::noBond),
     Shot("connection-nobond", pages = HOME + Page.Connection, link = LinkView(Phase.NONE), prep = ::noBond),
     Shot("connection-nobond-device", pages = HOME + Page.Connection, link = LinkView(Phase.NONE), prep = ::noBond) { rule.onNodeWithTag("conn.device").performClick() },
@@ -1246,6 +1260,7 @@ val SHOTS = listOf(
     Shot("lyrmark-idle", pages = NP, prep = lyricsOn(), art = true, artEntry = HELD, lyrics = shown(stamped(SUNG)), after = (Tok.motion_idle + Tok.motion_idleFade).toLong() + 100),
     Shot("lyrmark-heart", pages = NP, prep = ::lyrHeart, art = true, artEntry = HELD, lyrics = shown(stamped(SUNG))),
     Shot("lyr-synced", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG))) { lyricsMode() },
+    Shot("newboard-detected-lyrics", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG)), detected = DETECTED_R1) { lyricsMode() },
     Shot("lyr-before", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG, 70_000))) { lyricsMode() },
     Shot("lyr-plain", pages = NP, prep = lyricsOn(plain = true), artEntry = HELD, lyrics = shown(PLAIN_TEXT, Enums.LyricsKind.plain)) { lyricsMode() },
     Shot("lyr-plain-scrolled", pages = NP, prep = lyricsOn(plain = true), artEntry = HELD, lyrics = shown(PLAIN_TEXT, Enums.LyricsKind.plain), after = 3000) {
@@ -1485,6 +1500,7 @@ class Shots {
     var control by mutableStateOf<SimControl?>(null)
         private set
     private var shell by mutableStateOf(Shell())
+    private var board by mutableStateOf<Detected?>(null)
     private var sources by mutableStateOf(Sources())
 
     fun settle(ms: Long) {
@@ -1586,7 +1602,7 @@ class Shots {
             key(f, imeShare) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
                     val held = f.first.artEntry?.let { BackdropArt(if (f.first.white) whiteBg else backdrop ?: plain, null, it, f.first.wrong) }
-                    App(c.device, f.first.link, c, shell, sources, { sources = it }, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, scrobbleLabels = f.first.labels, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, svc = f.first.svc, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * if (shell.sheet.shown && shell.sheet.entry == null) 0f else imeShare).dp))
+                    App(c.device, f.first.link, c, shell, sources, { sources = it }, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, scrobbleLabels = f.first.labels, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, svc = f.first.svc, detected = board, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * if (shell.sheet.shown && shell.sheet.entry == null) 0f else imeShare).dp))
                 }
             }
         }
@@ -1596,9 +1612,14 @@ class Shots {
                 val name = if (tall) "${shot.name}-tallime" else shot.name
                 if (only.isNotEmpty() && only.split(',').none { "$name-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue
+                board = null
                 load(shot, size, if (tall) TALL_IME else shot.ime)
                 settle(1000)
                 shot.act(this, shell)
+                if (shot.detected != null) {
+                    settle(600)
+                    board = shot.detected
+                }
                 settle(shot.after)
                 val file = File(dir, "$name-${size.name}.png")
                 rule.onNodeWithTag("frame").captureRoboImage(file.path)

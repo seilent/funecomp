@@ -31,7 +31,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
@@ -88,6 +95,12 @@ class SheetState {
     var holds by mutableStateOf(false)
         private set
     val accentItem: Int get() = accent()
+    var armed by mutableStateOf(false)
+        private set
+    var guard = 0L
+        private set
+    var opened by mutableIntStateOf(0)
+        private set
     private var owner: Any? = null
     var keep: Keep? = null
         private set
@@ -112,9 +125,13 @@ class SheetState {
         onPress: ((i: Int, x: Float) -> Boolean)? = null,
         onHold: ((i: Int) -> Boolean)? = null,
         onScrim: (() -> Boolean)? = null,
+        guard: Long = 0L,
         pick: (Int) -> Unit,
     ) {
         this.owner = owner
+        this.guard = guard
+        armed = guard > 0
+        opened++
         this.accent = accent
         this.onPress = onPress
         this.onHold = onHold
@@ -138,6 +155,9 @@ class SheetState {
 
     fun openEntry(title: String, owner: Any? = null, entry: @Composable () -> Unit) {
         this.owner = owner
+        guard = 0L
+        armed = false
+        opened++
         this.accent = { -1 }
         this.onPress = null
         this.onHold = null
@@ -160,8 +180,18 @@ class SheetState {
     }
 
     fun press(i: Int, x: Float) {
-        if (!shown || entry != null) return
+        if (!shown || entry != null || armed) return
         if (onPress?.invoke(i, x) != true && i >= 0) accept(i)
+    }
+
+    fun click(i: Int): Boolean {
+        if (!shown || entry != null || armed || onPress != null) return false
+        accept(i)
+        return true
+    }
+
+    fun unguard() {
+        armed = false
     }
 
     fun hold(i: Int) {
@@ -169,7 +199,7 @@ class SheetState {
     }
 
     fun scrim() {
-        if (shown && onScrim?.invoke() != true) close()
+        if (shown && !armed && onScrim?.invoke() != true) close()
     }
 
     fun accept(i: Int) {
@@ -189,6 +219,7 @@ class SheetState {
     fun close(dismissed: Boolean = true) {
         if (!shown) return
         shown = false
+        armed = false
         owner = null
         keep = null
         pick = {}
@@ -199,6 +230,16 @@ class SheetState {
         dismiss = {}
         if (dismissed) d()
     }
+}
+
+private suspend fun AwaitPointerEventScope.held(state: SheetState) {
+    val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+    if (!state.armed) return
+    down.consume()
+    do {
+        val e = awaitPointerEvent(PointerEventPass.Initial)
+        e.changes.forEach { it.consume() }
+    } while (e.changes.any { it.pressed })
 }
 
 private fun firstRow(at: Int, total: Int, items: Int, rows: Int): Int = (if (items > rows) at - rows + 1 else minOf(at, total - rows)).coerceAtLeast(0)
@@ -289,6 +330,12 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
             state.pastList = null
         }
     }
+    LaunchedEffect(state.opened) {
+        if (state.armed) {
+            delay(state.guard)
+            state.unguard()
+        }
+    }
     if (progress.value <= 0f && !state.shown) return
     val measurer = rememberTextMeasurer()
     val edge = ui.px(Tok.edge)
@@ -333,7 +380,7 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
     val listRows = floor(listH / pitch).toInt()
     val scrolled = lines.size - fixed
     val list = remember(state.title, state.items, state.shown) { LazyListState(firstRow(state.focus + scrolled, scrolled + state.items.size, state.items.size, listRows)) }
-    Box(Modifier.fillMaxSize().testTag("sheet")) {
+    Box(Modifier.fillMaxSize().testTag("sheet").pointerInput(state) { awaitEachGesture { held(state) } }) {
         val b = LocalBleed.current
         Box(Modifier.fillMaxSize().bleed(b).background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha * p)).press({ state.scrim() }))
         Box(
@@ -367,7 +414,7 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
                         val on = i == state.focus
                         val value = itemValues.getOrElse(i) { "" }
                         Box(
-                            Modifier.size(w.dp(), pitch.dp()).press({ o -> state.press(i, o.x / w) }, if (state.holds) ({ state.hold(i) }) else null).testTag("sheet.item.$i"),
+                            Modifier.size(w.dp(), pitch.dp()).press({ o -> state.press(i, o.x / w) }, if (state.holds) ({ state.hold(i) }) else null).semantics { onClick { state.click(i) } }.testTag("sheet.item.$i"),
                         ) {
                             val entry = state.entry
                             if (entry != null) {

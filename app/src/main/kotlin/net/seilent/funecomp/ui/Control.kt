@@ -66,6 +66,12 @@ data class SvcView(val ask: SvcAsk? = null, val line: SvcLine? = null)
 @Immutable
 data class Bonded(val name: String, val address: String, val companion: Boolean = false)
 
+@Immutable
+data class Detected(val name: String, val address: String)
+
+@Immutable
+data class Flight(val name: String, val address: String, val paired: Boolean = false)
+
 interface Control {
     fun transport(cmd: Int, seekMs: Long? = null, on: Boolean? = null, repeat: Int? = null)
     fun volume(detents: Int)
@@ -87,6 +93,15 @@ interface Control {
     fun askPermission() {}
     fun retry() {}
     fun openBluetoothSettings() {}
+    fun pairBoard(address: String) {}
+    fun cancelBoard(address: String) {}
+    fun laterBoard(address: String) {}
+    fun connectionShown() {}
+    val boardRev: Int get() = 0
+    val flight: Flight? get() = null
+    val picking: Boolean get() = false
+    fun detectedBoards(): List<Detected> = emptyList()
+    fun pairDevice() {}
     fun disconnect() {}
     fun allowBackground() {}
     fun backgroundLater() {}
