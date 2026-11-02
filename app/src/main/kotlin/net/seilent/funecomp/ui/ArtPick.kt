@@ -70,17 +70,19 @@ private const val YOUTUBE_SEARCH = ArtistArt.YOUTUBE_SEARCH
 
 internal var browseCols: (Float) -> Int = { Tok.gridCols.toInt() }
 
-fun artistChooser(ctx: Ctx) {
+internal object ArtSheet
+
+fun artistChooser(ctx: Ctx, owner: Any? = null) {
     val s = ctx.device.playback.state
     val artists = s.artists.withIndex().filter { (_, n) -> n.isNotBlank() && n.trim().lowercase() !in Forward.PLACEHOLDERS }.map { (i, n) -> PickFor(n, s.mbids.getOrNull(i), origin = ArtPusher.origin(s.source)) }
     when (artists.size) {
         0 -> {}
-        1 -> pickSheet(ctx, artists.single())
-        else -> ctx.sheet.open(PICK_IMAGE, artists.map { it.name }) { pickSheet(ctx, artists[it]) }
+        1 -> pickSheet(ctx, artists.single(), owner)
+        else -> ctx.sheet.open(PICK_IMAGE, artists.map { it.name }, owner = owner) { pickSheet(ctx, artists[it], owner) }
     }
 }
 
-fun pickSheet(ctx: Ctx, target: PickFor) = ctx.sheet.open(target.name, listOf(PASTE_LINK, BROWSE, FROM_GALLERY)) {
+fun pickSheet(ctx: Ctx, target: PickFor, owner: Any? = null) = ctx.sheet.open(target.name, listOf(PASTE_LINK, BROWSE, FROM_GALLERY), owner = owner) {
     when (it) {
         0 -> pasteLink(ctx, target)
         1 -> ctx.nav.push(Page.Browse(target))

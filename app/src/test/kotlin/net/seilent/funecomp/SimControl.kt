@@ -494,25 +494,52 @@ class SimControl(
 
     val arts = mutableStateMapOf<String, ImageBitmap>()
     val wanted = ArrayList<String>()
+    private val crcs = HashMap<String, Long>()
+    private val albumCrcs = HashMap<String, Long>()
+    var holdArt = false
+    private val heldArt = LinkedHashMap<String, Triple<Int, Long, Pair<Int, String?>>>()
 
     override fun wantArt(slot: Int, track: Long, px: Int, album: String?) {
         val p = Thumbs.bucket(px)
         val key = Thumbs.key(track, p)
         wanted += "$slot $key"
         if (key in arts) return
+        if (holdArt) {
+            heldArt[key] = Triple(slot, track, px to album)
+            return
+        }
         val out = ByteArrayOutputStream()
         var total = Long.MAX_VALUE
+        var crc: Long? = null
         while (out.size() < total) {
             val a = req(Msg.ART_GET, Req.artGet(track, p, out.size().toLong())) as? Answer.Ok ?: return
             val r = ArtGetReply.from(Node.decode("ART_GET.reply", a.payload))
             r.total?.let { total = it }
+            r.crc?.let { crc = it }
             val d = r.data?.takeIf { it.isNotEmpty() } ?: return
             out.write(d)
         }
-        BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size())?.let { arts[key] = it.asImageBitmap() }
+        BitmapFactory.decodeByteArray(out.toByteArray(), 0, out.size())?.let {
+            crc?.let { v ->
+                crcs[key] = v
+                album?.let { a -> albumCrcs["$a:$p"] = v }
+            }
+            arts[key] = it.asImageBitmap()
+        }
+    }
+
+    fun releaseArt() {
+        holdArt = false
+        val w = heldArt.values.toList()
+        heldArt.clear()
+        for ((slot, track, pa) in w) wantArt(slot, track, pa.first, pa.second)
     }
 
     override fun art(track: Long, px: Int): ImageBitmap? = arts[Thumbs.key(track, Thumbs.bucket(px))]
+
+    override fun artCrc(track: Long, px: Int): Long? = crcs[Thumbs.key(track, Thumbs.bucket(px))]
+
+    override fun albumArtCrc(album: String, px: Int): Long? = albumCrcs["$album:${Thumbs.bucket(px)}"]
 
     val firmware = ArrayList<String>()
 

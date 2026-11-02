@@ -390,6 +390,13 @@ internal fun lyricsOn(plain: Boolean = false): (SimControl) -> Unit = { c ->
     c.device = c.device.withState(s.copy(lyrics = !plain, lyricsPlain = plain, lyricsCrc = 1), SystemClock.elapsedRealtime())
 }
 
+private fun photoOff(prep: (SimControl) -> Unit): (SimControl) -> Unit = { c ->
+    prep(c)
+    c.device = c.device.copy(settings = SettingsMirror(1, "artistPhoto=off\n"))
+}
+
+private const val LYRBG_AFTER = 2500L
+
 private fun lyricsLast(c: SimControl) {
     lyricsOn()(c)
     val p = c.device.playback
@@ -1274,6 +1281,15 @@ val SHOTS = listOf(
     Shot("lyr-cjk", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG_JA))) { lyricsMode() },
     Shot("lyr-cue", pages = NP, prep = lyricsAt(2_000), artEntry = HELD, lyrics = shown(listOf(LyrLine(0, "Till the last train leaves")) + stamped(SUNG.drop(1), 6_000))) { lyricsMode() },
     Shot("lyr-nobackdrop", pages = NP, prep = lyricsOn(), lyrics = shown(stamped(SUNG))) { lyricsMode() },
+    Shot("lyrbg-art-photo", pages = NP, prep = lyricsOn(), art = true, artEntry = HELD, lyrics = shown(stamped(SUNG)), after = LYRBG_AFTER) { lyricsMode() },
+    Shot("lyrbg-art-photo-plain", pages = NP, prep = lyricsOn(plain = true), art = true, artEntry = HELD, lyrics = shown(PLAIN_TEXT, Enums.LyricsKind.plain), after = LYRBG_AFTER) { lyricsMode() },
+    Shot("lyrbg-art", pages = NP, prep = lyricsOn(), art = true, lyrics = shown(stamped(SUNG)), after = LYRBG_AFTER) { lyricsMode() },
+    Shot("lyrbg-art-plain", pages = NP, prep = lyricsOn(plain = true), art = true, lyrics = shown(PLAIN_TEXT, Enums.LyricsKind.plain), after = LYRBG_AFTER) { lyricsMode() },
+    Shot("lyrbg-photooff", pages = NP, prep = photoOff(lyricsOn()), art = true, artEntry = HELD, lyrics = shown(stamped(SUNG)), after = LYRBG_AFTER) { lyricsMode() },
+    Shot("lyrbg-photooff-plain", pages = NP, prep = photoOff(lyricsOn(plain = true)), art = true, artEntry = HELD, lyrics = shown(PLAIN_TEXT, Enums.LyricsKind.plain), after = LYRBG_AFTER) { lyricsMode() },
+    Shot("lyrbg-noart", pages = NP, prep = lyricsOn(), artEntry = HELD, lyrics = shown(stamped(SUNG)), after = LYRBG_AFTER) { lyricsMode() },
+    Shot("lyrbg-noart-plain", pages = NP, prep = lyricsOn(plain = true), artEntry = HELD, lyrics = shown(PLAIN_TEXT, Enums.LyricsKind.plain), after = LYRBG_AFTER) { lyricsMode() },
+    Shot("lyrbg-normal", pages = NP, prep = lyricsOn(), art = true, artEntry = HELD, lyrics = shown(stamped(SUNG)), after = LYRBG_AFTER),
     Shot("lyroff-view", pages = NP, prep = offsets(), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { lyricsMode() },
     Shot("lyroff-sheet-0", pages = NP, prep = offsets(), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetSheet() },
     Shot("lyroff-sheet-plus500", pages = NP, prep = offsets(500), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetSheet() },

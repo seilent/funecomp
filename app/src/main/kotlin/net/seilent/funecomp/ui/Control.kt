@@ -131,6 +131,8 @@ interface Control {
     fun reconnect(on: Boolean) {}
     fun wantArt(slot: Int, track: Long, px: Int, album: String?) {}
     fun art(track: Long, px: Int): ImageBitmap? = null
+    fun artCrc(track: Long, px: Int): Long? = null
+    fun albumArtCrc(album: String, px: Int): Long? = null
     fun log(message: String) {}
     fun firmwareCheck() {}
     fun firmwareOpened() {}

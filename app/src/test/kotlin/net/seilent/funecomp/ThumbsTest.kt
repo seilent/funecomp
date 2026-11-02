@@ -13,6 +13,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 class ThumbsTest {
     @get:Rule
@@ -28,6 +31,32 @@ class ThumbsTest {
         assertEquals(256, Thumbs.bucket(256))
         assertEquals(512, Thumbs.bucket(257))
         assertEquals(512, Thumbs.bucket(1200))
+    }
+
+    @Test
+    fun theCrcReadsDoNotWaitForTheLock() {
+        val t = thumbs()
+        val w = Want(Thumbs.NOW_PLAYING, 101, 512, "Bad Mode")
+        t.want(w)
+        t.done(w, Got.Image(0xabcdefL, jpeg))
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val holder = Thread {
+            synchronized(t) {
+                held.countDown()
+                release.await(10, TimeUnit.SECONDS)
+            }
+        }.apply { start() }
+        held.await(10, TimeUnit.SECONDS)
+        val pool = Executors.newSingleThreadExecutor()
+        try {
+            val read = pool.submit<Pair<Long?, Long?>> { t.crc(101, 512) to t.albumCrc("Bad Mode", 512) }
+            assertEquals(0xabcdefL to 0xabcdefL, read.get(2, TimeUnit.SECONDS))
+        } finally {
+            release.countDown()
+            holder.join()
+            pool.shutdownNow()
+        }
     }
 
     @Test

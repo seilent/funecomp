@@ -2,6 +2,7 @@ package net.seilent.funecomp.art
 
 import net.seilent.funecomp.proto.gen.Err
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 class Thumbs(private val dir: File) {
     data class Want(val slot: Int, val track: Long, val px: Int, val album: String?) {
@@ -23,7 +24,7 @@ class Thumbs(private val dir: File) {
     }
 
     private var rev: Long? = null
-    private val index = LinkedHashMap<String, Long>()
+    private val index = ConcurrentHashMap<String, Long>()
     private val misses = HashSet<String>()
     private val retries = HashMap<String, Int>()
     private val waiting = LinkedHashMap<String, Want>()
@@ -97,6 +98,10 @@ class Thumbs(private val dir: File) {
 
     @Synchronized
     fun have(w: Want): Long? = w.album?.let { index[album(it, w.px)] }
+
+    fun crc(track: Long, px: Int): Long? = index[key(track, px)]
+
+    fun albumCrc(name: String, px: Int): Long? = index[album(name, px)]
 
     @Synchronized
     fun done(w: Want, got: Got, cardDown: Boolean = false, stale: Boolean = false): Done = when (got) {

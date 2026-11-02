@@ -154,17 +154,17 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
 }
 
 fun artSheet(ctx: Ctx, held: BackdropArt?, picks: List<ArtPicks.Pick> = emptyList()) {
-    val e = held?.entry ?: return artistChooser(ctx)
+    val e = held?.entry ?: return artistChooser(ctx, ArtSheet)
     val s = ctx.device.playback.state
     val target = PickFor(e.name, s.mbids.getOrNull(s.artists.indexOfFirst { Names.fold(it) == Names.fold(e.name) }), origin = ArtPusher.origin(s.source))
     val pick = picks.firstOrNull { it.cacheKey == e.key }
     val items = if (pick != null) listOf(PICK_IMAGE, UNDO_PICK) else listOf(BLOCK_IMAGE) + (if (held.wrongArtist) listOf(WRONG_ARTIST) else emptyList()) + PICK_IMAGE
     val info = listOf(listOfNotNull(Sources.label(e.source), e.credit?.author?.takeIf { it.isNotBlank() }).joinToString(", "))
-    ctx.sheet.open(e.name, items, info = info) {
+    ctx.sheet.open(e.name, items, info = info, owner = ArtSheet) {
         when (items[it]) {
             BLOCK_IMAGE -> ctx.control.blockArt(e)
             WRONG_ARTIST -> ctx.control.wrongArtist(e)
-            PICK_IMAGE -> pickSheet(ctx, target)
+            PICK_IMAGE -> pickSheet(ctx, target, ArtSheet)
             UNDO_PICK -> pick?.let { p -> ctx.control.undoPick(p) }
         }
     }

@@ -457,6 +457,10 @@ object Remote : Control {
 
     override fun art(track: Long, px: Int): ImageBitmap? = thumbs?.image(track, px)
 
+    override fun artCrc(track: Long, px: Int): Long? = thumbs?.crc(track, px)
+
+    override fun albumArtCrc(album: String, px: Int): Long? = thumbs?.albumCrc(album, px)
+
     override fun log(message: String) {
         Log.i(TAG, message)
     }

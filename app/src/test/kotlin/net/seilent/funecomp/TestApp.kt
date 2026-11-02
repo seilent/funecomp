@@ -4,7 +4,9 @@ import android.app.Application
 import android.os.Handler
 import android.view.Choreographer
 import androidx.compose.ui.platform.AndroidUiDispatcher
+import kotlinx.coroutines.Dispatchers
 import net.seilent.funecomp.artist.UrlHttp
+import net.seilent.funecomp.ui.CoverBlur
 import org.robolectric.TestLifecycleApplication
 import java.io.IOException
 import java.lang.reflect.Method
@@ -20,6 +22,7 @@ class TestApp : Application(), TestLifecycleApplication {
             throw IOException("tests never reach the network: $it")
         }
         Remote.resetArtist()
+        CoverBlur.context = Dispatchers.Unconfined
         rearmUiDispatcher()
     }
 

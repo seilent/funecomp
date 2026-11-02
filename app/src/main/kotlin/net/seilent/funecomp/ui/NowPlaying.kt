@@ -74,6 +74,7 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
@@ -154,16 +155,24 @@ fun formatTime(ms: Long): String {
     return "${total / 60}:${if (s < 10) "0" else ""}$s"
 }
 
-class BackdropArt(val image: ImageBitmap, val face: Pair<Double, Double>? = null, val entry: ArtCache.Entry? = null, val wrongArtist: Boolean = false)
+class BackdropArt(val image: ImageBitmap, val face: Pair<Double, Double>? = null, val entry: ArtCache.Entry? = null, val wrongArtist: Boolean = false, val pic: Long? = null, val box: IntSize? = null)
+
+val LocalBackdropProbe = staticCompositionLocalOf<((BackdropArt, Float) -> Unit)?> { null }
 
 @Composable
-fun Backdrop(art: BackdropArt?) {
+fun Backdrop(art: BackdropArt?): Boolean {
     var shown by remember { mutableStateOf(art) }
     var old by remember { mutableStateOf<BackdropArt?>(null) }
     var oldFrom by remember { mutableFloatStateOf(1f) }
     val fade = remember { Animatable(1f) }
     LaunchedEffect(art) {
         if (art === shown) return@LaunchedEffect
+        if (art?.pic != null && art.pic == shown?.pic) {
+            shown = art
+            fade.animateTo(1f, tween(((1f - fade.value) * Tok.motion_backdropFade).toInt(), easing = LinearEasing))
+            old = null
+            return@LaunchedEffect
+        }
         val f = fade.value
         if (old != null && f < 0.5f) {
             oldFrom *= 1f - f
@@ -176,7 +185,7 @@ fun Backdrop(art: BackdropArt?) {
         fade.animateTo(1f, tween(Tok.motion_backdropFade.toInt(), easing = LinearEasing))
         old = null
     }
-    if (shown == null && old == null) return
+    if (shown == null && old == null) return false
     val b = LocalBleed.current
     val ui = LocalUi.current
     Box(Modifier.fillMaxSize().bleed(b).clipToBounds().testTag("backdrop")) {
@@ -194,6 +203,20 @@ fun Backdrop(art: BackdropArt?) {
             ),
         )
     }
+    return true
+}
+
+@Composable
+private fun rememberCover(pic: Pair<Long, ImageBitmap>?, box: IntSize, u: Float): BackdropArt? {
+    var built by remember { mutableStateOf<BackdropArt?>(null) }
+    LaunchedEffect(pic?.first, box) {
+        val p = pic ?: return@LaunchedEffect
+        val b = built
+        if (b != null && b.pic == p.first && b.box == box) return@LaunchedEffect
+        val img = withContext(CoverBlur.context) { coverImage(p.second, box.width, box.height, u) } ?: return@LaunchedEffect
+        built = BackdropArt(img, pic = p.first, box = box)
+    }
+    return built
 }
 
 @Composable
@@ -203,14 +226,19 @@ private fun BackdropLayer(art: BackdropArt, alpha: Float) {
     val w = ui.px(ui.w) + b.left + b.right
     val h = ui.px(ui.h) + b.top + b.bottom
     val img = art.image
+    val probe = LocalBackdropProbe.current
     val painter = remember(art, w.roundToInt(), h.roundToInt()) {
+        if (art.pic != null) return@remember BitmapPainter(img)
         val r = Crop.rect(img.width, img.height, w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1), art.face?.let { it.second * img.height })
         BitmapPainter(img, IntOffset(r.x, r.y), IntSize(r.w, r.h))
     }
     Image(
         painter,
         null,
-        Modifier.requiredSize(w.dp(), h.dp()).graphicsLayer { this.alpha = alpha }.testTag("backdrop.photo"),
+        Modifier.requiredSize(w.dp(), h.dp()).graphicsLayer {
+            this.alpha = alpha
+            probe?.invoke(art, alpha)
+        }.testTag(if (art.pic != null) "backdrop.cover" else "backdrop.photo"),
         contentScale = ContentScale.FillBounds,
     )
 }
@@ -517,6 +545,27 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
         val total = s.slots ?: return@LaunchedEffect
         if (slot + 1 < total && device.queue.items[slot + 1] == null) control.queuePage(slot + 1)
     }
+    val bleed = LocalBleed.current
+    val coverPx = if (artSide > 0f) artSide.roundToInt() else Thumbs.LARGE
+    val coverTrack = s.library
+    LaunchedEffect(coverTrack, coverPx, device.hello, onPhone, lyricTarget) {
+        if (lyricTarget && coverTrack != null && !onPhone) control.wantArt(Thumbs.NOW_PLAYING, coverTrack, coverPx, s.album)
+    }
+    val pic = when {
+        !lyricTarget -> null
+        onPhone -> phoneCover?.takeIf { it.first == s.phoneArtCrc }
+        else -> coverTrack?.let { t -> control.art(t, coverPx)?.let { img -> control.artCrc(t, coverPx)?.let { it to img } } }
+    }
+    val wanted = when {
+        !lyricTarget -> null
+        pic != null -> pic.first
+        onPhone -> s.phoneArtCrc
+        else -> s.album?.let { control.albumArtCrc(it, coverPx) }
+    }
+    val box = IntSize((ui.px(ui.w) + bleed.left + bleed.right).roundToInt(), (ui.px(ui.h) + bleed.top + bleed.bottom).roundToInt())
+    val built = rememberCover(pic, box, ui.u)
+    val blurred = built?.takeIf { wanted != null && it.pic == wanted }
+    LaunchedEffect(blurred?.pic) { if (blurred != null) sheet?.closeIf(ArtSheet) }
 
     Box(
         Modifier.fillMaxSize().pointerInput(Unit) {
@@ -535,9 +584,9 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
         }.testTag("np"),
     ) {
         val photo = art?.takeIf { device.settings.values[ARTIST_PHOTO] != "off" }
-        Backdrop(photo)
-        if (photo != null && shaded) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).graphicsLayer { alpha = frame().shade * (swap()?.shade ?: 1f) }.background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha)).testTag("np.shade"))
-        val held = photo?.takeIf { it.entry != null }
+        val layered = Backdrop(blurred ?: photo)
+        if (layered && shaded) Box(Modifier.fillMaxSize().bleed(LocalBleed.current).graphicsLayer { alpha = frame().shade * (swap()?.shade ?: 1f) }.background(Color(Tok.color_bg).copy(alpha = Tok.scrim_sheet_alpha)).testTag("np.shade"))
+        val held = photo?.takeIf { it.entry != null && blurred == null }
         val lyricsTap: () -> Unit = {
             val k = npKey
             val c = copyFor(lyrics, k, s)
@@ -549,8 +598,8 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                 }
             }
         }
-        val backdrop = onBackdrop?.takeIf { held != null || s.artists.isNotEmpty() }
-        val longPress: () -> Unit = { backdrop?.invoke(held) }
+        val backdrop = onBackdrop?.takeIf { blurred == null && (held != null || s.artists.isNotEmpty()) }
+        val longPress: (() -> Unit)? = if (blurred != null) null else { { backdrop?.invoke(held) } }
         if (backdrop != null) Box(Modifier.fillMaxSize().press({}, longPress).testTag("np.backdrop"))
         Box(
             Modifier.fillMaxSize().graphicsLayer {
@@ -740,7 +789,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
 }
 
 @Composable
-private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, np: NpKey?, next: String?, lifecycle: Lifecycle, active: Boolean, onTap: () -> Unit, onLong: () -> Unit) {
+private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, np: NpKey?, next: String?, lifecycle: Lifecycle, active: Boolean, onTap: () -> Unit, onLong: (() -> Unit)?) {
     val ui = LocalUi.current
     val s = device.playback.state
     val x = ui.px(Tok.edge)

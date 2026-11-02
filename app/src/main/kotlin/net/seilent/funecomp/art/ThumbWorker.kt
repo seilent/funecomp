@@ -31,6 +31,10 @@ class ThumbWorker(dir: File, private val link: () -> Session?, private val card:
 
     fun image(track: Long, px: Int): ImageBitmap? = images[Thumbs.key(track, Thumbs.bucket(px))]
 
+    fun crc(track: Long, px: Int): Long? = thumbs.crc(track, Thumbs.bucket(px))
+
+    fun albumCrc(album: String, px: Int): Long? = thumbs.albumCrc(album, Thumbs.bucket(px))
+
     fun rev(libRev: Long) = thumbs.rev(libRev)
 
     fun session() = thumbs.session()
