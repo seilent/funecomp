@@ -16,7 +16,7 @@ library	folders	info	LIBRARY FOLDERS	-	-	-	readOnly	-
 library	rescan	action	RESCAN LIBRARY	-	-	-	-	-
 library	checkCard	action	CHECK CARD	-	-	-	readOnly	-
 library	format	action	FORMAT CARD	-	-	-	readOnly	-
-library	playThrough	choice	PLAY THROUGH	off,folders,albums	OFF,FOLDERS,ALBUMS	-	-	-
+library	playThrough	choice	PLAY THROUGH	off,folders,albums,playlist,library	OFF,FOLDERS,ALBUMS,PLAYLIST,LIBRARY	-	-	-
 library	resume	choice	RESUME	off,track,position	OFF,TRACK,POSITION	-	-	-
 library	autoNowPlaying	toggle	AUTO NOW PLAYING	off,on	OFF,ON	-	-	-
 display	brightness	steps	BRIGHTNESS	10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100	10%,15%,20%,25%,30%,35%,40%,45%,50%,55%,60%,65%,70%,75%,80%,85%,90%,95%,100%	-	-	-

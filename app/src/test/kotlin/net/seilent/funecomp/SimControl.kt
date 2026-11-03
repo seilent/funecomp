@@ -69,9 +69,10 @@ class SimControl(
     services: List<SvcInfo> = emptyList(),
     btRole: Int = Enums.BtRole.receiver,
     private val stateNow: () -> Long = now,
+    through: String? = null,
 ) : Control {
     private val faultSet = Faults(faults)
-    val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, faultSet, artDir = artDir, minor = minor, cardEq = cardEq, services = services, btRole = btRole), lib, now)
+    val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, faultSet, artDir = artDir, minor = minor, cardEq = cardEq, services = services, btRole = btRole, through = through), lib, now)
     var device by mutableStateOf(DeviceState())
     val sent = ArrayList<String>()
     val pushed = ArrayList<Int>()

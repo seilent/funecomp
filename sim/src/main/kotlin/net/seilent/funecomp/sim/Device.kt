@@ -1207,6 +1207,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun accept(key: String, value: String): String? {
         if (key == "bootLogo" && value == "picture") return null
+        if (key == "playThrough" && value == "playlist" && (opts.through == null || !mounted())) return null
         val r = structureRows().firstOrNull { it.key == key } ?: return null
         if (Enums.RowFlag.readOnly in r.flags || key in readOnlyToSet) return null
         return when (r.kind) {

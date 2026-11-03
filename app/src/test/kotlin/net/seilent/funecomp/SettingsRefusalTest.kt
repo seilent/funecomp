@@ -39,9 +39,9 @@ class SettingsRefusalTest {
 
     private lateinit var shell: Shell
 
-    private fun start(page: Page, vararg faults: String): SimControl {
+    private fun start(page: Page, vararg faults: String, through: String? = null): SimControl {
         shell = Shell(Nav(listOf(Page.Home, page)))
-        val c = SimControl("v1", faults = faults.toList())
+        val c = SimControl("v1", faults = faults.toList(), through = through)
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
@@ -50,8 +50,8 @@ class SettingsRefusalTest {
         return c
     }
 
-    private fun settings(to: String, faults: List<String> = emptyList()): SimControl {
-        val c = start(Page.Settings, *faults.toTypedArray())
+    private fun settings(to: String, faults: List<String> = emptyList(), through: String? = null): SimControl {
+        val c = start(Page.Settings, *faults.toTypedArray(), through = through)
         rule.walkPivots(c.device.schema.rows, to) { settle(1000) }
         return c
     }
@@ -94,6 +94,38 @@ class SettingsRefusalTest {
         assertEquals("boot logo" to "refused on the dap", toast())
         assertEquals("fune", c.device.settings.values["bootLogo"])
         shows("set.bootLogo", "FUNE")
+    }
+
+    @Test
+    fun aPlayThroughPlaylistWithoutTheCardsPickIsRefusedWithTheRowLabel() {
+        val c = settings("library")
+        tap("set.playThrough")
+        assertEquals("play through", shell.sheet.title)
+        assertEquals(listOf("OFF", "FOLDERS", "ALBUMS", "PLAYLIST", "LIBRARY"), shell.sheet.items)
+        pick(3)
+        assertFalse(shell.sheet.shown)
+        assertEquals(listOf(Err.refused), c.failed)
+        assertEquals(1, shell.toast.shows)
+        assertEquals("play through" to "refused on the dap", toast())
+        assertEquals("off", c.device.settings.values["playThrough"])
+        shows("set.playThrough", "OFF")
+        tap("set.playThrough")
+        pick(4)
+        assertEquals("library", c.device.settings.values["playThrough"])
+        shows("set.playThrough", "LIBRARY")
+        assertEquals(listOf(Err.refused), c.failed)
+        assertEquals(1, shell.toast.shows)
+    }
+
+    @Test
+    fun aPlayThroughPlaylistWithTheCardsPickShowsNoToast() {
+        val c = settings("library", through = "favorites")
+        tap("set.playThrough")
+        pick(3)
+        assertEquals("playlist", c.device.settings.values["playThrough"])
+        shows("set.playThrough", "PLAYLIST")
+        assertTrue(c.failed.isEmpty())
+        assertEquals(0, shell.toast.shows)
     }
 
     @Test

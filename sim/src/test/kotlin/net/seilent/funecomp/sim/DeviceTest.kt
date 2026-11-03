@@ -184,6 +184,33 @@ class DeviceTest {
     }
 
     @Test
+    fun playThroughPlaylistNeedsTheCardsPick() {
+        fun settings(d: Device) = Settings.from(Sink().also { d.greet(it) }.of(Msg.SETTINGS).single()).text.lines()
+        fun kept(d: Device, text: String): SetReply = SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set(text)))))
+        for (b in listOf("ap80", "v1", "r1")) {
+            val none = Device(Options(Board.of(b)), Library.synthetic()) { t }
+            val f = fail(req(none, Msg.SET, Req.set("playThrough=playlist\n")))
+            assertEquals(b, Err.refused, f.code)
+            assertEquals(b, listOf("playThrough"), f.refused)
+            assertTrue(b, "playThrough=off" in settings(none))
+            assertEquals(b, listOf("playThrough"), kept(none, "playThrough=library\n").kept)
+            assertTrue(b, "playThrough=library" in settings(none))
+            val picked = Device(Options(Board.of(b), through = "favorites"), Library.synthetic()) { t }
+            assertEquals(b, listOf("playThrough"), kept(picked, "playThrough=playlist\n").kept)
+            assertTrue(b, "playThrough=playlist" in settings(picked))
+            val both = Device(Options(Board.of(b), through = "favorites"), Library.synthetic()) { t }
+            val r = kept(both, "playThrough=playlist\nnoSuchKey=on\n")
+            assertEquals(b, listOf("playThrough"), r.kept)
+            assertEquals(b, listOf("noSuchKey"), r.refused)
+            val out = Device(Options(Board.of(b), Faults(listOf("card-seq=out:600000,ready")), through = "favorites"), Library.synthetic()) { t }
+            out.greet(Sink())
+            val g = fail(req(out, Msg.SET, Req.set("playThrough=playlist\n")))
+            assertEquals(b, Err.refused, g.code)
+            assertEquals(b, listOf("playThrough"), g.refused)
+        }
+    }
+
+    @Test
     fun conditionedRowsComeAndGoWithANewRev() {
         val d = device("v1")
         val out = Sink()

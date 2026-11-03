@@ -339,6 +339,7 @@ class Options(
     val updSeq: Long = 0,
     val services: List<SvcInfo> = emptyList(),
     val eqHeadset: String? = null,
+    val through: String? = null,
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
