@@ -38,6 +38,7 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 @Stable
 class Entrance {
@@ -234,7 +235,10 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                             Modifier.at(ui.px(barX), top).size((x - ui.px(barX) + labelW).dp(), ui.px(pitch).dp()).testTag("home.${item.name}"),
                         ) {
                             RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c)
-                            RoleText(item.subtitle, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(Tok.homeSubtitleX), subBaseline - top, ui.px(ui.w - Tok.edge) - x - ui.px(Tok.homeSubtitleX)))
+                            val subW = ui.px(ui.w - Tok.edge) - x - ui.px(Tok.homeSubtitleX)
+                            val subStyle = textStyle(Roles.homeSubtitle, white(Roles.homeSubtitle.alpha))
+                            val sub = if (item.names.isEmpty()) item.subtitle else remember(item.names, subW, subStyle) { wholeNames(item.names) { measurer.measure(shown(it, Roles.homeSubtitle.case), subStyle, softWrap = false, maxLines = 1).size.width <= subW.roundToInt() } }
+                            RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(Tok.homeSubtitleX), subBaseline - top, subW))
                         }
                     }
                 }
@@ -244,4 +248,15 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     }
 }
 
-data class HomeItem(val name: String, val subtitle: String, val page: Page)
+data class HomeItem(val name: String, val subtitle: String, val page: Page, val names: List<String> = emptyList()) {
+    constructor(name: String, page: Page, names: List<String>) : this(name, names.joinToString(" "), page, names)
+}
+
+fun wholeNames(names: List<String>, fits: (String) -> Boolean): String {
+    var line = names.firstOrNull() ?: return ""
+    for (n in names.drop(1)) {
+        if (!fits("$line $n")) break
+        line = "$line $n"
+    }
+    return line
+}

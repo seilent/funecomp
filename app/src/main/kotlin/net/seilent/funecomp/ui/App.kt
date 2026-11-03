@@ -79,8 +79,8 @@ fun homeItems(device: DeviceState, link: LinkView): List<HomeItem> {
         HomeItem("music", "artists albums songs", Page.Music),
         HomeItem("connection", if (link.phase == Phase.LIVE) link.device ?: device.hello?.board ?: "" else statusText(link), Page.Connection),
         HomeItem("playlists", if (playlists != null && playlists > 0) (if (playlists == 1L) "1 playlist" else "$playlists playlists") else if (playlists == 0L) "0 playlists" else "", Page.Playlists),
-        HomeItem("online", onlinePivots(device).joinToString(" "), Page.Online()),
-        HomeItem("settings", pivots.joinToString(" "), Page.Settings),
+        HomeItem("online", Page.Online(), onlinePivots(device)),
+        HomeItem("settings", Page.Settings, pivots),
     )
 }
 
