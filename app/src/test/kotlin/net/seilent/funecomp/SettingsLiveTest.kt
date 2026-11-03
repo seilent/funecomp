@@ -4,6 +4,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -88,6 +91,18 @@ class SettingsLiveTest {
     }
 
     @Test
+    fun theHeaderDrawsThePivotsInTheSchemaOrder() {
+        val c = SimControl("v1")
+        start(c)
+        val tagged = SemanticsMatcher("a pivot label") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("pivot.") == true }
+        val shown = rule.onAllNodes(tagged, useUnmergedTree = true).fetchSemanticsNodes()
+            .sortedBy { it.positionInRoot.x }
+            .map { it.config[SemanticsProperties.TestTag].removePrefix("pivot.") }
+        assertEquals(c.device.schema.rows.mapNotNull { it.pivot }.distinct(), shown)
+        assertEquals(listOf("output", "effects", "library", "display", "screens", "power", "connect", "system", "bluetooth"), shown)
+    }
+
+    @Test
     fun liveRowsShowTheLiveMapAndEqAndAboutKeepTheirSources() {
         val c = SimControl("ap80")
         val n = c.sim.lib.tracks.size
@@ -106,8 +121,7 @@ class SettingsLiveTest {
         pivot("display")
         scrollTo("set.scale")
         shows("set.scale", "1.5")
-        pivot("power")
-        pivot("system")
+        rule.walkPivots(c.device.schema.rows, "system", "display") { settle(1000) }
         scrollTo("set.about")
         shows("set.about", c.device.hello!!.version!!.uppercase())
     }

@@ -55,10 +55,7 @@ class MinuteSchemaTest {
         rule.mainClock.autoAdvance = false
         rule.setContent { Box(Modifier.requiredSize(411.dp, 600.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) } }
         settle(1000)
-        for (p in listOf("library", "display", "power", "system")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        rule.walkPivots(c.device.schema.rows, "system") { settle(1000) }
         rule.onNode(hasText("2026-01-01 00:00") and hasAnyAncestor(hasTestTag("set.dateTime"))).assertExists()
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.about"))

@@ -399,30 +399,28 @@ class BehaviorTest {
     }
 
     private fun deviceRows(board: String, brightness: String) {
-        val (_, shell) = start(listOf(Page.Home, Page.Settings), board = board)
-        rule.onNodeWithTag("pivot.effects").performClick()
-        settle(1000)
+        val (c, shell) = start(listOf(Page.Home, Page.Settings), board = board)
+        val rows = c.device.schema.rows
+        rule.walkPivots(rows, "effects") { settle(1000) }
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.crossfeed"))
         rule.mainClock.autoAdvance = false
         settle(1000)
         row("set.crossfeed", "CROSSFEED", "OFF")
-        for (p in listOf("library", "display")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        rule.walkPivots(rows, "display", "effects") { settle(1000) }
         row("set.brightness", "BRIGHTNESS", brightness)
+        if (board == "v1") row("set.size", "SIZE", "STANDARD") else row("set.scale", "SCALE", "1.5")
+        rule.walkPivots(rows, "screens", "display") { settle(1000) }
         row("set.saverLyrics", "SAVER LYRICS", "ON")
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.artistPhoto"))
         rule.mainClock.autoAdvance = false
         settle(1000)
         row("set.artistPhoto", "ARTIST PHOTO", "ON")
-        if (board == "v1") row("set.size", "SIZE", "STANDARD") else row("set.scale", "SCALE", "1.5")
-        for (p in listOf("power", "system")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        rule.walkPivots(rows, "connect", "screens") { settle(1000) }
+        assertEquals(board == "v1", rule.onAllNodesWithTag("set.wifi").fetchSemanticsNodes().isNotEmpty())
+        if (board == "v1") row("set.wifi", "WI-FI")
+        rule.walkPivots(rows, "system", "connect") { settle(1000) }
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.about"))
         rule.mainClock.autoAdvance = false
@@ -430,10 +428,6 @@ class BehaviorTest {
         rule.onNodeWithTag("set.about").performClick()
         settle(600)
         assertEquals("about", shell.sheet.title)
-        shell.sheet.close()
-        settle(600)
-        assertEquals(board == "v1", rule.onAllNodesWithTag("set.wifi").fetchSemanticsNodes().isNotEmpty())
-        if (board == "v1") row("set.wifi", "WI-FI")
     }
 
     @Test

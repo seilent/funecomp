@@ -50,12 +50,9 @@ class SettingsRefusalTest {
         return c
     }
 
-    private fun settings(vararg pivots: String, faults: List<String> = emptyList()): SimControl {
+    private fun settings(to: String, faults: List<String> = emptyList()): SimControl {
         val c = start(Page.Settings, *faults.toTypedArray())
-        for (p in pivots) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        rule.walkPivots(c.device.schema.rows, to) { settle(1000) }
         return c
     }
 
@@ -86,7 +83,7 @@ class SettingsRefusalTest {
 
     @Test
     fun aBootLogoPictureIsListedAndItsPickIsRefusedWithTheRowLabel() {
-        val c = settings("library", "display")
+        val c = settings("display")
         tap("set.bootLogo")
         assertEquals("boot logo", shell.sheet.title)
         assertEquals(listOf("FUNE", "STOCK", "PICTURE"), shell.sheet.items)
@@ -101,7 +98,7 @@ class SettingsRefusalTest {
 
     @Test
     fun aBootLogoPickTheDapTakesShowsNoToast() {
-        val c = settings("library", "display")
+        val c = settings("display")
         tap("set.bootLogo")
         pick(1)
         assertEquals("stock", c.device.settings.values["bootLogo"])
@@ -115,7 +112,7 @@ class SettingsRefusalTest {
 
     @Test
     fun aBadValueSetShowsNoToast() {
-        val c = settings("library", "display", faults = listOf("fail=SET:${Err.badValue}:1"))
+        val c = settings("display", faults = listOf("fail=SET:${Err.badValue}:1"))
         tap("set.bootLogo")
         pick(1)
         assertEquals(listOf(Err.badValue), c.failed)
@@ -125,7 +122,7 @@ class SettingsRefusalTest {
 
     @Test
     fun aCodecPickForARoleTheDapLeftIsRefusedWithTheRowLabel() {
-        val c = settings("library", "display", "power", "system", "bluetooth")
+        val c = settings("bluetooth")
         tap("set.btCodec")
         assertEquals("codec", shell.sheet.title)
         c.sim.btRole = Enums.BtRole.headphones
@@ -138,7 +135,7 @@ class SettingsRefusalTest {
 
     @Test
     fun aUsbModePickTheDapRefusesIsToastedWithTheRowLabel() {
-        val c = settings("library", "display", "power", "system", faults = listOf("fail=DRAFT:${Err.refused}:1"))
+        val c = settings("connect", faults = listOf("fail=DRAFT:${Err.refused}:1"))
         tap("set.usbMode")
         assertEquals("usb mode", shell.sheet.title)
         pick(2)

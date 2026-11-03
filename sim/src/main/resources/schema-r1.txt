@@ -26,17 +26,17 @@ display	led	choice	LED	off,low,mid,high	OFF,LOW,MID,HIGH	-	boardOnly	-
 display	accentHue	range	ACCENT	-	-	0,350,10	-	-
 display	bootLogo	choice	BOOT LOGO	fune,stock,picture	FUNE,STOCK,PICTURE	-	boardOnly	-
 display	size	draft	SIZE	standard,large	STANDARD,LARGE	-	readOnly,boardOnly,restart	-
-display	saverSeconds	steps	SAVER	10,15,30,60,120,300	10 S,15 S,30 S,1 MIN,2 MIN,5 MIN	-	-	-
-display	saverLyrics	toggle	SAVER LYRICS	off,on	OFF,ON	-	-	-
-display	saverDrift	toggle	SAVER DRIFT	off,on	OFF,ON	-	-	-
 display	clock	choice	CLOCK	24h,12h,off	24H,12H,OFF	-	-	-
 display	batteryPercent	toggle	BATTERY PERCENT	off,on	OFF,ON	-	-	-
 display	statusVolume	toggle	STATUS VOLUME	off,on	OFF,ON	-	-	-
-display	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-	-
-display	artistPhoto	toggle	ARTIST PHOTO	off,on	OFF,ON	-	-	-
-display	navBar	toggle	NAV BAR	off,on	OFF,ON	-	-	-
-display	navOrder	choice	NAV ORDER	backLeft,backRight	BACK LEFT,BACK RIGHT	-	-	navBar=on
-display	navButton	choice	NAV BUTTON	play,np,bt,next,shuffle,search,settings	PLAY/PAUSE,NOW PLAYING,BLUETOOTH,NEXT,SHUFFLE ALL,SEARCH,SETTINGS	-	-	navBar=on
+screens	saverSeconds	steps	SAVER	10,15,30,60,120,300	10 S,15 S,30 S,1 MIN,2 MIN,5 MIN	-	-	-
+screens	saverLyrics	toggle	SAVER LYRICS	off,on	OFF,ON	-	-	-
+screens	saverDrift	toggle	SAVER DRIFT	off,on	OFF,ON	-	-	-
+screens	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-	-
+screens	artistPhoto	toggle	ARTIST PHOTO	off,on	OFF,ON	-	-	-
+screens	navBar	toggle	NAV BAR	off,on	OFF,ON	-	-	-
+screens	navOrder	choice	NAV ORDER	backLeft,backRight	BACK LEFT,BACK RIGHT	-	-	navBar=on
+screens	navButton	choice	NAV BUTTON	play,np,bt,next,shuffle,search,settings	PLAY/PAUSE,NOW PLAYING,BLUETOOTH,NEXT,SHUFFLE ALL,SEARCH,SETTINGS	-	-	navBar=on
 power	screenOffSeconds	steps	SCREEN OFF AFTER	0,60,120,300,600,1800	OFF,1 MIN,2 MIN,5 MIN,10 MIN,30 MIN	-	-	-
 power	sleep	draft	SLEEP TIMER	0,15,30,45,60,90,120	OFF,15 MIN,30 MIN,45 MIN,60 MIN,90 MIN,120 MIN	0,999	-	-
 power	idleShutdownMinutes	steps	IDLE SHUTDOWN	0,5,10,30,60	OFF,5 MIN,10 MIN,30 MIN,60 MIN	-	-	-
@@ -44,14 +44,15 @@ power	chargeLimit	choice	CHARGE LIMIT	off,4200	OFF,4.20 V	-	boardOnly	-
 power	chargeSpeed	choice	CHARGE SPEED	normal,500,300	NORMAL,500 MA,300 MA	-	boardOnly	-
 power	lockKnob	toggle	LOCK VOLUME	off,on	OFF,ON	-	-	-
 power	screenOffKeys	choice	SCREEN OFF KEYS	all,play,none	ALL,PLAY ONLY,NONE	-	-	-
+power	swapTrackKeys	toggle	SWAP PREV/NEXT	off,on	OFF,ON	-	boardOnly	-
 power	inlineRemote	toggle	IN-LINE REMOTE	off,on	OFF,ON	-	-	-
-system	usbMode	draft	USB MODE	prompt,storage,dock,audio,mtp	PROMPT,STORAGE,DOCK,AUDIO,MTP	-	-	-
-system	usbFeedback	toggle	USB DAC FEEDBACK	off,on	OFF,ON	-	boardOnly	-
-system	usbOutput	choice	USB DAC OUTPUT	headphones,bluetooth	JACK,BLUETOOTH	-	boardOnly	-
-system	usbStorage	action	USB STORAGE	-	-	-	readOnly	-
+connect	usbMode	draft	USB MODE	prompt,storage,dock,audio,mtp	PROMPT,STORAGE,DOCK,AUDIO,MTP	-	-	-
+connect	usbFeedback	toggle	USB DAC FEEDBACK	off,on	OFF,ON	-	boardOnly	-
+connect	usbOutput	choice	USB DAC OUTPUT	headphones,bluetooth	JACK,BLUETOOTH	-	boardOnly	-
+connect	usbStorage	action	USB STORAGE	-	-	-	readOnly	-
+connect	wifi	info	WI-FI	-	-	-	readOnly,boardOnly	-
+connect	streaming	toggle	STREAMING	off,on	OFF,ON	-	boardOnly	-
 system	dateTime	draft	DATE/TIME	-	-	-	-	-
-system	wifi	info	WI-FI	-	-	-	readOnly,boardOnly	-
-system	streaming	toggle	STREAMING	off,on	OFF,ON	-	boardOnly	-
 system	companion	toggle	PHONE APP	off,on	OFF,ON	-	readOnly,boardOnly	-
 system	companionPair	action	PAIR PHONE APP	-	-	-	readOnly	companion=on
 system	scrobble	choice	SCROBBLE	phone,card,off	PHONE,CARD LOG,OFF	-	-	-

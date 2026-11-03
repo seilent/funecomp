@@ -47,8 +47,10 @@ class AboutTest {
     private var firmware by mutableStateOf(FirmwareView())
     private val shell = Shell(Nav(listOf(Page.Home, Page.Settings)))
 
+    private var sim: SimControl? = null
+
     private fun start(board: String = "ap80", edit: (DeviceState) -> DeviceState = { it }): SimControl {
-        val c = SimControl(board)
+        val c = SimControl(board).also { sim = it }
         c.device = edit(c.device)
         rule.mainClock.autoAdvance = false
         rule.setContent {
@@ -64,12 +66,7 @@ class AboutTest {
         rule.waitForIdle()
     }
 
-    private fun system() {
-        for (p in listOf("library", "display", "power", "system")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
-    }
+    private fun system() = rule.walkPivots(sim!!.device.schema.rows, "system") { settle(1000) }
 
     private fun tapAbout() {
         rule.mainClock.autoAdvance = true

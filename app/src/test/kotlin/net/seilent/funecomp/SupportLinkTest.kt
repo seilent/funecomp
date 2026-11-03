@@ -96,10 +96,7 @@ class SupportLinkTest {
         val a = main()
         a.get().shell.nav.push(Page.Settings)
         waitFor { rule.onAllNodes(hasTestTag("pivot.library")).fetchSemanticsNodes().isNotEmpty() }
-        for (p in listOf("library", "display", "power", "system")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            waitFor { true }
-        }
+        rule.walkPivots(Remote.device.schema.rows, "system") { waitFor { true } }
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.about"))
         rule.onNodeWithTag("set.about").performClick()
         waitFor { a.get().shell.sheet.shown && a.get().shell.sheet.items == listOf("update firmware", "support me") }

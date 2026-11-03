@@ -221,12 +221,9 @@ private fun sleep(minutes: Long, agoMs: Long): (SimControl) -> Unit = { c ->
     c.device = c.device.copy(playback = p.copy(receivedAt = SystemClock.elapsedRealtime() - agoMs))
 }
 
-private fun power(s: Shots) {
-    for (p in listOf("library", "display", "power")) {
-        s.rule.onNodeWithTag("pivot.$p").performClick()
-        s.settle(1000)
-    }
-}
+private fun power(s: Shots) = s.walk("power")
+
+private fun Shots.walk(to: String) = rule.walkPivots(control!!.device.schema.rows, to) { settle(1000) }
 
 private fun favorite(c: SimControl) {
     playing(c)
@@ -645,16 +642,13 @@ private fun cached(c: SimControl) {
 }
 
 private fun Shots.insertAbove(shell: Shell) {
-    for (p in listOf("library", "display")) {
-        rule.onNodeWithTag("pivot.$p").performClick()
-        settle(1000)
-    }
+    walk("display")
     tapRow("set.clock")
     shell.sheet.close()
     settle(600)
     val c = control ?: return
     val rows = c.device.schema.rows
-    val at = rows.indexOfFirst { it.key == "saverSeconds" }
+    val at = rows.indexOfFirst { it.key == "clock" }
     val nav = listOf(
         Row("navOrder", "NAV ORDER", "display", Enums.RowKind.choice, listOf("backLeft", "backRight"), words = listOf("BACK LEFT", "BACK RIGHT")),
         Row("navButton", "NAV BUTTON", "display", Enums.RowKind.choice, listOf("play", "np", "bt", "next", "shuffle", "search", "settings"), words = listOf("PLAY/PAUSE", "NOW PLAYING", "BLUETOOTH", "NEXT", "SHUFFLE ALL", "SEARCH", "SETTINGS")),
@@ -681,10 +675,7 @@ private val NO_ADD = "features=${net.seilent.funecomp.proto.Groups.all and net.s
 private val ONE_GENRE = net.seilent.funecomp.sim.Library(net.seilent.funecomp.sim.Library.synthetic().tracks.map { t -> net.seilent.funecomp.sim.Track(t.id, t.artist, t.artists, t.album, t.albumArtist, t.title, t.durationMs, t.folder, t.file, t.mbids, if (t.album == "First Love") "J-Pop" else "", t.no) })
 
 private fun Shots.about() {
-    for (p in listOf("library", "display", "power", "system")) {
-        rule.onNodeWithTag("pivot.$p").performClick()
-        settle(1000)
-    }
+    walk("system")
     tapRow("set.about")
 }
 
@@ -952,45 +943,26 @@ val SHOTS = listOf(
         rule.onNodeWithTag("set.digitalFilter").performClick()
     },
     Shot("settings-pick-usbmode", pages = HOME + Page.Settings) {
-        for (p in listOf("library", "display", "power", "system")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        walk("connect")
         scrollTo("set.usbMode")
         rule.onNodeWithTag("set.usbMode").performClick()
     },
     Shot("settings-toggle", pages = HOME + Page.Settings) {
-        for (p in listOf("library", "display")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        walk("screens")
         scrollTo("set.quickplay")
         rule.onNodeWithTag("set.quickplay").performClick()
     },
-    Shot("settings-display", pages = HOME + Page.Settings) {
-        for (p in listOf("library", "display")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
-    },
-    Shot("settings-display-v1", board = "v1", pages = HOME + Page.Settings) {
-        for (p in listOf("library", "display")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
-    },
+    Shot("settings-display", pages = HOME + Page.Settings) { walk("display") },
+    Shot("settings-screens", pages = HOME + Page.Settings) { walk("screens") },
+    Shot("settings-display-v1", board = "v1", pages = HOME + Page.Settings) { walk("display") },
     Shot("settings-artistphoto-v1", board = "v1", pages = HOME + Page.Settings) {
-        for (p in listOf("library", "display")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        walk("screens")
         scrollTo("set.artistPhoto")
     },
-    Shot("settings-power", pages = HOME + Page.Settings) {
-        for (p in listOf("library", "display", "power")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+    Shot("settings-power", pages = HOME + Page.Settings) { walk("power") },
+    Shot("settings-power-r1", board = "r1", pages = HOME + Page.Settings) {
+        walk("power")
+        scrollTo("set.swapTrackKeys")
     },
     Shot("settings-sleep", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) { power(this) },
     Shot("settings-sleep-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) { power(this) },
@@ -1018,38 +990,23 @@ val SHOTS = listOf(
         rule.onNodeWithTag("entry").performImeAction()
     },
     Shot("settings-bootlogo-refused", board = "v1", pages = HOME + Page.Settings) {
-        for (p in listOf("library", "display")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        walk("display")
         scrollTo("set.bootLogo")
         rule.onNodeWithTag("set.bootLogo").performClick()
         settle(600)
         it.sheet.accept(2)
     },
     Shot("settings-codec-headphones", board = "v1", pages = HOME + Page.Settings, btRole = Enums.BtRole.headphones) {
-        for (p in listOf("library", "display", "power", "system", "bluetooth")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        walk("bluetooth")
         rule.onNodeWithTag("set.btCodecHeadphones").performClick()
         settle(600)
         it.sheet.accept(1)
     },
     Shot("settings-sleep-wide", pages = HOME + Page.Settings, prep = sleep(120, 0)) { power(this) },
     Shot("settings-sleep-wide-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(120, 0)) { power(this) },
-    Shot("settings-system", pages = HOME + Page.Settings) {
-        for (p in listOf("library", "display", "power", "system")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
-    },
-    Shot("settings-system-v1", board = "v1", pages = HOME + Page.Settings) {
-        for (p in listOf("library", "display", "power", "system")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
-    },
+    Shot("settings-system", pages = HOME + Page.Settings) { walk("system") },
+    Shot("settings-connect-v1", board = "v1", pages = HOME + Page.Settings) { walk("connect") },
+    Shot("settings-system-v1", board = "v1", pages = HOME + Page.Settings) { walk("system") },
     Shot("eq", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)),
     Shot("eq-custom", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired), prep = ::custom) { tapRow("eq.band.0") },
     Shot("eq-entry", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired), prep = ::custom) {

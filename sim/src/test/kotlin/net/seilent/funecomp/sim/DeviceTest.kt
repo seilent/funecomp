@@ -119,7 +119,7 @@ class DeviceTest {
             val out = Sink()
             d.greet(out)
             val pages = out.of(Msg.SCHEMA).map { Schema.from(it) }
-            assertEquals(7, pages.last().pivotCount)
+            assertEquals(9, pages.last().pivotCount)
             assertTrue(pages.last().last)
             assertEquals(d.schemaRows().size, pages.sumOf { it.rows.size })
             val text = Settings.from(out.of(Msg.SETTINGS).single()).text
@@ -142,12 +142,44 @@ class DeviceTest {
 
     @Test
     fun rowCountsAtTheDefaultsAndWithEveryRuntimeRowShown() {
-        for ((b, n) in listOf("ap80" to 46, "v1" to 56, "r1" to 55)) assertEquals(b, n, device(b).schemaRows().size)
-        for ((b, n) in listOf("ap80" to 49, "v1" to 60, "r1" to 59)) {
+        for ((b, n) in listOf("ap80" to 46, "v1" to 56, "r1" to 56)) assertEquals(b, n, device(b).schemaRows().size)
+        for ((b, n) in listOf("ap80" to 49, "v1" to 60, "r1" to 60)) {
             val d = Device(Options(Board.of(b), headset = true, companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
             assertEquals(b, n, d.schemaRows().size)
             assertEquals(b, d.rows.size, d.schemaRows().size)
+        }
+    }
+
+    @Test
+    fun pivotsAsFuneos71eaf7418() {
+        val screens = listOf("saverSeconds", "saverLyrics", "saverDrift", "quickplay", "artistPhoto", "navBar", "navOrder", "navButton")
+        for (b in listOf("ap80", "v1", "r1")) {
+            val d = Device(Options(Board.of(b), companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
+            ok(req(d, Msg.SET, Req.set("navBar=on\n")))
+            val out = Sink()
+            d.greet(out)
+            val rows = out.of(Msg.SCHEMA).map { Schema.from(it) }.flatMap { it.rows }
+            fun on(p: String) = rows.filter { it.pivot == p }.map { it.key }
+            assertEquals(b, listOf("output", "effects", "library", "display", "screens", "power", "connect", "system", "bluetooth"), rows.map { it.pivot }.distinct())
+            assertEquals(b, screens, on("screens"))
+            val usb = if (b == "ap80") listOf("usbMode", "usbStorage") else listOf("usbMode", "usbFeedback", "usbOutput", "usbStorage", "wifi", "streaming")
+            assertEquals(b, usb, on("connect"))
+            assertEquals(b, listOf("dateTime", "companion", "companionPair", "scrobble", "about"), on("system"))
+            val power = on("power")
+            val settings = Settings.from(out.of(Msg.SETTINGS).single()).text.lines()
+            if (b == "r1") {
+                assertEquals(power.indexOf("screenOffKeys") + 1, power.indexOf("swapTrackKeys"))
+                assertEquals(power.indexOf("swapTrackKeys") + 1, power.indexOf("inlineRemote"))
+                assertTrue("swapTrackKeys=off" in settings)
+                val set = Sink()
+                assertEquals(listOf("swapTrackKeys"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("swapTrackKeys=on\n"), set)))).kept)
+                assertTrue("swapTrackKeys=on" in Settings.from(set.of(Msg.SETTINGS).single()).text.lines())
+            } else {
+                assertTrue(b, rows.none { it.key == "swapTrackKeys" })
+                assertTrue(b, settings.none { it.startsWith("swapTrackKeys=") })
+                assertEquals(b, listOf("swapTrackKeys"), fail(req(d, Msg.SET, Req.set("swapTrackKeys=on\n"))).refused)
+            }
         }
     }
 
@@ -164,9 +196,9 @@ class DeviceTest {
         d.tick(out)
         val pages = out.of(Msg.SCHEMA).map { Schema.from(it) }
         assertTrue(pages.isNotEmpty() && pages.all { it.rev == rev!! + 1 })
-        val display = pages.flatMap { it.rows }.filter { it.pivot == "display" }.map { it.key }
-        assertEquals(display.indexOf("navBar") + 1, display.indexOf("navOrder"))
-        assertEquals(display.indexOf("navBar") + 2, display.indexOf("navButton"))
+        val screens = pages.flatMap { it.rows }.filter { it.pivot == "screens" }.map { it.key }
+        assertEquals(screens.indexOf("navBar") + 1, screens.indexOf("navOrder"))
+        assertEquals(screens.indexOf("navBar") + 2, screens.indexOf("navButton"))
         out.frames.clear()
         d.tick(out)
         assertTrue(out.of(Msg.SCHEMA).isEmpty())
@@ -279,10 +311,10 @@ class DeviceTest {
             val d = device(b)
             val keys = d.rows.map { it.key }
             assertEquals(keys.indexOf("eq") + 1, keys.indexOf("crossfeed"))
-            val display = d.schemaRows().filter { it.pivot == "display" }.map { it.key }
-            assertEquals("brightness", display.first())
-            assertEquals(display.indexOf("artistPhoto") + 1, display.indexOf("navBar"))
-            assertEquals("navBar", display.last())
+            assertEquals("brightness", d.schemaRows().first { it.pivot == "display" }.key)
+            val screens = d.schemaRows().filter { it.pivot == "screens" }.map { it.key }
+            assertEquals(screens.indexOf("artistPhoto") + 1, screens.indexOf("navBar"))
+            assertEquals("navBar", screens.last())
             val xf = d.rows.first { it.key == "crossfeed" }
             assertEquals(Enums.RowKind.choice, xf.kind)
             assertEquals(listOf("off", "default", "chuMoy", "janMeier"), xf.values)
@@ -314,7 +346,7 @@ class DeviceTest {
             assertEquals(keys.indexOf("crossfeed") + 1, keys.indexOf("tube"))
             assertEquals(keys.indexOf("tube") + 1, keys.indexOf("stereoWidth"))
             val row = d.rows.first { it.key == "saverLyrics" }
-            assertEquals("display", row.pivot)
+            assertEquals("screens", row.pivot)
             assertEquals(Enums.RowKind.toggle, row.kind)
             assertEquals("SAVER LYRICS", row.label)
             assertEquals(listOf("off", "on"), row.values)
@@ -345,7 +377,7 @@ class DeviceTest {
             assertTrue(d.rows.none { it.key == "scale" })
         }
         val keys = v1.rows.map { it.key }
-        assertEquals(keys.indexOf("dateTime") + 1, keys.indexOf("wifi"))
+        assertEquals(keys.indexOf("usbStorage") + 1, keys.indexOf("wifi"))
         val wifi = v1.rows.first { it.key == "wifi" }
         assertEquals(Enums.RowKind.info, wifi.kind)
         assertEquals(listOf(Enums.RowFlag.readOnly, Enums.RowFlag.boardOnly), wifi.flags)

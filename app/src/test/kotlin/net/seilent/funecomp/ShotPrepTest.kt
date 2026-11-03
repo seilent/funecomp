@@ -76,10 +76,7 @@ class ShotPrepTest {
         rule.mainClock.autoAdvance = false
         rule.setContent { Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) } }
         settle(1000)
-        for (p in listOf("library", "display", "power", "system")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        rule.walkPivots(c.device.schema.rows, "system") { settle(1000) }
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.dateTime"))
         rule.mainClock.autoAdvance = false

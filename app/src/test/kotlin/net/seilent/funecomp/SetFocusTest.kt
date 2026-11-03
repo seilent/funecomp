@@ -47,8 +47,10 @@ class SetFocusTest {
 
     private val shell = Shell(Nav(listOf(Page.Home, Page.Settings)))
 
+    private var sim: SimControl? = null
+
     private fun start(restore: StateRestorationTester? = null): SimControl {
-        val c = SimControl("ap80")
+        val c = SimControl("ap80").also { sim = it }
         rule.mainClock.autoAdvance = false
         val content = @Composable { Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) } }
         if (restore != null) restore.setContent(content) else rule.setContent(content)
@@ -72,10 +74,7 @@ class SetFocusTest {
         rule.waitForIdle()
     }
 
-    private fun pivot(p: String) {
-        rule.onNodeWithTag("pivot.$p").performClick()
-        settle(1000)
-    }
+    private fun walk(to: String) = rule.walkPivots(sim!!.device.schema.rows, to) { settle(1000) }
 
     private fun focusOn(key: String) {
         rule.onNodeWithTag("set.$key").performClick()
@@ -111,12 +110,11 @@ class SetFocusTest {
     @Test
     fun aRowInsertedAboveKeepsFocusAndTheBarJumps() {
         val c = start()
-        pivot("library")
-        pivot("display")
+        walk("display")
         focusOn("batteryPercent")
         assertTrue(barOn("batteryPercent"))
         val before = bounds("set.batteryPercent").top
-        insertBefore(c, "saverSeconds", row("navOrder", "display"), row("navButton", "display"))
+        insertBefore(c, "clock", row("navOrder", "display"), row("navButton", "display"))
         val from = barTop()
         val seen = frames(8)
         val to = bounds("set.batteryPercent").top
@@ -138,8 +136,7 @@ class SetFocusTest {
     @Test
     fun rowsAddedThenRemovedKeepTheFocusedKey() {
         val c = start()
-        pivot("library")
-        pivot("display")
+        walk("display")
         focusOn("batteryPercent")
         insertBefore(c, "clock", row("navOrder", "display"), row("navButton", "display"))
         settle(600)
@@ -152,8 +149,7 @@ class SetFocusTest {
     @Test
     fun aRemovedKeyFallsBackToItsIndexAndKeepsTheNewRow() {
         val c = start()
-        pivot("library")
-        pivot("display")
+        walk("display")
         focusOn("clock")
         drop(c, "clock")
         settle(600)
@@ -166,7 +162,7 @@ class SetFocusTest {
     @Test
     fun theLastRowRemovedMovesFocusToTheNewLast() {
         val c = start()
-        for (p in listOf("library", "display", "power")) pivot(p)
+        walk("power")
         focusOn("inlineRemote")
         drop(c, "inlineRemote")
         settle(600)
@@ -176,9 +172,7 @@ class SetFocusTest {
     @Test
     fun aPivotInsertedBeforeKeepsTheShownPivotWithNoMotion() {
         val c = start()
-        pivot("library")
-        pivot("display")
-        pivot("power")
+        walk("power")
         val left = bounds("set.lockKnob").left
         schema(c) { rows -> listOf(row("extraRow", "extra")) + rows }
         repeat(20) {
@@ -192,7 +186,7 @@ class SetFocusTest {
     @Test
     fun aRemovedPivotSlidesTheOldRowsOutThenShowsItsNeighbour() {
         val c = start()
-        for (p in listOf("library", "display", "power", "system", "bluetooth")) pivot(p)
+        walk("bluetooth")
         val left = bounds("set.btCodec").left
         drop(c, "btCodec")
         rule.waitForIdle()
@@ -210,8 +204,7 @@ class SetFocusTest {
         start()
         val top = bounds("set.outputPriority").top
         focusOn("powerOnScale")
-        pivot("library")
-        pivot("display")
+        walk("display")
         focusOn("scale")
         assertTrue(barOn("scale"))
         repeat(3) {
@@ -220,8 +213,7 @@ class SetFocusTest {
         }
         assertTrue(barOn("powerOnScale"))
         assertEquals(top, bounds("set.outputPriority").top, 0.5f)
-        pivot("library")
-        pivot("display")
+        walk("display")
         assertTrue(barOn("scale"))
     }
 
@@ -250,13 +242,12 @@ class SetFocusTest {
     fun pivotAndFocusSurviveRecreation() {
         val restore = StateRestorationTester(rule)
         val c = start(restore)
-        pivot("library")
-        pivot("display")
+        walk("screens")
         focusOn("artistPhoto")
         restore.emulateSavedInstanceStateRestore()
         settle(1000)
         assertTrue(exists("set.artistPhoto"))
-        insertBefore(c, "clock", row("navOrder", "display"))
+        insertBefore(c, "saverSeconds", row("navOrder", "screens"))
         settle(600)
         assertTrue(barOn("artistPhoto"))
     }
@@ -264,8 +255,7 @@ class SetFocusTest {
     @Test
     fun aClearedSchemaDrawsNoStaleRows() {
         val c = start()
-        pivot("library")
-        pivot("display")
+        walk("display")
         assertTrue(exists("set.brightness"))
         schema(c) { emptyList() }
         settle(600)
@@ -275,7 +265,7 @@ class SetFocusTest {
     @Test
     fun anEmptySchemaKeepsThePivotIndexForTheFallback() {
         val c = start()
-        for (p in listOf("library", "display", "power")) pivot(p)
+        walk("power")
         val all = c.device.schema.rows
         schema(c) { emptyList() }
         settle(600)
@@ -303,7 +293,7 @@ class SetFocusTest {
     @Test
     fun aFallbackAfterARebuildJumps() {
         val c = start()
-        for (p in listOf("library", "display", "power")) pivot(p)
+        walk("power")
         focusOn("inlineRemote")
         val from = barTop()
         drop(c, "inlineRemote", "screenOffKeys")
@@ -319,7 +309,7 @@ class SetFocusTest {
     fun aSchemaArrivingAfterARestoreShowsTheSavedPivotWithNoMotion() {
         val restore = StateRestorationTester(rule)
         val c = start(restore)
-        for (p in listOf("library", "display", "power")) pivot(p)
+        walk("power")
         val all = c.device.schema.rows
         val left = bounds("set.lockKnob").left
         schema(c) { emptyList() }

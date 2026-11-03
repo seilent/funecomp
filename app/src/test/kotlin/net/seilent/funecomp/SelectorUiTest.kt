@@ -49,21 +49,18 @@ class SelectorUiTest {
 
     private var role = Enums.BtRole.receiver
 
-    private fun start(board: String = "ap80", vararg pivots: String): SimControl = startAt(411, 960, board, *pivots)
+    private fun start(board: String = "ap80", to: String? = null): SimControl = startAt(411, 960, board, to)
 
-    private fun startAt(w: Int, h: Int, board: String = "ap80", vararg pivots: String): SimControl = startAt(w.dp, h.dp, board, *pivots)
+    private fun startAt(w: Int, h: Int, board: String = "ap80", to: String? = null): SimControl = startAt(w.dp, h.dp, board, to)
 
-    private fun startAt(w: Dp, h: Dp, board: String = "ap80", vararg pivots: String): SimControl {
+    private fun startAt(w: Dp, h: Dp, board: String = "ap80", to: String? = null): SimControl {
         val c = SimControl(board, btRole = role)
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(w, h)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
         }
         settle(1000)
-        for (p in pivots) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        to?.let { rule.walkPivots(c.device.schema.rows, it) { settle(1000) } }
         return c
     }
 
@@ -141,13 +138,13 @@ class SelectorUiTest {
 
     @Test
     fun theLastValueRowScrollsPastTheEndAndBack() {
-        val c = start("ap80", "library", "display")
+        val c = startAt(411, 640, "ap80", "screens")
         val before = scrolledTo("navBar")
         rule.onNodeWithTag("set.navBar").performClick()
         settle(600)
         assertTrue(shell.sheet.shown)
         assertTrue(top("set.navBar") < before)
-        clearsThePanel("navBar", 411, 960)
+        clearsThePanel("navBar", 411, 640)
         shell.sheet.close()
         settle(1000)
         assertEquals(before, top("set.navBar"), 1.5f)
@@ -201,13 +198,13 @@ class SelectorUiTest {
 
     @Test
     fun aValueSheetScrollsItsRowAboveThePanel() {
-        val c = start("ap80", "library", "display")
-        val before = top("set.quickplay")
-        tap("quickplay")
+        val c = startAt(411, 640, "ap80", "screens")
+        val before = top("set.artistPhoto")
+        tap("artistPhoto")
         assertTrue(shell.sheet.shown)
-        assertTrue(top("set.quickplay") < before)
-        clearsThePanel("quickplay", 411, 960)
-        val row = rule.onNodeWithTag("set.quickplay").fetchSemanticsNode().boundsInRoot
+        assertTrue(top("set.artistPhoto") < before)
+        clearsThePanel("artistPhoto", 411, 640)
+        val row = rule.onNodeWithTag("set.artistPhoto").fetchSemanticsNode().boundsInRoot
         assertTrue(row.top >= rule.onNodeWithTag("rows").fetchSemanticsNode().boundsInRoot.top)
         shell.sheet.close()
         settle(600)
@@ -259,7 +256,7 @@ class SelectorUiTest {
 
     @Test
     fun usbModePickSendsOneDraft() {
-        val c = start("ap80", "library", "display", "power", "system")
+        val c = start("ap80", "connect")
         tap("usbMode")
         assertEquals(listOf("PROMPT", "STORAGE", "DOCK", "AUDIO"), shell.sheet.items)
         assertEquals(0, shell.sheet.focus)
@@ -280,7 +277,7 @@ class SelectorUiTest {
     fun codecPickIsADraftOnTheBluetoothPivotV1() = codecPick("v1")
 
     private fun codecPick(board: String) {
-        val c = start(board, "library", "display", "power", "system", "bluetooth")
+        val c = start(board, "bluetooth")
         tap("btCodec")
         assertEquals("codec", shell.sheet.title)
         assertEquals(listOf("AUTO", "APTX", "AAC", "SBC"), shell.sheet.items)
@@ -293,7 +290,7 @@ class SelectorUiTest {
     @Test
     fun theHeadphonesCodecPickIsADraftWithItsRole() {
         role = Enums.BtRole.headphones
-        val c = start("v1", "library", "display", "power", "system", "bluetooth")
+        val c = start("v1", "bluetooth")
         tap("btCodecHeadphones")
         assertEquals("codec", shell.sheet.title)
         assertEquals(listOf("AUTO", "LDAC", "APTX", "AAC", "SBC"), shell.sheet.items)
@@ -306,7 +303,7 @@ class SelectorUiTest {
 
     @Test
     fun aToggleTapOpensTheOffOnSheet() {
-        val c = start("ap80", "library", "display")
+        val c = start("ap80", "screens")
         assertEquals("on", c.device.settings.values["quickplay"])
         tap("quickplay")
         assertTrue(shell.sheet.shown)
@@ -330,7 +327,7 @@ class SelectorUiTest {
 
     @Test
     fun aReadOnlyToggleDoesNothing() {
-        val c = start("ap80", "library", "display", "power", "system")
+        val c = start("ap80", "system")
         tap("companion")
         assertFalse(shell.sheet.shown)
         assertEquals(emptyList<String>(), writes(c))
@@ -379,7 +376,7 @@ class SelectorUiTest {
 
     @Test
     fun aSchemaTurningAToggleReadOnlyClosesItsSheet() {
-        val c = start("ap80", "library", "display")
+        val c = start("ap80", "screens")
         tap("quickplay")
         assertTrue(shell.sheet.shown)
         val s = c.device.schema

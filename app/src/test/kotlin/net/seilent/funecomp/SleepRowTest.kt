@@ -59,17 +59,14 @@ class SleepRowTest {
 
     private val shell = Shell(Nav(listOf(Page.Home, Page.Settings)))
 
-    private fun start(board: String = "ap80", schema: String? = null, pivots: List<String> = listOf("library", "display", "power"), w: Int = 411, h: Int = 960): SimControl {
+    private fun start(board: String = "ap80", schema: String? = null, to: String = "power", w: Int = 411, h: Int = 960): SimControl {
         val c = SimControl(board, now = SystemClock::elapsedRealtime, schema = schema)
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(w.dp, h.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
         }
         settle(1000)
-        for (p in pivots) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        rule.walkPivots(c.device.schema.rows, to) { settle(1000) }
         return c
     }
 
@@ -264,7 +261,7 @@ class SleepRowTest {
 
     @Test
     fun noTypedItemWithoutMax() {
-        val c = start("ap80", "schema-steps.txt", listOf("power"))
+        val c = start("ap80", "schema-steps.txt", "power")
         assertEquals(null, c.device.schema.rows.first { it.key == "sleep" }.max)
         tap()
         assertEquals(listOf("OFF", "15 MIN", "30 MIN", "45 MIN", "60 MIN", "90 MIN", "120 MIN"), shell.sheet.items)
