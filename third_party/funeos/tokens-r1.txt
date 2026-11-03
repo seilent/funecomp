@@ -598,6 +598,7 @@ homeRingHitBottom 64 u
 npSeekBandX0 8 u
 npSeekBandX1 100 u
 npSeekBandBottom 299.8 u
+npMarkHit 54 u
 npLyricPitch 31.2 u
 saverLyricBaseline 304 u
 large.rowHeight 52.5 u
@@ -641,3 +642,5 @@ navGlyph 16 u
 adjustExit 54 u
 adjustColumn 47 u
 adjustNumberDrop 0.35 ratio
+backdrop.coverSigma 6 u
+backdrop.coverGrid 0.25 ratio

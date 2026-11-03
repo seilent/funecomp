@@ -579,6 +579,7 @@ object Tok {
     const val homeRingHitBottom = 64f
     const val npSeekBandX0 = 8f
     const val npSeekBandX1 = 100f
+    const val npMarkHit = 54f
     const val npLyricPitch = 31.2f
     const val large_rowTextInset = 4f
     const val large_rowRing = 28f
@@ -620,6 +621,8 @@ object Tok {
     const val adjustExit = 54f
     const val adjustColumn = 47f
     const val adjustNumberDrop = 0.35f
+    const val backdrop_coverSigma = 6f
+    const val backdrop_coverGrid = 0.25f
 }
 
 object TokUnit {
@@ -1201,6 +1204,7 @@ object TokUnit {
     const val homeRingHitBottom = "u"
     const val npSeekBandX0 = "u"
     const val npSeekBandX1 = "u"
+    const val npMarkHit = "u"
     const val npLyricPitch = "u"
     const val large_rowTextInset = "u"
     const val large_rowRing = "u"
@@ -1242,4 +1246,6 @@ object TokUnit {
     const val adjustExit = "u"
     const val adjustColumn = "u"
     const val adjustNumberDrop = "ratio"
+    const val backdrop_coverSigma = "u"
+    const val backdrop_coverGrid = "ratio"
 }

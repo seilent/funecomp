@@ -10,9 +10,9 @@ object Pin {
     const val COMMIT = "da0ab1dfd7e3dcf0817d697e25a4b6429ad1918c"
     const val PROTO_SHA256 = "d93c0d719a20ccbdf36cbc77e8c23096c9142185e377e0f64743ad83f4990e5a"
     const val VECTORS_SHA256 = "579efd3086b49ecd5166292d1052a839a8d993f6f8f0c174b0b4e6f05065c6e5"
-    const val TOKENS_SHA256 = "f2dfa709c7fd894ea5f28f6d1115cc730dbd88ce9d64f91a12f58910c29742ef"
-    const val TOKENSV1_SHA256 = "2cdda85493003a644d8757be33900f605260f6edbece74a66d1e2b84bddec616"
-    const val TOKENSR1_SHA256 = "93748894fd6c748aa282be39e36e4ca950d8dbb2edddc9e6841b443410fd44d6"
+    const val TOKENS_SHA256 = "be5f2e7a8e0bc4889c1792679cc2d24319fcf2c286198d43cdf0c13f5af3622f"
+    const val TOKENSV1_SHA256 = "fa11614ac7aa6de2daee32da20a2aa44f64819a65660571bb3d9e32f4cc95cd1"
+    const val TOKENSR1_SHA256 = "18515deac569c8af5c952c1237df330841c6f3bf4484af1e5b444a0dbaa915de"
 }
 
 object Proto {
