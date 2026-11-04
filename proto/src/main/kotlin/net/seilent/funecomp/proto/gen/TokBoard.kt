@@ -25,7 +25,14 @@ object TokBoard {
         val settings_brightnessDefault: Float,
         val npSeekBandBottom: Float,
         val saverLyricBaseline: Float,
-        val large_rowHeight: Float,
+        val large_settingsPitch: Float,
+        val large_btRowDrop: Float,
+        val large_toastHeight: Float,
+        val large_toastTitleBaseline: Float,
+        val large_motion_toastTravel: Float,
+        val large_npLyricPitch: Float,
+        val large_npNextPitch: Float,
+        val large_npAlbumPitch: Float,
     )
 
     val ap80 = Board(
@@ -52,7 +59,14 @@ object TokBoard {
         settings_brightnessDefault = 55f,
         npSeekBandBottom = 219.8f,
         saverLyricBaseline = 224f,
-        large_rowHeight = 54f,
+        large_settingsPitch = 47f,
+        large_btRowDrop = 62f,
+        large_toastHeight = 45f,
+        large_toastTitleBaseline = 38f,
+        large_motion_toastTravel = 45f,
+        large_npLyricPitch = 38.2f,
+        large_npNextPitch = 22f,
+        large_npAlbumPitch = 26f,
     )
 
     val v1 = Board(
@@ -79,7 +93,14 @@ object TokBoard {
         settings_brightnessDefault = 35f,
         npSeekBandBottom = 219.8f,
         saverLyricBaseline = 224f,
-        large_rowHeight = 54f,
+        large_settingsPitch = 47f,
+        large_btRowDrop = 62f,
+        large_toastHeight = 45f,
+        large_toastTitleBaseline = 38f,
+        large_motion_toastTravel = 45f,
+        large_npLyricPitch = 38.2f,
+        large_npNextPitch = 22f,
+        large_npAlbumPitch = 26f,
     )
 
     val r1 = Board(
@@ -106,7 +127,14 @@ object TokBoard {
         settings_brightnessDefault = 35f,
         npSeekBandBottom = 299.8f,
         saverLyricBaseline = 304f,
-        large_rowHeight = 52.5f,
+        large_settingsPitch = 46.5f,
+        large_btRowDrop = 62.5f,
+        large_toastHeight = 44.5f,
+        large_toastTitleBaseline = 37.5f,
+        large_motion_toastTravel = 44.5f,
+        large_npLyricPitch = 38.7f,
+        large_npNextPitch = 21.5f,
+        large_npAlbumPitch = 26.5f,
     )
 
     fun of(board: String): Board = when (board) {

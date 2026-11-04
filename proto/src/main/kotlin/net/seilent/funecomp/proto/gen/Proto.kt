@@ -7,12 +7,12 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "da0ab1dfd7e3dcf0817d697e25a4b6429ad1918c"
+    const val COMMIT = "3a4714d930c5d65ae835aeda82e9d6a6c94cfab3"
     const val PROTO_SHA256 = "d93c0d719a20ccbdf36cbc77e8c23096c9142185e377e0f64743ad83f4990e5a"
     const val VECTORS_SHA256 = "579efd3086b49ecd5166292d1052a839a8d993f6f8f0c174b0b4e6f05065c6e5"
-    const val TOKENS_SHA256 = "be5f2e7a8e0bc4889c1792679cc2d24319fcf2c286198d43cdf0c13f5af3622f"
-    const val TOKENSV1_SHA256 = "fa11614ac7aa6de2daee32da20a2aa44f64819a65660571bb3d9e32f4cc95cd1"
-    const val TOKENSR1_SHA256 = "18515deac569c8af5c952c1237df330841c6f3bf4484af1e5b444a0dbaa915de"
+    const val TOKENS_SHA256 = "7b34ed3d38d9bf5c98f4edd1004827107ca9ad5c8d98790e225d249cafcc08a6"
+    const val TOKENSV1_SHA256 = "36c53f0c8b6dcc209ce3096618859fd012f5e073f829abc41f23b36e7491d2ef"
+    const val TOKENSR1_SHA256 = "74f676e5a219d2049d143bdfa2f7649671317379c18576de19df481916d2731e"
 }
 
 object Proto {
