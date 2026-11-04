@@ -26,8 +26,8 @@ display	clock	choice	CLOCK	24h,12h,off	24H,12H,OFF	-	-	-
 display	batteryPercent	toggle	BATTERY PERCENT	off,on	OFF,ON	-	-	-
 display	statusVolume	toggle	STATUS VOLUME	off,on	OFF,ON	-	-	-
 screens	saverSeconds	steps	SAVER	0,10,15,30,60,120,300	OFF,10 S,15 S,30 S,1 MIN,2 MIN,5 MIN	-	-	-
-screens	saverLyrics	toggle	SAVER LYRICS	off,on	OFF,ON	-	-	-
-screens	saverDrift	toggle	SAVER DRIFT	off,on	OFF,ON	-	-	-
+screens	saverLyrics	toggle	SAVER LYRICS	off,on	OFF,ON	-	-	saverSeconds!=0
+screens	saverDrift	toggle	SAVER DRIFT	off,on	OFF,ON	-	-	saverSeconds!=0
 screens	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-	-
 screens	artistPhoto	toggle	ARTIST PHOTO	off,on	OFF,ON	-	-	-
 screens	navBar	toggle	NAV BAR	off,on	OFF,ON	-	-	-

@@ -183,7 +183,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val faults = opts.faults
     private val lock = Any()
 
-    private val conditions = HashMap<String, Pair<String, String>>()
+    private val conditions = HashMap<String, Triple<String, String, Boolean>>()
     val rows: List<Row> = loadRows()
     private val pivots = rows.mapNotNull { it.pivot }.distinct()
     private var schemaRev = 1L
@@ -381,7 +381,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             val p = line.split('\t')
             fun list(s: String) = if (s == "-") emptyList() else s.split(',')
             val range = list(p[6]).map { it.toInt() }
-            p.getOrNull(8)?.takeIf { it != "-" }?.let { conditions[p[1]] = it.substringBefore('=') to it.substringAfter('=') }
+            p.getOrNull(8)?.takeIf { it != "-" }?.let { c -> conditions[p[1]] = Triple(c.substringBefore('=').removeSuffix("!"), c.substringAfter('='), "!=" !in c) }
             Row(
                 p[1], p[3], p[0],
                 Enums.RowKind.names.entries.first { it.value == p[2] }.key,
@@ -791,12 +791,12 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         playFresh = true
     }
 
-    fun conditionOf(key: String?): String? = conditions[key]?.let { (k, v) -> "$k=$v" }
+    fun conditionOf(key: String?): String? = conditions[key]?.let { (k, v, eq) -> if (eq) "$k=$v" else "$k!=$v" }
 
     fun schemaRows(): List<Row> = synchronized(lock) { legacy(structureRows()) }
 
     private fun structureRows(): List<Row> =
-        rows.filter { r -> r.key !in faults.rowsOff && conditions[r.key]?.let { (k, v) -> prefs[k] == v } != false && (r.key != "streaming" || opts.services.isNotEmpty()) }
+        rows.filter { r -> r.key !in faults.rowsOff && conditions[r.key]?.let { (k, v, eq) -> (prefs[k] == v) == eq } != false && (r.key != "streaming" || opts.services.isNotEmpty()) }
             .flatMap { structure(it) }
 
     private fun legacy(rows: List<Row>): List<Row> = rows.map { r -> liveWord(r)?.let { r.copy(words = listOf(it)) } ?: r }
@@ -1160,6 +1160,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private val readOnlyToSet = setOf("usbMode", "btCodec", "btCodecHeadphones")
+    private val setWhileHidden = setOf("saverLyrics", "saverDrift")
 
     private fun scaleN(at: Int, top: Int): Int {
         val p = at.coerceIn(0, 100)
@@ -1208,6 +1209,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private fun accept(key: String, value: String): String? {
         if (key == "bootLogo" && value == "picture") return null
         if (key == "playThrough" && value == "playlist" && (opts.through == null || !mounted())) return null
+        if (key in setWhileHidden) return value.takeIf { it == "on" || it == "off" }
         val r = structureRows().firstOrNull { it.key == key } ?: return null
         if (Enums.RowFlag.readOnly in r.flags || key in readOnlyToSet) return null
         return when (r.kind) {

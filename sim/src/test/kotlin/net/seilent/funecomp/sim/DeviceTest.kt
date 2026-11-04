@@ -391,6 +391,40 @@ class DeviceTest {
             assertEquals(listOf("saverLyrics"), fail(req(d, Msg.SET, Req.set("saverLyrics=yes\n"))).refused)
         }
     }
+
+    @Test
+    fun saverOffHidesItsRowsAndTheirSetStillLands() {
+        fun settings(out: Sink) = Settings.from(out.of(Msg.SETTINGS).last()).text.lines()
+        fun keys(d: Device) = Sink().also { d.greet(it) }.of(Msg.SCHEMA).map { Schema.from(it) }.flatMap { it.rows }.mapNotNull { it.key }
+        for (b in listOf("ap80", "v1", "r1")) {
+            val d = device(b)
+            val off = Sink()
+            assertEquals(b, listOf("saverSeconds"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverSeconds=0\n"), off)))).kept)
+            val text = settings(off)
+            assertTrue(b, "saverSeconds=0" in text)
+            assertTrue(b, text.none { it.startsWith("saverLyrics=") || it.startsWith("saverDrift=") })
+            val hidden = keys(d)
+            assertTrue(b, "saverSeconds" in hidden && "saverLyrics" !in hidden && "saverDrift" !in hidden)
+            val lyrics = Sink()
+            assertEquals(b, listOf("saverLyrics", "saverDrift"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverLyrics=off\nsaverDrift=off\n"), lyrics)))).kept)
+            assertTrue(b, settings(lyrics).none { it.startsWith("saverLyrics=") })
+            assertEquals(b, listOf("saverLyrics"), fail(req(d, Msg.SET, Req.set("saverLyrics=1\n"))).refused)
+            assertEquals(b, listOf("navOrder"), fail(req(d, Msg.SET, Req.set("navOrder=backRight\n"))).refused)
+            val on = Sink()
+            ok(req(d, Msg.SET, Req.set("saverSeconds=30\n"), on))
+            val back = settings(on)
+            assertTrue(b, "saverLyrics=off" in back && "saverDrift=off" in back)
+            val shown = keys(d)
+            assertEquals(b, shown.indexOf("saverSeconds") + 1, shown.indexOf("saverLyrics"))
+            assertEquals(b, shown.indexOf("saverLyrics") + 1, shown.indexOf("saverDrift"))
+            for (v in listOf("10", "30")) {
+                val screen = Sink()
+                ok(req(d, Msg.SET, Req.set("screenOffSeconds=$v\n"), screen))
+                assertTrue("$b $v", "screenOffSeconds=$v" in settings(screen))
+            }
+        }
+    }
+
     @Test
     fun boardRowsFollowTheBoardFlags() {
         val v1 = device("v1")
