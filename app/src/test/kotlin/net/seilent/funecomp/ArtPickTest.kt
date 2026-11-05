@@ -233,11 +233,10 @@ class ArtPickTest {
         val s = sim(track(1, "TSUKI"))
         Remote.shown(true)
         val c = link(s)
-        waitFor { Remote.phase == Phase.LIVE && stored("TSUKI").isNotEmpty() }
-        Thread.sleep(300)
+        waitFor { Remote.phase == Phase.LIVE && stored("TSUKI").isNotEmpty() && Remote.artIdle }
         s.device.begins.clear()
         Remote.pick(PickFor("TSUKI", origin = Enums.ImgOrigin.phone), offer())
-        waitFor { stored("TSUKI").size >= 2 }
+        waitFor { stored("TSUKI").size >= 2 && Remote.artIdle }
         assertEquals("TSUKI" to Enums.ImgOrigin.phone, s.device.begins.first())
         assertTrue(lines.none { "rx LIB_GET" in it })
         s.device.begins.clear()
