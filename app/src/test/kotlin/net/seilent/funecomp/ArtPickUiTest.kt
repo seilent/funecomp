@@ -120,7 +120,7 @@ class ArtPickUiTest {
                 return { calls += "cancel take" }
             }
 
-            override fun pick(target: PickFor, offer: Offer) {
+            override fun pick(target: PickFor, offer: Offer, point: Pair<Int, Int>?) {
                 picked += target to offer
             }
 

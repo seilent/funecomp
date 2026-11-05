@@ -5,6 +5,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -29,19 +32,26 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
+import net.seilent.funecomp.artist.Crop
 import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.artist.PickLink
+import net.seilent.funecomp.artist.Rect
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.gen.Tok
@@ -60,6 +70,8 @@ private const val BROWSE = "browse"
 private const val PICK = "pick"
 private const val PICK_X = 75f
 private const val NEXT_IMAGE = "next image"
+private const val RESET = "reset"
+private const val EXCLUDE_DP = 200f
 private const val FROM_GALLERY = "from gallery"
 private const val NO_IMAGES = "no images"
 private const val YOUTUBE_UNAVAILABLE = "youtube search unavailable"
@@ -115,25 +127,63 @@ private fun resolving(ctx: Ctx, target: PickFor, fromBrowse: Boolean = false, st
 fun PickPreviewPage(ctx: Ctx, page: Page.PickPreview) {
     val ui = LocalUi.current
     var at by remember(page) { mutableIntStateOf(0) }
+    val windows = remember(page) { mutableStateMapOf<Int, Offset>() }
     val shown = page.previews[at.coerceIn(0, page.previews.lastIndex)]
     val two = page.previews.size > 1
     val measurer = rememberTextMeasurer()
+    val density = LocalDensity.current
     val style = textStyle(Roles.dialogItem, white(Roles.dialogItem.alpha))
     val pick = measurer.measure(shown(PICK, Roles.dialogItem.case), style)
+    val next = measurer.measure(shown(NEXT_IMAGE, Roles.dialogItem.case), style)
     val x = ui.px(PICK_X)
     val baseline = ui.px(ui.h - Tok.edge)
     val top = if (two) baseline - ui.px(Tok.settingsPitch) else baseline
     val photoH = (top - pick.firstBaseline - ui.px(Tok.edge)).coerceAtLeast(0f)
+    val frameW = ui.px(ui.w)
+    val src = shown.source
+    val win = shown.window
+    val home = win?.let { Offset(it.left.toFloat(), it.top.toFloat()) }
+    val moved = home != null && windows[at]?.let { (it - home).getDistance() > 0.5f } == true
     Box(Modifier.fillMaxSize().testTag("pick.page")) {
         Box(Modifier.fillMaxSize().bleed(LocalBleed.current).background(Black))
-        shown.image?.let { Image(it, null, Modifier.size(ui.px(ui.w).dp(), photoH.dp()).testTag("pick.preview"), contentScale = ContentScale.Fit) }
+        if (src != null && win != null && home != null) {
+            val band = minOf(EXCLUDE_DP * density.density, photoH)
+            val bandTop = (photoH - band) / 2
+            val scale = minOf(frameW / win.width, photoH / win.height)
+            val dw = win.width * scale
+            val dh = win.height * scale
+            val across = win.width < src.width
+            val down = win.height < src.height
+            val shownAt = at
+            Box(
+                Modifier.size(frameW.dp(), photoH.dp()).testTag("pick.preview").pointerInput(page, shownAt, across, down, scale) {
+                    if (!across && !down) return@pointerInput
+                    val move = { d: Float ->
+                        if (ctx.nav.top == page) {
+                            val o = windows[shownAt] ?: home
+                            windows[shownAt] = if (across) Offset((o.x - d / scale).coerceIn(0f, (src.width - win.width).toFloat()), o.y) else Offset(o.x, (o.y - d / scale).coerceIn(0f, (src.height - win.height).toFloat()))
+                        }
+                    }
+                    if (across) detectHorizontalDragGestures { c, d -> c.consume(); move(d) } else detectVerticalDragGestures { c, d -> c.consume(); move(d) }
+                }.drawBehind {
+                    val o = windows[shownAt] ?: home
+                    drawImage(src, IntOffset(o.x.roundToInt(), o.y.roundToInt()), IntSize(win.width, win.height), IntOffset(((frameW - dw) / 2).roundToInt(), ((photoH - dh) / 2).roundToInt()), IntSize(dw.roundToInt(), dh.roundToInt()))
+                },
+            )
+            Box(Modifier.at(0f, bandTop).size((frameW / 2).dp(), band.dp()).systemGestureExclusion().testTag("pick.exclude"))
+            Box(Modifier.at(frameW / 2, bandTop).size((frameW / 2).dp(), band.dp()).systemGestureExclusion().testTag("pick.exclude"))
+        } else {
+            shown.image?.let { Image(it, null, Modifier.size(frameW.dp(), photoH.dp()).testTag("pick.preview"), contentScale = ContentScale.Fit) }
+        }
         BackRing { ctx.nav.pop() }
         RoleText(
             PICK,
             Roles.dialogItem,
             Modifier.atBaseline(x, baseline).press({
                 if (ctx.nav.top != page) return@press
-                ctx.control.pick(page.target, shown.offer)
+                val o = windows[at]
+                val point = if (src != null && win != null && moved && o != null) Crop.point(src.width, src.height, Rect(o.x.roundToInt(), o.y.roundToInt(), win.width, win.height), shown.faceY) else null
+                ctx.control.pick(page.target, shown.offer, point)
                 ctx.nav.pop()
                 if (page.fromBrowse && ctx.nav.top == Page.Browse(page.target)) ctx.nav.pop()
             }).testTag("pick.label"),
@@ -141,6 +191,10 @@ fun PickPreviewPage(ctx: Ctx, page: Page.PickPreview) {
         if (two) {
             RoleText(shown.offer.label, Roles.dialogItem, Modifier.atBaseline(x, top).testTag("pick.source"), alpha = Roles.dialogItem.dim)
             RoleText(NEXT_IMAGE, Roles.dialogItem, Modifier.atBaseline(x + pick.size.width + ui.px(Tok.pivotGap), baseline).press({ at = (at + 1) % page.previews.size }).testTag("pick.next"))
+        }
+        if (moved) {
+            val rx = x + pick.size.width + ui.px(Tok.pivotGap) + if (two) next.size.width + ui.px(Tok.pivotGap) else 0f
+            RoleText(RESET, Roles.dialogItem, Modifier.atBaseline(rx, baseline).press({ windows.remove(at) }).testTag("pick.reset"))
         }
     }
 }

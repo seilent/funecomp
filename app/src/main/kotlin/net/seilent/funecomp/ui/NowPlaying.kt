@@ -155,7 +155,7 @@ fun formatTime(ms: Long): String {
     return "${total / 60}:${if (s < 10) "0" else ""}$s"
 }
 
-class BackdropArt(val image: ImageBitmap, val face: Pair<Double, Double>? = null, val entry: ArtCache.Entry? = null, val wrongArtist: Boolean = false, val pic: Long? = null, val box: IntSize? = null)
+class BackdropArt(val image: ImageBitmap, val face: Pair<Double, Double>? = null, val entry: ArtCache.Entry? = null, val wrongArtist: Boolean = false, val pic: Long? = null, val box: IntSize? = null, val point: Pair<Int, Int>? = null)
 
 val LocalBackdropProbe = staticCompositionLocalOf<((BackdropArt, Float) -> Unit)?> { null }
 
@@ -229,7 +229,7 @@ private fun BackdropLayer(art: BackdropArt, alpha: Float) {
     val probe = LocalBackdropProbe.current
     val painter = remember(art, w.roundToInt(), h.roundToInt()) {
         if (art.pic != null) return@remember BitmapPainter(img)
-        val r = Crop.rect(img.width, img.height, w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1), art.face?.let { it.second * img.height })
+        val r = Crop.rect(img.width, img.height, w.roundToInt().coerceAtLeast(1), h.roundToInt().coerceAtLeast(1), art.face?.let { it.second * img.height }, art.point)
         BitmapPainter(img, IntOffset(r.x, r.y), IntSize(r.w, r.h))
     }
     Image(

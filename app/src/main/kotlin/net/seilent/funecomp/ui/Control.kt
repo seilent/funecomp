@@ -2,6 +2,7 @@ package net.seilent.funecomp.ui
 
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.unit.IntRect
 import net.seilent.funecomp.artist.Accounts
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
@@ -46,7 +47,7 @@ data class PickFor(val name: String, val mbid: String? = null, val library: Bool
 
 class BrowseTile(val tile: Tile, val image: ImageBitmap)
 
-class Preview(val offer: Offer, val image: ImageBitmap?)
+class Preview(val offer: Offer, val image: ImageBitmap?, val source: ImageBitmap? = null, val window: IntRect? = null, val faceY: Double? = null)
 
 sealed interface Previewed {
     class Ok(val previews: List<Preview>) : Previewed
@@ -152,7 +153,7 @@ interface Control {
     fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}
     fun takeTile(t: Tile, done: (Previewed) -> Unit): () -> Unit = {}
     fun browseShown(section: String) {}
-    fun pick(target: PickFor, offer: Offer) {}
+    fun pick(target: PickFor, offer: Offer, point: Pair<Int, Int>? = null) {}
     fun undoPick(p: ArtPicks.Pick) {}
     fun tryAgain(p: ArtPicks.Pick) {}
     fun pickHandled(name: String) {}

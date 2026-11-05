@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.unit.IntRect
 import net.seilent.funecomp.art.ArtWorker
 import net.seilent.funecomp.art.BitmapCodec
 import net.seilent.funecomp.art.Forward
@@ -28,6 +29,7 @@ import net.seilent.funecomp.art.Pending
 import net.seilent.funecomp.art.ThumbWorker
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
+import net.seilent.funecomp.artist.ArtCrops
 import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.artist.ArtistArt
@@ -73,6 +75,7 @@ import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.QueueOpReply
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.SetReply
+import net.seilent.funecomp.proto.SourceJpeg
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.SvcKey
 import net.seilent.funecomp.proto.SvcLogin
@@ -515,7 +518,7 @@ object Remote : Control {
             val version = c.packageManager.getPackageInfo(c.packageName, 0).versionName ?: "0"
             network(c)
             val blocks = ArtBlocks(File(c.filesDir, "artblock.tsv")) { Log.w(TAG, it) }
-            val picks = ArtPicks(File(c.filesDir, "artpick.tsv")) { Log.w(TAG, it) }
+            val picks = ArtPicks(File(c.filesDir, "artpick.tsv"), ArtCrops(File(c.filesDir, "artcrop.tsv")) { Log.w(TAG, it) }) { Log.w(TAG, it) }
             targets(c)
             ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks, gallery = GalleryStore(File(c.filesDir, "pickimg")), log = { Log.w(TAG, it.replace(SECRET, "$1=x")) }, browseLog = { Log.i(TAG, it.replace(SECRET, "$1=x")) }, targets = { targets }).also {
                 artist = it
@@ -800,6 +803,7 @@ object Remote : Control {
         val h = device.hello
         val w = h?.backdropW ?: FETCH_W
         val hh = h?.backdropH ?: FETCH_H
+        val drag = h != null && h.has("imgSource") && h.has("imgFocusX")
         val shown = (o as Offered.Ok).offers.mapNotNull { offer ->
             if (run.cancelled) return Previewed.Closed
             if (offer.kind == ArtPicks.ARTIST) {
@@ -813,7 +817,7 @@ object Remote : Control {
                 }
                 Preview(offer, src?.let { preview(it, w, hh) })
             } else {
-                offer.src?.let { preview(it, w, hh) }?.let { Preview(offer, it) }
+                offer.src?.let { src -> if (drag && (SourceJpeg.read(src)?.orientation ?: 0) <= 1) dragPreview(offer, src, w, hh) else preview(src, w, hh)?.let { Preview(offer, it) } }
             }
         }
         return if (shown.isEmpty()) Previewed.Refused(PickLink.NOT_IMAGE) else Previewed.Ok(shown)
@@ -881,16 +885,29 @@ object Remote : Control {
         Log.i(TAG, "art browse shown $section +${SystemClock.elapsedRealtime() - browseStart}")
     }
 
-    override fun pick(target: PickFor, offer: Offer) {
+    internal fun dragPreview(offer: Offer, src: ByteArray, w: Int, h: Int, decode: (ByteArray, (() -> Pair<Double, Double>?) -> Pair<Double, Double>?) -> Pair<Bitmap, Pair<Double, Double>?>? = faced): Preview? {
+        val (bmp, face) = decode(src) { it() } ?: return null
+        val r = Crop.rect(bmp.width, bmp.height, w, h, face?.second)
+        val side = maxOf(Resources.getSystem().displayMetrics.run { maxOf(widthPixels, heightPixels) }, maxOf(w, h) * 4)
+        val f = minOf(1.0, side.toDouble() / maxOf(r.w, r.h), BACKDROP_MAX.toDouble() / maxOf(bmp.width, bmp.height))
+        val out = if (f < 1.0) Bitmap.createScaledBitmap(bmp, maxOf(1, (bmp.width * f).toInt()), maxOf(1, (bmp.height * f).toInt()), true) else bmp
+        val faceY = face?.second?.let { it * out.height / bmp.height }
+        if (out !== bmp) bmp.recycle()
+        val win = Crop.rect(out.width, out.height, w, h, faceY)
+        return Preview(offer, null, out.asImageBitmap(), IntRect(win.x, win.y, win.x + win.w, win.y + win.h), faceY)
+    }
+
+    override fun pick(target: PickFor, offer: Offer, point: Pair<Int, Int>?) {
         val a = artist ?: return
         val (k, k2) = ArtPicks.keys(target.name, target.mbid, target.library)
         val mbid = if (offer.kind == ArtPicks.ARTIST) offer.mbid else Names.mbid(target.mbid)
         val p = ArtPicks.Pick(k, k2, target.name.trim(), offer.kind, offer.source, offer.url, offer.id, offer.src?.let { ArtCache.sha256(it) } ?: "", offer.credit, mbid, System.currentTimeMillis())
-        Log.i(TAG, "art pick ${p.name} ${p.kind} ${p.source} ${p.keys}")
+        Log.i(TAG, "art pick ${p.name} ${p.kind} ${p.source} ${p.keys}${point?.let { " point ${it.first},${it.second}" } ?: ""}")
         pickHandled(p.name)
         picked(a) {
             a.picks.list().filter { o -> o.keys.any { it in p.keys } }.forEach { a.forget(it.cacheKey) }
             a.picks.add(p)
+            a.picks.setPoint(p, point)
             offer.src?.let {
                 if (p.source == Sources.GALLERY) a.gallery?.put(it)
                 a.store(p, it)
@@ -1192,7 +1209,7 @@ object Remote : Control {
         synchronized(backdropLock) {
             if (rev != backdropRev || a.blocked(full)) return false
             backdropFor = s.artists
-            backdrop = BackdropArt(art.image, art.face, full, wrong)
+            backdrop = BackdropArt(art.image, art.face, full, wrong, point = if (a.picked(full)) a.picks.byCache(full.key)?.let { a.picks.point(it) } else null)
         }
         return true
     }

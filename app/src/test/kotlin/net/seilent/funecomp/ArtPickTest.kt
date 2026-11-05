@@ -23,6 +23,7 @@ import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
@@ -133,9 +134,9 @@ class ArtPickTest {
 
     private fun track(id: Long, artist: String, mbid: String = "") = Track(id, artist, listOf(artist), "Album $id", artist, "Song $id", 200_000, "a$id", "a$id.flac", listOf(mbid))
 
-    private fun sim(vararg tracks: Track, faults: List<String> = emptyList(), board: Board = Board.of("v1")): Sim {
+    private fun sim(vararg tracks: Track, faults: List<String> = emptyList(), board: Board = Board.of("v1"), minor: Int = Proto.minor): Sim {
         Remote.artist(app, http)
-        val s = Sim(Options(board, Faults(faults), log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }), Library(tracks.toList()))
+        val s = Sim(Options(board, Faults(faults), minor = minor, log = { lines += it }, imgDir = File(app.cacheDir, "img").apply { deleteRecursively() }), Library(tracks.toList()))
         sims += s
         return s
     }
@@ -473,8 +474,8 @@ class ArtPickTest {
 
     private val wide = Board.of("r1").withBackdrop(720, 1280)
 
-    private fun liveWide(): Pair<Sim, org.robolectric.android.controller.ServiceController<LinkService>> {
-        val s = sim(track(1, "TSUKI"), faults = listOf("img-source"), board = wide)
+    private fun liveWide(minor: Int = Proto.minor): Pair<Sim, org.robolectric.android.controller.ServiceController<LinkService>> {
+        val s = sim(track(1, "TSUKI"), faults = listOf("img-source"), board = wide, minor = minor)
         Remote.shown(true)
         val c = link(s)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.hello?.backdropW == 720 }
@@ -485,7 +486,7 @@ class ArtPickTest {
 
     @Test
     fun aPickBelowTheBackdropPreviewsAtTheDeviceAspect() {
-        val (_, c) = liveWide()
+        val (_, c) = liveWide(16)
         val link = previewed { Remote.pickLink(steam, "TSUKI", it) } as Previewed.Ok
         assertEquals(680 to 1210, size(link.previews.single().image))
         val g = previewed { Remote.galleryPicked({ Gallery(structured(1920, 1210), "IMG_2.jpg") }, it) } as Previewed.Ok
@@ -545,5 +546,53 @@ class ArtPickTest {
         } finally {
             Remote.phoneA2dp = before
         }
+    }
+
+    private fun exif(jpeg: ByteArray, orientation: Int): ByteArray {
+        val tiff = byteArrayOf('M'.code.toByte(), 'M'.code.toByte(), 0, 42, 0, 0, 0, 8, 0, 1, 0x01, 0x12, 0, 3, 0, 0, 0, 1, 0, orientation.toByte(), 0, 0, 0, 0, 0, 0)
+        val body = "Exif".toByteArray() + byteArrayOf(0, 0) + tiff
+        val len = body.size + 2
+        val app1 = byteArrayOf(0xFF.toByte(), 0xE1.toByte(), (len shr 8).toByte(), len.toByte()) + body
+        val at = if ((jpeg[3].toInt() and 0xFF) == 0xE0) 4 + (((jpeg[4].toInt() and 0xFF) shl 8) or (jpeg[5].toInt() and 0xFF)) else 2
+        return jpeg.copyOfRange(0, at) + app1 + jpeg.copyOfRange(at, jpeg.size)
+    }
+
+    @Test
+    fun withTheFocusBitAPickPreviewKeepsTheSourceAndAPickPushesItsPointAsTheFocus() {
+        val (_, c) = liveWide()
+        val g = previewed { Remote.galleryPicked({ Gallery(structured(1920, 1210), "IMG_6.jpg") }, it) } as Previewed.Ok
+        val p = g.previews.single()
+        assertEquals(1920 to 1210, size(p.source))
+        assertEquals(androidx.compose.ui.unit.IntRect(620, 0, 1300, 1210), p.window)
+        assertNull(p.image)
+        Remote.pick(PickFor("TSUKI"), p.offer, 120 to 333)
+        waitFor { lines.any { it.startsWith("stored source name=TSUKI 1920x1210 ") && it.endsWith(" focus=120,333") } }
+        waitFor { Remote.backdrop?.point == (120 to 333) }
+        c.destroy()
+    }
+
+    @Test
+    fun aPickAtTheDefaultWindowPushesTodaysFocus() {
+        val (_, c) = liveWide()
+        val g = previewed { Remote.galleryPicked({ Gallery(structured(1920, 1210), "IMG_7.jpg") }, it) } as Previewed.Ok
+        Remote.pick(PickFor("TSUKI"), g.previews.single().offer, null)
+        waitFor { lines.any { it.startsWith("stored source name=TSUKI 1920x1210 ") } }
+        assertTrue(lines.single { it.startsWith("stored source name=TSUKI 1920x1210 ") }.endsWith(" focus=none"))
+        assertEquals("", File(app.filesDir, "artcrop.tsv").let { if (it.isFile) it.readText() else "" })
+        c.destroy()
+    }
+
+    @Test
+    fun aMinor16DeviceOrARotatedSourceGetsTodaysCroppedPreview() {
+        val (_, c) = liveWide(16)
+        val old = previewed { Remote.galleryPicked({ Gallery(structured(1920, 1210), "IMG_8.jpg") }, it) } as Previewed.Ok
+        assertNull(old.previews.single().source)
+        assertEquals(680 to 1210, size(old.previews.single().image))
+        c.destroy()
+        val (_, d) = liveWide()
+        val turned = previewed { Remote.galleryPicked({ Gallery(exif(structured(1920, 1210), 6), "IMG_9.jpg") }, it) } as Previewed.Ok
+        assertNull(turned.previews.single().source)
+        assertNotNull(turned.previews.single().image)
+        d.destroy()
     }
 }
