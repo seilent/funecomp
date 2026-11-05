@@ -352,6 +352,7 @@ class Options(
         if (minor < 12) faults.features = faults.features and Groups.mask("eqSlots", "eqGraphic").inv()
         if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig", "liveRows", "eqStages").inv()
         if (minor < 16) faults.features = faults.features and Groups.mask("svcLogin").inv()
+        if (minor < 17) faults.features = faults.features and Groups.mask("imgFocusX").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }

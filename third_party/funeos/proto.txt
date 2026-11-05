@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 16
+const minor 17
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -93,6 +93,7 @@ feature imgSource 28
 feature eqStages 29
 feature liveRows 30
 feature svcLogin 32
+feature imgFocusX 36
 enum SOURCE 0 local
 enum SOURCE 1 phone
 enum SOURCE 2 phoneFile

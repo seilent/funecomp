@@ -10,7 +10,7 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply bc000101010001040046444350020200010003020010000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply bc000101010001040046444350020200010003020011000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
 hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ffff0000000000000e0400070000000f04000300000010040004000000111a00010a00
 hex hello_reply 6865616470686f6e6573020a004845414450484f4e4553111800010900626c7565746f6f7468020900424c5545544f4f54481201000012010001120100021201
 hex hello_reply 0003
@@ -21,7 +21,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 16
+dec hello_reply 0.body.minor 17
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -5839,3 +5839,22 @@ dec hello_reply_services 0.body.service[1].id nightradio
 dec hello_reply_services 0.body.service[1].name Night Radio
 dec hello_reply_services 0.body.service[1].pkce false
 act hello_reply_services accept
+vec hello_reply_bit36 dev
+hex hello_reply_bit36 3e00010101000104004644435002020001000302001100040200723105060076302e332e32060200e0010702002003080200000209020020030d0800ffffff7f
+hex hello_reply_bit36 11000000
+re hello_reply_bit36 hello
+dec hello_reply_bit36 0.len 62
+dec hello_reply_bit36 0.type HELLO
+dec hello_reply_bit36 0.flags 0x01
+dec hello_reply_bit36 0.seq 1
+dec hello_reply_bit36 0.body.magic 1346585670
+dec hello_reply_bit36 0.body.major 1
+dec hello_reply_bit36 0.body.minor 17
+dec hello_reply_bit36 0.body.board r1
+dec hello_reply_bit36 0.body.version v0.3.2
+dec hello_reply_bit36 0.body.screenW 480
+dec hello_reply_bit36 0.body.screenH 800
+dec hello_reply_bit36 0.body.backdropW 512
+dec hello_reply_bit36 0.body.backdropH 800
+dec hello_reply_bit36 0.body.features 75161927679
+act hello_reply_bit36 accept

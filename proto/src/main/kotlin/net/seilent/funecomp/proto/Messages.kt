@@ -43,6 +43,7 @@ object Groups {
         "eqStages" to emptySet(),
         "liveRows" to setOf(Msg.LIVE),
         "svcLogin" to setOf(Msg.SVC_LOGIN, Msg.SVC_LOGIN_END, Msg.SVC_PKCE, Msg.SVC_KEYS),
+        "imgFocusX" to emptySet(),
     )
     val unserved: Set<String> = setOf(
         "eqPass",

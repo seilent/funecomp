@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "3a4714d930c5d65ae835aeda82e9d6a6c94cfab3"
-    const val PROTO_SHA256 = "d93c0d719a20ccbdf36cbc77e8c23096c9142185e377e0f64743ad83f4990e5a"
-    const val VECTORS_SHA256 = "579efd3086b49ecd5166292d1052a839a8d993f6f8f0c174b0b4e6f05065c6e5"
+    const val COMMIT = "7168027a33f2751c68aff2509e14bc585bcddd0f"
+    const val PROTO_SHA256 = "b7599db898eeebe57644cf652ded5a77c20bcd270ddc04dde51d3254dd07ec45"
+    const val VECTORS_SHA256 = "2de4dcd1ff60927d96e87732e915cb7edcddb8d7776e609e65881f919c0984fe"
     const val TOKENS_SHA256 = "4939e233fa79326690d1e6e733002a1d068a3640f6716d7c3b27b4b47d715d43"
     const val TOKENSV1_SHA256 = "4b8ddf566dcce893c58e122643f3e52490785e8f909095e5e6e5377ed244c5f5"
     const val TOKENSR1_SHA256 = "2f7ad3bba884d31f0ee6883d95e7b35662bc68b711af7c58d8f6068abcd0df6f"
@@ -19,7 +19,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 16
+    const val minor = 17
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -220,7 +220,8 @@ object Feature {
     const val eqStages = 29
     const val liveRows = 30
     const val svcLogin = 32
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin")
+    const val imgFocusX = 36
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin", 36 to "imgFocusX")
 }
 
 object Enums {

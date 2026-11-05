@@ -326,6 +326,15 @@ class OldPeerTest {
     }
 
     @Test
+    fun imgFocusXIsNewIn1_17() {
+        val old = text("/proto-1.16.txt")
+        assertTrue("const minor 16" in old)
+        assertFalse("imgFocusX" in old)
+        assertEquals("imgFocusX", Feature.names[36])
+        assertEquals(Groups.mask("imgFocusX"), 1L shl 36)
+    }
+
+    @Test
     fun liveRowsFramesWithTheEbc0751Table() {
         val live = frames("live").single()
         assertNull(v1_15["LIVE"])
