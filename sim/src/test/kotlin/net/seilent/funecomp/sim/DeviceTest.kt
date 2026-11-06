@@ -19,6 +19,7 @@ import net.seilent.funecomp.proto.SvcKey
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.gen.Tok
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -142,8 +143,8 @@ class DeviceTest {
 
     @Test
     fun rowCountsAtTheDefaultsAndWithEveryRuntimeRowShown() {
-        for ((b, n) in listOf("ap80" to 46, "v1" to 56, "r1" to 56)) assertEquals(b, n, device(b).schemaRows().size)
-        for ((b, n) in listOf("ap80" to 49, "v1" to 60, "r1" to 60)) {
+        for ((b, n) in listOf("ap80" to 47, "v1" to 57, "r1" to 57)) assertEquals(b, n, device(b).schemaRows().size)
+        for ((b, n) in listOf("ap80" to 50, "v1" to 61, "r1" to 61)) {
             val d = Device(Options(Board.of(b), headset = true, companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
             assertEquals(b, n, d.schemaRows().size)
@@ -389,6 +390,31 @@ class DeviceTest {
             assertEquals(listOf("saverLyrics", "stereoWidth"), r.kept)
             assertTrue("saverLyrics=off" in Settings.from(set.of(Msg.SETTINGS).single()).text.lines())
             assertEquals(listOf("saverLyrics"), fail(req(d, Msg.SET, Req.set("saverLyrics=yes\n"))).refused)
+        }
+    }
+
+    @Test
+    fun accentOffIsAToggleBesideTheHue() {
+        fun settings(out: Sink) = Settings.from(out.of(Msg.SETTINGS).last()).text.lines()
+        for (b in listOf("ap80", "v1", "r1")) {
+            val d = device(b)
+            val keys = d.rows.map { it.key }
+            assertEquals(b, keys.indexOf("accentHue") + 1, keys.indexOf("accentOff"))
+            val row = d.rows.first { it.key == "accentOff" }
+            assertEquals(b, Enums.RowKind.toggle, row.kind)
+            assertEquals(b, listOf("off", "on"), row.values)
+            val hue = "accentHue=${Tok.accent_hueDefault.toInt()}"
+            val out = Sink()
+            d.greet(out)
+            val first = Settings.from(out.of(Msg.SETTINGS).single()).text.lines()
+            assertTrue(b, "accentOff=off" in first && hue in first)
+            val on = Sink()
+            assertEquals(b, listOf("accentOff"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("accentOff=on\n"), on)))).kept)
+            assertTrue(b, "accentOff=on" in settings(on) && hue in settings(on))
+            val step = Sink()
+            assertEquals(b, listOf("accentHue"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("accentHue=90\n"), step)))).kept)
+            assertTrue(b, "accentOff=on" in settings(step) && "accentHue=90" in settings(step))
+            assertEquals(b, listOf("accentOff"), fail(req(d, Msg.SET, Req.set("accentOff=yes\n"))).refused)
         }
     }
 

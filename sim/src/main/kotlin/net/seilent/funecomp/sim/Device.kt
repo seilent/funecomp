@@ -197,7 +197,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val tok = TokBoard.of(board.name)
     private val prefs = linkedMapOf(
         "volumeStep" to whole(Tok.volume_stepDefault),
-        "accentHue" to whole(Tok.accent_hueDefault), "saverSeconds" to whole(Tok.settings_saverDefault),
+        "accentHue" to whole(Tok.accent_hueDefault), "accentOff" to "off", "saverSeconds" to whole(Tok.settings_saverDefault),
         "screenOffSeconds" to whole(Tok.settings_screenOffDefault),
         "idleShutdownMinutes" to whole(Tok.settings_idleDefault), "lockKnob" to "off", "screenOffKeys" to "all",
         "inlineRemote" to "on", "clock" to "24h", "batteryPercent" to "off", "playThrough" to "off",
