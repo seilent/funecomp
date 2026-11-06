@@ -223,6 +223,15 @@ private fun sleep(minutes: Long, agoMs: Long): (SimControl) -> Unit = { c ->
 
 private fun power(s: Shots) = s.walk("power")
 
+private fun accentOff(prep: (SimControl) -> Unit = {}): (SimControl) -> Unit = { c ->
+    c.set("accentOff", "on")
+    prep(c)
+}
+
+private fun lowBattery(c: SimControl) {
+    c.push(Msg.STATE, c.device.playback.state.copy(battery = Tok.batteryLowPercent.toInt() - 1).encode())
+}
+
 private fun Shots.walk(to: String) = rule.walkPivots(control!!.device.schema.rows, to) { settle(1000) }
 
 private fun favorite(c: SimControl) {
@@ -953,6 +962,24 @@ val SHOTS = listOf(
         rule.onNodeWithTag("set.quickplay").performClick()
     },
     Shot("settings-display", pages = HOME + Page.Settings) { walk("display") },
+    Shot("accentoff-album", pages = HOME + Page.Music + Page.Album(ALBUM_KEY, "First Love", "Utada Hikaru"), prep = accentOff(::playing)),
+    Shot("accentoff-music", pages = HOME + Page.Music, prep = accentOff(::playing)),
+    Shot("accentoff-np", pages = NP, prep = accentOff { opened(it); lowBattery(it) }),
+    Shot("accentoff-display", pages = HOME + Page.Settings, prep = accentOff()) { walk("display") },
+    Shot("accentoff-edit", pages = HOME + Page.Settings, prep = accentOff()) {
+        rule.onNodeWithTag("set.balance").performClick()
+        settle(600)
+    },
+    Shot("accentoff-sheet", pages = NP, prep = accentOff(offsets(500)), artEntry = HELD, lyrics = shifted(stamped(SUNG))) { offsetEdit() },
+    Shot("accentoff-entry", pages = HOME + Page.Settings, prep = accentOff(sleep(45, 61_000)), ime = AEQ_IME) {
+        power(this)
+        rule.onNodeWithTag("set.sleep").performClick()
+        settle(600)
+        it.sheet.accept(it.sheet.items.lastIndex)
+    },
+    Shot("accentoff-search", pages = AEQ, prep = accentOff(), ime = AEQ_IME) {
+        rule.onNodeWithTag("aeq.field").performClick()
+    },
     Shot("settings-screens", pages = HOME + Page.Settings) { walk("screens") },
     Shot("settings-display-v1", board = "v1", pages = HOME + Page.Settings) { walk("display") },
     Shot("settings-artistphoto-v1", board = "v1", pages = HOME + Page.Settings) {

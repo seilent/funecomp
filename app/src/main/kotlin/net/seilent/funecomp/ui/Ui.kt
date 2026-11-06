@@ -144,10 +144,15 @@ fun accentFor(hue: Int?): Color {
     return Color(ACCENTS[i])
 }
 
-val LocalAccent = staticCompositionLocalOf { Color(Tok.accent_default) }
+data class AccentState(val hue: Color, val off: Boolean)
+
+val LocalAccent = staticCompositionLocalOf { AccentState(Color(Tok.accent_default), false) }
 
 val Accent: Color
-    @Composable get() = LocalAccent.current
+    @Composable get() = LocalAccent.current.let { if (it.off) white(Tok.alpha_full) else it.hue }
+
+val AccentOff: Boolean
+    @Composable get() = LocalAccent.current.off
 
 fun shown(text: String, case: Case) = when (case) {
     Case.UPPER -> text.uppercase()

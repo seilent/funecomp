@@ -42,6 +42,7 @@ import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.LyricsFetch
 
 private const val ACCENT_KEY = "accentHue"
+private const val ACCENT_OFF_KEY = "accentOff"
 private const val BACKGROUND_INFO = "works with the screen off"
 private const val RECONNECT_INFO = "the link restarts by itself"
 private const val DETECTED = "detected"
@@ -115,7 +116,7 @@ fun App(
         val ui = Ui.of(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
         val base = LocalViewConfiguration.current
         val touch = remember(base, ui.u) { Touch(base, ui.px(Tok.touchSlop)) }
-        val accent = accentFor(device.settings.values[ACCENT_KEY]?.toIntOrNull())
+        val accent = AccentState(accentFor(device.settings.values[ACCENT_KEY]?.toIntOrNull()), device.settings.values[ACCENT_OFF_KEY] == "on")
         val slots = remember { PressSlots() }
         CompositionLocalProvider(
             LocalPressSlots provides slots,

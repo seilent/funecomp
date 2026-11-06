@@ -64,6 +64,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.rememberTextMeasurer
@@ -163,8 +164,8 @@ fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: ((
 @Composable
 fun PageSurface() {
     Box(
-        Modifier.fillMaxSize().bleed(LocalBleed.current).background(Black).background(
-            Brush.verticalGradient(listOf(Accent.copy(alpha = Tok.pageSurface_alphaTop), Accent.copy(alpha = 0f))),
+        Modifier.fillMaxSize().bleed(LocalBleed.current).background(Black).then(
+            if (AccentOff) Modifier else Modifier.background(Brush.verticalGradient(listOf(Accent.copy(alpha = Tok.pageSurface_alphaTop), Accent.copy(alpha = 0f)))),
         ),
     )
 }
@@ -395,7 +396,7 @@ fun ListRow(
     val rowH = ui.px(Tok.rowHeight)
     val indented = number.isNotEmpty() || ring
     val textX = ui.px(Tok.hubEdge + if (indented) Tok.songIndent else 0f)
-    val primaryRole = if (bold) Roles.listPlaylist else Roles.listPrimary
+    val primaryRole = (if (bold) Roles.listPlaylist else Roles.listPrimary).let { if (playing && AccentOff) it.copy(weight = FontWeight.Bold) else it }
     val secondaryRole = if (bold || countLine) Roles.listCount else Roles.listSecondary
     val c by animateColorAsState(
         if (playing) Accent else white(if (focused) primaryRole.alpha else primaryRole.dim),
@@ -464,7 +465,10 @@ fun SettingsRow(
     val shownValue = dip.shown
     val measurer = rememberTextMeasurer()
     val t = measurer.measure(shown(title, titleRole.case), textStyle(titleRole, tc))
-    val v = measurer.measure(shown(shownValue, Roles.settingsValue.case), textStyle(Roles.settingsValue, vc))
+    val bold = Roles.settingsValue.copy(weight = FontWeight.Bold)
+    val valueRole = if (editing && AccentOff) bold else Roles.settingsValue
+    val v = measurer.measure(shown(shownValue, valueRole.case), textStyle(valueRole, vc))
+    val room = if (AccentOff) measurer.measure(shown(shownValue, bold.case), textStyle(bold, vc)) else v
     val edgeX = ui.px(Tok.hubEdge)
     val right = rowW - edgeX
     val baseline = (rowH - t.size.height) / 2 + t.firstBaseline
@@ -476,19 +480,19 @@ fun SettingsRow(
             val slotX = edgeX + t.size.width + ui.px(Tok.eqValueGap)
             val slotW = (right - slotX).coerceAtLeast(0f)
             Box(Modifier.at(slotX, 0f).size(slotW.dp(), rowH.dp()).clipToBounds()) {
-                RoleText(shownValue, Roles.settingsValue, Modifier.atBaseline(slotW - v.size.width, baseline).dip(dip), color = valueColor)
+                RoleText(shownValue, valueRole, Modifier.atBaseline(slotW - v.size.width, baseline).dip(dip), color = valueColor)
             }
         } else {
             val limit = when {
                 swatch != null -> right - sw - ui.px(Tok.gutter) - edgeX
-                shownValue.isNotEmpty() -> right - v.size.width - ui.px(Tok.gutter) - edgeX
+                shownValue.isNotEmpty() -> right - room.size.width - ui.px(Tok.gutter) - edgeX
                 else -> right - edgeX
             }
             RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline, limit), color = tc)
             if (swatch != null) {
                 Box(Modifier.at(right - sw, (rowH - sw) / 2).size(sw.dp()).background(swatch.copy(alpha = (if (focused) Tok.settingsValueFocused else Tok.settingsValueDim) / Tok.settingsValueFocused)))
             } else if (shownValue.isNotEmpty()) {
-                RoleText(shownValue, Roles.settingsValue, Modifier.atBaseline(right - v.size.width, baseline).dip(dip), color = valueColor)
+                RoleText(shownValue, valueRole, Modifier.atBaseline(right - v.size.width, baseline).dip(dip), color = valueColor)
             }
         }
     }

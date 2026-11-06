@@ -1330,7 +1330,7 @@ object Remote : Control {
         )
     }
 
-    override fun set(key: String, value: String, done: (Int?) -> Unit) = send(Msg.SET, Req.set("$key=$value\n"), "set $key=$value", ok = { body ->
+    override fun set(values: List<Pair<String, String>>, done: (Int?) -> Unit) = send(Msg.SET, Req.set(values.joinToString("") { (k, v) -> "$k=$v\n" }), "set " + values.joinToString(" ") { (k, v) -> "$k=$v" }, ok = { body ->
         val r = SetReply.from(body)
         update { it.withSetReply(r.rev) }
     }, done = { code, _ -> main.post { done(code) } })

@@ -942,7 +942,7 @@ fun Status(device: DeviceState) {
             GlyphName.BATTERY,
             Tok.statusHeight,
             if (low) Accent else white(Tok.alpha_full),
-            Modifier.at(right, top, ax = 1f),
+            Modifier.at(right, top, ax = 1f).testTag("status.battery"),
             level = battery / 100f,
         )
         right -= step

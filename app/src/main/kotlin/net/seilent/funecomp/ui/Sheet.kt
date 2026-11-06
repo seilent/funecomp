@@ -45,6 +45,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
@@ -308,8 +309,9 @@ private fun SheetValue(value: String, baseline: Float, alpha: Float, editing: Bo
     val ui = LocalUi.current
     val measurer = rememberTextMeasurer()
     val c by animateColorAsState(if (editing) Accent else white(alpha), tween(Tok.motion_focusAlpha.toInt()), label = "value")
-    val w = measurer.measure(shown(value, Roles.settingsValue.case), textStyle(Roles.settingsValue, c)).size.width
-    RoleText(value, Roles.settingsValue, Modifier.atBaseline(ui.px(ui.w) - ui.px(Tok.edge) - w, baseline), color = c)
+    val role = if (editing && AccentOff) Roles.settingsValue.copy(weight = FontWeight.Bold) else Roles.settingsValue
+    val w = measurer.measure(shown(value, role.case), textStyle(role, c)).size.width
+    RoleText(value, role, Modifier.atBaseline(ui.px(ui.w) - ui.px(Tok.edge) - w, baseline), color = c)
 }
 
 @Composable

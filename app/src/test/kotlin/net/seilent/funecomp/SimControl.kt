@@ -233,8 +233,12 @@ class SimControl(
         }
     }
 
-    override fun set(key: String, value: String, done: (Int?) -> Unit) {
-        done((req(Msg.SET, Req.set("$key=$value\n")) as? Answer.Fail)?.code)
+    val setTexts = ArrayList<String>()
+
+    override fun set(values: List<Pair<String, String>>, done: (Int?) -> Unit) {
+        val text = values.joinToString("") { (k, v) -> "$k=$v\n" }
+        setTexts += text
+        done((req(Msg.SET, Req.set(text)) as? Answer.Fail)?.code)
     }
 
     val draftBodies = ArrayList<Node>()
