@@ -36,6 +36,26 @@ class SvcAt(val seq: Long, val host: String, val code: String, val ms: Long)
 
 class SvcEndAt(val seq: Long, val result: Int, val ms: Long)
 
+class SvcReply(val code: Int?, val seq: Long?, val text: String?, val ms: Long)
+
+data class SvcAcct(val id: String, val signedIn: Boolean?, val account: String? = null, val downloads: Long? = null, val gated: Boolean = false) {
+    companion object {
+        fun parse(v: String): SvcAcct {
+            val p = v.split(':', limit = 4)
+            require(p.size >= 2 && p[0].isNotEmpty()) { "svc-state must be <id>:<in|out|unknown>[:<account>[:<downloads>]], not $v" }
+            val signedIn = when (p[1]) {
+                "in" -> true
+                "out" -> false
+                "unknown" -> null
+                else -> throw IllegalArgumentException("svc-state: in, out or unknown, not ${p[1]}")
+            }
+            val dl = p.getOrNull(3)
+            val downloads = if (dl == null || dl == "?") null else dl.toLongOrNull() ?: throw IllegalArgumentException("svc-state: bad downloads in $v")
+            return SvcAcct(p[0], signedIn, p.getOrNull(2)?.takeIf { it.isNotEmpty() }, downloads, dl != null)
+        }
+    }
+}
+
 class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
     sealed interface Start {
         class Delay(val ms: Long) : Start
@@ -144,6 +164,18 @@ class Faults(specs: List<String>) {
     val svcPkces = ArrayList<SvcAt>()
     val svcPkceEnds = ArrayList<SvcEndAt>()
     var svcOff = false
+    val svcStarts = ArrayList<SvcReply>()
+    val svcLogouts = ArrayList<SvcReply>()
+    var svcRemoving = false
+    val svcStates = ArrayList<Pair<SvcAcct, Long>>()
+    var svcReask = false
+    val dropAfterReply = java.util.concurrent.atomic.AtomicBoolean(false)
+    var dropBeforeEnd = false
+    val svcStopped = HashSet<String>()
+    var svcDoneMs: Long? = null
+    var svcStartGap = false
+    var svcKeysWaitMs: Long? = null
+    var askHeldMs: Long? = null
     var replaceMs: Long? = null
 
     init {
@@ -270,6 +302,18 @@ class Faults(specs: List<String>) {
                     if (':' in v) failLeft[Msg.SVC_KEYS] = AtomicInteger(v.substringAfter(':').toIntOrNull() ?: throw IllegalArgumentException("svc-keys: bad count in $v"))
                 }
                 "svc-off" -> svcOff = true
+                "svc-start" -> svcStarts += svcReply(k, v, seqOk = true)
+                "svc-logout" -> svcLogouts += svcReply(k, v, seqOk = false)
+                "svc-removing" -> svcRemoving = true
+                "svc-state" -> svcStates += SvcAcct.parse(v.substringBeforeLast('@')) to svcMs(k, v)
+                "svc-reask" -> svcReask = true
+                "drop-after-reply" -> dropAfterReply.set(true)
+                "drop-before-end" -> dropBeforeEnd = true
+                "svc-stopped" -> svcStopped += v.ifEmpty { throw IllegalArgumentException("svc-stopped: id missing") }
+                "svc-done" -> svcDoneMs = v.toLongOrNull() ?: throw IllegalArgumentException("svc-done: delay missing in $v")
+                "svc-start-gap" -> svcStartGap = true
+                "svc-keys-wait" -> svcKeysWaitMs = v.toLongOrNull() ?: throw IllegalArgumentException("svc-keys-wait: delay missing in $v")
+                "ask-held" -> askHeldMs = v.toLongOrNull() ?: throw IllegalArgumentException("ask-held: time missing in $v")
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')
@@ -296,6 +340,15 @@ class Faults(specs: List<String>) {
     }
 
     private fun svcMs(k: String, v: String) = v.substringAfterLast('@', "").toLongOrNull() ?: throw IllegalArgumentException("$k: delay missing in $v")
+
+    private fun svcReply(k: String, v: String, seqOk: Boolean): SvcReply {
+        val head = v.substringBeforeLast('@')
+        val c = head.substringBefore(':')
+        val code = if (c == "ok") null else c.toIntOrNull() ?: throw IllegalArgumentException("$k: ok or a code, not $c")
+        val rest = head.substringAfter(':', "").ifEmpty { null }
+        val seq = if (code == null && seqOk) rest?.let { it.toLongOrNull() ?: throw IllegalArgumentException("$k: bad seq in $v") } else null
+        return SvcReply(code, seq, if (code != null) rest else null, svcMs(k, v))
+    }
 
     companion object {
         const val SVC_HOST = "svcdemo.test"
@@ -338,6 +391,7 @@ class Options(
     val updKeys: Set<String>? = null,
     val updSeq: Long = 0,
     val services: List<SvcInfo> = emptyList(),
+    val accounts: List<SvcAcct> = emptyList(),
     val eqHeadset: String? = null,
     val through: String? = null,
 ) {
@@ -352,7 +406,7 @@ class Options(
         if (minor < 12) faults.features = faults.features and Groups.mask("eqSlots", "eqGraphic").inv()
         if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig", "liveRows", "eqStages").inv()
         if (minor < 16) faults.features = faults.features and Groups.mask("svcLogin").inv()
-        if (minor < 17) faults.features = faults.features and Groups.mask("imgFocusX").inv()
+        if (minor < 17) faults.features = faults.features and Groups.mask("imgFocusX", "svcAccount").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }

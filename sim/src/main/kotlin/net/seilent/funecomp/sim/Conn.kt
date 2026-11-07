@@ -23,6 +23,7 @@ import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
+import java.io.ByteArrayOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.concurrent.Executors
@@ -53,6 +54,7 @@ class Conn(
     private class Ask(val type: Int, val seq: Int, val deadline: Long, val done: (String) -> Unit, val svcSeq: Long? = null)
 
     private var ask: Ask? = null
+    private var batch: ByteArrayOutputStream? = null
 
     val asks: Boolean get() = Groups.allowed(Msg.ART_BLOCK, appFeatures) && Groups.allowed(Msg.ART_BLOCK, faults.features)
 
@@ -62,17 +64,20 @@ class Conn(
 
     fun ask(type: Int, body: ByteArray, timeoutMs: Long, svcSeq: Long? = null, done: (String) -> Unit): Boolean {
         val s = synchronized(lock) {
-            if (closed != null || ask != null) return false
+            if (closed != null || ask != null || faults.askHeldMs?.let { clock() - startAt < it } == true) return false
             nextSeq().also { ask = Ask(type, it, clock() + timeoutMs, done, svcSeq) }
         }
         write(Frame(type, Proto.flagWant, s, body))
         return true
     }
 
-    fun pkce(q: SvcPkce, done: (String) -> Unit): Boolean = ask(Msg.SVC_PKCE, q.encode(), Proto.svcPkceMs.toLong(), q.seq, done)
+    override fun pkce(q: SvcPkce, done: (String) -> Unit): Boolean = ask(Msg.SVC_PKCE, q.encode(), Proto.svcPkceMs.toLong(), q.seq, done)
+
+    override fun drop(reason: String) = close(reason)
 
     fun svcEnd(e: SvcLoginEnd) {
         push(Msg.SVC_LOGIN_END, e.encode())
+        device.svcEnded(e)
         val a = synchronized(lock) { ask?.takeIf { it.type == Msg.SVC_PKCE && it.svcSeq == e.seq }?.also { ask = null } } ?: return
         log("ask ${name(a.type)} seq=${a.seq} -> ended")
         a.done("ended")
@@ -107,8 +112,13 @@ class Conn(
         val bytes = Frame(f.type, f.flags, f.seq, payload).encode()
         try {
             synchronized(lock) {
-                output.write(bytes)
-                output.flush()
+                val b = batch
+                if (b != null) {
+                    b.write(bytes)
+                } else {
+                    output.write(bytes)
+                    output.flush()
+                }
             }
             log("tx ${name(f.type)} flags=0x%02x seq=${f.seq} len=${payload.size}".format(f.flags))
             faults.slowBps?.let { Thread.sleep(bytes.size * 1000L / it) }
@@ -124,6 +134,46 @@ class Conn(
     }
 
     private fun reply(f: Frame, payload: ByteArray = ByteArray(0)) = write(Frame(f.type, Proto.flagReply, f.seq, payload))
+
+    private fun batched(f: () -> Unit) {
+        synchronized(lock) { batch = ByteArrayOutputStream() }
+        try {
+            f()
+        } finally {
+            val b = synchronized(lock) { batch.also { batch = null } }
+            try {
+                synchronized(lock) {
+                    output.write(b!!.toByteArray())
+                    output.flush()
+                }
+            } catch (e: Exception) {
+                close("io: ${e.message}")
+            }
+        }
+    }
+
+    private fun answer(f: Frame, a: Answer, at: Long, pushing: String?) {
+        when (a) {
+            is Answer.Ok -> {
+                val send: () -> Unit = {
+                    reply(f, a.payload)
+                    if (a.state) push(Msg.STATE, device.state(at, this))
+                    a.then?.invoke(this)
+                }
+                if (a.batch) batched(send) else send()
+                if (pushing != null) askLater(pushing)
+            }
+            is Answer.Fail -> {
+                a.before?.invoke(this)
+                error(f, a.code, a.text, a.refused)
+                a.then?.invoke(this)
+            }
+            is Answer.Later -> device.svc.timer.schedule({
+                val r = device.resolve(a)
+                if (closed == null) answer(f, r, clock(), null)
+            }, a.ms, TimeUnit.MILLISECONDS)
+        }
+    }
 
     private fun error(f: Frame, code: Int, text: String, refused: List<String> = emptyList()) =
         write(Frame(f.type, Proto.flagReply or Proto.flagError, f.seq, ErrorReply(code, text.ifEmpty { null }, refused).encode()))
@@ -211,6 +261,7 @@ class Conn(
     private fun accept(f: Frame, body: Node) {
         if (f.isReply) {
             if (f.type == Msg.PING && f.seq == pingSeq) pingSeq = null
+            if (f.type == Msg.SVC_PKCE && faults.dropAfterReply.compareAndSet(true, false)) return close("drop-after-reply")
             if (synchronized(lock) { ask?.let { it.type == f.type && it.seq == f.seq } } == true) {
                 answered(
                     f.seq,
@@ -248,14 +299,7 @@ class Conn(
             return
         }
         val pushing = if (f.type == Msg.IMG_END) device.pushing else null
-        when (val a = device.request(f.type, body, this)) {
-            is Answer.Ok -> {
-                reply(f, a.payload)
-                if (a.state) push(Msg.STATE, device.state(at, this))
-                if (pushing != null) askLater(pushing)
-            }
-            is Answer.Fail -> error(f, a.code, a.text, a.refused)
-        }
+        answer(f, device.request(f.type, body, this), at, pushing)
     }
 
     private fun askLater(name: String) {
@@ -303,8 +347,13 @@ class Conn(
         for (e in faults.svcPkceEnds) later(e.ms) { svcEnd(SvcLoginEnd(id, e.seq, e.result)) }
         for (l in faults.svcLogins) {
             val uri = if (faults.svcLoginBare) "${l.host}/${l.code}" else "https://${l.host}/${l.code}"
-            later(l.ms) { push(Msg.SVC_LOGIN, SvcLogin(id, uri, l.host, l.code, 300, l.seq).encode()) }
+            later(l.ms) {
+                val s = SvcLogin(id, uri, l.host, l.code, 300, l.seq)
+                device.svcSeen(s)
+                push(Msg.SVC_LOGIN, s.encode())
+            }
         }
-        for (p in faults.svcPkces) later(p.ms) { pkce(SvcPkce(id, "https://login.${p.host}/auth", "login.${p.host}", "https://${p.host}/cb", p.seq)) {} }
+        for (p in faults.svcPkces) later(p.ms) { device.svcAsk(this, SvcPkce(id, "https://login.${p.host}/auth", "login.${p.host}", "https://${p.host}/cb", p.seq)) }
+        for ((a, ms) in faults.svcStates) later(ms) { device.svcSet(this, a) }
     }
 }

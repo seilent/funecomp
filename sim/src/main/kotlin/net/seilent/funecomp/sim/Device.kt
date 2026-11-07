@@ -36,6 +36,9 @@ import net.seilent.funecomp.proto.SourceJpeg
 import net.seilent.funecomp.proto.Settings
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.SvcKeys
+import net.seilent.funecomp.proto.SvcLogin
+import net.seilent.funecomp.proto.SvcLoginEnd
+import net.seilent.funecomp.proto.SvcPkce
 import net.seilent.funecomp.proto.UpdAbort
 import net.seilent.funecomp.proto.UpdBeginReply
 import net.seilent.funecomp.proto.listView
@@ -66,6 +69,10 @@ import kotlin.math.roundToInt
 
 interface Out {
     fun push(type: Int, payload: ByteArray)
+
+    fun pkce(q: SvcPkce, done: (String) -> Unit): Boolean = false
+
+    fun drop(reason: String) {}
 }
 
 private class Forms(val rows: List<Row>, val legacy: List<Row>, val live: String)
@@ -73,8 +80,9 @@ private class Forms(val rows: List<Row>, val legacy: List<Row>, val live: String
 private class Sent(val schema: Long, val legacy: Long, val live: Long)
 
 sealed class Answer {
-    class Ok(val payload: ByteArray = ByteArray(0), val state: Boolean = false) : Answer()
-    class Fail(val code: Int, val text: String, val refused: List<String> = emptyList()) : Answer()
+    class Ok(val payload: ByteArray = ByteArray(0), val state: Boolean = false, val then: ((Out) -> Unit)? = null, val batch: Boolean = false) : Answer()
+    class Fail(val code: Int, val text: String, val refused: List<String> = emptyList(), val before: ((Out) -> Unit)? = null, val then: ((Out) -> Unit)? = null) : Answer()
+    class Later(val ms: Long, val then: () -> Answer) : Answer()
 }
 
 private const val FULL_VOLUME = 255
@@ -182,6 +190,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val board = opts.board
     private val faults = opts.faults
     private val lock = Any()
+    val svc = SvcAccounts(opts, lock) { now() }
 
     private val conditions = HashMap<String, Triple<String, String, Boolean>>()
     val rows: List<Row> = loadRows()
@@ -598,6 +607,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         pushForms(out, forms(), null)
         pushSettings(out)
         pushEqAll(out)
+        if (svcBoth(linked[out] ?: 0L)) svc.reask(out)
+        if (svcAccountPeer(out)) svc.push(out, cardOk())
     }
 
     private val frozen = ThreadLocal<Long>()
@@ -685,6 +696,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         btEdge()
         cardEdge()
         cardPush(out)
+        if (svcBoth(linked[out] ?: 0L)) svc.retry(out)
+        if (svcAccountPeer(out)) svc.push(out, cardGate == Enums.Card.ready)
         snapAt?.let { at ->
             if (now() >= at) {
                 snapAt = null
@@ -728,6 +741,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun unlinked(out: Out) = synchronized(lock) {
         linked.remove(out)
+        svc.forget(out)
         cardSent.remove(out)
         if (pushOut === out) pushOut = null
         if (updOut === out) updOut = null
@@ -1049,6 +1063,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Msg.PLAYLOG_GET -> playLogGet(body)
             Msg.PLAYLOG_ACK -> playLogAck(body)
             Msg.SVC_KEYS -> svcKeys(body)
+            Msg.SVC_LOGIN_START -> svcGate(body, out, Tags.SvcLoginStart.service) ?: svc.start(body, out, cardOk(), faults.svcOff || streamingOff()) { o -> state(out = o) }
+            Msg.SVC_LOGOUT -> svcGate(body, out, Tags.SvcLogout.service) ?: svc.logout(body, out, cardOk(), faults.svcOff || streamingOff())
             else -> Answer.Fail(Err.unknown, "unknown")
         }.also { follow() }
     }
@@ -1059,8 +1075,39 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         opts.log("svc keys ${k.service} names=${k.keys.map { it.name }} bytes=${k.encode().size}")
         if (faults.svcOff || streamingOff()) return Answer.Fail(Err.off, "streaming is off")
         if (svc == null || k.keys.isEmpty() || k.keys.any { it.name.isNullOrEmpty() || it.value.isNullOrEmpty() || it.name !in svc.secrets }) return Answer.Fail(Err.badValue, "bad key")
-        return Answer.Ok()
+        return this.svc.keys(k.service) ?: Answer.Ok()
     }
+
+    private fun svcGate(b: Node, out: Out, tag: Int): Answer.Fail? {
+        val id = b.str(tag)
+        if (id.isNullOrEmpty() || !id.all { it in 'a'..'z' || it in '0'..'9' }) return Answer.Fail(Err.badValue, "bad value")
+        if (!svcAccountApp(out)) return Answer.Fail(Err.unknown, "unknown")
+        return null
+    }
+
+    private fun svcAccountApp(out: Out?) = svcBoth(out?.let { linked[it] } ?: 0L) && appBit(out, Feature.svcAccount)
+
+    private fun svcAccountPeer(out: Out) = devBit(Feature.svcAccount) && svcAccountApp(out)
+
+    private fun cardOk(): Boolean {
+        cardEdge()
+        return cardGate == Enums.Card.ready
+    }
+
+    fun resolve(a: Answer.Later): Answer = synchronized(lock) { a.then() }
+
+    fun svcSet(out: Out?, a: SvcAcct) = synchronized(lock) {
+        svc.set(a)
+        if (out != null && svcAccountPeer(out)) svc.push(out, cardOk())
+    }
+
+    fun svcBoot() = synchronized(lock) { svc.boot() }
+
+    fun svcSeen(l: SvcLogin) = synchronized(lock) { svc.seen(l) }
+
+    fun svcAsk(out: Out, q: SvcPkce) = synchronized(lock) { svc.asked(q)?.let { svc.ask(out, it) } }
+
+    fun svcEnded(e: SvcLoginEnd) = synchronized(lock) { e.service?.let { s -> e.seq?.let { svc.ended(s, it) } } }
 
     private fun playLogGet(b: Node): Answer {
         val after = b.long(Tags.PlaylogGet.after) ?: 0

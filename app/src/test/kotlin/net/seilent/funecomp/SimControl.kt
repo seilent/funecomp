@@ -166,7 +166,7 @@ class SimControl(
     private fun call(type: Int, payload: ByteArray): Answer {
         sent += Msg.info.getValue(type).name
         faultSet.fail[type]?.let { code -> if ((faultSet.failLeft[type]?.getAndDecrement() ?: 1) > 0) return Answer.Fail(code, "fault $code").also { failed += code } }
-        return sim.request(type, Node.decode(Msg.info.getValue(type).name, payload), out).also { if (it is Answer.Fail) failed += it.code }
+        return sim.request(type, Node.decode(Msg.info.getValue(type).name, payload), out).let { if (it is Answer.Later) sim.resolve(it) else it }.also { if (it is Answer.Fail) failed += it.code }
     }
 
     private fun after(a: Answer) {
@@ -230,6 +230,7 @@ class SimControl(
                 done(r.added, null)
             }
             is Answer.Fail -> done(null, a.code)
+            is Answer.Later -> error("unresolved")
         }
     }
 
@@ -394,6 +395,7 @@ class SimControl(
             val r = when (val a = req(Msg.SVC_KEYS, Req.svcKeys(service, keys))) {
                 is Answer.Ok -> Session.Result.Ok(Node("SVC_KEYS.reply", emptyList()))
                 is Answer.Fail -> Session.Result.Failed(ErrorReply(a.code, a.text))
+                is Answer.Later -> error("unresolved")
             }
             done(Svc.keysLine(r))
         }

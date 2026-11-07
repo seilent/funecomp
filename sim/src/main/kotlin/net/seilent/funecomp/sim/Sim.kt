@@ -113,6 +113,10 @@ class Sim(private val opts: Options, lib: Library = Library.synthetic()) {
 
     fun svcEnd(e: SvcLoginEnd) = svcConn().svcEnd(e)
 
+    fun svcState(a: SvcAcct) = device.svcSet(current?.takeIf { it.closed == null }, a)
+
+    fun svcBoot() = device.svcBoot()
+
     fun askPkce(q: SvcPkce): String {
         val done = CompletableFuture<String>()
         check(svcConn().pkce(q) { done.complete(it) }) { "an ask is pending" }

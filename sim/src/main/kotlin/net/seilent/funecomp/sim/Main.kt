@@ -10,7 +10,7 @@ private const val USAGE = "usage: sim --board ap80|v1|r1 (--listen <port> | --co
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--upd-keys <hex>,...] [--upd-seq <n>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
     "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--through <name>] [--source local|phone] [--eq-headset <name>] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... " +
-    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--headset] [--bt-role receiver|headphones] [--companion] [--svc <id>:<name>:<secret>+...[:pkce]]... [--quiet]"
+    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--headset] [--bt-role receiver|headphones] [--companion] [--svc <id>:<name>:<secret>+...[:pkce]]... [--svc-state <id>:<in|out|unknown>[:<account>[:<downloads>]]]... [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -50,6 +50,7 @@ fun main(args: Array<String>) {
     var btRole = Enums.BtRole.receiver
     var companion = false
     val services = ArrayList<SvcInfo>()
+    val accounts = ArrayList<SvcAcct>()
     var i = 0
     fun value(): String = args.getOrNull(++i) ?: run {
         System.err.println(USAGE)
@@ -98,6 +99,7 @@ fun main(args: Array<String>) {
             }
             "--companion" -> companion = true
             "--svc" -> services += Options.svc(value())
+            "--svc-state" -> accounts += SvcAcct.parse(value())
             else -> {
                 System.err.println(USAGE)
                 exitProcess(2)
@@ -149,6 +151,7 @@ fun main(args: Array<String>) {
         updKeys = updKeys,
         updSeq = updSeq ?: base.updSeq,
         services = services,
+        accounts = accounts,
         eqHeadset = eqHeadset,
         through = through,
     )
