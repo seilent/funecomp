@@ -6,21 +6,11 @@ object Held {
     class Entry(val name: String, val token: String, val value: Any, val row: String, val branch: String)
 
     object Hub {
-        const val pivotGap = 16f
-        const val type_pivotActive_size = 22f
-        const val type_pivotInactive_size = 22f
-        const val type_pivotInactive_style = "Light"
-        const val type_pivotInactive_alpha = 0.4f
         const val tileCellH = 77f
         const val tileRowPitch = 89f
         const val shortArtTop = 124f
 
         val entries = listOf(
-            Entry("pivotGap", "pivotGap", pivotGap, "H2", "zhub"),
-            Entry("type_pivotActive_size", "type_pivotActive_size", type_pivotActive_size, "H2", "zhub"),
-            Entry("type_pivotInactive_size", "type_pivotInactive_size", type_pivotInactive_size, "H2", "zhub"),
-            Entry("type_pivotInactive_style", "type_pivotInactive_style", type_pivotInactive_style, "H2", "zhub"),
-            Entry("type_pivotInactive_alpha", "type_pivotInactive_alpha", type_pivotInactive_alpha, "H5", "zhub"),
             Entry("tileCellH", "tileCellH", tileCellH, "H3, H6a", "zhub"),
             Entry("tileRowPitch", "tileRowPitch", tileRowPitch, "H3, H6a", "zhub"),
             Entry("shortArtTop", "npArtTop", shortArtTop, "H7", "zhub"),

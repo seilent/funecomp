@@ -240,6 +240,13 @@ class ArtDragUiTest {
     }
 
     @Test
+    fun thePreviewItemsKeepTheSixteenUnitGap() {
+        start(preview(1920, 1080, 0), preview(1600, 900, 1))
+        val u = bounds("pick.page").let { Ui.of(it.width, it.height) }.u
+        assertEquals(16f * u, bounds("pick.next").left - bounds("pick.label").right, 0.5f * u)
+    }
+
+    @Test
     fun theFrameExcludesTwoSideBandsOfAtMost200dp() {
         start(preview(1920, 1080))
         val rects = view.systemGestureExclusionRects

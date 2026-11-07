@@ -69,6 +69,7 @@ private const val PASTE_LINK = "paste link"
 private const val BROWSE = "browse"
 private const val PICK = "pick"
 private const val PICK_X = 75f
+private const val PICK_GAP = 16f
 private const val NEXT_IMAGE = "next image"
 private const val RESET = "reset"
 private const val EXCLUDE_DP = 200f
@@ -190,10 +191,10 @@ fun PickPreviewPage(ctx: Ctx, page: Page.PickPreview) {
         )
         if (two) {
             RoleText(shown.offer.label, Roles.dialogItem, Modifier.atBaseline(x, top).testTag("pick.source"), alpha = Roles.dialogItem.dim)
-            RoleText(NEXT_IMAGE, Roles.dialogItem, Modifier.atBaseline(x + pick.size.width + ui.px(Held.Hub.pivotGap), baseline).press({ at = (at + 1) % page.previews.size }).testTag("pick.next"))
+            RoleText(NEXT_IMAGE, Roles.dialogItem, Modifier.atBaseline(x + pick.size.width + ui.px(PICK_GAP), baseline).press({ at = (at + 1) % page.previews.size }).testTag("pick.next"))
         }
         if (moved) {
-            val rx = x + pick.size.width + ui.px(Held.Hub.pivotGap) + if (two) next.size.width + ui.px(Held.Hub.pivotGap) else 0f
+            val rx = x + pick.size.width + ui.px(PICK_GAP) + if (two) next.size.width + ui.px(PICK_GAP) else 0f
             RoleText(RESET, Roles.dialogItem, Modifier.atBaseline(rx, baseline).press({ windows.remove(at) }).testTag("pick.reset"))
         }
     }

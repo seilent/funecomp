@@ -1,7 +1,9 @@
 package net.seilent.funecomp
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -9,20 +11,29 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.state.EqStage
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
+import net.seilent.funecomp.ui.LocalUi
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickFor
+import net.seilent.funecomp.ui.PivotStrip
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import org.junit.Assert.assertEquals
@@ -34,6 +45,9 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.awt.image.BufferedImage
+import kotlin.math.abs
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
@@ -47,11 +61,11 @@ class HubChromeTest {
 
     private lateinit var shell: Shell
 
-    private fun start(page: Page, off: Boolean = false, at: String = "411x960") {
+    private fun start(page: Page, off: Boolean = false, at: String = "411x960", under: List<Page> = emptyList()) {
         size = SIZES.first { it.name == at }
         val c = SimControl("v1")
         if (off) c.set("accentOff", "on")
-        shell = Shell(Nav(listOf(Page.Home, page)))
+        shell = Shell(Nav(listOf(Page.Home) + under + page))
         rule.mainClock.autoAdvance = false
         rule.setContent {
             val s = size
@@ -91,9 +105,49 @@ class HubChromeTest {
         settle(1500)
     }
 
-    private fun lit(img: BufferedImage, x: Int) = (0 until img.height).any { y ->
-        val p = img.getRGB(x, y)
-        (p shr 16 and 0xff) > 8 || (p shr 8 and 0xff) > 8 || (p and 0xff) > 8
+    private fun bright(p: Int) = (p shr 16 and 0xff) > 8 || (p shr 8 and 0xff) > 8 || (p and 0xff) > 8
+
+    private fun lit(img: BufferedImage, x: Int) = (0 until img.height).any { y -> bright(img.getRGB(x, y)) }
+
+    private fun pivots(): List<SemanticsNode> = rule.onAllNodes(SemanticsMatcher("pivot") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("pivot.") == true }, useUnmergedTree = true)
+        .fetchSemanticsNodes().sortedBy { it.positionInRoot.x }
+
+    private fun level(p: Int) = maxOf(p shr 16 and 0xff, p shr 8 and 0xff, p and 0xff)
+
+    private fun ink(img: BufferedImage, n: SemanticsNode, from: Float): Pair<Float, Float>? {
+        val b = n.boundsInRoot
+        val out = ArrayList<TextLayoutResult>()
+        n.config[SemanticsActions.GetTextLayoutResult].action?.invoke(out)
+        val base = n.positionInRoot.y + out.single().firstBaseline
+        val ys = max(0, max(b.top, from).roundToInt()) until min(img.height, base.roundToInt())
+        val xs = max(0, b.left.toInt()) until min(img.width, b.right.toInt())
+        val col = xs.associateWith { x -> ys.maxOf { y -> level(img.getRGB(x, y)) } }
+        val lit = xs.filter { col.getValue(it) > 8 }
+        if (lit.isEmpty()) return null
+        val full = col.values.max().toFloat()
+        return lit.first() + 1 - col.getValue(lit.first()) / full to lit.last() + col.getValue(lit.last()) / full
+    }
+
+    private fun assertInkGaps(name: String, page: String) {
+        val c = canvas(page)
+        val u = ui(page).u
+        val img = rule.onRoot().pixels().also { System.gc() }
+        val from = bounds("header.clip").bottom
+        val ns = pivots()
+        val active = ns.indexOfFirst { abs(it.positionInRoot.x - c.left - 20f * u) < 1f }
+        assertTrue("$name active", active >= 0)
+        if (active > 0) assertEquals("$name lead", -2f * u, ns[active - 1].positionInRoot.x + ns[active - 1].size.width - c.left, 1f)
+        var pairs = 0
+        for (k in active until ns.size - 1) {
+            val a = ns[k]
+            val b = ns[k + 1]
+            if (a.positionInRoot.x + a.size.width > c.right || b.positionInRoot.x >= c.right) break
+            val ia = ink(img, a, from) ?: break
+            val ib = ink(img, b, from) ?: break
+            assertEquals("$name $k", if (k == active) 7.7f else 6.6f, (ib.first - ia.second) / u, 0.3f)
+            pairs++
+        }
+        assertTrue("$name pairs", pairs > 0)
     }
 
     private fun assertPageHeader(name: String, page: String, s: Float) {
@@ -224,5 +278,56 @@ class HubChromeTest {
         settle(1500)
         assertEquals(Page.Music, shell.nav.top)
         assertEquals(20f * ui.u, left("pivot.albums") - c.left, 1.5f)
+    }
+
+    @Test
+    fun thePivotsAreTheDeviceRoles() {
+        start(Page.Music)
+        val u = ui("music").u
+        for ((tag, weight, alpha) in listOf(Triple("pivot.artists", FontWeight.Bold, 1.0f), Triple("pivot.albums", FontWeight.Normal, 0.28f))) {
+            val style = layout(tag).layoutInput.style
+            with(rule.density) { assertEquals(tag, (24.7f * u).roundToInt().toFloat(), style.fontSize.toPx(), 0.5f) }
+            assertEquals(tag, weight, style.fontWeight)
+            assertEquals(tag, alpha, style.color.alpha, 0.005f)
+        }
+    }
+
+    @Test
+    fun theInkGapsAreTheDevices() {
+        start(Page.Music, off = true)
+        assertInkGaps("artists", "music")
+        rule.onNodeWithTag("pivot.albums").performClick()
+        settle(1500)
+        assertInkGaps("albums", "music")
+    }
+
+    @Test
+    fun theEqInkGapsAreTheDevices() {
+        start(Page.Eq(Enums.EqOutput.wired), off = true, under = listOf(Page.Settings))
+        assertInkGaps("eq", "eq")
+    }
+
+    @Test
+    fun theCorrectionEqInkGapsAreTheDevices() {
+        start(Page.Eq(Enums.EqOutput.wired, EqStage.CORRECTION), off = true, under = listOf(Page.Settings))
+        assertInkGaps("correction eq", "correction eq")
+    }
+
+    @Test
+    fun aPivotChangeAloneMovesTheStrip() {
+        val ui = Ui.of(1079f, 2372f)
+        var active by mutableStateOf(0)
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            CompositionLocalProvider(LocalUi provides ui) {
+                Box(Modifier.fillMaxSize()) { PivotStrip(listOf("artists", "albums", "songs"), active, {}) }
+            }
+        }
+        settle(1500)
+        rule.runOnIdle { active = 1 }
+        settle(1500)
+        val artists = rule.onNodeWithTag("pivot.artists", useUnmergedTree = true).fetchSemanticsNode()
+        assertEquals(20f * ui.u, left("pivot.albums"), 1f)
+        assertEquals(-2f * ui.u, artists.positionInRoot.x + artists.size.width, 1f)
     }
 }

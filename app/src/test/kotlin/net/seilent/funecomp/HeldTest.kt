@@ -8,15 +8,10 @@ class HeldTest {
     private fun rows(e: List<Held.Entry>) = e.map { listOf(it.name, it.token, it.value, it.row, it.branch) }
 
     @Test
-    fun theThirtyHeldValuesKeepTheirOldPin() {
+    fun theHeldValuesKeepTheirOldPin() {
         assertEquals("6e3302724", Held.PIN)
         assertEquals(
             listOf(
-                listOf("pivotGap", "pivotGap", 16f, "H2", "zhub"),
-                listOf("type_pivotActive_size", "type_pivotActive_size", 22f, "H2", "zhub"),
-                listOf("type_pivotInactive_size", "type_pivotInactive_size", 22f, "H2", "zhub"),
-                listOf("type_pivotInactive_style", "type_pivotInactive_style", "Light", "H2", "zhub"),
-                listOf("type_pivotInactive_alpha", "type_pivotInactive_alpha", 0.4f, "H5", "zhub"),
                 listOf("tileCellH", "tileCellH", 77f, "H3, H6a", "zhub"),
                 listOf("tileRowPitch", "tileRowPitch", 89f, "H3, H6a", "zhub"),
                 listOf("shortArtTop", "npArtTop", 124f, "H7", "zhub"),
@@ -55,7 +50,7 @@ class HeldTest {
             ),
             rows(Held.Np.entries),
         )
-        assertEquals(30, Held.entries.size)
+        assertEquals(25, Held.entries.size)
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }
 }

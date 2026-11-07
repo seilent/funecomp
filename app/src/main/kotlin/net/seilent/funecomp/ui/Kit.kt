@@ -1,5 +1,9 @@
 package net.seilent.funecomp.ui
 
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
+import android.graphics.Typeface
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationState
@@ -62,8 +66,10 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layoutId
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -200,16 +206,23 @@ fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit, onTrave
     val measurer = rememberTextMeasurer()
     val activeStyle = textStyle(Roles.pivotActive, white(Roles.pivotActive.alpha))
     val inactiveStyle = textStyle(Roles.pivotInactive, white(Roles.pivotInactive.alpha))
-    val widths = labels.mapIndexed { i, l ->
-        measurer.measure(shown(l, Roles.pivotActive.case), if (i == active) activeStyle else inactiveStyle).size.width.toFloat()
-    }
-    val gap = ui.px(Held.Hub.pivotGap)
-    val lead = ui.px(Tok.pivotLeadGap)
-    val positions = ArrayList<Float>()
-    var x = 0f
-    for (i in labels.indices) {
-        positions += x
-        x += widths[i] + if (i == active - 1) lead else gap
+    val resolver = LocalFontFamilyResolver.current
+    val positions = remember(labels, active, ui, resolver) {
+        val shownLabels = labels.map { shown(it, Roles.pivotActive.case) }
+        val widths = shownLabels.mapIndexed { i, l -> measurer.measure(l, if (i == active) activeStyle else inactiveStyle).size.width.toFloat() }
+        val inks = shownLabels.mapIndexed { i, l -> ink(l, if (i == active) Roles.pivotActive else Roles.pivotInactive, ui, resolver) }
+        val p = ArrayList<Float>()
+        var x = 0f
+        for (i in labels.indices) {
+            p += x
+            if (i == labels.lastIndex) break
+            x += when (i) {
+                active - 1 -> widths[i] + ui.px(Tok.pivotLeadGap)
+                active -> inks[i].right + ui.px(Tok.pivotActiveGap) - inks[i + 1].left
+                else -> inks[i].right + ui.px(Tok.pivotGap) - inks[i + 1].left
+            }.roundToInt()
+        }
+        p
     }
     val rest = ui.px(Tok.hubEdge)
     val target = rest - (positions.getOrNull(active) ?: 0f)
@@ -225,6 +238,18 @@ fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit, onTrave
             RoleText(l, role, Modifier.atBaseline(row + px, ui.px(ui.pivotBaseline)).press({ onPick(i) }).testTag("pivot.$l"), color = c)
         }
     }
+}
+
+private fun ink(text: String, role: Role, ui: Ui, resolver: FontFamily.Resolver): RectF {
+    val size = ui.fontPx(role.size)
+    val paint = Paint().apply {
+        typeface = resolver.resolve(Selawik, role.weight).value as Typeface
+        textSize = size
+        letterSpacing = ui.px(Tok.tracking) / size
+    }
+    val path = Path()
+    paint.getTextPath(text, 0, text.length, 0f, 0f, path)
+    return RectF().also { path.computeBounds(it, true) }
 }
 
 class MicroFling(private val k: Float, private val threshold: Float) : FloatDecayAnimationSpec {
