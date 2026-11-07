@@ -197,6 +197,23 @@ class SvcStartTest {
     }
 
     @Test
+    fun aStopWithABoundArmSaysNothingAt120sAndALinkLossKeepsIt() {
+        start()
+        sent.last().done(ok(5))
+        Svc.pkce(ask, hello, ::record)
+        Svc.dropped(false)
+        timer(Svc.ARM_MS).run()
+        assertNull(Svc.view.line)
+        Svc.hello(hello, "dap")
+        start()
+        sent.last().done(ok(5))
+        Svc.pkce(ask, hello, ::record)
+        Svc.dropped(true)
+        timer(Svc.ARM_MS).run()
+        assertEquals("TIDAL" to Svc.NO_REPLY, Svc.view.line?.let { it.title to it.line })
+    }
+
+    @Test
     fun everyReplyButOkEndsTheArm() {
         fun armedAfter(r: Session.Result): Boolean {
             Svc.cancel()
