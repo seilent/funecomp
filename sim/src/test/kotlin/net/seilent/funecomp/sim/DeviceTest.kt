@@ -126,7 +126,7 @@ class DeviceTest {
             val text = Settings.from(out.of(Msg.SETTINGS).single()).text
             val keys = text.lines().filter { it.isNotEmpty() }.map { it.substringBefore('=') }.toSet()
             val rowKeys = d.schemaRows().mapNotNull { it.key }.toSet()
-            assertEquals(setOf("btCodecHeadphones"), keys - rowKeys)
+            assertEquals(setOf("btCodecHeadphones", "saverSeconds"), keys - rowKeys)
             assertTrue(d.rows.none { it.key == "pairPhone" || it.key == "playKey" })
             val codec = d.rows.single { it.key == "btCodec" }
             assertEquals("bluetooth", codec.pivot)
@@ -143,8 +143,8 @@ class DeviceTest {
 
     @Test
     fun rowCountsAtTheDefaultsAndWithEveryRuntimeRowShown() {
-        for ((b, n) in listOf("ap80" to 47, "v1" to 57, "r1" to 57)) assertEquals(b, n, device(b).schemaRows().size)
-        for ((b, n) in listOf("ap80" to 50, "v1" to 61, "r1" to 61)) {
+        for ((b, n) in listOf("ap80" to 48, "v1" to 58, "r1" to 58)) assertEquals(b, n, device(b).schemaRows().size)
+        for ((b, n) in listOf("ap80" to 51, "v1" to 62, "r1" to 62)) {
             val d = Device(Options(Board.of(b), headset = true, companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
             assertEquals(b, n, d.schemaRows().size)
@@ -154,7 +154,7 @@ class DeviceTest {
 
     @Test
     fun pivotsAsFuneos71eaf7418() {
-        val screens = listOf("saverSeconds", "saverLyrics", "saverDrift", "quickplay", "artistPhoto", "navBar", "navOrder", "navButton")
+        val screens = listOf("saverMode", "saverDelay", "saverLyrics", "saverDrift", "quickplay", "artistPhoto", "navBar", "navOrder", "navButton")
         for (b in listOf("ap80", "v1", "r1")) {
             val d = Device(Options(Board.of(b), companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
@@ -369,7 +369,8 @@ class DeviceTest {
         for (b in listOf("ap80", "v1", "r1")) {
             val d = device(b)
             val keys = d.rows.map { it.key }
-            assertEquals(keys.indexOf("saverSeconds") + 1, keys.indexOf("saverLyrics"))
+            assertEquals(keys.indexOf("saverMode") + 1, keys.indexOf("saverDelay"))
+            assertEquals(keys.indexOf("saverDelay") + 1, keys.indexOf("saverLyrics"))
             assertEquals(keys.indexOf("saverLyrics") + 1, keys.indexOf("saverDrift"))
             assertEquals(keys.indexOf("crossfeed") + 1, keys.indexOf("tube"))
             assertEquals(keys.indexOf("tube") + 1, keys.indexOf("stereoWidth"))
@@ -425,29 +426,78 @@ class DeviceTest {
         for (b in listOf("ap80", "v1", "r1")) {
             val d = device(b)
             val off = Sink()
-            assertEquals(b, listOf("saverSeconds"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverSeconds=0\n"), off)))).kept)
+            assertEquals(b, listOf("saverMode"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverMode=off\n"), off)))).kept)
             val text = settings(off)
-            assertTrue(b, "saverSeconds=0" in text)
-            assertTrue(b, text.none { it.startsWith("saverLyrics=") || it.startsWith("saverDrift=") })
+            assertTrue(b, "saverMode=off" in text && "saverSeconds=0" in text)
+            assertTrue(b, text.none { it.startsWith("saverDelay=") || it.startsWith("saverLyrics=") || it.startsWith("saverDrift=") })
             val hidden = keys(d)
-            assertTrue(b, "saverSeconds" in hidden && "saverLyrics" !in hidden && "saverDrift" !in hidden)
+            assertTrue(b, "saverMode" in hidden && "saverDelay" !in hidden && "saverLyrics" !in hidden && "saverDrift" !in hidden)
+            val delay = Sink()
+            assertEquals(b, listOf("saverDelay"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverDelay=60\n"), delay)))).kept)
+            assertTrue(b, "saverSeconds=0" in settings(delay))
             val lyrics = Sink()
             assertEquals(b, listOf("saverLyrics", "saverDrift"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverLyrics=off\nsaverDrift=off\n"), lyrics)))).kept)
             assertTrue(b, settings(lyrics).none { it.startsWith("saverLyrics=") })
             assertEquals(b, listOf("saverLyrics"), fail(req(d, Msg.SET, Req.set("saverLyrics=1\n"))).refused)
             assertEquals(b, listOf("navOrder"), fail(req(d, Msg.SET, Req.set("navOrder=backRight\n"))).refused)
             val on = Sink()
-            ok(req(d, Msg.SET, Req.set("saverSeconds=30\n"), on))
+            ok(req(d, Msg.SET, Req.set("saverMode=charge\n"), on))
             val back = settings(on)
+            assertTrue(b, "saverMode=charge" in back && "saverDelay=60" in back && "saverSeconds=60" in back)
             assertTrue(b, "saverLyrics=off" in back && "saverDrift=off" in back)
             val shown = keys(d)
-            assertEquals(b, shown.indexOf("saverSeconds") + 1, shown.indexOf("saverLyrics"))
+            assertEquals(b, shown.indexOf("saverMode") + 1, shown.indexOf("saverDelay"))
+            assertEquals(b, shown.indexOf("saverDelay") + 1, shown.indexOf("saverLyrics"))
             assertEquals(b, shown.indexOf("saverLyrics") + 1, shown.indexOf("saverDrift"))
             for (v in listOf("10", "30")) {
                 val screen = Sink()
                 ok(req(d, Msg.SET, Req.set("screenOffSeconds=$v\n"), screen))
                 assertTrue("$b $v", "screenOffSeconds=$v" in settings(screen))
             }
+        }
+    }
+
+    @Test
+    fun theOldSaverSecondsKeyIsMappedAsTheDeviceDoes() {
+        fun settings(out: Sink) = Settings.from(out.of(Msg.SETTINGS).last()).text.lines()
+        fun set(d: Device, text: String, out: Sink) = SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set(text), out)))).kept
+        for (b in listOf("ap80", "v1", "r1")) {
+            val d = device(b)
+            assertEquals(b, listOf("saverMode"), fail(req(d, Msg.SET, Req.set("saverMode=maybe\n"))).refused)
+            assertEquals(b, listOf("saverMode", "saverSeconds"), fail(req(d, Msg.SET, Req.set("saverMode=maybe\nsaverSeconds=30\n"))).refused)
+            val off = Sink()
+            assertEquals(b, listOf("saverSeconds", "saverMode"), set(d, "saverSeconds=0\n", off))
+            assertTrue(b, "saverMode=off" in settings(off) && "saverSeconds=0" in settings(off))
+            val on = Sink()
+            assertEquals(b, listOf("saverSeconds", "saverMode", "saverDelay"), set(d, "saverSeconds=30\n", on))
+            assertTrue(b, "saverMode=on" in settings(on) && "saverDelay=30" in settings(on) && "saverSeconds=30" in settings(on))
+            set(d, "saverDelay=120\n", Sink())
+            val snap = Sink()
+            assertEquals(b, listOf("saverSeconds", "saverDelay"), set(d, "saverSeconds=40\n", snap))
+            assertTrue(b, "saverMode=on" in settings(snap) && "saverDelay=30" in settings(snap))
+        }
+    }
+
+    @Test
+    fun theOldSaverSecondsKeyAtChargeKeepsChargeAndSetsTheDelay() {
+        fun settings(out: Sink) = Settings.from(out.of(Msg.SETTINGS).last()).text.lines()
+        for (b in listOf("ap80", "v1", "r1")) {
+            val d = device(b)
+            ok(req(d, Msg.SET, Req.set("saverMode=charge\n")))
+            val charge = Sink()
+            assertEquals(b, listOf("saverSeconds", "saverDelay"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverSeconds=60\n"), charge)))).kept)
+            assertTrue(b, "saverMode=charge" in settings(charge) && "saverDelay=60" in settings(charge) && "saverSeconds=60" in settings(charge))
+        }
+    }
+
+    @Test
+    fun saverDelaySnapsToTheNearestStepAndATieTakesTheFirst() {
+        fun delay(d: Device, v: String) = Sink().also { ok(req(d, Msg.SET, Req.set("saverDelay=$v\n"), it)) }.let { Settings.from(it.of(Msg.SETTINGS).last()).text.lines() }
+        for (b in listOf("ap80", "v1", "r1")) {
+            val d = device(b)
+            assertTrue(b, "saverDelay=30" in delay(d, "45"))
+            assertTrue(b, "saverDelay=120" in delay(d, "100"))
+            assertTrue(b, "saverDelay=300" in delay(d, "1000"))
         }
     }
 

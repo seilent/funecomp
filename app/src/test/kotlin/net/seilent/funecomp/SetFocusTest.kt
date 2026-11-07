@@ -247,7 +247,7 @@ class SetFocusTest {
         restore.emulateSavedInstanceStateRestore()
         settle(1000)
         assertTrue(exists("set.artistPhoto"))
-        insertBefore(c, "saverSeconds", row("navOrder", "screens"))
+        insertBefore(c, "saverMode", row("navOrder", "screens"))
         settle(600)
         assertTrue(barOn("artistPhoto"))
     }

@@ -206,7 +206,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val tok = TokBoard.of(board.name)
     private val prefs = linkedMapOf(
         "volumeStep" to whole(Tok.volume_stepDefault),
-        "accentHue" to whole(Tok.accent_hueDefault), "accentOff" to "off", "saverSeconds" to whole(Tok.settings_saverDefault),
+        "accentHue" to whole(Tok.accent_hueDefault), "accentOff" to "off", "saverMode" to "on", "saverDelay" to whole(Tok.settings_saverDefault),
         "screenOffSeconds" to whole(Tok.settings_screenOffDefault),
         "idleShutdownMinutes" to whole(Tok.settings_idleDefault), "lockKnob" to "off", "screenOffKeys" to "all",
         "inlineRemote" to "on", "clock" to "24h", "batteryPercent" to "off", "playThrough" to "off",
@@ -895,8 +895,10 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun settingsText(): String {
         val shown = structureRows().mapNotNull { it.key }.toSet() + setOf("btCodec", "btCodecHeadphones")
-        return prefs.entries.filter { it.key in shown }.joinToString("") { "${it.key}=${it.value}\n" }
+        return prefs.entries.filter { it.key in shown }.joinToString("") { "${it.key}=${it.value}\n" } + (saverSeconds()?.let { "saverSeconds=$it\n" } ?: "")
     }
+
+    private fun saverSeconds() = if (prefs["saverMode"] == "off") "0" else prefs["saverDelay"]
 
     private fun pushSettings(out: Out) = send(out, Msg.SETTINGS, Settings(settingsRev, settingsText()).encode())
 
@@ -1207,7 +1209,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private val readOnlyToSet = setOf("usbMode", "btCodec", "btCodecHeadphones")
-    private val setWhileHidden = setOf("saverLyrics", "saverDrift")
+    private val setWhileHidden = setOf("saverMode", "saverDelay", "saverSeconds", "saverLyrics", "saverDrift")
 
     private fun scaleN(at: Int, top: Int): Int {
         val p = at.coerceIn(0, 100)
@@ -1256,15 +1258,17 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private fun accept(key: String, value: String): String? {
         if (key == "bootLogo" && value == "picture") return null
         if (key == "playThrough" && value == "playlist" && (opts.through == null || !mounted())) return null
-        if (key in setWhileHidden) return value.takeIf { it == "on" || it == "off" }
+        if (key in setWhileHidden) return when (key) {
+            "saverMode" -> value.takeIf { it == "off" || it == "on" || it == "charge" }
+            "saverDelay" -> nearest(rows.firstOrNull { it.key == key }?.values ?: return null, value)
+            "saverSeconds" -> nearest(Tok.settings_saverSteps.split(','), value)
+            else -> value.takeIf { it == "on" || it == "off" }
+        }
         val r = structureRows().firstOrNull { it.key == key } ?: return null
         if (Enums.RowFlag.readOnly in r.flags || key in readOnlyToSet) return null
         return when (r.kind) {
             Enums.RowKind.choice, Enums.RowKind.toggle -> value.takeIf { it in r.values }
-            Enums.RowKind.steps -> {
-                val n = value.toIntOrNull() ?: return null
-                r.values.mapNotNull { it.toIntOrNull() }.minByOrNull { kotlin.math.abs(it - n) }?.toString()
-            }
+            Enums.RowKind.steps -> nearest(r.values, value)
             Enums.RowKind.range -> {
                 val n = value.toIntOrNull() ?: return null
                 val lo = r.min ?: 0
@@ -1278,22 +1282,46 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
     }
 
+    private fun nearest(values: List<String>, value: String): String? {
+        val n = value.toIntOrNull() ?: return null
+        return values.mapNotNull { it.toIntOrNull() }.minByOrNull { kotlin.math.abs(it - n) }?.toString()
+    }
+
     private fun set(b: Node, out: Out): Answer {
         val text = b.str(Tags.Set.text) ?: return Answer.Fail(Err.badValue, "no text")
         val kept = ArrayList<String>()
         val refused = ArrayList<String>()
         val next = LinkedHashMap(prefs)
+        var mode = false
+        var seconds: String? = null
         for (line in text.lines()) {
             val eq = line.indexOf('=')
             if (eq <= 0) continue
             val k = line.substring(0, eq).trim()
             val v = accept(k, line.substring(eq + 1).trim())
-            if (v == null || k !in prefs) refused += k else {
-                next[k] = v
+            mode = mode || k == "saverMode"
+            if (v == null || (k !in prefs && !(k == "saverSeconds" && "saverMode" in prefs))) refused += k else {
+                if (k == "saverSeconds") seconds = v else next[k] = v
                 kept += k
             }
         }
+        if (mode && "saverMode" !in kept && seconds != null) {
+            kept -= "saverSeconds"
+            refused += "saverSeconds"
+            seconds = null
+        }
         if (kept.isEmpty()) return Answer.Fail(Err.refused, "refused", refused)
+        if (seconds != null && !mode) {
+            val old = if (seconds == "0") "off" else "on"
+            if (old == "off" || prefs["saverMode"] == "off") {
+                next["saverMode"] = old
+                if ("saverMode" !in kept) kept += "saverMode"
+            }
+            if (old != "off") {
+                next["saverDelay"] = seconds
+                if ("saverDelay" !in kept) kept += "saverDelay"
+            }
+        }
         if ("powerOnScale" !in kept) powerOnKeep(next)
         gainRaise(next)
         val differs = next != prefs
