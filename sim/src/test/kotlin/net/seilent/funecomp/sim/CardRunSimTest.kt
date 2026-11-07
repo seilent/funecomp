@@ -363,6 +363,21 @@ class CardRunSimTest {
     }
 
     @Test
+    fun aMessageStartRefusesTheRequestThatStartsIt() {
+        val d = device(15, null, "card-run=2000+1000@msg:LRC_PUT")
+        val out = linked(d)
+        assertEquals(null, code(requests.getValue("IMG_LIST")(d)))
+        assertEquals(Err.noCard, code(requests.getValue("LRC_PUT")(d)))
+        assertEquals(Enums.Card.busy, state(d).card)
+        assertEquals(Err.noCard, code(requests.getValue("IMG_LIST")(d)))
+        at(d, out, 3000)
+        assertEquals(Enums.Card.ready, out.states().last().card)
+        assertEquals(null, code(requests.getValue("IMG_LIST")(d)))
+        assertEquals(null, code(requests.getValue("LRC_PUT")(d)))
+        assertEquals(Enums.Card.ready, state(d).card)
+    }
+
+    @Test
     fun anEndStartRefusesTheUpdateEndAndKeepsThePart() {
         val dir = tmp.newFolder()
         val d = device(15, dir, "card-run=2000+1000@end")
@@ -558,10 +573,11 @@ class CardRunSimTest {
         assertEquals(7L, (Faults(listOf("card-run=1+2@upd:7")).cardRun!!.start as CardRun.Start.Upd).bytes)
         assertEquals(0L, (Faults(listOf("card-run=1+2")).cardRun!!.start as CardRun.Start.Delay).ms)
         assertTrue(Faults(listOf("card-run=1+2@end")).cardRun!!.start == CardRun.Start.End)
+        assertEquals(Msg.LYR_GET, (Faults(listOf("card-run=1+2@msg:LYR_GET")).cardRun!!.start as CardRun.Start.Request).type)
         val f2 = Faults(listOf("card-run=1+2,art-hold=300,snap-late=400"))
         assertEquals(300L, f2.artHold)
         assertEquals(400L, f2.snapLate)
-        for (bad in listOf("card-run=5000", "card-run=a+1", "card-seq=nope:1,ready", "card-seq=busy,ready", "card-device=new", "card-run=1+1,card-seq=ready")) {
+        for (bad in listOf("card-run=5000", "card-run=a+1", "card-run=1+2@msg:NOPE", "card-seq=nope:1,ready", "card-seq=busy,ready", "card-device=new", "card-run=1+1,card-seq=ready")) {
             try {
                 Faults(listOf(bad))
                 throw AssertionError("$bad parsed")

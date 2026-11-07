@@ -66,6 +66,7 @@ class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
         data object Manual : Start
         data object Queue : Start
         data object End : Start
+        class Request(val type: Int) : Start
     }
 
     companion object {
@@ -82,6 +83,7 @@ class CardRun(val holdMs: Long, val indexMs: Long, val start: Start) {
                 at == "end" -> Start.End
                 at.startsWith("img:") -> Start.Img(at.removePrefix("img:").toLongOrNull() ?: throw IllegalArgumentException("card-run: bad bytes in $v"))
                 at.startsWith("upd:") -> Start.Upd(at.removePrefix("upd:").toLongOrNull() ?: throw IllegalArgumentException("card-run: bad bytes in $v"))
+                at.startsWith("msg:") -> Start.Request(Msg.byName[at.removePrefix("msg:")] ?: throw IllegalArgumentException("card-run: unknown msg in $v"))
                 else -> Start.Delay(at.toLongOrNull() ?: throw IllegalArgumentException("card-run: bad start in $v"))
             }
             return CardRun(hold, index, start)

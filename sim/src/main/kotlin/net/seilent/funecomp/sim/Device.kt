@@ -1026,6 +1026,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     fun request(type: Int, body: Node, out: Out): Answer = synchronized(lock) {
         follow()
         if (type == Msg.QUEUE_OP && body.int(Tags.QueueOp.cmd) == Enums.QueueCmd.page && faults.cardRun?.start == CardRun.Start.Queue && cardArmed) cardStart(now())
+        if ((faults.cardRun?.start as? CardRun.Start.Request)?.type == type && cardArmed) cardStart(now())
         if ((type == Msg.IMG_END || type == Msg.UPD_END) && faults.cardRun?.start == CardRun.Start.End && cardArmed) {
             if (type == Msg.IMG_END) push = null else upd = null
             cardStart(now())
