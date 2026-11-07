@@ -194,14 +194,13 @@ fun HeaderWord(text: String, role: Role, x: Float, tracking: Float, tag: String 
 }
 
 @Composable
-fun CroppedHeader(text: String, shift: Float = 0f, onBack: (() -> Unit)? = null) {
+fun CroppedHeader(text: String, onBack: (() -> Unit)? = null) {
     val ui = LocalUi.current
-    val x by animateFloatAsState(ui.px(Tok.page_headerX * ui.headerScale + shift), tween(Tok.motion_pivotStrip.toInt(), easing = Strip), label = "header")
-    HeaderWord(text, Roles.pageHeader, x, Tok.trackingHeader, onBack = onBack)
+    HeaderWord(text, Roles.pageHeader, ui.px(Tok.page_headerX * ui.headerScale), Tok.trackingHeader, onBack = onBack)
 }
 
 @Composable
-fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit, onTravel: (Float) -> Unit = {}) {
+fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit) {
     val ui = LocalUi.current
     val measurer = rememberTextMeasurer()
     val activeStyle = textStyle(Roles.pivotActive, white(Roles.pivotActive.alpha))
@@ -227,8 +226,6 @@ fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit, onTrave
     val rest = ui.px(Tok.hubEdge)
     val target = rest - (positions.getOrNull(active) ?: 0f)
     val row by animateFloatAsState(target, tween(Tok.motion_pivotStrip.toInt(), easing = Strip), label = "strip")
-    val travel = Tok.motion_pivotHeaderParallax * (target - rest) / ui.u
-    SideEffect { onTravel(travel) }
     Box(Modifier.fillMaxWidth().height(ui.px(ui.pivotBottom).dp()).clipToBounds()) {
         labels.forEachIndexed { i, l ->
             val on = i == active

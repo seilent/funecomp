@@ -104,7 +104,6 @@ fun HubPage(
     keepEnd: Boolean = false,
     content: @Composable (Int) -> Unit,
 ) {
-    var shift by remember { mutableFloatStateOf(0f) }
     val entrance = remember { Entrance() }
     var shownPivot by rememberSaveable { mutableIntStateOf(active) }
     var shownName by rememberSaveable { mutableStateOf(pivots.getOrNull(active)) }
@@ -143,8 +142,8 @@ fun HubPage(
         ) {
             CompositionLocalProvider(LocalEntrance provides entrance) { content(shownAt) }
         }
-        CroppedHeader(header, shift, onBack)
-        if (pivots.isNotEmpty()) PivotStrip(pivots, active, onPivot) { shift = it }
+        CroppedHeader(header, onBack = onBack)
+        if (pivots.isNotEmpty()) PivotStrip(pivots, active, onPivot)
         if (count != null) {
             val d = rememberDip(count)
             val x = ui.px(Tok.hubEdge)

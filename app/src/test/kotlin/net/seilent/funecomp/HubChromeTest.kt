@@ -197,10 +197,48 @@ class HubChromeTest {
         }
     }
 
+    private fun pivotTo(page: String, label: String) {
+        val c = canvas(page)
+        val u = ui(page).u
+        repeat(10) {
+            val ns = pivots()
+            val active = ns.indexOfFirst { abs(it.positionInRoot.x - c.left - 20f * u) < 1f }
+            if (active < 0) error("no pivot $label")
+            if (ns[active].config[SemanticsProperties.TestTag] == "pivot.$label") return
+            val next = ns.getOrNull(active + 1) ?: error("no pivot $label")
+            rule.onNodeWithTag(next.config[SemanticsProperties.TestTag], useUnmergedTree = true).performClick()
+            settle(1500)
+        }
+        error("no pivot $label")
+    }
+
+    private fun assertPenX(name: String, page: String, at: String) =
+        assertEquals(name, -22f * scale(at) * ui(page).u, left("header.word") - canvas(page).left, 1f)
+
     @Test
     fun theHeaderWordStartsAtThePenX() {
         start(Page.Music)
-        assertEquals(-22f * scale("411x960") * ui("music").u, left("header.word") - canvas("music").left, 1f)
+        assertPenX("artists", "music", "411x960")
+        for (label in listOf("songs", "folders")) {
+            pivotTo("music", label)
+            assertPenX(label, "music", "411x960")
+        }
+    }
+
+    @Test
+    fun theShortHeaderWordStartsAtThePenX() {
+        start(Page.Music, at = "sn411x438")
+        for (label in listOf("songs", "folders")) {
+            pivotTo("music", label)
+            assertPenX(label, "music", "sn411x438")
+        }
+    }
+
+    @Test
+    fun theSettingsHeaderWordStartsAtThePenX() {
+        start(Page.Settings)
+        pivotTo("settings", "system")
+        assertPenX("system", "settings", "411x960")
     }
 
     @Test
