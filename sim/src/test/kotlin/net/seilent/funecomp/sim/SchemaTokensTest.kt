@@ -6,20 +6,10 @@ import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.gen.TokBoard
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SchemaTokensTest {
     private fun steps(s: String) = s.split(',')
-
-    @Test
-    fun saverDelayStepsAreFuneosTokensLine672UntilTheTokenRepin() {
-        assertTrue(Tok::class.java.declaredFields.none { it.name == "settings_saverDelaySteps" })
-        for (b in listOf("ap80", "v1", "r1")) {
-            val rows = Device(Options(Board.of(b)), Library.synthetic()) { 0L }.rows.associateBy { it.key }
-            assertEquals(b, listOf("10", "15", "30", "60", "120", "300"), rows.getValue("saverDelay").values)
-        }
-    }
 
     @Test
     fun stepRowsAreTheTokenLists() {
@@ -32,6 +22,7 @@ class SchemaTokensTest {
                 "powerOnScale" to tok.settings_powerOnSteps,
                 "brightness" to Tok.settings_brightnessSteps,
                 "screenOffSeconds" to Tok.settings_screenOffSteps,
+                "saverDelay" to Tok.settings_saverDelaySteps,
                 "idleShutdownMinutes" to Tok.settings_idleSteps,
                 "sleep" to Tok.settings_sleepSteps,
                 "crossfade" to Tok.settings_crossfadeSteps,

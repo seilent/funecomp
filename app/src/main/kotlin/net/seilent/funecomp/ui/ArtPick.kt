@@ -190,10 +190,10 @@ fun PickPreviewPage(ctx: Ctx, page: Page.PickPreview) {
         )
         if (two) {
             RoleText(shown.offer.label, Roles.dialogItem, Modifier.atBaseline(x, top).testTag("pick.source"), alpha = Roles.dialogItem.dim)
-            RoleText(NEXT_IMAGE, Roles.dialogItem, Modifier.atBaseline(x + pick.size.width + ui.px(Tok.pivotGap), baseline).press({ at = (at + 1) % page.previews.size }).testTag("pick.next"))
+            RoleText(NEXT_IMAGE, Roles.dialogItem, Modifier.atBaseline(x + pick.size.width + ui.px(Held.Hub.pivotGap), baseline).press({ at = (at + 1) % page.previews.size }).testTag("pick.next"))
         }
         if (moved) {
-            val rx = x + pick.size.width + ui.px(Tok.pivotGap) + if (two) next.size.width + ui.px(Tok.pivotGap) else 0f
+            val rx = x + pick.size.width + ui.px(Held.Hub.pivotGap) + if (two) next.size.width + ui.px(Held.Hub.pivotGap) else 0f
             RoleText(RESET, Roles.dialogItem, Modifier.atBaseline(rx, baseline).press({ windows.remove(at) }).testTag("pick.reset"))
         }
     }
@@ -307,8 +307,8 @@ private sealed interface BrowseItem {
 
 private fun BrowseItem.height() = when (this) {
     is BrowseItem.Head -> Tok.qpFirstBaseline + Tok.qpContentDrop
-    is BrowseItem.Gap -> Tok.qpSectionGap - Tok.qpFirstBaseline - (Tok.tileRowPitch - Tok.tileCellH)
-    is BrowseItem.Row -> Tok.tileRowPitch
+    is BrowseItem.Gap -> Tok.qpSectionGap - Tok.qpFirstBaseline - (Held.Hub.tileRowPitch - Held.Hub.tileCellH)
+    is BrowseItem.Row -> Held.Hub.tileRowPitch
     is BrowseItem.Line -> Tok.rowHeight
 }
 
@@ -434,7 +434,7 @@ fun ArtTile(b: BrowseTile, focused: Boolean, modifier: Modifier = Modifier, onTa
     val side = ui.px(Tok.tileS)
     val edge = ui.px(Tok.focus_border)
     val c by animateColorAsState(white(if (focused) Tok.alpha_full else Roles.gridCaption.alpha), tween(Tok.motion_focusAlpha.toInt()), label = "caption")
-    Pressable({ onTap() }, modifier.size(side.dp(), ui.px(Tok.tileCellH).dp())) {
+    Pressable({ onTap() }, modifier.size(side.dp(), ui.px(Held.Hub.tileCellH).dp())) {
         Box(Modifier.size(side.dp()).background(Color(Tok.color_tile))) {
             Image(b.image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }

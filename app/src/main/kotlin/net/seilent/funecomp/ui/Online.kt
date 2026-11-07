@@ -41,7 +41,7 @@ private const val NO_PHOTOS = "no photos"
 @Composable
 fun SectionLabel(text: String, i: Int) {
     val ui = LocalUi.current
-    val above = Tok.detailLabelBaseline - Tok.detailRingTop - Tok.detailRing
+    val above = LayoutTok.detailLabelBaseline - LayoutTok.detailRingTop - Tok.detailRing
     Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(above + Tok.detailLabelDrop).dp())) {
         RoleText(text, Roles.sectionLabel, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(above)))
     }

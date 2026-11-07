@@ -194,7 +194,7 @@ fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit, onTrave
     val widths = labels.mapIndexed { i, l ->
         measurer.measure(shown(l, Roles.pivotActive.case), if (i == active) activeStyle else inactiveStyle).size.width.toFloat()
     }
-    val gap = ui.px(Tok.pivotGap)
+    val gap = ui.px(Held.Hub.pivotGap)
     val lead = ui.px(Tok.pivotLeadGap)
     val positions = ArrayList<Float>()
     var x = 0f

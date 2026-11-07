@@ -18,6 +18,7 @@ import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -91,7 +92,7 @@ class HomeRingTest {
     private fun barLit(index: Int): Boolean {
         val ui = ui()
         val origin = rule.onNodeWithTag("home").fetchSemanticsNode().boundsInWindow
-        val p = frame().getPixel((origin.left + ui.px(Tok.homeBarX + Tok.focus_barWidth / 2)).toInt(), (origin.top + ui.px(slotCenter(index))).toInt())
+        val p = frame().getPixel((origin.left + ui.px(Held.Home.homeBarX + Tok.focus_barWidth / 2)).toInt(), (origin.top + ui.px(slotCenter(index))).toInt())
         return (p shr 16) and 0xff > 230
     }
 

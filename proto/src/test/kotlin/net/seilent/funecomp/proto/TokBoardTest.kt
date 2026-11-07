@@ -23,9 +23,16 @@ class TokBoardTest {
         assertEquals(400f, TokBoard.r1.canvasH)
         assertEquals(320f, TokBoard.v1.canvasH)
         assertEquals(320f, TokBoard.ap80.canvasH)
-        assertEquals(TokBoard.ap80.npSeekBandBottom, TokBoard.v1.npSeekBandBottom)
+        assertEquals(TokBoard.ap80.queueRowsTop, TokBoard.v1.queueRowsTop)
+        assertEquals(120f, TokBoard.r1.queueRowsTop)
         assertEquals("0,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100", TokBoard.r1.settings_powerOnSteps)
         assertEquals(5f, TokBoard.r1.settings_filterCount)
         assertSame(TokBoard.r1, TokBoard.of("r1"))
+    }
+
+    @Test
+    fun theSeekBandSplitsBetweenTheAp80AndTheV1() {
+        assertEquals(219.8f, TokBoard.ap80.npSeekBandBottom)
+        assertEquals(235.49f, TokBoard.v1.npSeekBandBottom)
     }
 }

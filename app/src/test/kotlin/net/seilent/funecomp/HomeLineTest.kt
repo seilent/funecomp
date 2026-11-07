@@ -19,6 +19,7 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -78,7 +79,7 @@ class HomeLineTest {
             val l = line(item)
             val words = l.text.lowercase().split(' ')
             val need = ceil(l.layout.multiParagraph.intrinsics.maxIntrinsicWidth)
-            val u = (l.left - l.labelLeft) / Tok.homeSubtitleX
+            val u = (l.left - l.labelLeft) / Held.Home.homeSubtitleX
             val edge = rule.onNodeWithTag("home.column").fetchSemanticsNode().boundsInRoot.right - Tok.edge * u
             assertTrue("$item at ${s.name}: ${l.text} needs $need of ${l.layout.layoutInput.constraints.maxWidth}", need <= l.layout.layoutInput.constraints.maxWidth)
             assertTrue("$item at ${s.name}: ${l.text} ends at ${l.left + need} past $edge", l.left + need <= edge + 1f)

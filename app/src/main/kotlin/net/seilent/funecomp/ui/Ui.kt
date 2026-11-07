@@ -85,10 +85,10 @@ private fun case(c: String) = when (c) {
 
 object Roles {
     val hubHeader = Role(Tok.type_hubHeader_size, weight(Tok.type_hubHeader_style), case(Tok.type_hubHeader_case), Tok.type_hubHeader_alpha)
-    val homeItem = Role(Tok.type_homeItem_size, weight(Tok.type_homeItem_style), case(Tok.type_homeItem_case), Tok.type_homeItem_alpha, Tok.type_homeItem_alphaDim)
-    val homeSubtitle = Role(Tok.type_homeSubtitle_size, weight(Tok.type_homeSubtitle_style), case(Tok.type_homeSubtitle_case), Tok.type_homeSubtitle_alpha)
-    val pivotActive = Role(Tok.type_pivotActive_size, weight(Tok.type_pivotActive_style), case(Tok.type_pivotActive_case), Tok.type_pivotActive_alpha)
-    val pivotInactive = Role(Tok.type_pivotInactive_size, weight(Tok.type_pivotInactive_style), case(Tok.type_pivotInactive_case), Tok.type_pivotInactive_alpha)
+    val homeItem = Role(Held.Home.type_homeItem_size, weight(Held.Home.type_homeItem_style), case(Tok.type_homeItem_case), Tok.type_homeItem_alpha, Tok.type_homeItem_alphaDim)
+    val homeSubtitle = Role(Held.Home.type_homeSubtitle_size, weight(Tok.type_homeSubtitle_style), case(Tok.type_homeSubtitle_case), Tok.type_homeSubtitle_alpha)
+    val pivotActive = Role(Held.Hub.type_pivotActive_size, weight(Tok.type_pivotActive_style), case(Tok.type_pivotActive_case), Tok.type_pivotActive_alpha)
+    val pivotInactive = Role(Held.Hub.type_pivotInactive_size, weight(Held.Hub.type_pivotInactive_style), case(Tok.type_pivotInactive_case), Held.Hub.type_pivotInactive_alpha)
     val quickplayHeader = Role(Tok.type_quickplayHeader_size, weight(Tok.type_quickplayHeader_style), case(Tok.type_quickplayHeader_case), Tok.type_quickplayHeader_alpha)
     val sectionLabel = Role(Tok.type_sectionLabel_size, weight(Tok.type_sectionLabel_style), case(Tok.type_sectionLabel_case), Tok.type_sectionLabel_alpha)
     val listPrimary = Role(Tok.type_listPrimary_size, weight(Tok.type_listPrimary_style), case(Tok.type_listPrimary_case), Tok.type_listPrimary_alpha, Tok.type_listPrimary_alphaDim)
@@ -103,7 +103,7 @@ object Roles {
     val npAlbum = Role(Tok.type_npAlbum_size, weight(Tok.type_npAlbum_style), case(Tok.type_npAlbum_case), Tok.type_npAlbum_alpha)
     val npTitle = Role(Tok.type_npTitle_size, weight(Tok.type_npTitle_style), case(Tok.type_npTitle_case), Tok.type_npTitle_alpha)
     val npNext = Role(Tok.type_npNext_size, weight(Tok.type_npNext_style), case(Tok.type_npNext_case), Tok.type_npNext_alpha)
-    val npCount = Role(Tok.type_npCount_size, weight(Tok.type_npCount_style), case(Tok.type_npCount_case), Tok.type_npCount_alpha)
+    val npCount = Role(Held.Np.type_npCount_size, weight(Tok.type_npCount_style), case(Tok.type_npCount_case), Tok.type_npCount_alpha)
     val time = Role(Tok.type_time_size, weight(Tok.type_time_style), case(Tok.type_time_case), Tok.type_time_alpha)
     val overlayNumber = Role(Tok.type_overlayNumber_size, weight(Tok.type_overlayNumber_style), Case.MIXED, Tok.type_overlayNumber_alpha)
     val overlayLabel = Role(Tok.type_overlayLabel_size, weight(Tok.type_overlayLabel_style), case(Tok.type_overlayLabel_case), Tok.type_overlayLabel_alpha)

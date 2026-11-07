@@ -31,7 +31,7 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Control
-import net.seilent.funecomp.ui.LayoutTok
+import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -192,7 +192,7 @@ class NowPlayingTransportTest {
             val art = bounds("np.art")
             assertEquals(s.name, Tok.detailRingInset * u, art.right - ring.right, 1f)
             assertEquals(s.name, Tok.detailRingInset * u, ring.top - art.top, 1f)
-            assertEquals(s.name, Tok.npRing * u, ring.width, 1f)
+            assertEquals(s.name, Held.Np.npRing * u, ring.width, 1f)
         }
     }
 
@@ -214,8 +214,8 @@ class NowPlayingTransportTest {
                 assertEquals(s.name, Tok.tileLGutter * ui.u, ring.left - art.right, 1.5f)
                 assertEquals(s.name, art.bottom, ring.bottom, 1.5f)
             }
-            assertEquals(s.name, Tok.npRing * ui.u, ring.width, 1.5f)
-            assertEquals(s.name, Tok.npRing * ui.u, ring.height, 1.5f)
+            assertEquals(s.name, Held.Np.npRing * ui.u, ring.width, 1.5f)
+            assertEquals(s.name, Held.Np.npRing * ui.u, ring.height, 1.5f)
         }
     }
 
@@ -369,9 +369,9 @@ class NowPlayingTransportTest {
             val band = bounds("np.seek")
             val line = bounds("np.progress")
             val art = bounds("np.art")
-            val margin = (Tok.edge - Tok.npSeekBandX0) * ui.u
+            val margin = (Tok.edge - Held.Np.npSeekBandX0) * ui.u
             assertEquals(s.name, line.top, band.top, 1f)
-            assertEquals(s.name, (LayoutTok.npSeekBandBottom - LayoutTok.npProgressY) * ui.u, band.height, 1f)
+            assertEquals(s.name, (Held.Np.npSeekBandBottom - Held.Np.npProgressY) * ui.u, band.height, 1f)
             assertEquals(s.name, art.left - margin, band.left, 1f)
             assertEquals(s.name, art.right + margin, band.right, 1.5f)
             if (ui.shape == Shape.P || ui.shape == Shape.SN) {
@@ -524,7 +524,7 @@ class NowPlayingTransportTest {
     }
 
     private companion object {
-        val SEEK_MID = (LayoutTok.npSeekBandBottom - LayoutTok.npProgressY) / 2
+        val SEEK_MID = (Held.Np.npSeekBandBottom - Held.Np.npProgressY) / 2
         const val DRAG_STEPS = 5
         const val HELD = 0.61f
         const val OFF_BAND = 60f

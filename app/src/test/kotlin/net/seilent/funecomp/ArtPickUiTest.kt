@@ -45,6 +45,7 @@ import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
+import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LOADING
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -54,6 +55,7 @@ import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.Preview
 import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.VariantMotion
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -671,6 +673,17 @@ class ArtPickUiTest {
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag(tag))
         rule.mainClock.autoAdvance = false
         settle(300)
+    }
+
+    @Test
+    fun aBrowseTileIsOneCellHighAndTheRowsStepByThePitch() {
+        browsePage(listOf(Sources.DEEZER))
+        put(Sources.DEEZER, 6)
+        val ui = rule.onRoot().fetchSemanticsNode().boundsInRoot.let { Ui.of(it.width, it.height) }
+        val first = bounds("pick.tile.deezer.0")
+        assertEquals(ui.px(Held.Hub.tileCellH), first.height, 0.5f)
+        val next = (1 until 6).map { top("pick.tile.deezer.$it") }.first { it > first.top + 0.5f }
+        assertEquals(ui.px(Held.Hub.tileRowPitch), next - first.top, 0.5f)
     }
 
     @Test

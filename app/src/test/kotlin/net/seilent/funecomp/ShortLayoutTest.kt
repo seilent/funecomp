@@ -24,6 +24,7 @@ import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.NP_THREE_NEXT_H
 import net.seilent.funecomp.ui.NP_WIDE_ROW_H
@@ -138,7 +139,7 @@ class ShortLayoutTest {
         val texts = listOf("np.elapsed", "np.remaining", "np.title", "np.artist", "np.album", "np.next.0", "np.next.1", "np.next.2") + extra
         val heartRing = listOf("np.heart.off", "np.heart.on").firstNotNullOfOrNull { box(it) }
         val visuals = texts.map { it to ink(it) } + listOf("np.art" to box("np.art"), "np.mark" to box("np.mark"), "np.heart.ring" to heartRing) +
-            listOf(ring("np.shuffle", Tok.npRing, ui), ring("np.repeat", Tok.npRing, ui), ring("np.toggle", ui.npPlayRing, ui), ring("np.prev", Tok.overlayGlyph, ui), ring("np.nextTrack", Tok.overlayGlyph, ui))
+            listOf(ring("np.shuffle", Held.Np.npRing, ui), ring("np.repeat", Held.Np.npRing, ui), ring("np.toggle", ui.npPlayRing, ui), ring("np.prev", Tok.overlayGlyph, ui), ring("np.nextTrack", Tok.overlayGlyph, ui))
         need(visuals, listOf("np.title", "np.artist", "np.album") + next + extra + listOfNotNull("np.elapsed".takeIf { seek }, "np.remaining".takeIf { seek }, "np.art".takeIf { art }, "np.heart.ring".takeIf { heart }, "np.mark".takeIf { mark }))
         val onArt = when (ui.shape) {
             Shape.P, Shape.SN -> HEART_ON_ART

@@ -25,7 +25,7 @@ import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
-import net.seilent.funecomp.ui.LayoutTok
+import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
@@ -231,7 +231,7 @@ class SeekBandHitShots {
     }
 
     private companion object {
-        val SEEK_MID = (LayoutTok.npSeekBandBottom - LayoutTok.npProgressY) / 2
+        val SEEK_MID = (Held.Np.npSeekBandBottom - Held.Np.npProgressY) / 2
         const val CAPTION = 64
         val HELD_AT = listOf(0.25f, 0.75f)
         val DRAG_SIZES = setOf("flip960x411", "960x600", "cover474x419")

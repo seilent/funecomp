@@ -188,14 +188,14 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     val measurer = rememberTextMeasurer()
     val pitch = ui.homePitch
     val x = ui.px(ui.homeTextX)
-    val margin = Tok.homeFirstBaseline - Tok.homeBarTop
+    val margin = Held.Home.homeFirstBaseline - Held.Home.homeBarTop
     Box(Modifier.fillMaxSize().testTag("home")) {
         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("home.column")) {
             val height = maxOf(ui.h, 2 * margin + items.size * pitch)
             Box(Modifier.size(ui.px(ui.w).dp(), ui.px(height).dp())) {
                 val barX = ui.homeTextX - Tok.focus_barOffset
-                val first = ui.px(Tok.homeFirstBaseline)
-                FocusBar(ui.px(Tok.homeBarH), ui.px(barX), first + ui.px(focus * pitch) - ui.px(Tok.homeBarTop)) {
+                val first = ui.px(Held.Home.homeFirstBaseline)
+                FocusBar(ui.px(Held.Home.homeBarH), ui.px(barX), first + ui.px(focus * pitch) - ui.px(Held.Home.homeBarTop)) {
                     (if (music < 0) 1f else homeBarAlpha(barFocus, music)) * Decel.transform((enterMs() / Tok.motion_homeEnter).coerceIn(0f, 1f))
                 }
                 if (music >= 0) {
@@ -209,15 +209,15 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                             .press({ onShuffle() }, press = press)
                             .testTag("home.ring"),
                     ) {
-                        Box(Modifier.at(ui.px(ui.homeRingX) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(Tok.homeRingSize, GlyphName.PLAY, Look.Focus(false), press = press, tag = "home.ring") }
+                        Box(Modifier.at(ui.px(ui.homeRingX) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(Held.Home.homeRingSize, GlyphName.PLAY, Look.Focus(false), press = press, tag = "home.ring") }
                     }
                 }
                 items.forEachIndexed { i, item ->
-                    val baseline = ui.px(Tok.homeFirstBaseline + i * pitch)
+                    val baseline = ui.px(Held.Home.homeFirstBaseline + i * pitch)
                     val on = focus == i
                     val c by animateColorAsState(white(if (on) Roles.homeItem.alpha else Roles.homeItem.dim), tween(Tok.motion_focusAlpha.toInt()), label = "home")
-                    val subBaseline = baseline + ui.px(Tok.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size)
-                    val top = baseline - ui.px(Tok.homeBarTop)
+                    val subBaseline = baseline + ui.px(Held.Home.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size)
+                    val top = baseline - ui.px(Held.Home.homeBarTop)
                     val shiftPx = ui.px(Tok.motion_homeEnterShift)
                     Box(
                         Modifier.fillMaxSize().graphicsLayer {
@@ -235,10 +235,10 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                             Modifier.at(ui.px(barX), top).size((x - ui.px(barX) + labelW).dp(), ui.px(pitch).dp()).testTag("home.${item.name}"),
                         ) {
                             RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c)
-                            val subW = ui.px(ui.w - Tok.edge) - x - ui.px(Tok.homeSubtitleX)
+                            val subW = ui.px(ui.w - Tok.edge) - x - ui.px(Held.Home.homeSubtitleX)
                             val subStyle = textStyle(Roles.homeSubtitle, white(Roles.homeSubtitle.alpha))
                             val sub = if (item.names.isEmpty()) item.subtitle else remember(item.names, subW, subStyle) { wholeNames(item.names) { measurer.measure(shown(it, Roles.homeSubtitle.case), subStyle, softWrap = false, maxLines = 1).size.width <= subW.roundToInt() } }
-                            RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(Tok.homeSubtitleX), subBaseline - top, subW))
+                            RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(Held.Home.homeSubtitleX), subBaseline - top, subW))
                         }
                     }
                 }
