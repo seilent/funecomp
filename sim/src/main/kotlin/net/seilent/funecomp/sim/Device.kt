@@ -271,7 +271,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private var shuffle = false
     private var repeat = Enums.Repeat.off
     private var volume = 60
-    private val maxVolume: Int get() = percentVolume(prefs.getValue("maxVolume").toIntOrNull() ?: 100)
+    private val maxVolume: Int get() = percentVolume(prefs["maxVolume"]?.toIntOrNull() ?: 100)
     private var queueRev = 1L
     private var lastStateAt = 0L
     private var stopped = false
@@ -671,9 +671,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             if (v12 && on) opts.cardFreeMiB else null,
             if (v12 && on) opts.cardTotalMiB else null,
             if (v12) volumePercent(volume) else null,
-            if (v12) prefs.getValue("volumeStep").toIntOrNull() ?: 5 else null,
+            if (v12) prefs["volumeStep"]?.toIntOrNull() ?: 5 else null,
             if (v12 && t != null && !unread) hasSynced(t.id) else null,
-            if (v12) prefs.getValue("maxVolume").toIntOrNull() ?: 100 else null,
+            if (v12) prefs["maxVolume"]?.toIntOrNull() ?: 100 else null,
             if (v13 && t != null && favsBusy == 0) t.id in lib.favorites else null,
             if (v13) lib.snapRev else null,
             if (v14 && t != null && !unread) hasPlain(t.id) else null,
@@ -1203,7 +1203,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             set != null -> set
             pct != null -> percentVolume(pct)
             step == 0 -> volume
-            step != null -> stepVolume(volume, step, prefs.getValue("volumeStep").toIntOrNull() ?: 5)
+            step != null -> stepVolume(volume, step, prefs["volumeStep"]?.toIntOrNull() ?: 5)
             else -> return Answer.Fail(Err.badValue, "no set or step")
         }.coerceIn(0, maxVolume)
         return changed()

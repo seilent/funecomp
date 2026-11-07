@@ -1,0 +1,2 @@
+screens	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-	-
+screens	navBar	toggle	NAV BAR	off,on	OFF,ON	-	-	-

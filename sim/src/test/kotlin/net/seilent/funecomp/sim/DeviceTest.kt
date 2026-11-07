@@ -700,6 +700,17 @@ class DeviceTest {
     }
 
     @Test
+    fun aBoardWithoutTheVolumeRowsGreetsAndAnswersASet() {
+        val d = Device(Options(Board("ap80", 360, 480, 360, 480, "schema-novolume.txt")), Library.synthetic()) { t }
+        val greet = Sink()
+        d.greet(greet)
+        assertTrue(greet.of(Msg.STATE).isNotEmpty())
+        val out = Sink()
+        assertEquals(listOf("quickplay"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("quickplay=off\n"), out)))).kept)
+        assertTrue("quickplay=off" in Settings.from(out.of(Msg.SETTINGS).last()).text.lines())
+    }
+
+    @Test
     fun sleepTimerCountsDownInStateAndPausesAtExpiry() {
         val d = device()
         ok(req(d, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.play)))
