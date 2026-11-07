@@ -85,6 +85,7 @@ private fun case(c: String) = when (c) {
 
 object Roles {
     val pageHeader = Role(Tok.type_pageHeader_size, weight(Tok.type_pageHeader_style), case(Tok.type_pageHeader_case), Tok.type_pageHeader_alpha)
+    val albumHeader = Role(Tok.type_albumHeader_size, weight(Tok.type_albumHeader_style), case(Tok.type_albumHeader_case), Tok.type_albumHeader_alpha)
     val homeItem = Role(Held.Home.type_homeItem_size, weight(Held.Home.type_homeItem_style), case(Tok.type_homeItem_case), Tok.type_homeItem_alpha, Tok.type_homeItem_alphaDim)
     val homeSubtitle = Role(Held.Home.type_homeSubtitle_size, weight(Tok.type_homeSubtitle_style), case(Tok.type_homeSubtitle_case), Tok.type_homeSubtitle_alpha)
     val pivotActive = Role(Tok.type_pivotActive_size, weight(Tok.type_pivotActive_style), case(Tok.type_pivotActive_case), Tok.type_pivotActive_alpha)
@@ -116,6 +117,8 @@ object Roles {
     val jumpExit = Role(Tok.type_jumpExit_size, weight(Tok.type_jumpExit_style), case(Tok.type_jumpExit_case), Tok.type_jumpExit_alpha)
     val watermark = Role(Tok.type_watermark_size, weight(Tok.type_watermark_style), case(Tok.type_watermark_case), Tok.type_watermark_alpha)
 }
+
+val albumHeaderTracking = Tok.tracking * Tok.type_albumHeader_size / Tok.type_pivotActive_size
 
 val Selawik = FontFamily(
     Font(R.font.selawkl, FontWeight.Light),

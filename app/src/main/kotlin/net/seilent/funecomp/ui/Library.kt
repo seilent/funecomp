@@ -369,9 +369,10 @@ fun AlbumDetail(ctx: Ctx, page: Page.Album) {
             RowSpec(r.name ?: "", number = "${i + 1}", playing = r.first != null && r.first == ctx.device.playback.state.library, tap = play) { songSheet(ctx, r, play) }
         }
         Box(Modifier.at(0f, 0f).size(ui.px(ui.w).dp(), ui.px(ui.albumRowsTop - y).dp()).background(Black).press({}))
+        HeaderWord("albums", Roles.albumHeader, ui.px(Tok.page_albumHeaderX * ui.headerScale), albumHeaderTracking, "album.header") { ctx.nav.pop() }
         val textX = ui.px(ui.albumLineX(dock, rise))
         val textW = ui.px(ui.w - Tok.edge) - textX
-        RoleText(page.artist, Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.albumArtistBaseline), textW))
+        RoleText(page.artist, Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.albumArtistBaseline), textW).testTag("album.artist"))
         RoleText(page.title, Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.albumTitleBaseline), textW).testTag("album.title"))
         val track = page.key.toULongOrNull()?.toLong()
         val px = ui.px(Tok.tileL).roundToInt()
@@ -379,8 +380,6 @@ fun AlbumDetail(ctx: Ctx, page: Page.Album) {
         Box(Modifier.at(ui.px(Tok.albumArtX), ui.px(ui.albumArtTop - dock)).size(ui.px(side).dp()).background(Color(Tok.color_tile)).testTag("album.art")) {
             track?.let { ctx.control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("album.art.image"), contentScale = ContentScale.Crop) }
         }
-        Status(ctx.device)
-        BackRing { ctx.nav.pop() }
     }
 }
 

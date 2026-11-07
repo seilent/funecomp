@@ -189,23 +189,20 @@ fun detailRingX(index: Int) = Tok.hubEdge + index * (Tok.detailRing + Tok.detail
 
 val Ui.albumArtistBaseline: Float get() = when (shape) {
     Shape.P -> ALBUM_ARTIST_BASELINE
-    Shape.SN, Shape.SW -> ALBUM_ARTIST_BASELINE - (NP_ART_TOP - albumArtTop)
-    Shape.L -> NP_ARTIST_LANDSCAPE
+    Shape.SN, Shape.SW, Shape.L -> ALBUM_ARTIST_BASELINE - (NP_ART_TOP - albumArtTop)
 }
 val Ui.albumTitleBaseline: Float get() = when (shape) {
     Shape.P -> ALBUM_TITLE_BASELINE
-    Shape.SN, Shape.SW -> ALBUM_TITLE_BASELINE - (NP_ART_TOP - albumArtTop)
-    Shape.L -> NP_ALBUM_LANDSCAPE
+    Shape.SN, Shape.SW, Shape.L -> ALBUM_TITLE_BASELINE - (NP_ART_TOP - albumArtTop)
 }
 val Ui.albumArtTop: Float get() = when (shape) {
     Shape.P -> NP_ART_TOP
     Shape.SN -> byK(NP_ART_TOP, Held.Hub.shortArtTop, Held.Hub.shortArtTop)
-    Shape.SW -> Held.Hub.shortArtTop
-    Shape.L -> contentTop
+    Shape.SW, Shape.L -> Held.Hub.shortArtTop
 }
 val Ui.albumRowsTop: Float get() = when (shape) {
     Shape.P, Shape.SN, Shape.SW -> albumArtTop + Tok.tileL + Tok.albumRowsGap
-    Shape.L -> contentTop
+    Shape.L -> albumArtTop
 }
 val Ui.albumLead: Float get() = when (shape) {
     Shape.P, Shape.L -> 0f
