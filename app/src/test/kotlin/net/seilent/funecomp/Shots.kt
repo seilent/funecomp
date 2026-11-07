@@ -342,7 +342,7 @@ private val ARU_TWO: (SimControl) -> Unit = { c ->
 
 private const val LONG_ARTIST = "空星きらめ/Sorahoshi Kirame【にじさんじ】"
 
-private val WIDE: (Float) -> Int = { w -> ((w - 2 * Tok.hubEdge + Tok.gutter) / (Tok.tileS + Tok.gutter)).toInt() }
+private val WIDE: (Float) -> Int = { w -> ((w - 2 * Tok.gridX + Tok.gridGap) / (Tok.gridTile + Tok.gridGap)).toInt() }
 
 private fun Shots.holdBackdrop() {
     rule.onNodeWithTag("np.backdrop").performTouchInput { longClick(Offset(width * 0.85f, height * 0.2f)) }

@@ -38,6 +38,7 @@ import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Track
 import net.seilent.funecomp.state.DeviceState
@@ -45,7 +46,6 @@ import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
-import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LOADING
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -65,6 +65,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -82,6 +83,7 @@ class ArtPickUiTest {
     private val late = ArrayList<(Previewed) -> Unit>()
     private var tile: ((String, BrowseTile) -> Unit)? = null
     private var sections: ((List<String>) -> Unit)? = null
+    private var browsePx = 0
     private var sectionDone: ((String) -> Unit)? = null
     private var ended: ((Boolean) -> Unit)? = null
     private var searched: ((YouTube.Search) -> Unit)? = null
@@ -108,6 +110,7 @@ class ArtPickUiTest {
 
             override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name $mbid"
+                browsePx = px
                 this@ArtPickUiTest.tile = tile
                 this@ArtPickUiTest.sections = sections
                 this@ArtPickUiTest.sectionDone = sectionDone
@@ -447,6 +450,11 @@ class ArtPickUiTest {
 
     private fun bounds(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
 
+    private fun canvas(): Pair<Ui, Float> {
+        val n = rule.onNodeWithTag("hub.TSUKI").fetchSemanticsNode()
+        return Ui.of(n.size.width.toFloat(), n.size.height.toFloat()) to n.positionInRoot.x
+    }
+
     private fun focusedOn(tag: String) {
         val t = bounds(tag)
         val f = rule.onNodeWithTag("pick.focus", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
@@ -679,11 +687,22 @@ class ArtPickUiTest {
     fun aBrowseTileIsOneCellHighAndTheRowsStepByThePitch() {
         browsePage(listOf(Sources.DEEZER))
         put(Sources.DEEZER, 6)
-        val ui = rule.onRoot().fetchSemanticsNode().boundsInRoot.let { Ui.of(it.width, it.height) }
+        val (ui, left) = canvas()
         val first = bounds("pick.tile.deezer.0")
-        assertEquals(ui.px(Held.Hub.tileCellH), first.height, 0.5f)
+        assertEquals(ui.px(Tok.tileCellH), first.height, 0.5f)
+        assertEquals(ui.px(Tok.gridTile), first.width, 0.5f)
+        assertEquals(ui.px(7f), first.left - left, 0.5f)
+        assertEquals(ui.px(87.5f), bounds("pick.tile.deezer.1").left - left, 0.5f)
         val next = (1 until 6).map { top("pick.tile.deezer.$it") }.first { it > first.top + 0.5f }
-        assertEquals(ui.px(Held.Hub.tileRowPitch), next - first.top, 0.5f)
+        assertEquals(ui.px(Tok.tileRowPitch), next - first.top, 0.5f)
+    }
+
+    @Test
+    fun theBrowseThumbnailsAreFetchedAtTheDrawnTileSize() {
+        browsePage(listOf(Sources.DEEZER))
+        put(Sources.DEEZER, 3)
+        assertEquals(canvas().first.px(Tok.gridTile).roundToInt(), browsePx)
+        assertEquals(bounds("pick.tile.deezer.0").width, browsePx.toFloat(), 1f)
     }
 
     @Test

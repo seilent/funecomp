@@ -308,8 +308,8 @@ private sealed interface BrowseItem {
 
 private fun BrowseItem.height() = when (this) {
     is BrowseItem.Head -> Tok.qpFirstBaseline + Tok.qpContentDrop
-    is BrowseItem.Gap -> Tok.qpSectionGap - Tok.qpFirstBaseline - (Held.Hub.tileRowPitch - Held.Hub.tileCellH)
-    is BrowseItem.Row -> Held.Hub.tileRowPitch
+    is BrowseItem.Gap -> Tok.qpSectionGap - Tok.qpFirstBaseline - (Tok.tileRowPitch - Tok.tileCellH)
+    is BrowseItem.Row -> Tok.tileRowPitch
     is BrowseItem.Line -> Tok.rowHeight
 }
 
@@ -350,7 +350,7 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse, ime: WindowInsets) {
     val key = LocalEntry.current
     val runs = BrowseSessions.runs(ctx.nav.stack, key.substringBefore('/').toIntOrNull() ?: -1)
     val s = ctx.browse[key]
-    val px = ui.px(Tok.tileS).roundToInt()
+    val px = ui.px(Tok.gridTile).roundToInt()
     val begin: (BrowseSession) -> () -> Unit = { b ->
         val mbid = if (Names.fold(b.query) == Names.fold(target.name)) target.mbid else null
         ctx.control.browse(b.query, mbid, px, { if (b.live) b.sections = it }, { section, t -> if (b.live) b.add(section, t) }, {}, { if (b.live) b.searched(it) }) { if (b.live) b.end(it) }
@@ -404,7 +404,7 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse, ime: WindowInsets) {
                                 item.tiles.forEachIndexed { c, b ->
                                     val n = item.row * cols + c
                                     val at = item.section to n
-                                    ArtTile(b, s.focus == at, Modifier.at(ui.px(Tok.hubEdge + c * (Tok.tileS + Tok.gutter)), 0f).testTag("pick.tile.${item.section}.$n")) {
+                                    ArtTile(b, s.focus == at, Modifier.at(ui.px(Tok.gridX + c * (Tok.gridTile + Tok.gridGap)), 0f).testTag("pick.tile.${item.section}.$n")) {
                                         s.focus = at
                                         resolving(ctx, target, fromBrowse = true) { done -> ctx.control.takeTile(b.tile, done) }
                                     }
@@ -432,10 +432,10 @@ private fun BrowseHead(section: String, i: Int) {
 @Composable
 fun ArtTile(b: BrowseTile, focused: Boolean, modifier: Modifier = Modifier, onTap: () -> Unit) {
     val ui = LocalUi.current
-    val side = ui.px(Tok.tileS)
+    val side = ui.px(Tok.gridTile)
     val edge = ui.px(Tok.focus_border)
     val c by animateColorAsState(white(if (focused) Tok.alpha_full else Roles.gridCaption.alpha), tween(Tok.motion_focusAlpha.toInt()), label = "caption")
-    Pressable({ onTap() }, modifier.size(side.dp(), ui.px(Held.Hub.tileCellH).dp())) {
+    Pressable({ onTap() }, modifier.size(side.dp(), ui.px(Tok.tileCellH).dp())) {
         Box(Modifier.size(side.dp()).background(Color(Tok.color_tile))) {
             Image(b.image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
         }

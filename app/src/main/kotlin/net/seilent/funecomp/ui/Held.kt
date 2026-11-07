@@ -6,13 +6,9 @@ object Held {
     class Entry(val name: String, val token: String, val value: Any, val row: String, val branch: String)
 
     object Hub {
-        const val tileCellH = 77f
-        const val tileRowPitch = 89f
         const val shortArtTop = 124f
 
         val entries = listOf(
-            Entry("tileCellH", "tileCellH", tileCellH, "H3, H6a", "zhub"),
-            Entry("tileRowPitch", "tileRowPitch", tileRowPitch, "H3, H6a", "zhub"),
             Entry("shortArtTop", "npArtTop", shortArtTop, "H7", "zhub"),
         )
     }

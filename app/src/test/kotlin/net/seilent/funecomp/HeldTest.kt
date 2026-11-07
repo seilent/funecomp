@@ -12,8 +12,6 @@ class HeldTest {
         assertEquals("6e3302724", Held.PIN)
         assertEquals(
             listOf(
-                listOf("tileCellH", "tileCellH", 77f, "H3, H6a", "zhub"),
-                listOf("tileRowPitch", "tileRowPitch", 89f, "H3, H6a", "zhub"),
                 listOf("shortArtTop", "npArtTop", 124f, "H7", "zhub"),
             ),
             rows(Held.Hub.entries),
@@ -50,7 +48,7 @@ class HeldTest {
             ),
             rows(Held.Np.entries),
         )
-        assertEquals(25, Held.entries.size)
+        assertEquals(23, Held.entries.size)
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }
 }
