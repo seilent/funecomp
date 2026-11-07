@@ -60,6 +60,7 @@ import net.seilent.funecomp.proto.SvcLogin
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.sim.SvcAcct
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.DeviceState
@@ -153,6 +154,7 @@ class Shot(
     val white: Boolean = false,
     val lib: net.seilent.funecomp.sim.Library? = null,
     val services: List<SvcInfo> = emptyList(),
+    val accounts: List<String> = emptyList(),
     val svc: SvcView = SvcView(),
     val detected: Detected? = null,
     val btRole: Int = Enums.BtRole.receiver,
@@ -183,7 +185,7 @@ private val ALBUM_KEY = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim
 internal val SHOT_CLOCK: () -> Long = SystemClock::elapsedRealtime
 
 internal fun shotControl(shot: Shot, artDir: File? = null) =
-    SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = artDir, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq, services = shot.services, btRole = shot.btRole, stateNow = SHOT_CLOCK).also {
+    SimControl(shot.board, shot.lib ?: net.seilent.funecomp.sim.Library.synthetic(), artDir = artDir, minor = shot.minor, faults = shot.faults, cardEq = shot.cardEq, services = shot.services, btRole = shot.btRole, stateNow = SHOT_CLOCK, accounts = shot.accounts.map { SvcAcct.parse(it) }).also {
         shotClock(it)
         shot.prep(it)
     }
@@ -789,6 +791,19 @@ private fun Shots.svcKey(text: String?) {
     secretField().append(text)
     secretField().onEditorAction(android.view.inputmethod.EditorInfo.IME_ACTION_DONE)
 }
+
+private const val LONG_ACCOUNT = "Night Radio Plus Extended Listener"
+
+private fun Shots.svcSign() {
+    tapRow("svc.tidal")
+    rule.onNodeWithTag("sheet.item.0").performClick()
+    settle(600)
+}
+
+private fun svcAccounts(name: String, vararg accounts: String, svc: SvcView = SvcView(), prep: (SimControl) -> Unit = {}, act: Shots.(Shell) -> Unit = {}) = Shot(name, board = "v1", pages = STREAMING, services = SVC, accounts = accounts.toList(), svc = svc, prep = {
+    Svc.reset()
+    prep(it)
+}, act = act)
 
 private fun svcToast(line: String) = Shot("svc-toast-${line.replace(' ', '-')}", board = "v1", pages = NP, prep = ::playing, services = SVC, svc = SvcView(line = SvcLine("TIDAL", line, 1)), after = 600)
 
@@ -1479,6 +1494,25 @@ val SHOTS = listOf(
         settle(600)
         rule.onNodeWithTag("sheet.item.4").performClick()
     },
+    svcAccounts("svc-rows-account", "tidal:in:Night Owl", "svcdemo:out"),
+    svcAccounts("svc-rows-long", "tidal:in:$LONG_ACCOUNT", "svcdemo:in"),
+    svcAccounts("svc-rows-signedin", "tidal:in", "svcdemo:in"),
+    svcAccounts("svc-rows-notsignedin", "tidal:out", "svcdemo:out"),
+    svcAccounts("svc-rows-unknown", "tidal:unknown", "svcdemo:unknown"),
+    svcAccounts("svc-sheet-signin", "tidal:out") { tapRow("svc.tidal") },
+    svcAccounts("svc-sheet-signout", "tidal:in:Night Owl") { tapRow("svc.tidal") },
+    svcAccounts("svc-sheet-unknown", "tidal:unknown") { tapRow("svc.tidal") },
+    svcAccounts("svc-signin-waiting", "tidal:out", prep = { it.holdSvc = true }) { svcSign() },
+    svcAccounts("svc-confirm", "tidal:in:Night Owl:0") { svcSign() },
+    svcAccounts("svc-confirm-1", "tidal:in:Night Owl:1") { svcSign() },
+    svcAccounts("svc-confirm-12345", "tidal:in:Night Owl:12345") { svcSign() },
+    svcAccounts("svc-confirm-long", "tidal:in:$LONG_ACCOUNT:12") { svcSign() },
+    svcAccounts("svc-confirm-inprogress", "tidal:in:Night Owl:12") {
+        svcSign()
+        it.sheet.open("sign out?", listOf("sign out", "keep signed in"), 1, listOf("Night Owl", "removes 12 downloads on this card", "a download in progress is removed too"), infoMixed = { listOf(true, false, false) }) {}
+        settle(600)
+    },
+    svcAccounts("svc-sheet-signingout", "tidal:in:Night Owl:12", svc = SvcView(held = setOf("tidal"))) { tapRow("svc.tidal") },
     svcToast("signed in"),
     svcToast("sign in ended"),
     svcToast("sign in link too long"),
@@ -1486,6 +1520,14 @@ val SHOTS = listOf(
     svcToast("refused on the dap"),
     svcToast("streaming is off on the dap"),
     svcToast("the dap refused a key"),
+    svcToast("signed out"),
+    svcToast("account changed"),
+    svcToast("no keys on the dap"),
+    svcToast("downloads not counted yet"),
+    svcToast("not in firmware"),
+    svcToast("card not available"),
+    svcToast("dap busy"),
+    svcToast("waiting for the dap"),
 )
 
 @RunWith(RobolectricTestRunner::class)

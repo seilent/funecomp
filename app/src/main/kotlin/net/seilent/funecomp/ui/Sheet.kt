@@ -75,6 +75,7 @@ class SheetState {
     private var lines by mutableStateOf<() -> List<String>>({ emptyList() })
     private var lineValues by mutableStateOf<() -> List<String>>({ emptyList() })
     private var lineMixed by mutableStateOf<() -> List<Boolean>>({ emptyList() })
+    private var lineDrop by mutableStateOf<() -> List<Boolean>>({ emptyList() })
     private var values by mutableStateOf<() -> List<String>>({ emptyList() })
     private var itemCase by mutableStateOf<() -> List<Boolean>>({ emptyList() })
     var titleMixed by mutableStateOf(false)
@@ -82,6 +83,7 @@ class SheetState {
     val info: List<String> get() = lines()
     val infoValues: List<String> get() = lineValues()
     val infoMixed: List<Boolean> get() = lineMixed()
+    val infoDrop: List<Boolean> get() = lineDrop()
     val itemValues: List<String> get() = values()
     val itemMixed: List<Boolean> get() = itemCase()
     var focus by mutableIntStateOf(0)
@@ -118,6 +120,7 @@ class SheetState {
         infoValues: () -> List<String> = { emptyList() },
         itemValues: () -> List<String> = { emptyList() },
         infoMixed: () -> List<Boolean> = { emptyList() },
+        infoDrop: () -> List<Boolean> = { emptyList() },
         itemMixed: () -> List<Boolean> = { emptyList() },
         titleMixed: Boolean = false,
         infoLines: () -> List<String> = { info },
@@ -143,6 +146,7 @@ class SheetState {
         this.lines = infoLines
         this.lineValues = infoValues
         this.lineMixed = infoMixed
+        this.lineDrop = infoDrop
         this.itemCase = itemMixed
         this.titleMixed = titleMixed
         this.values = itemValues
@@ -169,6 +173,7 @@ class SheetState {
         this.lines = { emptyList() }
         this.lineValues = { emptyList() }
         this.lineMixed = { emptyList() }
+        this.lineDrop = { emptyList() }
         this.itemCase = { emptyList() }
         this.titleMixed = false
         this.values = { emptyList() }
@@ -349,14 +354,19 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
     val density = LocalDensity.current
     val lift = ime.getBottom(density).toFloat()
     val screenH = ui.px(ui.h) - lift
-    val lines = state.info
-    val lineValues = state.infoValues
-    val mixed = state.infoMixed
     val itemValues = state.itemValues
     val itemMixed = state.itemMixed
     val itemStyle = textStyle(Roles.dialogItem, white(1f))
     val valueStyle = textStyle(Roles.settingsValue, white(1f))
     fun slot(value: String) = (if (value.isEmpty()) w - 2 * edge else w - 2 * edge - measurer.measure(shown(value, Roles.settingsValue.case), valueStyle).size.width - gutter).coerceAtLeast(0f)
+    val all = state.info
+    val drop = state.infoDrop
+    val keep = all.indices.filter { i ->
+        !drop.getOrElse(i) { false } || measurer.measure(shown(all[i], if (state.infoMixed.getOrElse(i) { false }) Case.MIXED else Roles.dialogItem.case), itemStyle, softWrap = true, constraints = Constraints(maxWidth = slot(state.infoValues.getOrElse(i) { "" }).roundToInt())).lineCount <= LINE_MAX
+    }
+    val lines = keep.map { all[it] }
+    val lineValues = keep.map { state.infoValues.getOrElse(it) { "" } }
+    val mixed = keep.map { state.infoMixed.getOrElse(it) { false } }
     val widths = lines.indices.map { slot(lineValues.getOrElse(it) { "" }).roundToInt() }
     val texts = lines.mapIndexed { i, line -> measurer.wrapped(shown(line, if (mixed.getOrElse(i) { false }) Case.MIXED else Roles.dialogItem.case), itemStyle, widths[i]) }
     val layouts = texts.mapIndexed { i, t -> measurer.measure(t, itemStyle, overflow = TextOverflow.Clip, softWrap = true, maxLines = LINE_MAX, constraints = Constraints(maxWidth = widths[i])) }

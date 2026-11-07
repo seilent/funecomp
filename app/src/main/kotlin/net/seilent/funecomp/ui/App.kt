@@ -210,7 +210,7 @@ fun App(
                     Page.Playlists -> Playlists(ctx)
                     Page.Settings -> SettingsPage(ctx, firmware)
                     Page.Connection -> ConnectionPage(ctx, link, gated = shell.gated)
-                    is Page.Online -> OnlinePage(ctx, page, sources, onSources, credits, onCredit, blocked, picks, scrobble, link.lyrics, scrobbleLabels, shell.keys)
+                    is Page.Online -> OnlinePage(ctx, page, sources, onSources, credits, onCredit, blocked, picks, scrobble, link.lyrics, scrobbleLabels, shell.keys, svc.held)
                     Page.ArtPicked -> ArtPickedPage(ctx, picks, galleryMissing)
                     Page.ArtBlocked -> ArtBlockedPage(ctx, blocked)
                     Page.ArtCredits -> ArtCreditsPage(ctx, credits, onCredit)

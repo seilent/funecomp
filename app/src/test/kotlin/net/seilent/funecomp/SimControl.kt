@@ -27,6 +27,7 @@ import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.SvcInfo
 import net.seilent.funecomp.proto.SvcKey
+import net.seilent.funecomp.proto.SvcLogout
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
@@ -37,6 +38,7 @@ import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Out
+import net.seilent.funecomp.sim.SvcAcct
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.Heart
@@ -70,9 +72,10 @@ class SimControl(
     btRole: Int = Enums.BtRole.receiver,
     private val stateNow: () -> Long = now,
     through: String? = null,
+    accounts: List<SvcAcct> = emptyList(),
 ) : Control {
     private val faultSet = Faults(faults)
-    val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, faultSet, artDir = artDir, minor = minor, cardEq = cardEq, services = services, btRole = btRole, through = through), lib, now)
+    val sim = Device(Options(Board.of(board).let { b -> if (schema == null) b else Board(b.name, b.screenW, b.screenH, b.backdropW, b.backdropH, schema) }, faultSet, artDir = artDir, minor = minor, cardEq = cardEq, services = services, accounts = accounts, btRole = btRole, through = through), lib, now)
     var device by mutableStateOf(DeviceState())
     val sent = ArrayList<String>()
     val pushed = ArrayList<Int>()
@@ -101,6 +104,7 @@ class SimControl(
             val e = edit
             val mark = if (type == Msg.STATE) e?.mark() else null
             device = device.reduce(type, body, stateNow())
+            if (type == Msg.SVC_STATE && services.isNotEmpty()) Svc.state(device.accounts)
             if (type == Msg.STATE) {
                 show(heart.state(State.from(body)))
                 e?.state(State.from(body), mark)
@@ -401,6 +405,55 @@ class SimControl(
         }
         if (holdKeys) keysReply = finish else finish()
     }
+
+    var holdSvc = false
+    private val svcReplies = ArrayList<(Boolean) -> Unit>()
+    val logouts = ArrayList<SvcLogout>()
+
+    fun svcReply(closed: Boolean = false) = svcReplies.removeAt(0)(closed)
+
+    private fun svcReq(type: Int, payload: ByteArray, done: (Session.Result) -> Unit) {
+        val run: (Boolean) -> Unit = { closed ->
+            if (closed) {
+                done(Session.Result.Closed)
+            } else {
+                val a = call(type, payload)
+                if (a is Answer.Fail) a.before?.invoke(out)
+                done(
+                    when (a) {
+                        is Answer.Ok -> Session.Result.Ok(Node.decode("${Msg.info.getValue(type).name}.reply", a.payload))
+                        is Answer.Fail -> Session.Result.Failed(ErrorReply(a.code, a.text))
+                        is Answer.Later -> error("unresolved")
+                    },
+                )
+                when (a) {
+                    is Answer.Ok -> a.then?.invoke(out)
+                    is Answer.Fail -> a.then?.invoke(out)
+                    is Answer.Later -> {}
+                }
+            }
+        }
+        if (holdSvc) svcReplies += run else run(false)
+    }
+
+    override fun svcStart(service: String, done: (String?) -> Unit) {
+        Svc.start(service, { type, payload, _, r ->
+            svc += "start $service"
+            svcReq(type, payload, r)
+        }, { null }, { svc += "front" }, {}, done)
+    }
+
+    override fun svcStartCancel(service: String) {
+        svc += "decline $service"
+        Svc.decline(service)
+    }
+
+    override fun svcLogout(service: String, account: String, downloads: Long?, done: (String?) -> Unit) {
+        logouts += SvcLogout(service, account, downloads)
+        Svc.logout(service, account, downloads, { type, payload, _, r -> svcReq(type, payload, r) }, { device.accounts?.get(service)?.signedIn == false }, {}, done)
+    }
+
+    override fun svcReopened() = Svc.reopened()
 
     val secures = ArrayList<Boolean>()
 

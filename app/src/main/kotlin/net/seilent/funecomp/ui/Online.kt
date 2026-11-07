@@ -111,6 +111,7 @@ fun OnlinePage(
     lyrics: LyricSources = LyricSources(),
     labels: Boolean = true,
     keys: KeysFlow = KeysFlow(),
+    held: Set<String> = emptySet(),
 ) {
     var pivot by rememberSaveable { mutableIntStateOf(page.pivot) }
     val words = onlinePivots(ctx.device)
@@ -121,7 +122,7 @@ fun OnlinePage(
             when (shown) {
                 ONLINE_LYRICS -> LyricsRows(ctx, lyrics)
                 ONLINE_SCROBBLING -> ScrobbleRows(ctx, scrobble, labels)
-                ONLINE_STREAMING -> StreamingRows(ctx, keys)
+                ONLINE_STREAMING -> StreamingRows(ctx, keys, held)
                 else -> ArtRows(ctx, sources, onSources, credits, blocked, picks)
             }
         }
