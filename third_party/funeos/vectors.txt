@@ -5748,6 +5748,337 @@ dec svc_keys_off 0.seq 247
 dec svc_keys_off 0.body.code 16
 dec svc_keys_off 0.body.text off
 act svc_keys_off accept
+vec svc_login_start app
+hex svc_login_start 08004804f900010500746964616c
+dec svc_login_start 0.len 8
+dec svc_login_start 0.type SVC_LOGIN_START
+dec svc_login_start 0.flags 0x04
+dec svc_login_start 0.seq 249
+dec svc_login_start 0.body.service tidal
+act svc_login_start accept
+vec svc_login_start_reply dev
+hex svc_login_start_reply 07004801f90001040007000000
+re svc_login_start_reply svc_login_start
+dec svc_login_start_reply 0.len 7
+dec svc_login_start_reply 0.type SVC_LOGIN_START
+dec svc_login_start_reply 0.flags 0x01
+dec svc_login_start_reply 0.seq 249
+dec svc_login_start_reply 0.body.seq 7
+act svc_login_start_reply accept
+vec svc_login_start_signed_in dev
+hex svc_login_start_signed_in 10004803f9000101000c0209007369676e656420696e
+re svc_login_start_signed_in svc_login_start
+dec svc_login_start_signed_in 0.len 16
+dec svc_login_start_signed_in 0.type SVC_LOGIN_START
+dec svc_login_start_signed_in 0.flags 0x03
+dec svc_login_start_signed_in 0.seq 249
+dec svc_login_start_signed_in 0.body.code 12
+dec svc_login_start_signed_in 0.body.text signed in
+act svc_login_start_signed_in accept
+vec svc_login_start_off dev
+hex svc_login_start_off 0a004803f900010100100203006f6666
+re svc_login_start_off svc_login_start
+dec svc_login_start_off 0.len 10
+dec svc_login_start_off 0.type SVC_LOGIN_START
+dec svc_login_start_off 0.flags 0x03
+dec svc_login_start_off 0.seq 249
+dec svc_login_start_off 0.body.code 16
+dec svc_login_start_off 0.body.text off
+act svc_login_start_off accept
+vec svc_login_start_unknown dev
+hex svc_login_start_unknown 16004803f9000101000a020f006e6f7420696e206669726d77617265
+re svc_login_start_unknown svc_login_start
+dec svc_login_start_unknown 0.len 22
+dec svc_login_start_unknown 0.type SVC_LOGIN_START
+dec svc_login_start_unknown 0.flags 0x03
+dec svc_login_start_unknown 0.seq 249
+dec svc_login_start_unknown 0.body.code 10
+dec svc_login_start_unknown 0.body.text not in firmware
+act svc_login_start_unknown accept
+vec svc_login_start_busy dev
+hex svc_login_start_busy 0b004803f9000101000302040062757379
+re svc_login_start_busy svc_login_start
+dec svc_login_start_busy 0.len 11
+dec svc_login_start_busy 0.type SVC_LOGIN_START
+dec svc_login_start_busy 0.flags 0x03
+dec svc_login_start_busy 0.seq 249
+dec svc_login_start_busy 0.body.code 3
+dec svc_login_start_busy 0.body.text busy
+act svc_login_start_busy accept
+vec svc_login_start_card dev
+hex svc_login_start_card 19004803f9000101000e02120063617264206e6f7420617661696c61626c65
+re svc_login_start_card svc_login_start
+dec svc_login_start_card 0.len 25
+dec svc_login_start_card 0.type SVC_LOGIN_START
+dec svc_login_start_card 0.flags 0x03
+dec svc_login_start_card 0.seq 249
+dec svc_login_start_card 0.body.code 14
+dec svc_login_start_card 0.body.text card not available
+act svc_login_start_card accept
+vec svc_login_start_refused dev
+hex svc_login_start_refused 0e004803f9000101000402070072656675736564
+re svc_login_start_refused svc_login_start
+dec svc_login_start_refused 0.len 14
+dec svc_login_start_refused 0.type SVC_LOGIN_START
+dec svc_login_start_refused 0.flags 0x03
+dec svc_login_start_refused 0.seq 249
+dec svc_login_start_refused 0.body.code 4
+dec svc_login_start_refused 0.body.text refused
+act svc_login_start_refused accept
+vec svc_login_start_failed dev
+hex svc_login_start_failed 0e004803f900010100040207006e6f206b657973
+re svc_login_start_failed svc_login_start
+dec svc_login_start_failed 0.len 14
+dec svc_login_start_failed 0.type SVC_LOGIN_START
+dec svc_login_start_failed 0.flags 0x03
+dec svc_login_start_failed 0.seq 249
+dec svc_login_start_failed 0.body.code 4
+dec svc_login_start_failed 0.body.text no keys
+act svc_login_start_failed accept
+vec svc_login_start_nobit32 dev
+hex svc_login_start_nobit32 0e004803f90001010001020700756e6b6e6f776e
+re svc_login_start_nobit32 svc_login_start
+dec svc_login_start_nobit32 0.len 14
+dec svc_login_start_nobit32 0.type SVC_LOGIN_START
+dec svc_login_start_nobit32 0.flags 0x03
+dec svc_login_start_nobit32 0.seq 249
+dec svc_login_start_nobit32 0.body.code 1
+dec svc_login_start_nobit32 0.body.text unknown
+act svc_login_start_nobit32 accept
+vec svc_login_start_removing dev
+hex svc_login_start_removing 0b004803f9000101000302040062757379
+re svc_login_start_removing svc_login_start
+dec svc_login_start_removing 0.len 11
+dec svc_login_start_removing 0.type SVC_LOGIN_START
+dec svc_login_start_removing 0.flags 0x03
+dec svc_login_start_removing 0.seq 249
+dec svc_login_start_removing 0.body.code 3
+dec svc_login_start_removing 0.body.text busy
+act svc_login_start_removing accept
+vec svc_login_start_bad dev
+hex svc_login_start_bad 10004803f900010100020209006261642076616c7565
+re svc_login_start_bad svc_login_start
+dec svc_login_start_bad 0.len 16
+dec svc_login_start_bad 0.type SVC_LOGIN_START
+dec svc_login_start_bad 0.flags 0x03
+dec svc_login_start_bad 0.seq 249
+dec svc_login_start_bad 0.body.code 2
+dec svc_login_start_bad 0.body.text bad value
+act svc_login_start_bad accept
+vec svc_login_start_cancelled dev
+hex svc_login_start_cancelled 10004803f9000101000d02090063616e63656c6c6564
+re svc_login_start_cancelled svc_login_start
+dec svc_login_start_cancelled 0.len 16
+dec svc_login_start_cancelled 0.type SVC_LOGIN_START
+dec svc_login_start_cancelled 0.flags 0x03
+dec svc_login_start_cancelled 0.seq 249
+dec svc_login_start_cancelled 0.body.code 13
+dec svc_login_start_cancelled 0.body.text cancelled
+act svc_login_start_cancelled accept
+vec svc_login_start_timeout dev
+hex svc_login_start_timeout 0e004803f9000101000302070074696d656f7574
+re svc_login_start_timeout svc_login_start
+dec svc_login_start_timeout 0.len 14
+dec svc_login_start_timeout 0.type SVC_LOGIN_START
+dec svc_login_start_timeout 0.flags 0x03
+dec svc_login_start_timeout 0.seq 249
+dec svc_login_start_timeout 0.body.code 3
+dec svc_login_start_timeout 0.body.text timeout
+act svc_login_start_timeout accept
+vec svc_login_start_retry dev
+hex svc_login_start_retry 12004803f90001010004020b007265747279206c61746572
+re svc_login_start_retry svc_login_start
+dec svc_login_start_retry 0.len 18
+dec svc_login_start_retry 0.type SVC_LOGIN_START
+dec svc_login_start_retry 0.flags 0x03
+dec svc_login_start_retry 0.seq 249
+dec svc_login_start_retry 0.body.code 4
+dec svc_login_start_retry 0.body.text retry later
+act svc_login_start_retry accept
+vec svc_logout app
+hex svc_logout 1b004904fa00010500746964616c0209006e69676874206f776c0304000c000000
+dec svc_logout 0.len 27
+dec svc_logout 0.type SVC_LOGOUT
+dec svc_logout 0.flags 0x04
+dec svc_logout 0.seq 250
+dec svc_logout 0.body.service tidal
+dec svc_logout 0.body.account night owl
+dec svc_logout 0.body.downloads 12
+act svc_logout accept
+vec svc_logout_reply dev
+hex svc_logout_reply 00004901fa00
+re svc_logout_reply svc_logout
+dec svc_logout_reply 0.len 0
+dec svc_logout_reply 0.type SVC_LOGOUT
+dec svc_logout_reply 0.flags 0x01
+dec svc_logout_reply 0.seq 250
+act svc_logout_reply accept
+vec svc_logout_off dev
+hex svc_logout_off 0a004903fa00010100100203006f6666
+re svc_logout_off svc_logout
+dec svc_logout_off 0.len 10
+dec svc_logout_off 0.type SVC_LOGOUT
+dec svc_logout_off 0.flags 0x03
+dec svc_logout_off 0.seq 250
+dec svc_logout_off 0.body.code 16
+dec svc_logout_off 0.body.text off
+act svc_logout_off accept
+vec svc_logout_busy dev
+hex svc_logout_busy 0b004903fa000101000302040062757379
+re svc_logout_busy svc_logout
+dec svc_logout_busy 0.len 11
+dec svc_logout_busy 0.type SVC_LOGOUT
+dec svc_logout_busy 0.flags 0x03
+dec svc_logout_busy 0.seq 250
+dec svc_logout_busy 0.body.code 3
+dec svc_logout_busy 0.body.text busy
+act svc_logout_busy accept
+vec svc_logout_counted dev
+hex svc_logout_counted 1c004903fa0001010003021500646f776e6c6f616473206e6f7420636f756e746564
+re svc_logout_counted svc_logout
+dec svc_logout_counted 0.len 28
+dec svc_logout_counted 0.type SVC_LOGOUT
+dec svc_logout_counted 0.flags 0x03
+dec svc_logout_counted 0.seq 250
+dec svc_logout_counted 0.body.code 3
+dec svc_logout_counted 0.body.text downloads not counted
+act svc_logout_counted accept
+vec svc_logout_card dev
+hex svc_logout_card 19004903fa000101000e02120063617264206e6f7420617661696c61626c65
+re svc_logout_card svc_logout
+dec svc_logout_card 0.len 25
+dec svc_logout_card 0.type SVC_LOGOUT
+dec svc_logout_card 0.flags 0x03
+dec svc_logout_card 0.seq 250
+dec svc_logout_card 0.body.code 14
+dec svc_logout_card 0.body.text card not available
+act svc_logout_card accept
+vec svc_logout_stale dev
+hex svc_logout_stale 0c004903fa00010100070205007374616c65
+re svc_logout_stale svc_logout
+dec svc_logout_stale 0.len 12
+dec svc_logout_stale 0.type SVC_LOGOUT
+dec svc_logout_stale 0.flags 0x03
+dec svc_logout_stale 0.seq 250
+dec svc_logout_stale 0.body.code 7
+dec svc_logout_stale 0.body.text stale
+act svc_logout_stale accept
+vec svc_logout_changed dev
+hex svc_logout_changed 18004903fa0001010007021100646f776e6c6f616473206368616e676564
+re svc_logout_changed svc_logout
+dec svc_logout_changed 0.len 24
+dec svc_logout_changed 0.type SVC_LOGOUT
+dec svc_logout_changed 0.flags 0x03
+dec svc_logout_changed 0.seq 250
+dec svc_logout_changed 0.body.code 7
+dec svc_logout_changed 0.body.text downloads changed
+act svc_logout_changed accept
+vec svc_logout_refused dev
+hex svc_logout_refused 0e004903fa000101000402070072656675736564
+re svc_logout_refused svc_logout
+dec svc_logout_refused 0.len 14
+dec svc_logout_refused 0.type SVC_LOGOUT
+dec svc_logout_refused 0.flags 0x03
+dec svc_logout_refused 0.seq 250
+dec svc_logout_refused 0.body.code 4
+dec svc_logout_refused 0.body.text refused
+act svc_logout_refused accept
+vec svc_logout_bad dev
+hex svc_logout_bad 10004903fa00010100020209006261642076616c7565
+re svc_logout_bad svc_logout
+dec svc_logout_bad 0.len 16
+dec svc_logout_bad 0.type SVC_LOGOUT
+dec svc_logout_bad 0.flags 0x03
+dec svc_logout_bad 0.seq 250
+dec svc_logout_bad 0.body.code 2
+dec svc_logout_bad 0.body.text bad value
+act svc_logout_bad accept
+vec svc_logout_nobit32 dev
+hex svc_logout_nobit32 0e004903fa0001010001020700756e6b6e6f776e
+re svc_logout_nobit32 svc_logout
+dec svc_logout_nobit32 0.len 14
+dec svc_logout_nobit32 0.type SVC_LOGOUT
+dec svc_logout_nobit32 0.flags 0x03
+dec svc_logout_nobit32 0.seq 250
+dec svc_logout_nobit32 0.body.code 1
+dec svc_logout_nobit32 0.body.text unknown
+act svc_logout_nobit32 accept
+vec svc_logout_notfw dev
+hex svc_logout_notfw 16004903fa000101000a020f006e6f7420696e206669726d77617265
+re svc_logout_notfw svc_logout
+dec svc_logout_notfw 0.len 22
+dec svc_logout_notfw 0.type SVC_LOGOUT
+dec svc_logout_notfw 0.flags 0x03
+dec svc_logout_notfw 0.seq 250
+dec svc_logout_notfw 0.body.code 10
+dec svc_logout_notfw 0.body.text not in firmware
+act svc_logout_notfw accept
+vec svc_logout_stopped dev
+hex svc_logout_stopped 0e004903fa000101000402070073746f70706564
+re svc_logout_stopped svc_logout
+dec svc_logout_stopped 0.len 14
+dec svc_logout_stopped 0.type SVC_LOGOUT
+dec svc_logout_stopped 0.flags 0x03
+dec svc_logout_stopped 0.seq 250
+dec svc_logout_stopped 0.body.code 4
+dec svc_logout_stopped 0.body.text stopped
+act svc_logout_stopped accept
+vec svc_logout_broken dev
+hex svc_logout_broken 0d004903fa000101000402060062726f6b656e
+re svc_logout_broken svc_logout
+dec svc_logout_broken 0.len 13
+dec svc_logout_broken 0.type SVC_LOGOUT
+dec svc_logout_broken 0.flags 0x03
+dec svc_logout_broken 0.seq 250
+dec svc_logout_broken 0.body.code 4
+dec svc_logout_broken 0.body.text broken
+act svc_logout_broken accept
+vec svc_logout_timeout dev
+hex svc_logout_timeout 0e004903fa000101000302070074696d656f7574
+re svc_logout_timeout svc_logout
+dec svc_logout_timeout 0.len 14
+dec svc_logout_timeout 0.type SVC_LOGOUT
+dec svc_logout_timeout 0.flags 0x03
+dec svc_logout_timeout 0.seq 250
+dec svc_logout_timeout 0.body.code 3
+dec svc_logout_timeout 0.body.text timeout
+act svc_logout_timeout accept
+vec svc_state dev
+hex svc_state 86004a00fb00014700010500746964616c020500544944414c030900636c69656e745f6964030d00636c69656e745f7365637265740401000105010001060900
+hex svc_state 6e69676874206f776c0704000c000000011c0001070073766364656d6f02070053564344454d4f0401000105010000011a00010500726164696f020b004e6967
+hex svc_state 687420526164696f04010000
+dec svc_state 0.len 134
+dec svc_state 0.type SVC_STATE
+dec svc_state 0.flags 0x00
+dec svc_state 0.seq 251
+dec svc_state 0.body.service[0].id tidal
+dec svc_state 0.body.service[0].name TIDAL
+dec svc_state 0.body.service[0].secret[0] client_id
+dec svc_state 0.body.service[0].secret[1] client_secret
+dec svc_state 0.body.service[0].pkce true
+dec svc_state 0.body.service[0].signedIn true
+dec svc_state 0.body.service[0].account night owl
+dec svc_state 0.body.service[0].downloads 12
+dec svc_state 0.body.service[1].id svcdemo
+dec svc_state 0.body.service[1].name SVCDEMO
+dec svc_state 0.body.service[1].pkce true
+dec svc_state 0.body.service[1].signedIn false
+dec svc_state 0.body.service[2].id radio
+dec svc_state 0.body.service[2].name Night Radio
+dec svc_state 0.body.service[2].pkce false
+act svc_state accept
+vec hello_bit35 app
+hex hello_bit35 2400010401000104004644435002020001000302001100040500302e312e300508000000000009000000
+dec hello_bit35 0.len 36
+dec hello_bit35 0.type HELLO
+dec hello_bit35 0.flags 0x04
+dec hello_bit35 0.seq 1
+dec hello_bit35 0.body.magic 1346585670
+dec hello_bit35 0.body.major 1
+dec hello_bit35 0.body.minor 17
+dec hello_bit35 0.body.appVersion 0.1.0
+dec hello_bit35 0.body.features 38654705664
+act hello_bit35 accept
 vec queue_service dev
 hex queue_service 44001400f80001040009000000020400000000000304000100000004010000052800020400536f6e6703040042616e64060400400d03000a050074696461
 hex queue_service 6c0b0800a700000000000000

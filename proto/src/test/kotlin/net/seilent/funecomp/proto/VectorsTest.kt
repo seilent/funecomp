@@ -194,6 +194,7 @@ class VectorsTest {
             Msg.STREAM_READ -> StreamReadReply.from(n).encode()
             Msg.PHONE_ART -> PhoneArtReply.from(n).encode()
             Msg.SVC_PKCE -> SvcPkceReply.from(n).encode()
+            Msg.SVC_LOGIN_START -> SvcLoginStartReply.from(n).encode()
             else -> null
         }
         return when (f.type) {
@@ -218,6 +219,9 @@ class VectorsTest {
             Msg.SVC_LOGIN_END -> SvcLoginEnd.from(n).encode()
             Msg.SVC_PKCE -> SvcPkce.from(n).encode()
             Msg.SVC_KEYS -> SvcKeys.from(n).encode()
+            Msg.SVC_LOGIN_START -> SvcLoginStart.from(n).encode()
+            Msg.SVC_LOGOUT -> SvcLogout.from(n).encode()
+            Msg.SVC_STATE -> SvcState.from(n).encode()
             else -> null
         }
     }

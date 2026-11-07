@@ -43,6 +43,7 @@ object Groups {
         "eqStages" to emptySet(),
         "liveRows" to setOf(Msg.LIVE),
         "svcLogin" to setOf(Msg.SVC_LOGIN, Msg.SVC_LOGIN_END, Msg.SVC_PKCE, Msg.SVC_KEYS),
+        "svcAccount" to setOf(Msg.SVC_LOGIN_START, Msg.SVC_LOGOUT, Msg.SVC_STATE),
         "imgFocusX" to emptySet(),
     )
     val unserved: Set<String> = setOf(
@@ -53,6 +54,7 @@ object Groups {
         "receiver",
         "phoneFiles",
         "imgSource",
+        "svcAccount",
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -162,16 +164,37 @@ data class HelloReply(
     }
 }
 
-data class SvcInfo(val id: String?, val name: String?, val secrets: List<String> = emptyList(), val pkce: Boolean? = null) {
+data class SvcInfo(
+    val id: String?,
+    val name: String?,
+    val secrets: List<String> = emptyList(),
+    val pkce: Boolean? = null,
+    val signedIn: Boolean? = null,
+    val account: String? = null,
+    val downloads: Long? = null,
+) {
     fun write(o: TlvWriter) = o.apply {
         str(Tags.SvcInfo.id, id)
         str(Tags.SvcInfo.name, name)
         secrets.forEach { str(Tags.SvcInfo.secret, it) }
         bool(Tags.SvcInfo.pkce, pkce)
+        bool(Tags.SvcInfo.signedIn, signedIn)
+        str(Tags.SvcInfo.account, account)
+        u32(Tags.SvcInfo.downloads, downloads)
     }
 
+    override fun toString() = "SvcInfo(id=$id, name=$name, secrets=$secrets, pkce=$pkce, signedIn=$signedIn, downloads=$downloads)"
+
     companion object {
-        fun from(n: Node) = SvcInfo(n.str(Tags.SvcInfo.id), n.str(Tags.SvcInfo.name), n.strs(Tags.SvcInfo.secret), n.bool(Tags.SvcInfo.pkce))
+        fun from(n: Node) = SvcInfo(
+            n.str(Tags.SvcInfo.id),
+            n.str(Tags.SvcInfo.name),
+            n.strs(Tags.SvcInfo.secret),
+            n.bool(Tags.SvcInfo.pkce),
+            n.bool(Tags.SvcInfo.signedIn),
+            n.str(Tags.SvcInfo.account),
+            n.long(Tags.SvcInfo.downloads),
+        )
     }
 }
 
@@ -1280,5 +1303,43 @@ data class SvcKeys(val service: String?, val keys: List<SvcKey>) {
 
     companion object {
         fun from(n: Node) = SvcKeys(n.str(Tags.SvcKeys.service), n.nodes(Tags.SvcKeys.key).map { SvcKey.from(it) })
+    }
+}
+
+data class SvcLoginStart(val service: String?) {
+    fun encode() = tlv { str(Tags.SvcLoginStart.service, service) }
+
+    companion object {
+        fun from(n: Node) = SvcLoginStart(n.str(Tags.SvcLoginStart.service))
+    }
+}
+
+data class SvcLoginStartReply(val seq: Long?) {
+    fun encode() = tlv { u32(Tags.SvcLoginStartReply.seq, seq) }
+
+    companion object {
+        fun from(n: Node) = SvcLoginStartReply(n.long(Tags.SvcLoginStartReply.seq))
+    }
+}
+
+data class SvcLogout(val service: String?, val account: String?, val downloads: Long? = null) {
+    fun encode() = tlv {
+        str(Tags.SvcLogout.service, service)
+        str(Tags.SvcLogout.account, account)
+        u32(Tags.SvcLogout.downloads, downloads)
+    }
+
+    override fun toString() = "SvcLogout(service=$service, downloads=$downloads)"
+
+    companion object {
+        fun from(n: Node) = SvcLogout(n.str(Tags.SvcLogout.service), n.str(Tags.SvcLogout.account), n.long(Tags.SvcLogout.downloads))
+    }
+}
+
+data class SvcState(val services: List<SvcInfo>) {
+    fun encode() = tlv { services.forEach { s -> rec(Tags.SvcState.service) { s.write(this) } } }
+
+    companion object {
+        fun from(n: Node) = SvcState(n.nodes(Tags.SvcState.service).map { SvcInfo.from(it) })
     }
 }

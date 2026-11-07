@@ -212,4 +212,8 @@ object Req {
     fun updEnd(md5: String) = tlv { str(Tags.UpdEnd.md5, md5) }
 
     fun svcKeys(service: String, keys: List<SvcKey>) = SvcKeys(service, keys).encode()
+
+    fun svcLoginStart(service: String) = SvcLoginStart(service).encode()
+
+    fun svcLogout(service: String, account: String, downloads: Long?) = SvcLogout(service, account, downloads).encode()
 }

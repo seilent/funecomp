@@ -93,6 +93,7 @@ feature imgSource 28
 feature eqStages 29
 feature liveRows 30
 feature svcLogin 32
+feature svcAccount 35
 feature imgFocusX 36
 enum SOURCE 0 local
 enum SOURCE 1 phone
@@ -574,6 +575,15 @@ tag SVC_PKCE.reply 1 redirect str one
 msg SVC_KEYS 0x46 app req
 tag SVC_KEYS 1 service str one
 tag SVC_KEYS 2 key SvcKey list
+msg SVC_LOGIN_START 0x48 app req
+tag SVC_LOGIN_START 1 service str one
+tag SVC_LOGIN_START.reply 1 seq u32 one
+msg SVC_LOGOUT 0x49 app req
+tag SVC_LOGOUT 1 service str one
+tag SVC_LOGOUT 2 account str one
+tag SVC_LOGOUT 3 downloads u32 one
+msg SVC_STATE 0x4a dev push
+tag SVC_STATE 1 service SvcInfo list
 tag error 1 code u8 one
 tag error 2 text str one
 tag error 3 refused str list
@@ -666,3 +676,6 @@ tag SvcInfo 1 id str one
 tag SvcInfo 2 name str one
 tag SvcInfo 3 secret str list
 tag SvcInfo 4 pkce bool one
+tag SvcInfo 5 signedIn bool one
+tag SvcInfo 6 account str one
+tag SvcInfo 7 downloads u32 one

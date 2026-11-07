@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "7168027a33f2751c68aff2509e14bc585bcddd0f"
-    const val PROTO_SHA256 = "b7599db898eeebe57644cf652ded5a77c20bcd270ddc04dde51d3254dd07ec45"
-    const val VECTORS_SHA256 = "2de4dcd1ff60927d96e87732e915cb7edcddb8d7776e609e65881f919c0984fe"
+    const val COMMIT = "543acface2254abb6c8c0699455c67fabd8b9d9f"
+    const val PROTO_SHA256 = "205fd28c5192a1e435ed1cceb7587426d93abc0af1423a692bb4a44907dbbf38"
+    const val VECTORS_SHA256 = "5d13da7b6f119bad952ef57e4434f245b61451e884039af7783861abd22958f3"
     const val TOKENS_SHA256 = "4939e233fa79326690d1e6e733002a1d068a3640f6716d7c3b27b4b47d715d43"
     const val TOKENSV1_SHA256 = "4b8ddf566dcce893c58e122643f3e52490785e8f909095e5e6e5377ed244c5f5"
     const val TOKENSR1_SHA256 = "2f7ad3bba884d31f0ee6883d95e7b35662bc68b711af7c58d8f6068abcd0df6f"
@@ -114,6 +114,9 @@ object Msg {
     const val SVC_LOGIN_END = 0x44
     const val SVC_PKCE = 0x45
     const val SVC_KEYS = 0x46
+    const val SVC_LOGIN_START = 0x48
+    const val SVC_LOGOUT = 0x49
+    const val SVC_STATE = 0x4a
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -163,6 +166,9 @@ object Msg {
         SVC_LOGIN_END to MsgInfo(SVC_LOGIN_END, "SVC_LOGIN_END", "dev", true),
         SVC_PKCE to MsgInfo(SVC_PKCE, "SVC_PKCE", "dev", false),
         SVC_KEYS to MsgInfo(SVC_KEYS, "SVC_KEYS", "app", false),
+        SVC_LOGIN_START to MsgInfo(SVC_LOGIN_START, "SVC_LOGIN_START", "app", false),
+        SVC_LOGOUT to MsgInfo(SVC_LOGOUT, "SVC_LOGOUT", "app", false),
+        SVC_STATE to MsgInfo(SVC_STATE, "SVC_STATE", "dev", true),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -220,8 +226,9 @@ object Feature {
     const val eqStages = 29
     const val liveRows = 30
     const val svcLogin = 32
+    const val svcAccount = 35
     const val imgFocusX = 36
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin", 36 to "imgFocusX")
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin", 35 to "svcAccount", 36 to "imgFocusX")
 }
 
 object Enums {
@@ -888,6 +895,20 @@ object Tags {
         const val service = 1
         const val key = 2
     }
+    object SvcLoginStart {
+        const val service = 1
+    }
+    object SvcLoginStartReply {
+        const val seq = 1
+    }
+    object SvcLogout {
+        const val service = 1
+        const val account = 2
+        const val downloads = 3
+    }
+    object SvcState {
+        const val service = 1
+    }
     object Error {
         const val code = 1
         const val text = 2
@@ -1011,6 +1032,9 @@ object Tags {
         const val name = 2
         const val secret = 3
         const val pkce = 4
+        const val signedIn = 5
+        const val account = 6
+        const val downloads = 7
     }
     val scopes: Map<String, Map<Int, Field>> = mapOf(
         "HELLO" to mapOf(
@@ -1472,6 +1496,20 @@ object Tags {
             1 to Field(1, "service", Base.STR, null, false),
             2 to Field(2, "key", Base.RECORD, "SvcKey", true),
         ),
+        "SVC_LOGIN_START" to mapOf(
+            1 to Field(1, "service", Base.STR, null, false),
+        ),
+        "SVC_LOGIN_START.reply" to mapOf(
+            1 to Field(1, "seq", Base.U32, null, false),
+        ),
+        "SVC_LOGOUT" to mapOf(
+            1 to Field(1, "service", Base.STR, null, false),
+            2 to Field(2, "account", Base.STR, null, false),
+            3 to Field(3, "downloads", Base.U32, null, false),
+        ),
+        "SVC_STATE" to mapOf(
+            1 to Field(1, "service", Base.RECORD, "SvcInfo", true),
+        ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),
             2 to Field(2, "text", Base.STR, null, false),
@@ -1595,6 +1633,9 @@ object Tags {
             2 to Field(2, "name", Base.STR, null, false),
             3 to Field(3, "secret", Base.STR, null, true),
             4 to Field(4, "pkce", Base.BOOL, null, false),
+            5 to Field(5, "signedIn", Base.BOOL, null, false),
+            6 to Field(6, "account", Base.STR, null, false),
+            7 to Field(7, "downloads", Base.U32, null, false),
         ),
     )
 }

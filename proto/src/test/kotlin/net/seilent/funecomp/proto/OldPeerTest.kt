@@ -34,6 +34,7 @@ class OldPeerTest {
     private val v1_14 = table("/proto-1.14.txt")
     private val v1_15 = table("/proto-1.15-ebc0751.txt")
     private val last15 = table("/proto-1.15.txt")
+    private val v1_16 = table("/proto-1.16.txt")
 
     private fun text(name: String) = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
 
@@ -456,6 +457,87 @@ class OldPeerTest {
             assertEquals("svcLogin", Groups.group(m))
             assertFalse(Groups.allowed(m, Groups.all and Groups.mask("svcLogin").inv()))
             assertTrue(Groups.allowed(m, Groups.mask("svcLogin")))
+        }
+    }
+
+    @Test
+    fun protocol117AccountFramesDecodeWithThe116TableToEmptyFields() {
+        for (scope in listOf("SVC_LOGIN_START", "SVC_LOGIN_START.reply", "SVC_LOGOUT", "SVC_STATE")) assertNull(scope, v1_16[scope])
+        for (m in listOf("0x48", "0x49", "0x4a")) assertFalse(m, Regex("^msg \\S+ $m ", RegexOption.MULTILINE).containsMatchIn(text("/proto-1.16.txt")))
+        assertFalse("feature svcAccount 35" in text("/proto-1.16.txt"))
+        assertEquals(setOf(1, 2, 3, 4), v1_16.getValue("SvcInfo").keys)
+
+        val records = Tlv.parse(body("svc_state")).filter { it.tag == Tags.SvcState.service }
+        assertEquals(listOf(listOf(5, 6, 7), listOf(5), emptyList()), records.map { Node.decode("SvcInfo", it.value, v1_16).unknownTags })
+        assertEquals(
+            listOf(SvcInfo("tidal", "TIDAL", listOf("client_id", "client_secret"), true), SvcInfo("svcdemo", "SVCDEMO", pkce = true), SvcInfo("radio", "Night Radio", pkce = false)),
+            records.map { SvcInfo.from(Node.decode("SvcInfo", it.value, v1_16)) },
+        )
+
+        val oldHello = Node.decode("HELLO.reply", body("hello_reply_services"), v1_16)
+        assertTrue(oldHello.unknownTags.isEmpty())
+        assertTrue(oldHello.nodes(Tags.HelloReply.service).all { it.unknownTags.isEmpty() })
+        assertEquals(HelloReply.from(Node.decode("HELLO.reply", body("hello_reply_services"))).services, HelloReply.from(oldHello).services)
+
+        assertEquals("svcAccount", Feature.names[35])
+        assertEquals((1L shl Feature.svcLogin) or (1L shl Feature.svcAccount), Hello.from(Node.decode("HELLO", body("hello_bit35"))).features)
+        for (m in listOf(Msg.SVC_LOGIN_START, Msg.SVC_LOGOUT, Msg.SVC_STATE)) {
+            assertEquals("svcAccount", Groups.group(m))
+            assertFalse(Groups.allowed(m, Groups.mask("svcLogin")))
+            assertTrue(Groups.allowed(m, Groups.mask("svcAccount")))
+        }
+    }
+
+    @Test
+    fun protocol117AccountBuildersMatchTheVectors() {
+        assertArrayEquals(body("svc_login_start"), Req.svcLoginStart("tidal"))
+        assertEquals(SvcLoginStartReply(7), SvcLoginStartReply.from(Node.decode("SVC_LOGIN_START.reply", body("svc_login_start_reply"))))
+        assertArrayEquals(body("svc_logout"), Req.svcLogout("tidal", "night owl", 12))
+        assertEquals(SvcLogout("tidal", "night owl", 12), SvcLogout.from(Node.decode("SVC_LOGOUT", body("svc_logout"))))
+        assertFalse("night owl" in SvcLogout("tidal", "night owl", 12).toString())
+        assertTrue(body("svc_logout_reply").isEmpty())
+        val state = SvcState.from(Node.decode("SVC_STATE", body("svc_state")))
+        assertEquals(
+            listOf(
+                SvcInfo("tidal", "TIDAL", listOf("client_id", "client_secret"), true, true, "night owl", 12),
+                SvcInfo("svcdemo", "SVCDEMO", pkce = true, signedIn = false),
+                SvcInfo("radio", "Night Radio", pkce = false),
+            ),
+            state.services,
+        )
+        assertFalse("night owl" in state.services[0].toString())
+        assertArrayEquals(body("svc_state"), state.encode())
+        val errors = mapOf(
+            "svc_login_start_signed_in" to (Err.exists to "signed in"),
+            "svc_login_start_off" to (Err.off to "off"),
+            "svc_login_start_unknown" to (Err.notFound to "not in firmware"),
+            "svc_login_start_busy" to (Err.busy to "busy"),
+            "svc_login_start_card" to (Err.noCard to "card not available"),
+            "svc_login_start_refused" to (Err.refused to "refused"),
+            "svc_login_start_failed" to (Err.refused to "no keys"),
+            "svc_login_start_nobit32" to (Err.unknown to "unknown"),
+            "svc_login_start_removing" to (Err.busy to "busy"),
+            "svc_login_start_bad" to (Err.badValue to "bad value"),
+            "svc_login_start_cancelled" to (Err.cancelled to "cancelled"),
+            "svc_login_start_timeout" to (Err.busy to "timeout"),
+            "svc_login_start_retry" to (Err.refused to "retry later"),
+            "svc_logout_off" to (Err.off to "off"),
+            "svc_logout_busy" to (Err.busy to "busy"),
+            "svc_logout_counted" to (Err.busy to "downloads not counted"),
+            "svc_logout_card" to (Err.noCard to "card not available"),
+            "svc_logout_stale" to (Err.staleRev to "stale"),
+            "svc_logout_changed" to (Err.staleRev to "downloads changed"),
+            "svc_logout_refused" to (Err.refused to "refused"),
+            "svc_logout_bad" to (Err.badValue to "bad value"),
+            "svc_logout_nobit32" to (Err.unknown to "unknown"),
+            "svc_logout_notfw" to (Err.notFound to "not in firmware"),
+            "svc_logout_stopped" to (Err.refused to "stopped"),
+            "svc_logout_broken" to (Err.refused to "broken"),
+            "svc_logout_timeout" to (Err.busy to "timeout"),
+        )
+        for ((v, want) in errors) {
+            val e = ErrorReply.from(Node.decode("error", body(v)))
+            assertEquals(v, want, e.code to e.text)
         }
     }
 
