@@ -121,6 +121,40 @@ class SaverRowsTest {
     }
 
     @Test
+    fun screenLockBringsBackSaverLyricsAndSaverDriftWhileTheSaverIsOff() {
+        start()
+        rule.walkPivots(c.device.schema.rows, "screens") { settle(1000) }
+        tap("set.saverMode")
+        pick(0)
+        c.tick()
+        settle(1000)
+        assertTrue(screens().none { it == "saverLyrics" || it == "saverDrift" })
+        shows("set.screenLock", "OFF")
+        tap("set.screenLock")
+        assertEquals("screen lock", shell.sheet.title)
+        assertEquals(listOf("OFF", "ON"), shell.sheet.items)
+        assertEquals(0, shell.sheet.focus)
+        pick(1)
+        c.tick()
+        settle(1000)
+        assertEquals("on", c.device.settings.values["screenLock"])
+        val back = screens()
+        assertEquals(back.indexOf("saverMode") + 1, back.indexOf("saverLyrics"))
+        assertEquals(back.indexOf("saverLyrics") + 1, back.indexOf("saverDrift"))
+        assertEquals(back.indexOf("saverDrift") + 1, back.indexOf("screenLock"))
+        shows("set.saverLyrics", "ON")
+        shows("set.screenLock", "ON")
+        tap("set.screenLock")
+        pick(0)
+        c.tick()
+        settle(1000)
+        assertTrue(screens().none { it == "saverLyrics" || it == "saverDrift" })
+        rule.onNodeWithTag("set.saverLyrics").assertDoesNotExist()
+        rule.onNodeWithTag("set.saverDrift").assertDoesNotExist()
+        assertTrue(c.failed.isEmpty())
+    }
+
+    @Test
     fun screenOffAfterListsTenAndThirtySeconds() {
         start()
         rule.walkPivots(c.device.schema.rows, "power") { settle(1000) }

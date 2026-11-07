@@ -1,0 +1,6 @@
+screens	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-	-
+screens	navBar	toggle	NAV BAR	off,on	OFF,ON	-	-	-
+screens	artistPhoto	toggle	ARTIST PHOTO	off,on	OFF,ON	-	-	quickplay=off|navBar!=off
+screens	statusVolume	toggle	STATUS VOLUME	off,on	OFF,ON	-	-	navBar=on
+screens	led	choice	LED	high,low	HIGH,LOW	-	-	ghost=on
+screens	batteryPercent	toggle	BATTERY PERCENT	off,on	OFF,ON	-	-	ghost!=on

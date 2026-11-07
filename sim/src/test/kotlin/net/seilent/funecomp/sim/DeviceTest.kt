@@ -22,6 +22,7 @@ import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Tok
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.zip.CRC32
@@ -143,8 +144,8 @@ class DeviceTest {
 
     @Test
     fun rowCountsAtTheDefaultsAndWithEveryRuntimeRowShown() {
-        for ((b, n) in listOf("ap80" to 48, "v1" to 58, "r1" to 58)) assertEquals(b, n, device(b).schemaRows().size)
-        for ((b, n) in listOf("ap80" to 51, "v1" to 62, "r1" to 62)) {
+        for ((b, n) in listOf("ap80" to 49, "v1" to 59, "r1" to 59)) assertEquals(b, n, device(b).schemaRows().size)
+        for ((b, n) in listOf("ap80" to 52, "v1" to 63, "r1" to 63)) {
             val d = Device(Options(Board.of(b), headset = true, companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
             assertEquals(b, n, d.schemaRows().size)
@@ -154,7 +155,7 @@ class DeviceTest {
 
     @Test
     fun pivotsAsFuneos71eaf7418() {
-        val screens = listOf("saverMode", "saverDelay", "saverLyrics", "saverDrift", "quickplay", "artistPhoto", "navBar", "navOrder", "navButton")
+        val screens = listOf("saverMode", "saverDelay", "saverLyrics", "saverDrift", "screenLock", "quickplay", "artistPhoto", "navBar", "navOrder", "navButton")
         for (b in listOf("ap80", "v1", "r1")) {
             val d = Device(Options(Board.of(b), companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
@@ -372,6 +373,7 @@ class DeviceTest {
             assertEquals(keys.indexOf("saverMode") + 1, keys.indexOf("saverDelay"))
             assertEquals(keys.indexOf("saverDelay") + 1, keys.indexOf("saverLyrics"))
             assertEquals(keys.indexOf("saverLyrics") + 1, keys.indexOf("saverDrift"))
+            assertEquals(keys.indexOf("saverDrift") + 1, keys.indexOf("screenLock"))
             assertEquals(keys.indexOf("crossfeed") + 1, keys.indexOf("tube"))
             assertEquals(keys.indexOf("tube") + 1, keys.indexOf("stereoWidth"))
             val row = d.rows.first { it.key == "saverLyrics" }
@@ -455,6 +457,55 @@ class DeviceTest {
                 assertTrue("$b $v", "screenOffSeconds=$v" in settings(screen))
             }
         }
+    }
+
+    @Test
+    fun screenLockShowsTheSaverLinesWhileTheSaverIsOff() {
+        fun settings(out: Sink) = Settings.from(out.of(Msg.SETTINGS).last()).text.lines()
+        fun keys(d: Device) = Sink().also { d.greet(it) }.of(Msg.SCHEMA).map { Schema.from(it) }.flatMap { it.rows }.mapNotNull { it.key }
+        fun set(d: Device, text: String) = Sink().also { ok(req(d, Msg.SET, Req.set(text), it)) }
+        for (b in listOf("ap80", "v1", "r1")) {
+            val d = device(b)
+            assertTrue(b, "screenLock=off" in settings(Sink().also { d.greet(it) }))
+            set(d, "saverLyrics=off\n")
+            val off = set(d, "saverMode=off\n")
+            val hidden = keys(d)
+            assertTrue(b, "saverDelay" !in hidden && "saverLyrics" !in hidden && "saverDrift" !in hidden)
+            assertEquals(b, hidden.indexOf("saverMode") + 1, hidden.indexOf("screenLock"))
+            assertTrue(b, "screenLock=off" in settings(off) && settings(off).none { it.startsWith("saverLyrics=") || it.startsWith("saverDrift=") })
+            val on = set(d, "screenLock=on\n")
+            val shown = keys(d)
+            assertEquals(b, listOf("saverMode", "saverLyrics", "saverDrift", "screenLock"), shown.subList(shown.indexOf("saverMode"), shown.indexOf("screenLock") + 1))
+            assertTrue(b, "saverLyrics=off" in settings(on) && "saverDrift=on" in settings(on) && "screenLock=on" in settings(on))
+            set(d, "screenLock=off\n")
+            assertTrue(b, keys(d).none { it == "saverLyrics" || it == "saverDrift" })
+            set(d, "saverMode=on\n")
+            val saver = keys(d)
+            set(d, "screenLock=on\n")
+            assertEquals(b, saver, keys(d))
+            assertEquals(b, listOf("screenLock"), fail(req(d, Msg.SET, Req.set("screenLock=yes\n"))).refused)
+        }
+    }
+
+    @Test
+    fun aConditionWithTwoClausesShowsWhenEitherHolds() {
+        val d = Device(Options(Board("ap80", 360, 480, 360, 480, "schema-orwhen.txt")), Library.synthetic()) { t }
+        fun shown() = d.schemaRows().mapNotNull { it.key }
+        assertEquals("quickplay=off|navBar!=off", d.conditionOf("artistPhoto"))
+        assertEquals("navBar=on", d.conditionOf("statusVolume"))
+        assertEquals(listOf("quickplay", "navBar", "batteryPercent"), shown())
+        ok(req(d, Msg.SET, Req.set("quickplay=off\n")))
+        assertTrue("artistPhoto" in shown())
+        ok(req(d, Msg.SET, Req.set("quickplay=on\nnavBar=on\n")))
+        assertTrue("artistPhoto" in shown() && "statusVolume" in shown())
+        ok(req(d, Msg.SET, Req.set("navBar=off\n")))
+        assertFalse("artistPhoto" in shown() || "statusVolume" in shown())
+    }
+
+    @Test
+    fun anEmptyClauseInAConditionIsRefusedAtLoad() {
+        val e = assertThrows(IllegalArgumentException::class.java) { Device(Options(Board("ap80", 360, 480, 360, 480, "schema-emptyclause.txt")), Library.synthetic()) { t } }
+        assertEquals("empty clause in when of artistPhoto: quickplay=off||navBar=on", e.message)
     }
 
     @Test

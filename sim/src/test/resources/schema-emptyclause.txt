@@ -1,0 +1,2 @@
+screens	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-	-
+screens	artistPhoto	toggle	ARTIST PHOTO	off,on	OFF,ON	-	-	quickplay=off||navBar=on

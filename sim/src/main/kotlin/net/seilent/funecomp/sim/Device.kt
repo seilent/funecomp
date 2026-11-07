@@ -192,7 +192,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val lock = Any()
     val svc = SvcAccounts(opts, lock) { now() }
 
-    private val conditions = HashMap<String, Triple<String, String, Boolean>>()
+    private val conditions = HashMap<String, List<Triple<String, String, Boolean>>>()
     val rows: List<Row> = loadRows()
     private val pivots = rows.mapNotNull { it.pivot }.distinct()
     private var schemaRev = 1L
@@ -216,7 +216,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         "crossfade" to whole(Tok.settings_crossfadeDefault), "crossfeed" to "off", "artistPhoto" to "on",
         "saverLyrics" to "on", "brightness" to whole(tok.settings_brightnessDefault),
         "outputPriority" to "headphones", "outputGain" to "high", "dsdOutput" to "dop", "tube" to "off", "stereoWidth" to "off",
-        "led" to "high", "saverDrift" to "on", "statusVolume" to "off", "navBar" to "off", "navOrder" to "backLeft",
+        "led" to "high", "saverDrift" to "on", "screenLock" to "off", "statusVolume" to "off", "navBar" to "off", "navOrder" to "backLeft",
         "navButton" to "play", "whenIdle" to "powerOff", "chargeLimit" to "off", "chargeSpeed" to "normal", "swapTrackKeys" to "off", "usbFeedback" to "on", "usbOutput" to "headphones",
         "companion" to if (opts.companion) "on" else "off", "scrobble" to "phone", "size" to "standard",
         "bootLogo" to "fune", "streaming" to if (opts.services.isNotEmpty()) "on" else "off", "btAudio" to "on",
@@ -390,7 +390,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             val p = line.split('\t')
             fun list(s: String) = if (s == "-") emptyList() else s.split(',')
             val range = list(p[6]).map { it.toInt() }
-            p.getOrNull(8)?.takeIf { it != "-" }?.let { c -> conditions[p[1]] = Triple(c.substringBefore('=').removeSuffix("!"), c.substringAfter('='), "!=" !in c) }
+            p.getOrNull(8)?.takeIf { it != "-" }?.let { c ->
+                val clauses = c.split('|')
+                require(clauses.none { it.isEmpty() }) { "empty clause in when of ${p[1]}: $c" }
+                conditions[p[1]] = clauses.map { Triple(it.substringBefore('=').removeSuffix("!"), it.substringAfter('='), "!=" !in it) }
+            }
             Row(
                 p[1], p[3], p[0],
                 Enums.RowKind.names.entries.first { it.value == p[2] }.key,
@@ -805,12 +809,12 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         playFresh = true
     }
 
-    fun conditionOf(key: String?): String? = conditions[key]?.let { (k, v, eq) -> if (eq) "$k=$v" else "$k!=$v" }
+    fun conditionOf(key: String?): String? = conditions[key]?.joinToString("|") { (k, v, eq) -> if (eq) "$k=$v" else "$k!=$v" }
 
     fun schemaRows(): List<Row> = synchronized(lock) { legacy(structureRows()) }
 
     private fun structureRows(): List<Row> =
-        rows.filter { r -> r.key !in faults.rowsOff && conditions[r.key]?.let { (k, v, eq) -> (prefs[k] == v) == eq } != false && (r.key != "streaming" || opts.services.isNotEmpty()) }
+        rows.filter { r -> r.key !in faults.rowsOff && conditions[r.key]?.any { (k, v, eq) -> (prefs[k] == v) == eq } != false && (r.key != "streaming" || opts.services.isNotEmpty()) }
             .flatMap { structure(it) }
 
     private fun legacy(rows: List<Row>): List<Row> = rows.map { r -> liveWord(r)?.let { r.copy(words = listOf(it)) } ?: r }
