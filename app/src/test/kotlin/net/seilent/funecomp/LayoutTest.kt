@@ -26,6 +26,8 @@ import net.seilent.funecomp.ui.detailRowsTop
 import net.seilent.funecomp.ui.display
 import net.seilent.funecomp.ui.freqText
 import net.seilent.funecomp.ui.gridHz
+import net.seilent.funecomp.ui.headerBaseline
+import net.seilent.funecomp.ui.headerScale
 import net.seilent.funecomp.ui.homeBarAlpha
 import net.seilent.funecomp.ui.homeMenuX
 import net.seilent.funecomp.ui.homePitch
@@ -451,5 +453,18 @@ class LayoutTest {
         }
         assertEquals(5, JumpLayout.of(Ui(3f, 353.9f, 320f, Shape.SW)).cols)
         assertEquals(6, JumpLayout.of(Ui(3f, 354.1f, 320f, Shape.SW)).cols)
+    }
+
+    @Test
+    fun theHeaderScaleIsTheFrameOnP() {
+        val p = Ui(1f, 272f, 480f, Shape.P)
+        assertEquals(1.13333f, p.headerScale, 1e-4f)
+        assertEquals(1.06882f, Ui(1f, 320f, 465f, Shape.SN).headerScale, 1e-4f)
+        assertEquals(1f, Ui(1f, 320f, 449f, Shape.SN).headerScale, 1e-4f)
+        val sw = Ui(1f, 480f, 320f, Shape.SW)
+        assertEquals(1f, sw.headerScale, 1e-4f)
+        assertEquals(1f, Ui(1f, 640f, 272f, Shape.L).headerScale, 1e-4f)
+        assertEquals(58.933f, p.headerBaseline, 1e-3f)
+        assertEquals(52f, sw.headerBaseline, 1e-3f)
     }
 }

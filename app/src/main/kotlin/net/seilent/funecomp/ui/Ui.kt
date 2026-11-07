@@ -84,7 +84,7 @@ private fun case(c: String) = when (c) {
 }
 
 object Roles {
-    val hubHeader = Role(Tok.type_hubHeader_size, weight(Tok.type_hubHeader_style), case(Tok.type_hubHeader_case), Tok.type_hubHeader_alpha)
+    val pageHeader = Role(Tok.type_pageHeader_size, weight(Tok.type_pageHeader_style), case(Tok.type_pageHeader_case), Tok.type_pageHeader_alpha)
     val homeItem = Role(Held.Home.type_homeItem_size, weight(Held.Home.type_homeItem_style), case(Tok.type_homeItem_case), Tok.type_homeItem_alpha, Tok.type_homeItem_alphaDim)
     val homeSubtitle = Role(Held.Home.type_homeSubtitle_size, weight(Tok.type_homeSubtitle_style), case(Tok.type_homeSubtitle_case), Tok.type_homeSubtitle_alpha)
     val pivotActive = Role(Held.Hub.type_pivotActive_size, weight(Tok.type_pivotActive_style), case(Tok.type_pivotActive_case), Tok.type_pivotActive_alpha)

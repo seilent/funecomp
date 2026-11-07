@@ -66,6 +66,13 @@ val Ui.contentTop: Float get() = when (shape) {
     Shape.SW, Shape.L -> Tok.contentTop
 }
 
+val Ui.headerScale: Float get() = when (shape) {
+    Shape.P -> Ui.PORTRAIT_W / Tok.canvasW
+    Shape.SN -> byK(Ui.PORTRAIT_W / Tok.canvasW, 1f, Held.Hub.shortArtTop)
+    Shape.SW, Shape.L -> 1f
+}
+val Ui.headerBaseline get() = Tok.page_headerBaseline * headerScale
+
 val Ui.npTextX: Float get() = when (shape) {
     Shape.P, Shape.SN -> Tok.edge
     Shape.SW -> NP_COLUMN_RIGHT - NP_ART_MAX + npArt

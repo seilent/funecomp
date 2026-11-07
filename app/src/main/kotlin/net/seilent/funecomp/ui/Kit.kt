@@ -74,6 +74,8 @@ import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private const val MS_PER_S = 1000f
@@ -171,18 +173,25 @@ fun PageSurface() {
 }
 
 @Composable
+fun HeaderWord(text: String, role: Role, x: Float, tracking: Float, tag: String = "header", onBack: (() -> Unit)? = null) {
+    val ui = LocalUi.current
+    val s = ui.headerScale
+    val scaled = role.copy(size = role.size * s)
+    val advance = rememberTextMeasurer().measure(shown(text, role.case), textStyle(scaled, white(role.alpha), tracking * s)).size.width.toFloat()
+    val left = max(0f, x)
+    val right = min(ui.px(ui.w), x + advance)
+    Box(Modifier.fillMaxWidth().height(ui.px(ui.pivotTop).dp()).clipToBounds().testTag("$tag.clip")) {
+        RoleText(text, scaled, Modifier.atBaseline(x, ui.px(ui.headerBaseline)).testTag("$tag.word"), tracking = tracking * s)
+    }
+    val tap = if (onBack == null) Modifier else Modifier.press({ onBack() })
+    Box(Modifier.at(left, 0f).size(max(0f, right - left).dp(), ui.px(Tok.headerBand).dp()).then(tap).testTag(tag))
+}
+
+@Composable
 fun CroppedHeader(text: String, shift: Float = 0f, onBack: (() -> Unit)? = null) {
     val ui = LocalUi.current
-    val x by animateFloatAsState(ui.px(Tok.hubEdge + shift), tween(Tok.motion_pivotStrip.toInt(), easing = Strip), label = "header")
-    Box(Modifier.fillMaxWidth().height(ui.px(Tok.headerBand).dp()).clipToBounds()) {
-        val tap = if (onBack == null) Modifier else Modifier.press({ onBack() })
-        RoleText(
-            text,
-            Roles.hubHeader,
-            Modifier.atBaseline(x, ui.px(Tok.headerXHeightBottom)).then(tap).testTag("header"),
-            tracking = Tok.trackingHeader,
-        )
-    }
+    val x by animateFloatAsState(ui.px(Tok.page_headerX * ui.headerScale + shift), tween(Tok.motion_pivotStrip.toInt(), easing = Strip), label = "header")
+    HeaderWord(text, Roles.pageHeader, x, Tok.trackingHeader, onBack = onBack)
 }
 
 @Composable
