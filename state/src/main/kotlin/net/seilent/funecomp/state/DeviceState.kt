@@ -17,6 +17,7 @@ import net.seilent.funecomp.proto.Settings
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.SvcLogin
 import net.seilent.funecomp.proto.SvcLoginEnd
+import net.seilent.funecomp.proto.SvcState
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Feature
 import net.seilent.funecomp.proto.gen.Msg
@@ -116,6 +117,7 @@ data class DeviceState(
     val clock: DeviceClock = DeviceClock(),
     val card: CardView = CardView(),
     val logins: SvcLogins = SvcLogins(),
+    val accounts: Map<String, SvcAccount>? = null,
     val appFeatures: Long = 0,
 ) {
     val cardDown: Boolean get() = card.down
@@ -161,10 +163,13 @@ data class DeviceState(
         Msg.LIB -> withLib(Lib.from(body))
         Msg.SVC_LOGIN -> if (has(SVC)) copy(logins = logins.login(SvcLogin.from(body))) else this
         Msg.SVC_LOGIN_END -> if (has(SVC)) copy(logins = logins.end(SvcLoginEnd.from(body))) else this
+        Msg.SVC_STATE -> if (has(SVC) && has(ACCOUNT)) copy(accounts = SvcAccount.of(SvcState.from(body))) else this
         else -> this
     }
 
     fun withHello(h: HelloReply, app: Long = 0) = DeviceState(hello = h, lib = LibMirror(h.libRev, snap = h.snapRev), appFeatures = app)
+
+    fun unlinked() = copy(hello = null, logins = SvcLogins(), accounts = null)
 
     private fun both(bit: Int) = hello?.let { (it.features ushr bit) and 1L == 1L } == true && (appFeatures ushr bit) and 1L == 1L
 
@@ -292,6 +297,7 @@ data class DeviceState(
     companion object {
         const val RECEIVER = "bluetooth receiver"
         const val SVC = "svcLogin"
+        const val ACCOUNT = "svcAccount"
     }
 }
 
