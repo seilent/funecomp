@@ -721,12 +721,12 @@ class BackgroundTest {
         shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(1))
     }
 
-    private fun heldLive(i: Int, body: String, code: Int = 200, copy: String = oldSynced, faults: List<String> = emptyList(), minor: Int = Proto.minor, late: Boolean = false): org.robolectric.android.controller.ServiceController<LinkService> {
+    private fun heldLive(i: Int, body: String, code: Int = 200, copy: String = oldSynced, faults: List<String> = emptyList(), minor: Int = Proto.minor, late: Boolean = false, lib: net.seilent.funecomp.sim.Library = net.seilent.funecomp.sim.Library.synthetic()): org.robolectric.android.controller.ServiceController<LinkService> {
         lyricsFrom(body, code)
         if (late) Lyrics.set(LyricSources.LRCLIB, false)
         mark(i)
         org.robolectric.shadows.ShadowLog.clear()
-        val c = live(sim(lrcDir = copy(i, copy), faults = faults, minor = minor, offsets = mapOf(synth[i].id to 500)))
+        val c = live(sim(lrcDir = copy(i, copy), faults = faults, minor = minor, offsets = mapOf(synth[i].id to 500), lib = lib))
         if (late) {
             waitFor { Remote.device.queue.items.size > LyricsPlan.AHEAD }
             Lyrics.set(LyricSources.LRCLIB, true)
@@ -924,7 +924,9 @@ class BackgroundTest {
 
     @Test
     fun aBusyDeleteIsTriedTwicePerSession() {
-        val c = heldLive(2, "", code = 404, copy = oldPlain, faults = listOf("busy=LRC_DEL:50"))
+        val c = heldLive(2, "", code = 404, copy = oldPlain, faults = listOf("busy=LRC_DEL:50"), lib = net.seilent.funecomp.sim.Library(listOf(synth[2])))
+        waitFor(15_000) { dels() >= 1 }
+        Lyrics.poke()
         waitFor(15_000) { dels() >= 2 }
         settle(5)
         assertEquals(2, dels())
@@ -956,8 +958,12 @@ class BackgroundTest {
     fun aHeldPutAnsweringNotFoundIsNotRepeated() = aFailedHeldPutIsNotRepeated(Err.notFound)
 
     @Test
-    fun aHeldNoCardPutWaitsForTheCard() {
-        val c = heldLive(0, syntheticSyncedBody, faults = listOf("fail=LRC_PUT:${Err.noCard}:2"))
+    fun aNoCardAnswerToAHeldPutIsNotATry() {
+        val c = heldLive(0, syntheticSyncedBody, faults = listOf("fail=LRC_PUT:${Err.noCard}:2"), lib = net.seilent.funecomp.sim.Library(listOf(synth[0])))
+        waitFor(15_000) { putLines(0).isNotEmpty() }
+        Lyrics.poke()
+        waitFor(15_000) { putLines(0).size >= 2 }
+        Lyrics.poke()
         waitFor(15_000) { putLines(0).any { it.endsWith("-> ok") } }
         assertTrue(putLines(0).toString(), matches(lines(0, "synced lrclib -> error ${Err.noCard}", "synced lrclib -> error ${Err.noCard}", "synced lrclib -> ok"), putLines(0)))
         assertFalse(marker(0).exists())
@@ -966,7 +972,9 @@ class BackgroundTest {
 
     @Test
     fun aBusyHeldPutIsTriedTwicePerSession() {
-        val c = heldLive(0, syntheticSyncedBody, faults = listOf("busy=LRC_PUT:50"))
+        val c = heldLive(0, syntheticSyncedBody, faults = listOf("busy=LRC_PUT:50"), lib = net.seilent.funecomp.sim.Library(listOf(synth[0])))
+        waitFor(15_000) { putLines(0).isNotEmpty() }
+        Lyrics.poke()
         waitFor(15_000) { putLines(0).size >= 2 }
         settle(5)
         assertTrue(putLines(0).toString(), matches(lines(0, "synced lrclib -> error ${Err.busy}", "synced lrclib -> error ${Err.busy}"), putLines(0)))
@@ -1028,7 +1036,9 @@ class BackgroundTest {
 
     @Test
     fun aBusyDapReadKeepsTheCopyAndIsTriedTwicePerSession() {
-        val c = heldLive(2, "", code = 404, copy = oldPlain, faults = listOf("busy=LYR_GET:50"))
+        val c = heldLive(2, "", code = 404, copy = oldPlain, faults = listOf("busy=LYR_GET:50"), lib = net.seilent.funecomp.sim.Library(listOf(synth[2])))
+        waitFor(15_000) { reads() >= 1 }
+        Lyrics.poke()
         waitFor(15_000) { reads() >= 2 }
         settle(5)
         assertEquals(2, reads())
@@ -1039,7 +1049,7 @@ class BackgroundTest {
 
     @Test
     fun aDapReadWithNoCardWaitsForTheCard() {
-        val c = heldLive(2, "", code = 404, copy = oldPlain, faults = listOf("fail=LYR_GET:${Err.noCard}:1"))
+        val c = heldLive(2, "", code = 404, copy = oldPlain, faults = listOf("card-run=2000+0@msg:LYR_GET"))
         waitFor(15_000) { appLog("lrc del ${uid(2)} verdict ").isNotEmpty() }
         settle()
         assertEquals(2, reads())
