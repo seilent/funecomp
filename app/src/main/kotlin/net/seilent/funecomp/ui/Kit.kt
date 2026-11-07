@@ -487,9 +487,9 @@ fun SettingsRow(
     val titleRole = when {
         sub -> Roles.settingsSub
         info -> Roles.settingsValue
-        else -> Roles.settingsItem
+        else -> Roles.pageRowTitle
     }
-    val tc by animateColorAsState(white(if (focused) Roles.settingsItem.alpha else Roles.settingsItem.dim), tween(Tok.motion_focusAlpha.toInt()), label = "title")
+    val tc by animateColorAsState(white(if (focused) Roles.pageRowTitle.alpha else Roles.pageRowTitle.dim), tween(Tok.motion_focusAlpha.toInt()), label = "title")
     val vc by animateColorAsState(
         if (editing) Accent else white(if (focused) Tok.settingsValueFocused else Tok.settingsValueDim),
         tween(Tok.motion_focusAlpha.toInt()),
@@ -510,7 +510,7 @@ fun SettingsRow(
     Pressable({ onTap(it.x / rowW) }, modifier.size(rowW.dp(), rowH.dp()), onLong) {
         val valueColor = vc
         if (eqSlot) {
-            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline), color = tc)
+            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline).testTag("settings.title"), color = tc)
             val slotX = edgeX + t.size.width + ui.px(Tok.eqValueGap)
             val slotW = (right - slotX).coerceAtLeast(0f)
             Box(Modifier.at(slotX, 0f).size(slotW.dp(), rowH.dp()).clipToBounds()) {
@@ -522,7 +522,7 @@ fun SettingsRow(
                 shownValue.isNotEmpty() -> right - room.size.width - ui.px(Tok.gutter) - edgeX
                 else -> right - edgeX
             }
-            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline, limit), color = tc)
+            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline, limit).testTag("settings.title"), color = tc)
             if (swatch != null) {
                 Box(Modifier.at(right - sw, (rowH - sw) / 2).size(sw.dp()).background(swatch.copy(alpha = (if (focused) Tok.settingsValueFocused else Tok.settingsValueDim) / Tok.settingsValueFocused)))
             } else if (shownValue.isNotEmpty()) {

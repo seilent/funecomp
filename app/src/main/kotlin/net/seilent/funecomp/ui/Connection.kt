@@ -136,8 +136,8 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
         if (hint) add(Line("bluetooth settings", "", tag = "btsettings") { ctx.control.openBluetoothSettings() })
         if (gated) add(Line("online", "", tag = "online") { ctx.nav.push(Page.Online()) })
         link.battery?.let { add(Line("background", it.word, tag = "background") { ctx.control.allowBackground() }) }
-        add(Line("phone media controls", if (link.mediaControls) ON else OFF, tag = "media") { i -> onOffSheet(ctx, "phone media controls", link.mediaControls, keep(i)) { ctx.control.mediaControls(it) } })
-        add(Line("reconnect on update", if (link.reconnect) ON else OFF, tag = "reconnect") { i -> onOffSheet(ctx, "reconnect on update", link.reconnect, keep(i)) { ctx.control.reconnect(it) } })
+        add(Line("media controls", if (link.mediaControls) ON else OFF, tag = "media") { i -> onOffSheet(ctx, "phone media controls", link.mediaControls, keep(i)) { ctx.control.mediaControls(it) } })
+        add(Line("auto reconnect", if (link.reconnect) ON else OFF, tag = "reconnect") { i -> onOffSheet(ctx, "reconnect on update", link.reconnect, keep(i)) { ctx.control.reconnect(it) } })
         if (link.phase != Phase.NONE) add(Line("disconnect", "", tag = "disconnect") { ctx.control.disconnect() })
     }
     val at = lines.indexOfFirst { it.tag == focus }.coerceAtLeast(0)

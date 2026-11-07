@@ -98,6 +98,7 @@ object Roles {
     val listCount = Role(Tok.type_listCount_size, weight(Tok.type_listCount_style), case(Tok.type_listCount_case), Tok.type_listCount_alpha)
     val detailName = Role(Tok.type_detailName_size, weight(Tok.type_detailName_style), case(Tok.type_detailName_case), Tok.type_detailName_alpha)
     val settingsItem = Role(Tok.type_settingsItem_size, weight(Tok.type_settingsItem_style), case(Tok.type_settingsItem_case), Tok.type_settingsItem_alpha, Tok.type_settingsItem_alphaDim)
+    val pageRowTitle = Role(Tok.page_rowTitle, weight(Tok.type_settingsItem_style), case(Tok.type_settingsItem_case), Tok.type_settingsItem_alpha, Tok.type_settingsItem_alphaDim)
     val settingsValue = Role(Tok.type_settingsValue_size, weight(Tok.type_settingsValue_style), case(Tok.type_settingsValue_case), Tok.type_settingsValue_alpha)
     val settingsSub = Role(Tok.type_settingsSub_size, weight(Tok.type_settingsSub_style), case(Tok.type_settingsSub_case), Tok.type_settingsSub_alpha, Tok.type_settingsSub_alphaDim)
     val npArtist = Role(Tok.type_npArtist_size, weight(Tok.type_npArtist_style), case(Tok.type_npArtist_case), Tok.type_npArtist_alpha)
