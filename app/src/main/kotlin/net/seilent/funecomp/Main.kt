@@ -396,6 +396,7 @@ class Main : ComponentActivity() {
             (!shell.gated && !shell.sheet.shown && shell.pick == null && !askBattery() && !reconnectAsk).also { if (it) shell.pick = target }
         }
         Remote.svcShown = { shell.front }
+        Remote.svcFront = { startActivity(Intent(this, SvcLogin::class.java).putExtra(Svc.EXTRA_TOKEN, it).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)) }
         Scrobbles.opener = { browse(it) }
         scanAsk = checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED && !prefs().getBoolean(SCAN_ASKED, false)
         if (scanAsk) prefs().edit().putBoolean(SCAN_ASKED, true).apply()
@@ -425,6 +426,7 @@ class Main : ComponentActivity() {
         super.onStop()
         Remote.pickAsk = null
         Remote.svcShown = null
+        Remote.svcFront = null
         Scrobbles.opener = null
         scan.stop()
         if (!isChangingConfigurations) {

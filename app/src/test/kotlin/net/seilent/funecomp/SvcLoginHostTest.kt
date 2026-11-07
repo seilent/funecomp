@@ -4,12 +4,14 @@ import android.os.IBinder
 import android.os.Process
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.SvcInfo
+import net.seilent.funecomp.proto.SvcLogin
 import net.seilent.funecomp.proto.SvcLoginEnd
 import net.seilent.funecomp.proto.SvcPkce
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.Groups
+import net.seilent.funecomp.state.SvcAccount
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -242,7 +244,7 @@ class SvcLoginHostTest {
     }
 
     @Test
-    fun aDropOrTheTimeoutEndsTheAskWithNoReply() {
+    fun aDropEndsTheAskWithNoReplyAndTheTimeoutAnswers13() {
         Svc.binder.ask(hold(), Page())
         Svc.dropped()
         assertNull(Svc.view.ask)
@@ -259,7 +261,7 @@ class SvcLoginHostTest {
         timers.first().second.run()
         assertNull(Svc.view.ask)
         assertFalse(Svc.binder.caught(t, redirect))
-        assertTrue(answers.isEmpty())
+        assertEquals(listOf("error ${Err.cancelled}"), answers)
         assertEquals(listOf("ended", "ended"), ends)
     }
 
@@ -316,5 +318,278 @@ class SvcLoginHostTest {
         Svc.tapped()
         ShadowSystemClock.advanceBy(Duration.ofMillis(Svc.TAP_MS + 1))
         assertFalse(Svc.spendTap())
+    }
+
+    private val no35 = hello.copy(features = Groups.all and Groups.mask("svcAccount").inv())
+
+    private fun timers(): ArrayList<Pair<Long, Runnable>> {
+        val timers = ArrayList<Pair<Long, Runnable>>()
+        Svc.later = { ms, r ->
+            timers += ms to r
+            FutureTask<Unit>({}, Unit)
+        }
+        return timers
+    }
+
+    private fun again(spec: String = "dap") {
+        Svc.dropped(true)
+        Svc.hello(hello, spec)
+    }
+
+    @Test
+    fun aCatchOnABit35DeviceIsKeptAcrossADropAndAnsweredAtTheReAsk() {
+        Svc.hello(hello, "dap")
+        val t = hold()
+        val page = Page()
+        Svc.binder.ask(t, page)
+        assertTrue(Svc.binder.caught(t, redirect))
+        deaths.getValue(page.asBinder())()
+        assertFalse(Svc.binder.closed(t))
+        assertEquals(setOf("tidal"), Svc.view.held)
+        again()
+        assertEquals("tidal 7 kept", Svc.pkce(ask, hello, ::record))
+        assertEquals(List(2) { "redirect $redirect" }, answers)
+        assertNull(Svc.view.ask)
+        assertNull(Svc.begin())
+        assertTrue(Svc.ended(SvcLoginEnd("tidal", 7, Enums.SvcLoginResult.done)))
+        assertEquals(Svc.SIGNED_IN, Svc.view.line?.line)
+        assertTrue(Svc.view.held.isEmpty())
+    }
+
+    @Test
+    fun aDetachedPageTakesTheNewResponder() {
+        Svc.hello(hello, "dap")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        Svc.dropped(true)
+        assertTrue(ends.isEmpty())
+        assertTrue(answers.isEmpty())
+        assertNull(Svc.view.line)
+        assertEquals(setOf("tidal"), Svc.view.held)
+        assertNull(Svc.attached("tidal"))
+        Svc.hello(hello, "dap")
+        val next = CopyOnWriteArrayList<String>()
+        assertEquals("tidal 7 attached", Svc.pkce(ask, hello) { next += (it as? Svc.Answer.Redirect)?.url ?: "error" })
+        assertEquals(t, Svc.attached("tidal"))
+        assertTrue(Svc.binder.caught(t, redirect))
+        assertEquals(listOf(redirect), next)
+        assertTrue(answers.isEmpty())
+    }
+
+    @Test
+    fun aDetachedCatchSaysWaitingAndTheReAskGetsTheRedirect() {
+        Svc.hello(hello, "dap")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        Svc.dropped(true)
+        assertTrue(Svc.binder.caught(t, redirect))
+        assertEquals("TIDAL" to Svc.WAITING, Svc.view.line?.let { it.title to it.line })
+        assertTrue(answers.isEmpty())
+        Svc.hello(hello, "dap")
+        assertEquals("tidal 7 kept", Svc.pkce(ask, hello, ::record))
+        assertEquals(listOf("redirect $redirect"), answers)
+    }
+
+    @Test
+    fun aDetachedPageClosedOrDeadIsAnswered13AtTheReAsk() {
+        Svc.hello(hello, "dap")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        Svc.dropped(true)
+        assertTrue(Svc.binder.closed(t))
+        assertFalse(Svc.binder.closed(t))
+        assertTrue(answers.isEmpty())
+        Svc.hello(hello, "dap")
+        assertEquals("tidal 7 closed", Svc.pkce(ask, hello, ::record))
+        assertEquals(listOf("error ${Err.cancelled}"), answers)
+        assertEquals(Svc.ENDED, Svc.view.line?.line)
+        assertTrue(Svc.view.held.isEmpty())
+        val t8 = hold(ask.copy(seq = 8))
+        val page = Page()
+        Svc.binder.ask(t8, page)
+        Svc.dropped(true)
+        deaths.getValue(page.asBinder())()
+        Svc.hello(hello, "dap")
+        assertEquals("tidal 8 closed", Svc.pkce(ask.copy(seq = 8), hello, ::record))
+    }
+
+    @Test
+    fun aNonMatchingReAskEndsTheDetachedOrKeptSignInAndIsHeld() {
+        Svc.hello(hello, "dap")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        again()
+        val other = ask.copy(authorizeUrl = "https://login.svcdemo.test/auth?state=t")
+        assertEquals("tidal 7 held", Svc.pkce(other, hello, ::record))
+        assertEquals(listOf("ended"), ends)
+        assertEquals(Svc.ENDED, Svc.view.line?.line)
+        assertEquals(other.authorizeUrl, Svc.view.ask?.link)
+        assertTrue(answers.isEmpty())
+        val t2 = Svc.begin()!!
+        Svc.binder.ask(t2, Page())
+        assertTrue(Svc.binder.caught(t2, redirect))
+        Svc.lineShown(Svc.view.line!!.id)
+        again()
+        assertEquals("tidal 7 held", Svc.pkce(ask, hello, ::record))
+        assertEquals(listOf("redirect $redirect"), answers)
+        assertEquals(Svc.ENDED, Svc.view.line?.line)
+    }
+
+    @Test
+    fun noReAskIn15sEndsTheDetachedAskAndQuietlyTheKeptRedirect() {
+        val timers = timers()
+        Svc.hello(hello, "dap")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        again()
+        timers.last { it.first == Svc.REASK_MS }.second.run()
+        assertEquals(listOf("ended"), ends)
+        assertEquals(Svc.ENDED, Svc.view.line?.line)
+        assertTrue(Svc.view.held.isEmpty())
+        Svc.lineShown(Svc.view.line!!.id)
+        val t8 = hold(ask.copy(seq = 8))
+        Svc.binder.ask(t8, Page())
+        Svc.binder.caught(t8, redirect)
+        again()
+        assertEquals(setOf("tidal"), Svc.view.held)
+        timers.last { it.first == Svc.REASK_MS }.second.run()
+        assertTrue(Svc.view.held.isEmpty())
+        assertNull(Svc.view.line)
+        assertEquals("tidal 8 held", Svc.pkce(ask.copy(seq = 8), hello, ::record))
+    }
+
+    @Test
+    fun aReAskInTimeKeepsTheKeptRedirectPastTheWindow() {
+        val timers = timers()
+        Svc.hello(hello, "dap")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        Svc.binder.caught(t, redirect)
+        again()
+        assertEquals("tidal 7 kept", Svc.pkce(ask, hello, ::record))
+        timers.last { it.first == Svc.REASK_MS }.second.run()
+        assertEquals(setOf("tidal"), Svc.view.held)
+    }
+
+    @Test
+    fun aStopOrAnotherDeviceEndsItAndAKeptRedirectGoesQuietly() {
+        Svc.hello(hello, "dap")
+        Svc.binder.ask(hold(), Page())
+        Svc.dropped(false)
+        assertEquals(listOf("ended"), ends)
+        assertEquals(Svc.ENDED, Svc.view.line?.line)
+        Svc.binder.ask(hold(ask.copy(seq = 8)), Page())
+        again("other dap")
+        assertEquals(listOf("ended", "ended"), ends)
+        val t = hold(ask.copy(seq = 9))
+        Svc.binder.ask(t, Page())
+        Svc.binder.caught(t, redirect)
+        Svc.dropped(false)
+        assertTrue(Svc.view.held.isEmpty())
+        Svc.hello(hello, "other dap")
+        assertEquals("tidal 9 held", Svc.pkce(ask.copy(seq = 9), hello, ::record))
+        assertTrue(answers.none { it == "error ${Err.cancelled}" })
+    }
+
+    @Test
+    fun anEndInTheFirstSessionDropsTheKeptRedirect() {
+        Svc.hello(hello, "dap")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        Svc.binder.caught(t, redirect)
+        assertTrue(Svc.ended(SvcLoginEnd("tidal", 7, Enums.SvcLoginResult.cancelled)))
+        assertEquals(Svc.ENDED, Svc.view.line?.line)
+        assertTrue(Svc.view.held.isEmpty())
+        again()
+        assertEquals("tidal 7 held", Svc.pkce(ask, hello, ::record))
+    }
+
+    @Test
+    fun aDeviceWithoutBit35ClosesThePageAtTheDropAndKeepsNoRedirect() {
+        Svc.hello(no35, "dap")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        Svc.dropped(true)
+        assertEquals(listOf("ended"), ends)
+        assertEquals(Svc.ENDED, Svc.view.line?.line)
+        assertFalse(Svc.binder.caught(t, redirect))
+        Svc.hello(no35, "dap")
+        val t8 = hold(ask.copy(seq = 8))
+        Svc.binder.ask(t8, Page())
+        Svc.binder.caught(t8, redirect)
+        assertTrue(Svc.view.held.isEmpty())
+        Svc.dropped(true)
+        Svc.hello(no35, "dap")
+        assertEquals("tidal 8 held", Svc.pkce(ask.copy(seq = 8), hello, ::record))
+    }
+
+    @Test
+    fun aKeptRedirectEndsAtSignedInAndAtSignedOutOnlyPastTheReaskWindowOfALaterSession() {
+        Svc.hello(hello, "dap")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        Svc.binder.caught(t, redirect)
+        Svc.state(mapOf("tidal" to SvcAccount(false)))
+        assertEquals(setOf("tidal"), Svc.view.held)
+        again()
+        Svc.state(mapOf("tidal" to SvcAccount(null)))
+        assertEquals(setOf("tidal"), Svc.view.held)
+        Svc.state(mapOf("tidal" to SvcAccount(false)))
+        assertEquals(setOf("tidal"), Svc.view.held)
+        ShadowSystemClock.advanceBy(Duration.ofMillis(Svc.REASK_MS))
+        Svc.state(mapOf("tidal" to SvcAccount(false)))
+        assertTrue(Svc.view.held.isEmpty())
+        val t8 = hold(ask.copy(seq = 8))
+        Svc.binder.ask(t8, Page())
+        Svc.binder.caught(t8, redirect)
+        Svc.state(mapOf("tidal" to SvcAccount(true)))
+        assertTrue(Svc.view.held.isEmpty())
+    }
+
+    @Test
+    fun aReaskAfterASignedOutStateInsideTheWindowGetsTheKeptRedirect() {
+        Svc.hello(hello, "dap")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        Svc.binder.caught(t, redirect)
+        again()
+        Svc.state(mapOf("tidal" to SvcAccount(false)))
+        ShadowSystemClock.advanceBy(Duration.ofMillis(Svc.REASK_MS - 1))
+        assertEquals("tidal 7 kept", Svc.resume(ask, ::record))
+        assertEquals(List(2) { "redirect $redirect" }, answers)
+    }
+
+    @Test
+    fun aDeclineOfAnotherLoginDoesNotHoldTheReaskOffTheLinkThread() {
+        Svc.hello(hello, "dap")
+        Svc.decline("tidal")
+        val t = hold()
+        Svc.binder.ask(t, Page())
+        Svc.binder.caught(t, redirect)
+        assertEquals("tidal 7 kept", Svc.resume(ask, ::record))
+        assertEquals(List(2) { "redirect $redirect" }, answers)
+    }
+
+    @Test
+    fun aDetachedAskEndsAtALoginOfItsServiceAtSignedInAndAt600s() {
+        val timers = timers()
+        Svc.hello(hello, "dap")
+        Svc.binder.ask(hold(), Page())
+        again()
+        Svc.loginSeen(SvcLogin("plain", "https://link.svcdemo.test/A", "link.svcdemo.test", "A", 300, 1))
+        assertEquals(setOf("tidal"), Svc.view.held)
+        Svc.loginSeen(SvcLogin("tidal", "https://link.svcdemo.test/A", "link.svcdemo.test", "A", 300, 1))
+        assertEquals(listOf("ended"), ends)
+        assertEquals(Svc.ENDED, Svc.view.line?.line)
+        Svc.binder.ask(hold(ask.copy(seq = 8)), Page())
+        again()
+        Svc.state(mapOf("tidal" to SvcAccount(true)))
+        assertEquals(listOf("ended", "ended"), ends)
+        Svc.binder.ask(hold(ask.copy(seq = 9)), Page())
+        again()
+        timers.last { it.first == Proto.svcPkceMs.toLong() }.second.run()
+        assertEquals(listOf("ended", "ended", "ended"), ends)
+        assertTrue(answers.isEmpty())
+        assertTrue(Svc.view.held.isEmpty())
     }
 }

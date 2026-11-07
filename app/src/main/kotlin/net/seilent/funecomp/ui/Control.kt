@@ -56,13 +56,13 @@ sealed interface Previewed {
 }
 
 @Immutable
-data class SvcAsk(val service: String, val name: String, val seq: Long, val host: String, val link: String, val page: Boolean = false)
+data class SvcAsk(val service: String, val name: String, val seq: Long, val host: String, val link: String, val page: Boolean = false, val armed: Boolean = false)
 
 @Immutable
 data class SvcLine(val title: String, val line: String, val id: Int)
 
 @Immutable
-data class SvcView(val ask: SvcAsk? = null, val line: SvcLine? = null)
+data class SvcView(val ask: SvcAsk? = null, val line: SvcLine? = null, val held: Set<String> = emptySet(), val reopen: String? = null)
 
 @Immutable
 data class Bonded(val name: String, val address: String, val companion: Boolean = false)
@@ -167,6 +167,10 @@ interface Control {
     fun svcKnown(service: String, host: String) {}
     fun svcCancel() {}
     fun svcKeys(service: String, keys: List<SvcKey>, done: (String) -> Unit) {}
+    fun svcStart(service: String, done: (String?) -> Unit) {}
+    fun svcStartCancel(service: String) {}
+    fun svcLogout(service: String, account: String, downloads: Long?, done: (String?) -> Unit) {}
+    fun svcReopened() {}
     fun secure(on: Boolean) {}
 }
 
