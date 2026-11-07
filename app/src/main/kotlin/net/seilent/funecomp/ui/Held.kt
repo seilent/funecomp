@@ -5,14 +5,6 @@ object Held {
 
     class Entry(val name: String, val token: String, val value: Any, val row: String, val branch: String)
 
-    object Hub {
-        const val shortArtTop = 124f
-
-        val entries = listOf(
-            Entry("shortArtTop", "npArtTop", shortArtTop, "H7", "zhub"),
-        )
-    }
-
     object Home {
         const val homeTextX = 70f
         const val homeFirstBaseline = 48f
@@ -69,5 +61,5 @@ object Held {
         )
     }
 
-    val entries get() = Hub.entries + Home.entries + Np.entries
+    val entries get() = Home.entries + Np.entries
 }

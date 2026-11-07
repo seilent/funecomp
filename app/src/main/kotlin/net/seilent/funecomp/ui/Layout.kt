@@ -49,12 +49,12 @@ private fun Ui.byK(tall: Float, short: Float, anchor: Float) = tall + (short - t
 
 val Ui.pivotTop: Float get() = when (shape) {
     Shape.P -> PIVOT_TOP
-    Shape.SN -> byK(PIVOT_TOP, LayoutTok.pivotTop, Held.Hub.shortArtTop)
+    Shape.SN -> byK(PIVOT_TOP, LayoutTok.pivotTop, Tok.albumArtTop)
     Shape.SW, Shape.L -> LayoutTok.pivotTop
 }
 val Ui.pivotBottom: Float get() = when (shape) {
     Shape.P -> PIVOT_BOTTOM
-    Shape.SN -> byK(PIVOT_BOTTOM, LayoutTok.pivotBottom, Held.Hub.shortArtTop)
+    Shape.SN -> byK(PIVOT_BOTTOM, LayoutTok.pivotBottom, Tok.albumArtTop)
     Shape.SW, Shape.L -> LayoutTok.pivotBottom
 }
 val Ui.pivotBaseline get() = pivotTop + PIVOT_BASELINE_DROP
@@ -62,13 +62,13 @@ val LayoutTok = TokBoard.v1
 
 val Ui.contentTop: Float get() = when (shape) {
     Shape.P -> CONTENT_TOP
-    Shape.SN -> byK(CONTENT_TOP, Tok.contentTop, Held.Hub.shortArtTop)
+    Shape.SN -> byK(CONTENT_TOP, Tok.contentTop, Tok.albumArtTop)
     Shape.SW, Shape.L -> Tok.contentTop
 }
 
 val Ui.headerScale: Float get() = when (shape) {
     Shape.P -> Ui.PORTRAIT_W / Tok.canvasW
-    Shape.SN -> byK(Ui.PORTRAIT_W / Tok.canvasW, 1f, Held.Hub.shortArtTop)
+    Shape.SN -> byK(Ui.PORTRAIT_W / Tok.canvasW, 1f, Tok.albumArtTop)
     Shape.SW, Shape.L -> 1f
 }
 val Ui.headerBaseline get() = Tok.page_headerBaseline * headerScale
@@ -197,8 +197,8 @@ val Ui.albumTitleBaseline: Float get() = when (shape) {
 }
 val Ui.albumArtTop: Float get() = when (shape) {
     Shape.P -> NP_ART_TOP
-    Shape.SN -> byK(NP_ART_TOP, Held.Hub.shortArtTop, Held.Hub.shortArtTop)
-    Shape.SW, Shape.L -> Held.Hub.shortArtTop
+    Shape.SN -> byK(NP_ART_TOP, Tok.albumArtTop, Tok.albumArtTop)
+    Shape.SW, Shape.L -> Tok.albumArtTop
 }
 val Ui.albumRowsTop: Float get() = when (shape) {
     Shape.P, Shape.SN, Shape.SW -> albumArtTop + Tok.tileL + Tok.albumRowsGap

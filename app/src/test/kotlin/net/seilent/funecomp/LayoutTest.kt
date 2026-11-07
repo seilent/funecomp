@@ -467,4 +467,15 @@ class LayoutTest {
         assertEquals(58.933f, p.headerBaseline, 1e-3f)
         assertEquals(52f, sw.headerBaseline, 1e-3f)
     }
+
+    @Test
+    fun theShortBandAndAlbumDetailBlendOnTheAlbumArtTop() {
+        val sn = Ui(1f, 320f, 460f, Shape.SN)
+        assertEquals(63.68f, sn.pivotTop, 1e-2f)
+        assertEquals(93.10f, sn.pivotBottom, 1e-2f)
+        assertEquals(108.65f, sn.contentTop, 1e-2f)
+        assertEquals(135.0f, sn.albumArtTop, 1e-2f)
+        assertEquals(1.0473f, sn.headerScale, 1e-4f)
+        assertEquals(124f, Ui(1f, 361.6f, 320f, Shape.SW).albumArtTop, 1e-3f)
+    }
 }

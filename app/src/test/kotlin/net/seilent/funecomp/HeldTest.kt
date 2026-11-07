@@ -12,12 +12,6 @@ class HeldTest {
         assertEquals("6e3302724", Held.PIN)
         assertEquals(
             listOf(
-                listOf("shortArtTop", "npArtTop", 124f, "H7", "zhub"),
-            ),
-            rows(Held.Hub.entries),
-        )
-        assertEquals(
-            listOf(
                 listOf("homeTextX", "homeTextX", 70f, "M1, M4", "zhome"),
                 listOf("homeFirstBaseline", "homeFirstBaseline", 48f, "M1, M4", "zhome"),
                 listOf("homeSubtitleX", "homeSubtitleX", 10f, "M1, M4", "zhome"),
@@ -48,7 +42,8 @@ class HeldTest {
             ),
             rows(Held.Np.entries),
         )
-        assertEquals(23, Held.entries.size)
+        assertEquals(22, Held.entries.size)
+        assertEquals(setOf("Entry", "Home", "Np"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }
 }
