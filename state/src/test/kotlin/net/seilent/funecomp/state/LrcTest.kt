@@ -64,10 +64,9 @@ class LrcTest {
     }
 
     @Test
-    fun badStampsAndStampsAfterTextGiveNothingTimed() {
+    fun badStampsGiveNothingTimed() {
         assertTrue(parse("").isEmpty() && parse("hello\nworld\n").isEmpty())
         assertTrue(parse("[00:61.00]x\n[aa:10.00]y\n[00:1x.00]z\n[00:01.0000]w\n[12345:00.00]v\n[00:01.00").isEmpty())
-        assertEquals(listOf(l(1000, "[00:02.00]x")), parse("[00:01.00] [00:02.00]x\n"))
         assertEquals(listOf(l(1000, "x")), parse(" \t[00:01.00]x\n"))
         assertEquals(listOf(l(1050, "x")), parse("[0:01.05]x\n"))
         assertEquals(listOf(l(1005, "x")), parse("[0:01:005]x\n"))
@@ -139,35 +138,101 @@ class LrcTest {
     }
 
     @Test
+    fun angleWordStampsLeaveCleanText() {
+        assertEquals(listOf(l(12000, "Hello world")), parse(LrcCases.T1))
+        assertEquals(listOf(l(12000, "a")), parse(LrcCases.T1_TAIL))
+    }
+
+    @Test
+    fun spacedAngleStampsMergeToOneSpace() {
+        assertEquals(listOf(l(12000, "wwww ttt rrrrr")), parse(LrcCases.T1B))
+    }
+
+    @Test
+    fun squareAndMixedWordStamps() {
+        assertEquals(listOf(l(12000, "Hello world")), parse(LrcCases.T2_SQUARE))
+        assertEquals(listOf(l(12000, "a b")), parse(LrcCases.T2_SPACES))
+        assertEquals(listOf(l(12340, "あい")), parse(LrcCases.T2_CJK))
+        assertEquals(listOf(l(12000, "a b c")), parse(LrcCases.T2_MIXED))
+        assertEquals(listOf(l(12000, "a b")), parse(LrcCases.T2_CONTROL))
+    }
+
+    @Test
+    fun blankSeparatedLeadingStampsStampToStamp() {
+        assertEquals(listOf(l(1000, "x"), l(2000, "x")), parse(LrcCases.T3_SPACE))
+        assertEquals(listOf(l(1000, "x"), l(2000, "x")), parse(LrcCases.T3_CONTROL))
+        assertEquals(listOf(l(12000, "la")), parse(LrcCases.T3_ANGLE))
+    }
+
+    @Test
+    fun leadingTagGuardsStayAsToday() {
+        assertEquals(listOf(l(1000, "[Chorus] la")), parse(LrcCases.T3_CHORUS))
+        val p = Lrc.parse(u(LrcCases.T3_ID))
+        assertTrue(p.lines.isEmpty())
+        assertEquals(listOf("[ti:x] [00:01.00]la"), p.plain)
+    }
+
+    @Test
+    fun repeatedLeadingStampsCopyCleanText() {
+        assertEquals(listOf(l(3000, "la la"), l(10250, "la la")), parse(LrcCases.T4))
+    }
+
+    @Test
+    fun fileOffsetMovesTheCleanLine() {
+        assertEquals(listOf(l(1500, "a b")), parse(LrcCases.T5))
+    }
+
+    @Test
+    fun falseBracketsStayText() {
+        assertEquals(listOf(l(12000, "<3 you x")), parse(LrcCases.T6_HEART))
+        assertEquals(listOf(l(12000, "<00:13.00>x")), parse(LrcCases.T6_NESTED))
+    }
+
+    @Test
+    fun falseBracketGuardsStayText() {
+        for (t in LrcCases.T6_KEPT) assertEquals(listOf(l(12000, t)), parse(LrcCases.timed(t)))
+        assertEquals(listOf("a <00:12.50>b"), plain(LrcCases.T6_PLAIN))
+    }
+
+    @Test
+    fun shiftOfParsedCleanLines() {
+        val one = parse(LrcCases.T1)
+        val four = parse(LrcCases.T4)
+        assertEquals(listOf(l(12000, "Hello world")), Lrc.shift(one, 0))
+        assertEquals(listOf(l(11500, "Hello world")), Lrc.shift(one, 500))
+        assertEquals(listOf(l(12500, "Hello world")), Lrc.shift(one, -500))
+        assertEquals(listOf(l(3000, "la la"), l(10250, "la la")), Lrc.shift(four, 0))
+        assertEquals(listOf(l(2500, "la la"), l(9750, "la la")), Lrc.shift(four, 500))
+        assertEquals(listOf(l(3500, "la la"), l(10750, "la la")), Lrc.shift(four, -500))
+    }
+
+    @Test
+    fun aWordTimedBodyParsesAsItsPlainTwin() {
+        assertEquals(parse(LrcCases.T8_T1), parse(LrcCases.T1))
+        assertEquals(parse(LrcCases.T8_T1B), parse(LrcCases.T1B))
+    }
+
+    @Test
+    fun theBudgetCountsWordRecords() {
+        val x = List(500) { "x" }.joinToString(" ")
+        val a = "a".repeat(57536)
+        assertEquals(List(13) { l(1000, x) }, parse(LrcCases.B1))
+        assertEquals(List(13) { l(1000, x) }, parse(LrcCases.B2))
+        assertEquals(listOf(l(1000, a)), parse(LrcCases.B3))
+        assertEquals(listOf(l(1000, ""), l(1000, a)), parse(LrcCases.B4))
+    }
+
+    @Test
     fun fuzzLinesStaySortedAndNotNegative() {
-        var seed = 4242
-        fun rnd(): Int {
-            seed = seed * 1103515245 + 12345
-            return seed ushr 8
-        }
-        val base = byteArrayOf(0xEF.toByte(), 0xBB.toByte(), 0xBF.toByte()) + latin("[ar:A]\n[offset:-120]\n[00:01.50]one\n[00:03.00][00:10.25]chorus\n[01:02]bare\n[00:07:40]colon é\n[00:08.00]\n")
-        val alphabet = latin("[]:.+-0123456789 \n\roffsetÃéÿ")
         var runs = 0
-        for (n in 0..base.size) {
-            Lrc.parse(base.copyOf(n))
-            runs++
-        }
-        repeat(4000) {
-            val m = base.toMutableList()
-            repeat(1 + rnd() % 10) {
-                val p = rnd() % (m.size + 1)
-                val op = rnd() % 3
-                val ch = if (rnd() % 2 != 0) alphabet[rnd() % alphabet.size] else rnd().toByte()
-                if (op == 0 && p < m.size) m[p] = ch else if (op == 1) m.add(p, ch) else if (p < m.size) repeat(minOf(1 + rnd() % 8, m.size - p)) { m.removeAt(p) }
+        for (c in LrcFuzz.cases()) {
+            val got = Lrc.parse(c.input).lines
+            val by = c.shift
+            if (by != null) {
+                assertTrue(got.zipWithNext().all { (a, b) -> a.ms <= b.ms })
+                val moved = Lrc.shift(got, by)
+                assertTrue(moved.zipWithNext().all { (a, b) -> a.ms <= b.ms } && moved.all { it.ms >= 0 })
             }
-            val got = Lrc.parse(m.toByteArray()).lines
-            assertTrue(got.zipWithNext().all { (a, b) -> a.ms <= b.ms })
-            val moved = Lrc.shift(got, (rnd() % 120001).toLong() - 60000)
-            assertTrue(moved.zipWithNext().all { (a, b) -> a.ms <= b.ms } && moved.all { it.ms >= 0 })
-            runs++
-        }
-        repeat(200) {
-            Lrc.parse(ByteArray(rnd() % 4096) { rnd().toByte() })
             runs++
         }
         assertTrue(runs > 4000)

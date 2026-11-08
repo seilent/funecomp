@@ -210,6 +210,15 @@ class PhoneLyricsTest {
     }
 
     @Test
+    fun aWordTimedBodyGivesACopyOfCleanLines() {
+        answer = { PhoneLyrics.Found.Copy("[00:12.00]<00:12.00>Hello <00:12.50>world<00:13.10>\n", LyricSources.LRCLIB) }
+        settle()
+        drain()
+        assertEquals(listOf(Lrc.Line(12000, "Hello world")), p.entry(idol)!!.copy!!.lines)
+        assertEquals(listOf("Hello world"), (p.show() as LyricsFetch.Show.Phone).copy!!.lines.map { it.text })
+    }
+
+    @Test
     fun anUnavailableIsAskedAgainOnRetryOnSourcesAndOnSettlingAgain() {
         answer = { PhoneLyrics.Found.Unavailable }
         settle()

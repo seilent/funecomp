@@ -12,9 +12,12 @@ object Lrc {
     private const val LF = '\n'.code
     private const val OPEN = '['.code
     private const val CLOSE = ']'.code
+    private const val LT = '<'.code
+    private const val GT = '>'.code
     private const val COLON = ':'.code
     private const val DOT = '.'.code
     private const val BAD = 0xFFFD
+    private const val WORD = 8
 
     enum class Have { None, Synced, Plain }
 
@@ -73,12 +76,16 @@ object Lrc {
                 if (e < 0) break
                 val tag = line.sub(i + 1, e)
                 val st = stamp(tag)
+                i = e + 1
                 if (st != null) {
                     stamps += st
+                    var j = i
+                    while (j < line.size && line[j] <= SPACE) j++
+                    val f = if (j < line.size && line[j] == OPEN) line.indexOf(CLOSE, j) else -1
+                    if (f >= 0 && stamp(line.sub(j + 1, f)) != null) i = j
                 } else {
                     offset(tag)?.let { shift = it }
                 }
-                i = e + 1
                 tags++
                 if (idTag(tag)) ids++
             }
@@ -87,11 +94,12 @@ object Lrc {
                 if ((rest.size > 0 || ids < tags || tags == 0) && plain.size < MAX_LINES) plain += (if (tags > 0) line.trim() else rest).text()
                 continue
             }
-            val words = line.sub(i).trim()
+            val (words, records) = clean(line.sub(i))
             val said = words.text()
+            val cost = words.size + WORD * records
             for (v in stamps) {
-                if (out.size >= MAX_LINES || kept + words.size > CAP) break
-                kept += words.size
+                if (out.size >= MAX_LINES || kept + cost > CAP) break
+                kept += cost
                 out += Line(v, said)
             }
         }
@@ -100,6 +108,46 @@ object Lrc {
         val first = plain.indexOfFirst { it.isNotEmpty() }
         val lines = out.map { it.copy(ms = (it.ms - shift).coerceAtMost(MAX_STAMP_MS)) }.sortedBy { it.ms }
         return Parsed(lines, if (first < 0) emptyList() else plain.subList(first, plain.size).toList())
+    }
+
+    private fun clean(r: Bytes): Pair<Bytes, Int> {
+        val out = ByteArray(r.size)
+        var n = 0
+        var records = 0
+        var j = 0
+        while (j < r.size && r[j] <= SPACE) j++
+        while (j < r.size) {
+            val e = wordStamp(r, j)
+            if (e < 0) {
+                out[n++] = r[j++].toByte()
+                continue
+            }
+            var blank = false
+            while (n > 0 && (out[n - 1].toInt() and 0xFF) <= SPACE) {
+                n--
+                blank = true
+            }
+            j = e
+            while (j < r.size && r[j] <= SPACE) {
+                j++
+                blank = true
+            }
+            if (j < r.size && wordStamp(r, j) < 0) records++
+            if (blank && n > 0 && j < r.size) out[n++] = SPACE.toByte()
+        }
+        return Bytes(out, 0, n).trim() to records
+    }
+
+    private fun wordStamp(r: Bytes, at: Int): Int {
+        val shut = when (r[at]) {
+            LT -> GT
+            OPEN -> CLOSE
+            else -> return -1
+        }
+        var e = at + 1
+        while (e < r.size && (r[e] in '0'.code..'9'.code || r[e] == COLON || r[e] == DOT)) e++
+        if (e >= r.size || r[e] != shut || stamp(r.sub(at + 1, e)) == null) return -1
+        return e + 1
     }
 
     fun shift(lines: List<Line>, ms: Long): List<Line> = lines.map { it.copy(ms = (it.ms - ms).coerceIn(0, MAX_STAMP_MS)) }
@@ -112,7 +160,7 @@ object Lrc {
         return String(b, 0, if (n > 0) n else LINE_MAX, Charsets.UTF_8)
     }
 
-    private fun decode(b: ByteArray, from: Int, to: Int): String {
+    internal fun decode(b: ByteArray, from: Int, to: Int): String {
         val out = StringBuilder(to - from)
         var i = from
         while (i < to) {
