@@ -19,7 +19,7 @@ import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
-import net.seilent.funecomp.ui.Held
+import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -64,7 +64,7 @@ class HomeLineTest {
         val (label, sub) = texts.partition { it.first.lowercase() == item }.let { it.first.single().second to it.second.single() }
         val layouts = ArrayList<TextLayoutResult>()
         sub.second.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
-        return Line(sub.first, layouts.single(), sub.second.boundsInRoot.left, label.boundsInRoot.left)
+        return Line(sub.first, layouts.single(), sub.second.positionInRoot.x, label.positionInRoot.x)
     }
 
     private fun check(item: String, names: List<String>, whole: Set<String>) {
@@ -79,7 +79,7 @@ class HomeLineTest {
             val l = line(item)
             val words = l.text.lowercase().split(' ')
             val need = ceil(l.layout.multiParagraph.intrinsics.maxIntrinsicWidth)
-            val u = (l.left - l.labelLeft) / Held.Home.homeSubtitleX
+            val u = (l.left - l.labelLeft) / LayoutTok.homeSubtitleX
             val edge = rule.onNodeWithTag("home.column").fetchSemanticsNode().boundsInRoot.right - Tok.edge * u
             assertTrue("$item at ${s.name}: ${l.text} needs $need of ${l.layout.layoutInput.constraints.maxWidth}", need <= l.layout.layoutInput.constraints.maxWidth)
             assertTrue("$item at ${s.name}: ${l.text} ends at ${l.left + need} past $edge", l.left + need <= edge + 1f)

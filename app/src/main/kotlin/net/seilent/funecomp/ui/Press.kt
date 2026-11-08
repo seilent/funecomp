@@ -12,6 +12,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -190,9 +191,10 @@ class PressSlots {
     }
 }
 
-fun Modifier.pressScale(p: PressState?): Modifier = if (p == null || !p.lit) this else graphicsLayer {
+fun Modifier.pressScale(p: PressState?, origin: TransformOrigin = TransformOrigin.Center): Modifier = if (p == null || !p.lit) this else graphicsLayer {
     scaleX = p.scale
     scaleY = p.scale
+    transformOrigin = origin
 }
 
 val LocalPressSlots = staticCompositionLocalOf<PressSlots?> { null }

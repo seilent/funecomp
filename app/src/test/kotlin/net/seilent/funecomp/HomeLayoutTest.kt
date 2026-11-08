@@ -12,10 +12,12 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.text.TextLayoutResult
@@ -26,6 +28,7 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.Shape
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.homeItems
@@ -37,6 +40,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -88,6 +92,12 @@ class HomeLayoutTest {
 
     private fun alpha(item: String) = layout(word(item)).layoutInput.style.color.alpha
 
+    private fun node(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode()
+
+    private fun px(t: TextLayoutResult) = with(rule.density) { t.layoutInput.style.fontSize.toPx() }
+
+    private fun inkRight(item: String) = layout(word(item)).let { it.getPathForRange(0, it.layoutInput.text.length).getBounds().right }
+
     private fun scroll() = rule.onNodeWithTag("home.column").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
 
     private fun marked(item: String) {
@@ -121,6 +131,87 @@ class HomeLayoutTest {
         settle(1000)
         marked("playlists")
         assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+    }
+
+    @Test
+    fun aHeldPressScalesTheItemAboutItsLabelAndSubtitleBlock() {
+        show(411, 960)
+        val u = ui().u
+        val wn = word("playlists")
+        val sub = layout(texts("playlists").single { it.id != wn.id })
+        assertTrue("the word is the block's width", layout(wn).size.width > 11.1f * u + sub.size.width)
+        val rest = wn.boundsInRoot
+        rule.onNodeWithTag("home.playlists").performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(200)
+        val held = word("playlists").boundsInRoot
+        assertEquals(Tok.motion_pressScale, held.width / rest.width, 0.005f)
+        assertEquals(rest.center.x, held.center.x, 0.5f * u)
+        assertEquals(rest.center.y, held.center.y, 0.5f * u)
+        rule.onNodeWithTag("home.playlists").performTouchInput { cancel() }
+        settle(1000)
+    }
+
+    @Test
+    fun theWidestWordStaysWholeOnLandscape() {
+        for ((w, h) in listOf(960 to 600, 1280 to 800, 960 to 411)) {
+            show(w, h)
+            val ui = ui()
+            val u = ui.u
+            val home = node("home")
+            val o = home.positionInRoot
+            val n = "$w x $h"
+            assertEquals(n, Shape.L, ui.shape)
+            val widest = names.maxBy { layout(word(it)).size.width }
+            val wn = word(widest)
+            val img = rule.onRoot().pixels().also { System.gc() }
+            val rows = wn.positionInRoot.y.roundToInt() until (wn.positionInRoot.y + layout(wn).firstBaseline).roundToInt()
+            val cols = wn.positionInRoot.x.roundToInt() until (o.x + home.size.width).roundToInt()
+            val lit = cols.lastOrNull { x -> rows.any { y -> img.getRGB(x, y).let { p -> minOf(p shr 16 and 0xff, p shr 8 and 0xff, p and 0xff) > 40 } } }
+            val right = (checkNotNull(lit) { "$n $widest has no ink" } + 1 - o.x) / u
+            assertTrue("$n $widest ink ends at $right past ${ui.w - Tok.edge}", right <= ui.w - Tok.edge)
+            if (h == 411) assertEquals("$n menu x stays 240", 292f * u, wn.positionInRoot.x - o.x, 1f)
+        }
+    }
+
+    @Test
+    fun theItemsSitAtTheDevicePlaces() {
+        for ((w, h) in listOf(411 to 960, 411 to 438, 960 to 600)) {
+            val shell = show(w, h)
+            val ui = ui()
+            val u = ui.u
+            val home = node("home")
+            val o = home.positionInRoot
+            val x = if (ui.shape == Shape.L) minOf(240f, ui.w - 16f - 52f - names.maxOf { inkRight(it) } / u) + 52f else 52f
+            val pitch = if (ui.shape == Shape.L) 48f else 55f
+            val n = "$w x $h"
+            names.forEachIndexed { i, item ->
+                val wn = word(item)
+                val wl = layout(wn)
+                val sn = texts(item).single { it.id != wn.id }
+                val sl = layout(sn)
+                val baseline = wn.positionInRoot.y + wl.firstBaseline - o.y
+                assertEquals("$n $item size", 39.7f, px(wl) / u, 0.5f / u + 1e-3f)
+                assertEquals("$n $item x", x * u, wn.positionInRoot.x - o.x, 1f)
+                assertEquals("$n $item baseline", (96.4f + pitch * i) * u, baseline, 1f)
+                assertEquals("$n $item subtitle size", 9f, px(sl) / u, 0.5f / u + 1e-3f)
+                assertEquals("$n $item subtitle x", 11.1f * u, sn.positionInRoot.x - wn.positionInRoot.x, 1f)
+                assertEquals("$n $item subtitle cap top", 3.5f * u, sn.positionInRoot.y + sl.firstBaseline - Tok.capHeight * px(sl) - o.y - baseline, 1f)
+                val box = node("home.$item")
+                assertEquals("$n $item box left", (x - 8f) * u, box.positionInRoot.x - o.x, 1f)
+                assertEquals("$n $item box right", home.size.width.toFloat(), box.positionInRoot.x - o.x + box.size.width, 1f)
+                assertEquals("$n $item box top", baseline - 27.79f * u, box.positionInRoot.y - o.y, 1f)
+            }
+            val left = ui.px(20f)
+            rule.mainClock.autoAdvance = true
+            rule.onNodeWithTag("home.column").performTouchInput { swipe(Offset(left, bottom - 1f), Offset(left, top + 1f)) }
+            rule.mainClock.autoAdvance = false
+            settle(1000)
+            val band = node("home.settings")
+            val y = band.positionInRoot.y - o.y + band.size.height / 2f
+            rule.onNodeWithTag("home").performTouchInput { click(Offset(width - ui.px(4f), y)) }
+            settle(1000)
+            assertEquals(n, listOf(Page.Home, Page.Settings), shell.nav.stack.toList())
+        }
     }
 
     @Test

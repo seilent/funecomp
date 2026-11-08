@@ -241,12 +241,12 @@ val Ui.homeMenuX: Float get() = when (shape) {
     Shape.P, Shape.SN, Shape.SW -> 0f
     Shape.L -> HOME_MENU_X_LANDSCAPE
 }
-val Ui.homeTextX get() = homeMenuX + Held.Home.homeTextX
+val Ui.homeTextX get() = homeMenuX + LayoutTok.homeTextX
 
-fun Ui.homeSlotTop(index: Int) = Held.Home.homeFirstBaseline + index * homePitch - Held.Home.homeBarTop
+fun Ui.homeSlotTop(index: Int) = LayoutTok.homeFirstBaseline + index * homePitch - LayoutTok.homeBarTop
 val Ui.homeRingX get() = homeMenuX + Held.Home.homeRingX
-fun Ui.homeRingY(music: Int) = Held.Home.homeRingY + music * homePitch
+fun Ui.homeRingY(music: Int) = LayoutTok.homeRingY + music * homePitch
 val Ui.homeRingHitRight get() = homeMenuX + min(Held.Home.homeBarX, Held.Home.homeRingX + Held.Home.homeRingSize / 2)
-fun Ui.homeRingHitBottom(music: Int) = music * homePitch + Held.Home.homeRingHitBottom
+fun Ui.homeRingHitBottom(music: Int) = music * homePitch + LayoutTok.homeRingHitBottom
 
 fun homeRingEnter(ms: Float) = Decel.transform((ms / Tok.motion_homeEnterPeek).coerceIn(0f, 1f))

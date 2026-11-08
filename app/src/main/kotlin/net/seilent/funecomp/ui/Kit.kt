@@ -55,6 +55,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -169,9 +170,9 @@ private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: B
 }
 
 @Composable
-fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, onDown: () -> Unit = {}, content: @Composable () -> Unit) {
+fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, onDown: () -> Unit = {}, origin: TransformOrigin = TransformOrigin.Center, content: @Composable () -> Unit) {
     val p = rememberPress()
-    Box(modifier.press(onTap, onLong, p, onDown).pressScale(p)) { content() }
+    Box(modifier.press(onTap, onLong, p, onDown).pressScale(p, origin)) { content() }
 }
 
 @Composable

@@ -17,6 +17,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
@@ -83,6 +84,8 @@ class ShortLayoutTest {
     }
 
     private fun box(tag: String) = rule.onAllNodesWithTag(tag).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+
+    private fun whole(tag: String) = rule.onAllNodesWithTag(tag).fetchSemanticsNodes().firstOrNull()?.let { Rect(it.positionInRoot, it.size.toSize()) }
 
     private fun text(t: String) = rule.onAllNodesWithText(t, ignoreCase = true).fetchSemanticsNodes().firstOrNull()?.let(::inkOf)
 
@@ -285,7 +288,7 @@ class ShortLayoutTest {
         start(c, listOf(Page.Home))
         each {
             val frame = box("home") ?: return@each run { findings += "${canvas.name} no home" }
-            val items = listOf("now playing", "music", "connection", "playlists", "online", "settings").map { "home.$it" to box("home.$it") } + ("home.ring" to box("home.ring"))
+            val items = listOf("now playing", "music", "connection", "playlists", "online", "settings").map { "home.$it" to whole("home.$it") } + ("home.ring" to whole("home.ring"))
             need(items, items.map { it.first })
             found(items, frame, RING_IN_MUSIC, bottomEdge = false)
         }

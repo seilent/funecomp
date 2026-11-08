@@ -28,6 +28,7 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -183,34 +184,37 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     }
     val music = items.indexOfFirst { it.page == Page.Music }
     val measurer = rememberTextMeasurer()
+    val wordStyle = textStyle(Roles.homeItem, white(Roles.homeItem.alpha))
+    val ink = remember(items, wordStyle, ui) { items.maxOfOrNull { val t = shown(it.name, Roles.homeItem.case); measurer.measure(t, wordStyle, softWrap = false, maxLines = 1).getPathForRange(0, t.length).getBounds().right } ?: 0f }
+    val fit = if (ui.shape == Shape.L) minOf(0f, ui.w - Tok.edge - ui.homeTextX - ink / ui.u) else 0f
     val pitch = ui.homePitch
-    val x = ui.px(ui.homeTextX)
-    val margin = Held.Home.homeFirstBaseline - Held.Home.homeBarTop
+    val x = ui.px(ui.homeTextX + fit)
+    val margin = LayoutTok.homeFirstBaseline - LayoutTok.homeBarTop
     Box(Modifier.fillMaxSize().testTag("home")) {
         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("home.column")) {
             val height = maxOf(ui.h, 2 * margin + items.size * pitch)
             Box(Modifier.size(ui.px(ui.w).dp(), ui.px(height).dp())) {
-                val barX = ui.homeTextX - Tok.focus_barOffset
+                val barX = ui.homeMenuX + LayoutTok.homeBarX + fit
                 if (music >= 0) {
                     val press = rememberPress()
-                    val left = ui.px(ui.homeMenuX)
+                    val left = ui.px(ui.homeMenuX + fit)
                     val top = ui.px(ui.homeSlotTop(music))
                     Box(
                         Modifier.at(left, top)
-                            .size((ui.px(ui.homeRingHitRight) - left).dp(), (ui.px(ui.homeRingHitBottom(music)) - top).dp())
+                            .size((ui.px(ui.homeRingHitRight + fit) - left).dp(), (ui.px(ui.homeRingHitBottom(music)) - top).dp())
                             .graphicsLayer { alpha = homeRingEnter(ringMs()) }
                             .press({ onShuffle() }, press = press)
                             .testTag("home.ring"),
                     ) {
-                        Box(Modifier.at(ui.px(ui.homeRingX) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(Held.Home.homeRingSize, GlyphName.PLAY, Look.Focus(false), press = press, tag = "home.ring") }
+                        Box(Modifier.at(ui.px(ui.homeRingX + fit) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(Held.Home.homeRingSize, GlyphName.PLAY, Look.Focus(false), press = press, tag = "home.ring") }
                     }
                 }
                 items.forEachIndexed { i, item ->
-                    val baseline = ui.px(Held.Home.homeFirstBaseline + i * pitch)
+                    val baseline = ui.px(LayoutTok.homeFirstBaseline + i * pitch)
                     val on = focus == i
                     val c by animateColorAsState(white(if (on) Roles.homeItem.alpha else Roles.homeItem.dim), tween(Tok.motion_focusAlpha.toInt(), easing = LinearEasing), label = "home")
-                    val subBaseline = baseline + ui.px(Held.Home.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size)
-                    val top = baseline - ui.px(Held.Home.homeBarTop)
+                    val subBaseline = baseline + ui.px(LayoutTok.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size)
+                    val top = baseline - ui.px(LayoutTok.homeBarTop)
                     val shiftPx = ui.px(Tok.motion_homeEnterShift)
                     Box(
                         Modifier.fillMaxSize().graphicsLayer {
@@ -219,17 +223,21 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                             alpha = p
                         },
                     ) {
-                        val labelW = measurer.measure(shown(item.name, Roles.homeItem.case), textStyle(Roles.homeItem, c)).size.width
+                        val subW = ui.px(ui.w - Tok.edge) - x - ui.px(LayoutTok.homeSubtitleX)
+                        val subStyle = textStyle(Roles.homeSubtitle, white(Roles.homeSubtitle.alpha))
+                        val sub = if (item.names.isEmpty()) item.subtitle else remember(item.names, subW, subStyle) { wholeNames(item.names) { measurer.measure(shown(it, Roles.homeSubtitle.case), subStyle, softWrap = false, maxLines = 1).size.width <= subW.roundToInt() } }
+                        val word = remember(item.name, wordStyle, ui) { measurer.measure(shown(item.name, Roles.homeItem.case), wordStyle) }
+                        val line = remember(sub, subStyle, ui) { measurer.measure(shown(sub, Roles.homeSubtitle.case), subStyle, softWrap = false, maxLines = 1) }
+                        val blockX = x - ui.px(barX) + maxOf(word.size.width.toFloat(), ui.px(LayoutTok.homeSubtitleX) + minOf(line.size.width.toFloat(), subW)) / 2
+                        val blockY = (baseline - top - word.firstBaseline + subBaseline - top + line.size.height - line.firstBaseline) / 2
                         Pressable(
                             { onOpen(item.page) },
-                            Modifier.at(ui.px(barX), top).size((x - ui.px(barX) + labelW).dp(), ui.px(pitch).dp()).testTag("home.${item.name}"),
+                            Modifier.at(ui.px(barX), top).size((ui.px(ui.w) - ui.px(barX)).dp(), ui.px(pitch).dp()).testTag("home.${item.name}"),
                             onDown = { focus = i },
+                            origin = TransformOrigin(blockX / (ui.px(ui.w) - ui.px(barX)), blockY / ui.px(pitch)),
                         ) {
                             RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c)
-                            val subW = ui.px(ui.w - Tok.edge) - x - ui.px(Held.Home.homeSubtitleX)
-                            val subStyle = textStyle(Roles.homeSubtitle, white(Roles.homeSubtitle.alpha))
-                            val sub = if (item.names.isEmpty()) item.subtitle else remember(item.names, subW, subStyle) { wholeNames(item.names) { measurer.measure(shown(it, Roles.homeSubtitle.case), subStyle, softWrap = false, maxLines = 1).size.width <= subW.roundToInt() } }
-                            RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(Held.Home.homeSubtitleX), subBaseline - top, subW))
+                            RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(LayoutTok.homeSubtitleX), subBaseline - top, subW))
                         }
                     }
                 }
