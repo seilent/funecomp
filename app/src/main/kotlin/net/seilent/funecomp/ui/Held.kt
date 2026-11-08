@@ -5,14 +5,6 @@ object Held {
 
     class Entry(val name: String, val token: String, val value: Any, val row: String, val branch: String)
 
-    object Home {
-        const val type_homeItem_style = "Light"
-
-        val entries = listOf(
-            Entry("type_homeItem_style", "type_homeItem_style", type_homeItem_style, "M1, M4", "zhome"),
-        )
-    }
-
     object Np {
         const val npArtTop = 124f
         const val npRing = 32f
@@ -35,5 +27,5 @@ object Held {
         )
     }
 
-    val entries get() = Home.entries + Np.entries
+    val entries get() = Np.entries
 }

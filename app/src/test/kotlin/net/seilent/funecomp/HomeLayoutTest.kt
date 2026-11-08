@@ -21,6 +21,11 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
 import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
@@ -40,6 +45,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
@@ -212,6 +218,20 @@ class HomeLayoutTest {
             settle(1000)
             assertEquals(n, listOf(Page.Home, Page.Settings), shell.nav.stack.toList())
         }
+    }
+
+    @Test
+    fun theWordsAreSemilight() {
+        show(411, 960)
+        names.forEach { assertEquals(it, FontWeight(350), layout(word(it)).layoutInput.style.fontWeight) }
+        val input = layout(word("music")).layoutInput
+        val measurer = TextMeasurer(input.fontFamilyResolver, input.density, input.layoutDirection)
+        val size = with(input.density) { 2048f.toSp() }
+        fun advance(family: FontFamily, weight: FontWeight) = measurer.measure("m", TextStyle(fontFamily = family, fontWeight = weight, fontSize = size), softWrap = false, maxLines = 1).multiParagraph.getLineWidth(0)
+        val semilight = advance(FontFamily(Font(R.font.selawksl)), FontWeight.Normal)
+        val light = advance(FontFamily(Font(R.font.selawkl)), FontWeight.Normal)
+        assertTrue("selawksl $semilight selawkl $light", abs(semilight - light) > 8f)
+        assertEquals(semilight, advance(input.style.fontFamily!!, input.style.fontWeight!!), 1f)
     }
 
     @Test

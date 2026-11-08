@@ -73,6 +73,7 @@ data class Role(val size: Float, val weight: FontWeight, val case: Case, val alp
 
 private fun weight(style: String) = when (style) {
     "Light" -> FontWeight.Light
+    "SemiLight" -> FontWeight(350)
     "Bold" -> FontWeight.Bold
     else -> FontWeight.Normal
 }
@@ -86,7 +87,7 @@ private fun case(c: String) = when (c) {
 object Roles {
     val pageHeader = Role(Tok.type_pageHeader_size, weight(Tok.type_pageHeader_style), case(Tok.type_pageHeader_case), Tok.type_pageHeader_alpha)
     val albumHeader = Role(Tok.type_albumHeader_size, weight(Tok.type_albumHeader_style), case(Tok.type_albumHeader_case), Tok.type_albumHeader_alpha)
-    val homeItem = Role(LayoutTok.type_homeItem_size, weight(Held.Home.type_homeItem_style), case(Tok.type_homeItem_case), Tok.type_homeItem_alpha, Tok.type_homeItem_alphaDim)
+    val homeItem = Role(LayoutTok.type_homeItem_size, weight(Tok.type_homeItem_style), case(Tok.type_homeItem_case), Tok.type_homeItem_alpha, Tok.type_homeItem_alphaDim)
     val homeSubtitle = Role(LayoutTok.type_homeSubtitle_size, weight(Tok.type_homeSubtitle_style), case(Tok.type_homeSubtitle_case), Tok.type_homeSubtitle_alpha)
     val pivotActive = Role(Tok.type_pivotActive_size, weight(Tok.type_pivotActive_style), case(Tok.type_pivotActive_case), Tok.type_pivotActive_alpha)
     val pivotInactive = Role(Tok.type_pivotInactive_size, weight(Tok.type_pivotInactive_style), case(Tok.type_pivotInactive_case), Tok.type_pivotInactive_alpha)
@@ -123,6 +124,7 @@ val albumHeaderTracking = Tok.tracking * Tok.type_albumHeader_size / Tok.type_pi
 
 val Selawik = FontFamily(
     Font(R.font.selawkl, FontWeight.Light),
+    Font(R.font.selawksl, FontWeight(350)),
     Font(R.font.selawk, FontWeight.Normal),
     Font(R.font.selawkb, FontWeight.Bold),
 )
