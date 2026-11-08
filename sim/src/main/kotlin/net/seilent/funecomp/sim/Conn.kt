@@ -75,6 +75,8 @@ class Conn(
 
     override fun drop(reason: String) = close(reason)
 
+    override val phone: String get() = faults.phone
+
     fun svcEnd(e: SvcLoginEnd) {
         push(Msg.SVC_LOGIN_END, e.encode())
         device.svcEnded(e)
@@ -280,6 +282,7 @@ class Conn(
         if (!f.wantsReply) {
             if (f.type == Msg.IMG_DATA && Groups.allowed(f.type, faults.features)) device.imgData(body, this)
             if (f.type == Msg.UPD_DATA && Groups.allowed(f.type, faults.features)) device.updData(body, this)
+            if (f.type == Msg.APP_DATA && Groups.allowed(f.type, faults.features)) device.appData(body, this)
             return
         }
         if (f.type == Msg.PING) return reply(f)

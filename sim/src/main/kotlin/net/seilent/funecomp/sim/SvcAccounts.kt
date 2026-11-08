@@ -173,7 +173,7 @@ class SvcAccounts(private val opts: Options, private val lock: Any, private val 
     fun start(b: Node, out: Out, cardOk: Boolean, off: Boolean, state: (Out) -> ByteArray): Answer {
         card(cardOk)
         val service = b.str(Tags.SvcLoginStart.service)!!
-        val svc = opts.services.firstOrNull { it.id == service } ?: return Answer.Fail(Err.notFound, "not in firmware")
+        val svc = opts.services.firstOrNull { it.id == service } ?: return Answer.Fail(Err.notFound, "not installed")
         if (off) return Answer.Fail(Err.off, "off")
         val a = acct(service)
         if (a.signedIn == true) return Answer.Fail(Err.exists, "signed in")
@@ -213,7 +213,7 @@ class SvcAccounts(private val opts: Options, private val lock: Any, private val 
         val service = b.str(Tags.SvcLogout.service)!!
         val sentCount = b.long(Tags.SvcLogout.downloads)
         opts.log("svc logout $service downloads=$sentCount")
-        if (opts.services.none { it.id == service }) return Answer.Fail(Err.notFound, "not in firmware")
+        if (opts.services.none { it.id == service }) return Answer.Fail(Err.notFound, "not installed")
         if (off) return Answer.Fail(Err.off, "off")
         val a = acct(service)
         val want = b.str(Tags.SvcLogout.account).orEmpty()

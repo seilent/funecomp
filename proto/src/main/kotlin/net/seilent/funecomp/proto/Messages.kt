@@ -55,7 +55,6 @@ object Groups {
         "receiver",
         "phoneFiles",
         "imgSource",
-        "appPkg",
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 

@@ -195,7 +195,7 @@ class SvcSimTest {
         assertEquals(0, code(a.call(Msg.SVC_KEYS, keys("client_id" to "v4lue1", "client_secret" to "v4lue2"))))
         assertEquals(Err.badValue, code(a.call(Msg.SVC_KEYS, keys("other" to "v4lue3"))))
         assertEquals(Err.badValue, code(a.call(Msg.SVC_KEYS, keys("client_id" to ""))))
-        assertEquals(Err.badValue, code(a.call(Msg.SVC_KEYS, keys("client_id" to "v4lue4", service = "other"))))
+        assertEquals(Err.notFound, code(a.call(Msg.SVC_KEYS, keys("client_id" to "v4lue4", service = "other"))))
         assertEquals(Err.badValue, code(a.call(Msg.SVC_KEYS, keys())))
         assertTrue(logs.any { it.startsWith("svc keys tidal names=[client_id, client_secret] bytes=") })
         assertTrue(logs.none { "v4lue" in it })

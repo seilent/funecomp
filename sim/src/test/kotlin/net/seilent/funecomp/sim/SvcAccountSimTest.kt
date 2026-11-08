@@ -229,7 +229,7 @@ class SvcAccountSimTest {
         assertTrue(System.currentTimeMillis() - t0 >= 400)
         assertEquals(1L, seq(r))
         assertEquals(Err.busy to "busy", start(a, "radio").let { code(it) to text(it) })
-        assertEquals(Err.notFound to "not in firmware", start(a, "nope").let { code(it) to text(it) })
+        assertEquals(Err.notFound to "not installed", start(a, "nope").let { code(it) to text(it) })
         assertEquals(Err.exists to "signed in", start(app(sim(accounts = listOf("tidal:in")).listen(0))).let { code(it) to text(it) })
         assertEquals(Err.off to "off", start(app(sim("svc-off").listen(0))).let { code(it) to text(it) })
         assertEquals(Err.busy to "busy", start(app(sim("svc-removing", accounts = listOf("tidal:out")).listen(0))).let { code(it) to text(it) })

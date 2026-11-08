@@ -118,6 +118,23 @@ class Faults(specs: List<String>) {
     var restart = false
     var abortAt: Long? = null
     var updAbortAt: Long? = null
+    var phone = "phone"
+    var appOpenMs = 0L
+    var appDropMs = 0L
+    var appAbortAt: Pair<Long, Int>? = null
+    var appCheckMs = 0L
+    var appAsk = "yes"
+    var appAskMs = 0L
+    var appPending = false
+    var appStaged = false
+    var appEndFail: Pair<Int, String>? = null
+    var appStateLost = false
+    var appRestart = false
+    var appEndLost = false
+    var appRedeliver = false
+    var appBegins: List<Set<String>> = emptyList()
+    var appEndBusy = false
+    var appAbortLate = false
     val enums = ArrayList<EnumFault>()
     var features = Groups.all
     var askBlock: Pair<Int, Long>? = null
@@ -231,6 +248,23 @@ class Faults(specs: List<String>) {
                 "src-fail" -> srcFail += v.trim().lowercase()
                 "abort-at" -> abortAt = v.toLong()
                 "upd-abort-at" -> updAbortAt = v.toLong()
+                "phone" -> phone = v
+                "app-open-ms" -> appOpenMs = v.toLong()
+                "app-drop-ms" -> appDropMs = v.toLong()
+                "app-abort-at" -> appAbortAt = v.substringBefore('@').toLong() to (Enums.AbortCode.names.entries.firstOrNull { it.value == v.substringAfter('@') }?.key ?: throw IllegalArgumentException("app-abort-at: unknown code in $v"))
+                "app-check-ms" -> appCheckMs = v.toLong()
+                "app-ask" -> appAsk = v.also { require(it == "yes" || it == "no" || it == "expire") { "app-ask: $v" } }
+                "app-ask-ms" -> appAskMs = v.toLong()
+                "app-pending" -> appPending = true
+                "app-staged" -> appStaged = true
+                "app-end-fail" -> appEndFail = v.substringBefore(':').toInt() to v.substringAfter(':', "")
+                "app-state-lost" -> appStateLost = true
+                "app-restart" -> appRestart = true
+                "app-end-lost" -> appEndLost = true
+                "app-redeliver" -> appRedeliver = true
+                "app-begins" -> appBegins = v.split('/').map { b -> b.split('+').filter { it.isNotEmpty() && it != "ok" }.toSet().also { a -> require(a.all { it.substringBefore('@') in APP_STEPS && ('@' !in it || it.substringBefore('@') in APP_CUTS && appCutCode(it) != null) }) { "app-begins: $v" } } }
+                "app-end-busy" -> appEndBusy = true
+                "app-abort-late" -> appAbortLate = true
                 "features" -> features = v.toLong()
                 "favs-busy" -> {
                     favsBusy = v.substringBefore(':').toIntOrNull() ?: throw IllegalArgumentException("favs-busy: count missing in $v")
@@ -396,6 +430,7 @@ class Options(
     val accounts: List<SvcAcct> = emptyList(),
     val eqHeadset: String? = null,
     val through: String? = null,
+    val appReplyMs: Long = Proto.svcReplyMs.toLong(),
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
@@ -408,7 +443,7 @@ class Options(
         if (minor < 12) faults.features = faults.features and Groups.mask("eqSlots", "eqGraphic").inv()
         if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig", "liveRows", "eqStages").inv()
         if (minor < 16) faults.features = faults.features and Groups.mask("svcLogin").inv()
-        if (minor < 17) faults.features = faults.features and Groups.mask("imgFocusX", "svcAccount").inv()
+        if (minor < 17) faults.features = faults.features and Groups.mask("imgFocusX", "svcAccount", "appPkg").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }

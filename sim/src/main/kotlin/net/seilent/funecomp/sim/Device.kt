@@ -73,6 +73,8 @@ interface Out {
     fun pkce(q: SvcPkce, done: (String) -> Unit): Boolean = false
 
     fun drop(reason: String) {}
+
+    val phone: String get() = "phone"
 }
 
 private class Forms(val rows: List<Row>, val legacy: List<Row>, val live: String)
@@ -278,6 +280,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val playLog = PlayLog(opts.playLogId, opts.playLogCap, opts.playLog)
     private var connects = 0
     private val linked = HashMap<Out, Long>()
+    val apps = AppStage(opts, { now() }, { ms, f -> svc.timer.schedule({ synchronized(lock) { f() } }, ms, java.util.concurrent.TimeUnit.MILLISECONDS) }, { linked.toMap() }, { o, t, p -> send(o, t, p) })
     private var zoneS: Int? = null
     private var playTrack: Long? = null
     private var playFresh = true
@@ -538,7 +541,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun landedRefusal(type: Int, b: Node, artHeld: Boolean): Answer.Fail? = when (type) {
         Msg.LYR_GET -> if (b.long(Tags.LyrGet.track) == cardLyrics) null else noCard()
-        Msg.PLAY, Msg.ACTION, Msg.LRC_PUT, Msg.LRC_DEL, Msg.LYR_OFFSET, Msg.IMG_BEGIN, Msg.IMG_END, Msg.IMG_DEL, Msg.IMG_TAG, Msg.UPD_BEGIN, Msg.UPD_END -> noCard()
+        Msg.PLAY, Msg.ACTION, Msg.LRC_PUT, Msg.LRC_DEL, Msg.LYR_OFFSET, Msg.IMG_BEGIN, Msg.IMG_END, Msg.IMG_DEL, Msg.IMG_TAG, Msg.UPD_BEGIN, Msg.UPD_END, Msg.APP_BEGIN, Msg.APP_END -> noCard()
         Msg.QUEUE_OP -> if (b.int(Tags.QueueOp.cmd) == Enums.QueueCmd.page && !faults.cardPage) null else noCard()
         Msg.TRANSPORT -> if (transportRefused(b.int(Tags.Transport.cmd))) noCard() else null
         Msg.IMG_LIST -> if (artHeld) noCard() else null
@@ -569,6 +572,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     fun restart() = synchronized(lock) {
         partials.clear()
         push = null
+        apps.restart()
     }
 
     fun helloReply(out: Out? = null) = HelloReply(
@@ -603,6 +607,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     fun greet(out: Out, receipt: Long? = null) = synchronized(lock) {
+        linked[out]?.let { apps.linked(out, it) }
         if (faults.cardSeq.isNotEmpty()) cardStart(now())
         cardEdge()
         cardSent[out] = cardKey()
@@ -749,6 +754,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         cardSent.remove(out)
         if (pushOut === out) pushOut = null
         if (updOut === out) updOut = null
+        apps.unlinked(out)
     }
 
     val plays: List<PlayEntry> get() = synchronized(lock) { playLog.held }
@@ -1071,6 +1077,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Msg.LYR_OFFSET -> lyrOffset(body)
             Msg.UPD_BEGIN -> updBegin(body, out)
             Msg.UPD_END -> updEnd(body)
+            Msg.APP_BEGIN -> apps.begin(body, out)
+            Msg.APP_END -> apps.end(body, out)
             Msg.PLAYLOG_GET -> playLogGet(body)
             Msg.PLAYLOG_ACK -> playLogAck(body)
             Msg.SVC_KEYS -> svcKeys(body)
@@ -1085,7 +1093,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val svc = opts.services.firstOrNull { it.id == k.service }
         opts.log("svc keys ${k.service} names=${k.keys.map { it.name }} bytes=${k.encode().size}")
         if (faults.svcOff || streamingOff()) return Answer.Fail(Err.off, "streaming is off")
-        if (svc == null || k.keys.isEmpty() || k.keys.any { it.name.isNullOrEmpty() || it.value.isNullOrEmpty() || it.name !in svc.secrets }) return Answer.Fail(Err.badValue, "bad key")
+        if (svc == null) return Answer.Fail(Err.notFound, "not installed")
+        if (k.keys.isEmpty() || k.keys.any { it.name.isNullOrEmpty() || it.value.isNullOrEmpty() || it.name !in svc.secrets }) return Answer.Fail(Err.badValue, "bad key")
         return this.svc.keys(k.service) ?: Answer.Ok()
     }
 
@@ -2234,6 +2243,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         opts.log("upd begin size=$size offset=${part.length()}")
         return Answer.Ok(UpdBeginReply(part.length()).encode())
     }
+
+    fun appData(b: Node, out: Out) = synchronized(lock) { apps.data(b, out) }
 
     fun updData(b: Node, out: Out) = synchronized(lock) {
         cardEdge()
