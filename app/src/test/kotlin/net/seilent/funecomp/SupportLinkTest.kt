@@ -99,8 +99,8 @@ class SupportLinkTest {
         rule.walkPivots(Remote.device.schema.rows, "system") { waitFor { true } }
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.about"))
         rule.onNodeWithTag("set.about").performClick()
-        waitFor { a.get().shell.sheet.shown && a.get().shell.sheet.items == listOf("update firmware", "support me") }
-        rule.onNodeWithTag("sheet.item.1").performClick()
+        waitFor { a.get().shell.sheet.shown && a.get().shell.sheet.items == listOf("update firmware", "install app", "support me") }
+        rule.onNodeWithTag("sheet.item.${a.get().shell.sheet.items.indexOf("support me")}").performClick()
         waitFor { shadowOf(a.get()).peekNextStartedActivity() != null }
         val started = shadowOf(a.get()).nextStartedActivity
         assertEquals(Intent.ACTION_VIEW, started.action)

@@ -48,6 +48,7 @@ sealed interface Page {
     data object ArtBlocked : Page
     data object ArtCredits : Page
     data object Firmware : Page
+    data object Apps : Page
     data class Online(val pivot: Int = ONLINE_ART) : Page
     data class AutoEq(val slot: String) : Page
     data class Artist(val name: String, val songs: Long? = null) : Page

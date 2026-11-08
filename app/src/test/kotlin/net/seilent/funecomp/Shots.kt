@@ -70,6 +70,7 @@ import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.SettingsMirror
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.AppsView
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Bonded
@@ -136,6 +137,7 @@ class Shot(
     val credits: List<ArtCache.Entry> = emptyList(),
     val scrobble: ScrobbleView = ScrobbleView(),
     val firmware: FirmwareView = FirmwareView(),
+    val apps: AppsView = AppsView(),
     val art: Boolean = false,
     val artEntry: ArtCache.Entry? = null,
     val wrong: Boolean = false,
@@ -629,6 +631,8 @@ private val SCROBBLE_OUT = ScrobbleView(Accounts(true, listenBrainz = true), app
 private val SCROBBLE_MIXED = ScrobbleView(Accounts(true, "", "", "SeiLent", "session", true, "token", "SeiLent"), queued = 3, app = ZEROS)
 
 private val FW = HOME + Page.Settings + Page.Firmware
+private val APPS = HOME + Page.Settings + Page.Apps
+private const val APP_FILE = "tidal tidal-3.fnapp"
 
 private val ONLINE = HOME + Page.Online()
 private val GATED = LinkView(Phase.CONNECTING, "AP80")
@@ -1213,6 +1217,22 @@ val SHOTS = listOf(
     Shot("eqp-toast-taken", pages = EQ, faults = listOf("eq-hidden=Sennheiser HD 650"), after = 300) { apply() },
     Shot("eqp-toast-full", pages = EQ, prep = { c -> (1..200).forEach { preset("P$it")(c) } }, after = 300) { apply() },
     Shot("firmware", board = "v1", pages = FW),
+    Shot("apps", board = "v1", pages = APPS),
+    Shot("apps-checking", board = "v1", pages = APPS, apps = AppsView(send = Apps.CHECKING_FILE)),
+    Shot("apps-picked", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE)),
+    Shot("apps-sending", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, send = "app 40%")),
+    Shot("apps-confirm", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.CONFIRM)),
+    Shot("apps-installed", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.INSTALLED)),
+    Shot("apps-refused-signature", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.endLine(Err.badSignature, "signature"))),
+    Shot("apps-refused-no-room", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.endLine(Err.noSpace, "no room"))),
+    Shot("apps-refused-older", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.endLine(Err.refused, "older"))),
+    Shot("apps-refused-board", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.endLine(Err.refused, "board"))),
+    Shot("apps-refused-layout", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.endLine(Err.refused, "layout"))),
+    Shot("apps-refused-fit", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.endLine(Err.refused, "fit"))),
+    Shot("apps-refused-other", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.endLine(Err.refused, "io"))),
+    Shot("apps-busy", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.BUSY_STOP)),
+    Shot("apps-no-answer", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.NO_ANSWER)),
+    Shot("apps-no-installer", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.NO_INSTALLER)),
     Shot("firmware-private", board = "v1", pages = FW, firmware = FirmwareView(info = "no public releases")),
     Shot("firmware-found", board = "v1", pages = FW, firmware = FOUND),
     Shot("firmware-dev", board = "v1", pages = FW, firmware = FOUND.copy(newer = null, info = "device runs a dev build")),
@@ -1664,7 +1684,7 @@ class Shots {
             key(f, imeShare) {
                 Box(Modifier.requiredSize(f.second.w.dp, f.second.h.dp).testTag("frame")) {
                     val held = f.first.artEntry?.let { BackdropArt(if (f.first.white) whiteBg else backdrop ?: plain, null, it, f.first.wrong) }
-                    App(c.device, f.first.link, c, shell, sources, { sources = it }, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, blocked = f.first.blocked, picks = f.first.picks, scrobbleLabels = f.first.labels, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, svc = f.first.svc, detected = board, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * if (shell.sheet.shown && shell.sheet.entry == null) 0f else imeShare).dp))
+                    App(c.device, f.first.link, c, shell, sources, { sources = it }, held ?: if (f.first.backdrop) backdrop?.let { BackdropArt(it) } else null, f.first.credits, scrobble = f.first.scrobble, firmware = f.first.firmware, apps = f.first.apps, blocked = f.first.blocked, picks = f.first.picks, scrobbleLabels = f.first.labels, lyrics = f.first.lyrics?.invoke(c.device) ?: LyricsFetch.Show.Off, svc = f.first.svc, detected = board, insets = f.second.bars, ime = WindowInsets(bottom = (f.second.h * if (shell.sheet.shown && shell.sheet.entry == null) 0f else imeShare).dp))
                 }
             }
         }

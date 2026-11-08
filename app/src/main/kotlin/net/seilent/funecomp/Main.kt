@@ -21,6 +21,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.OpenableColumns
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
@@ -102,6 +103,7 @@ class Main : ComponentActivity() {
     }
     private val associate: ActivityResultLauncher<IntentSenderRequest> = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { associated(it) }
     internal val scan: BoardScan by lazy {
+        Remote.apps.onToast = { id, line -> runOnUiThread { shell.toast.show(id, line) } }
         BoardScan(this, Remote.boards, { spec?.removePrefix("rfcomm:") }, { Remote.bulkSending() || "art" in Remote.wakeHeld || Remote.phoneA2dp() }, { name, line -> shell.toast.show(name, line) }, { control.choose(it) })
     }
 
@@ -111,6 +113,16 @@ class Main : ComponentActivity() {
         picked = null
         if (uri != null) AutoEqs.read(uri, done)
     }
+
+    private val appPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) Remote.apps.read(this, uri, displayName(uri))
+    }
+
+    private fun displayName(uri: Uri): String = try {
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { if (it.moveToFirst()) it.getString(0) else null }
+    } catch (_: SecurityException) {
+        null
+    } ?: uri.lastPathSegment.orEmpty()
 
     private var firmwarePicked: ((PickedFile) -> Unit)? = null
     private val firmwarePicker = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
@@ -293,6 +305,17 @@ class Main : ComponentActivity() {
 
         override fun firmwareCancel() = Firmwares.cancel()
 
+        override fun appFile() {
+            try {
+                appPicker.launch(arrayOf("*/*"))
+            } catch (_: ActivityNotFoundException) {
+            }
+        }
+
+        override fun appSend() = Remote.apps.send()
+
+        override fun appStop() = Remote.apps.stop()
+
         override fun firmwareFile(done: (PickedFile) -> Unit) {
             firmwarePicked = done
             try {
@@ -358,7 +381,7 @@ class Main : ComponentActivity() {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
                     } catch (_: ActivityNotFoundException) {
                     }
-                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing, svc = Svc.view, liveDevice = { Remote.device }, detected = Remote.boards.prompt)
+                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing, svc = Svc.view, apps = Remote.apps.view, liveDevice = { Remote.device }, detected = Remote.boards.prompt)
             }
         }
     }

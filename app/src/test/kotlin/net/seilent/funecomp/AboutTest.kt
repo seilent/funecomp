@@ -90,8 +90,8 @@ class AboutTest {
         assertEquals(listOf("funeOS ${h.version}", "seilent", "board", "dap battery", "card"), shell.sheet.info)
         assertEquals(listOf("", "", h.board, if (st.battery != null) batteryText(st) else "", cardText(st) ?: ""), shell.sheet.infoValues)
         assertEquals(listOf(true, true), shell.sheet.infoMixed)
-        assertEquals(listOf("update firmware", "support me"), shell.sheet.items)
-        assertEquals(listOf(firmwareText(firmware), ""), shell.sheet.itemValues)
+        assertEquals(listOf("update firmware", "install app", "support me"), shell.sheet.items)
+        assertEquals(listOf(firmwareText(firmware), "", ""), shell.sheet.itemValues)
     }
 
     @Test
@@ -99,8 +99,9 @@ class AboutTest {
         val c = start()
         system()
         tapAbout()
-        rule.onNode(hasText("SUPPORT ME") and hasAnyAncestor(hasTestTag("sheet.item.1")), useUnmergedTree = true).assertExists()
-        rule.onNodeWithTag("sheet.item.1").performClick()
+        val support = "sheet.item.${shell.sheet.items.indexOf("support me")}"
+        rule.onNode(hasText("SUPPORT ME") and hasAnyAncestor(hasTestTag(support)), useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag(support).performClick()
         settle(1000)
         assertEquals(1, c.supports)
         assertFalse(shell.sheet.shown)
@@ -114,9 +115,10 @@ class AboutTest {
         tapAbout()
         firmware = FirmwareView(send = "firmware 42%")
         settle(300)
-        assertEquals(listOf("42%", ""), shell.sheet.itemValues)
-        rule.onNode(hasText("42%") and hasAnyAncestor(hasTestTag("sheet.item.0")), useUnmergedTree = true).assertExists()
-        rule.onNodeWithTag("sheet.item.0").performClick()
+        assertEquals(listOf("42%", "", ""), shell.sheet.itemValues)
+        val update = "sheet.item.${shell.sheet.items.indexOf("update firmware")}"
+        rule.onNode(hasText("42%") and hasAnyAncestor(hasTestTag(update)), useUnmergedTree = true).assertExists()
+        rule.onNodeWithTag(update).performClick()
         settle(1000)
         assertFalse(shell.sheet.shown)
         assertEquals(listOf(Page.Home, Page.Settings, Page.Firmware), shell.nav.stack.toList())
@@ -151,7 +153,7 @@ class AboutTest {
         system()
         tapAbout()
         assertEquals(listOf("seilent"), shell.sheet.info)
-        assertEquals(listOf("update firmware", "support me"), shell.sheet.items)
+        assertEquals(listOf("update firmware", "install app", "support me"), shell.sheet.items)
     }
 
     @Test

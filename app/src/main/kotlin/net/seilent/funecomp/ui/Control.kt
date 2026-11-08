@@ -144,6 +144,9 @@ interface Control {
     fun firmwareSettings(checkDaily: Boolean, prereleases: Boolean) {}
     fun firmwareSend(picked: Boolean) {}
     fun firmwareStopSend() {}
+    fun appFile() {}
+    fun appSend() {}
+    fun appStop() {}
     fun blockArt(e: ArtCache.Entry) {}
     fun wrongArtist(e: ArtCache.Entry) {}
     fun unblock(r: ArtBlocks.Record) {}

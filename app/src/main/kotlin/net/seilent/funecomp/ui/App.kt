@@ -108,6 +108,7 @@ fun App(
     ime: WindowInsets = WindowInsets.ime,
     liveDevice: () -> DeviceState = { device },
     detected: Detected? = null,
+    apps: AppsView = AppsView(),
 ) {
     val density = LocalDensity.current
     val dir = LocalLayoutDirection.current
@@ -215,6 +216,7 @@ fun App(
                     Page.ArtBlocked -> ArtBlockedPage(ctx, blocked)
                     Page.ArtCredits -> ArtCreditsPage(ctx, credits, onCredit)
                     Page.Firmware -> FirmwarePage(ctx, firmware)
+                    Page.Apps -> AppsPage(ctx, apps)
                     is Page.AutoEq -> AutoEqPage(ctx, page, remember(ime, insets) { ime.exclude(insets) })
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
