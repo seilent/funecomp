@@ -154,6 +154,7 @@ object Firmwares {
         val c = context ?: return "not connected"
         val d = Remote.device
         if (Remote.phase != Phase.LIVE) return "not connected"
+        if (Remote.apps.bulk) return Apps.SENDING
         if (!d.has("update")) return "device has no updater"
         val st = d.playback.state
         if (st.output != null && st.output != Enums.Output.wired && !PushGate.receiver(d)) return "dap on bluetooth output"

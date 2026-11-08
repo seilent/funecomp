@@ -102,7 +102,7 @@ class Main : ComponentActivity() {
     }
     private val associate: ActivityResultLauncher<IntentSenderRequest> = registerForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { associated(it) }
     internal val scan: BoardScan by lazy {
-        BoardScan(this, Remote.boards, { spec?.removePrefix("rfcomm:") }, { Firmwares.sending || "art" in Remote.wakeHeld || Remote.phoneA2dp() }, { name, line -> shell.toast.show(name, line) }, { control.choose(it) })
+        BoardScan(this, Remote.boards, { spec?.removePrefix("rfcomm:") }, { Remote.bulkSending() || "art" in Remote.wakeHeld || Remote.phoneA2dp() }, { name, line -> shell.toast.show(name, line) }, { control.choose(it) })
     }
 
     private var picked: ((String, String?) -> Unit)? = null
@@ -628,6 +628,7 @@ class Main : ComponentActivity() {
             Lyrics.init(c)
             AutoEqs.init(c)
             Firmwares.init(c)
+            Remote.apps.init(c)
             Remote.logExit(c)
         }
 

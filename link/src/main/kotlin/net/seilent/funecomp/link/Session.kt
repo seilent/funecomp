@@ -1,5 +1,6 @@
 package net.seilent.funecomp.link
 
+import net.seilent.funecomp.proto.AppAbort
 import net.seilent.funecomp.proto.Bye
 import net.seilent.funecomp.proto.ErrorReply
 import net.seilent.funecomp.proto.Frame
@@ -98,6 +99,7 @@ class Session(
 
     @Volatile var abortListener: ((ImgAbort) -> Unit)? = null
     @Volatile var updAbortListener: ((UpdAbort) -> Unit)? = null
+    @Volatile var appAbortListener: ((AppAbort) -> Unit)? = null
 
     fun run(): String {
         synchronized(own) { own += Thread.currentThread() }
@@ -315,6 +317,7 @@ class Session(
         if (!Groups.allowed(f.type, h.features)) return
         if (f.type == Msg.IMG_ABORT) ImgAbort.from(body).let { listener.onRefused(it.code, true); abortListener?.invoke(it) }
         if (f.type == Msg.UPD_ABORT) UpdAbort.from(body).let { listener.onRefused(it.code, true); updAbortListener?.invoke(it) }
+        if (f.type == Msg.APP_ABORT) AppAbort.from(body).let { listener.onRefused(it.code, true); appAbortListener?.invoke(it) }
         listener.onPush(f.type, body)
     }
 

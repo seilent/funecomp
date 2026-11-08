@@ -60,6 +60,7 @@ import net.seilent.funecomp.link.Responder
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
 import net.seilent.funecomp.link.Transport
+import net.seilent.funecomp.proto.AppState
 import net.seilent.funecomp.proto.ArtBlock
 import net.seilent.funecomp.proto.ArtPick
 import net.seilent.funecomp.proto.ArtPickReply
@@ -115,7 +116,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin", "svcAccount", "eqSlots", "eqStages")
+val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin", "svcAccount", "eqSlots", "eqStages", "appPkg")
 
 object Remote : Control {
     const val TAG = "Funecomp"
@@ -544,7 +545,10 @@ object Remote : Control {
         galleryMissing = emptySet()
     }
 
+    internal val artWants = AtomicInteger()
+
     fun sourcesChanged() {
+        artWants.incrementAndGet()
         resetBackdrop()
         art?.want()
     }
@@ -1068,12 +1072,20 @@ object Remote : Control {
 
     fun session(): Session? = link?.session
 
+    @Volatile var apps = Apps()
+
+    fun bulkSending() = Firmwares.sending || apps.bulk
+
     fun holdWake(tag: String, ms: Long) = wake?.hold(tag, ms)
 
     fun dropWake(tag: String) = wake?.drop(tag)
 
+    internal val bulkGates = AtomicInteger()
+
     private fun gate(): Boolean {
-        val open = PushGate.open(device, SystemClock.elapsedRealtime()) && !Firmwares.sending
+        val bulk = bulkSending()
+        if (bulk) bulkGates.incrementAndGet()
+        val open = PushGate.open(device, SystemClock.elapsedRealtime()) && !bulk
         if (open) scanCancel?.invoke()
         if (open) wake?.hold(ART, ART_WAKE_MS) else wake?.drop(ART)
         return open
@@ -1100,9 +1112,9 @@ object Remote : Control {
 
     private fun bluetooth(): Boolean = PushGate.bluetooth(device) || phoneA2dp()
 
-    internal fun refetchData(): Boolean = held(!Firmwares.sending && !phoneA2dp() && PushGate.refetch(device, SystemClock.elapsedRealtime()))
+    internal fun refetchData(): Boolean = held(!bulkSending() && !phoneA2dp() && PushGate.refetch(device, SystemClock.elapsedRealtime()))
 
-    internal fun refetchRearm(): Boolean = held(!Firmwares.sending && PushGate.rearm(device))
+    internal fun refetchRearm(): Boolean = held(!bulkSending() && PushGate.rearm(device))
 
     private fun held(open: Boolean): Boolean {
         if (open) wake?.hold(ART, ART_WAKE_MS)
@@ -1112,7 +1124,7 @@ object Remote : Control {
     internal val wakeHeld: Set<String> get() = wake?.held ?: emptySet()
 
     private fun phoneGate(): Boolean {
-        val open = PushGate.phoneArt(device) && !Firmwares.sending && !PushGate.card(device)
+        val open = PushGate.phoneArt(device) && !bulkSending() && !PushGate.card(device)
         if (open) wake?.hold(ART, ART_WAKE_MS)
         return open
     }
@@ -1140,7 +1152,7 @@ object Remote : Control {
             },
             ::gate,
             { !shown && online && !breaker.open && (unmetered || swept(context)) },
-            { !shown && !Firmwares.sending },
+            { !shown && !bulkSending() },
             ::libPage,
             breaker,
             { online },
@@ -1150,7 +1162,7 @@ object Remote : Control {
                 override fun mark(): Any = a.mark()
                 override fun holds(mark: Any) = mark is ArtistArt.Mark && a.holds(mark, unmetered)
             },
-            Forward.Blocks(a.blocks, { spec }, a::keyOf, a::hasHit) { !Firmwares.sending && !PushGate.card(device) },
+            Forward.Blocks(a.blocks, { spec }, a::keyOf, a::hasHit) { !bulkSending() && !PushGate.card(device) },
             a::known,
             { !shown },
             { PushGate.card(device) },
@@ -1527,6 +1539,7 @@ object Remote : Control {
             Svc.hello(hello, spec)
             if (synchronized(clock) { clock.hello(hello) }) sendClock("hello")
             phase(Phase.LIVE)
+            apps.hello(hello.board, spec)
             phoneLyrics.retry()
             wake?.drop(ATTEMPT)
             Log.i(TAG, "hello board=${hello.board} version=${hello.version} idle=${hello.idleMs} busy=${hello.busyMs}")
@@ -1550,6 +1563,7 @@ object Remote : Control {
             }
             if (type == Msg.SVC_LOGIN || type == Msg.SVC_LOGIN_END) svcPush(type, body, logins)
             if (type == Msg.SVC_STATE) Svc.state(device.accounts)
+            if (type == Msg.APP_STATE) apps.state(AppState.from(body))
             if (type == Msg.STATE || type == Msg.QUEUE) Lyrics.poke()
             if (type == Msg.LIB || type == Msg.QUEUE) synchronized(asked) { asked.removeAll { k -> k.startsWith(if (type == Msg.LIB) "lib " else "queue ") } }
             if (type != Msg.STATE) return
@@ -1562,6 +1576,7 @@ object Remote : Control {
             heartShow(heart.state(s))
             Scrobbles.state(s, System.currentTimeMillis(), device.card)
             Firmwares.state()
+            apps.card()
             onState?.invoke()
             Log.i(TAG, "state applied title=${s.title} artist=${s.artist} playing=${s.playing} volume=${s.volume}/${s.maxVolume} battery=${s.battery} charging=${s.charging} card=${s.cardFreeMiB}/${s.cardTotalMiB} pos=${s.positionMs} sent=${s.sentMs} sample=${s.sampleMs} rtt=${device.rttMs} at=$now lateMs=${device.playback.lateMs} held=${s.positionHeld}")
             if (old.title != null && old.title != s.title) Log.i(TAG, "title changed ${old.title} -> ${s.title}")
@@ -1631,6 +1646,7 @@ object Remote : Control {
             }
             sessions++
             Svc.dropped(bye == null || bye == Enums.ByeReason.replaced)
+            apps.closed(bye)
             offset?.end(false)
             phoneCover.clear()
             update { it.unlinked() }

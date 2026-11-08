@@ -31,6 +31,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.CRC32
 
@@ -57,6 +58,8 @@ object Lyrics {
     private var doneGen = -1
     private val queued = AtomicBoolean(false)
     @Volatile private var generation = 0
+
+    internal val bulkHolds = AtomicInteger()
 
     var sources by mutableStateOf(LyricSources())
         private set
@@ -182,7 +185,9 @@ object Lyrics {
 
     private fun blocked(gen: Int): Boolean {
         if (gen != generation || !on || Remote.phase != Phase.LIVE) return true
-        if (Firmwares.sending || !PushGate.open(Remote.device, SystemClock.elapsedRealtime()) || PushGate.card(Remote.device)) {
+        val bulk = Remote.bulkSending()
+        if (bulk) bulkHolds.incrementAndGet()
+        if (bulk || !PushGate.open(Remote.device, SystemClock.elapsedRealtime()) || PushGate.card(Remote.device)) {
             exec.schedule({ poke() }, Proto.pushGateMs.toLong(), TimeUnit.MILLISECONDS)
             return true
         }
