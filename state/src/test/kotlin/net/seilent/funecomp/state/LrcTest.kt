@@ -141,6 +141,9 @@ class LrcTest {
     fun angleWordStampsLeaveCleanText() {
         assertEquals(listOf(l(12000, "Hello world")), parse(LrcCases.T1))
         assertEquals(listOf(l(12000, "a")), parse(LrcCases.T1_TAIL))
+        assertEquals(listOf(l(1000, "a")), parse(LrcCases.T1_END))
+        assertEquals(listOf(l(12000, "a")), parse(LrcCases.T1_CLAMP))
+        assertEquals(listOf(l(12000, "")), parse(LrcCases.T1_BARE))
     }
 
     @Test
@@ -175,6 +178,7 @@ class LrcTest {
     @Test
     fun repeatedLeadingStampsCopyCleanText() {
         assertEquals(listOf(l(3000, "la la"), l(10250, "la la")), parse(LrcCases.T4))
+        assertEquals(listOf(l(3000, "la"), l(10250, "la")), parse(LrcCases.T4_ORDER))
     }
 
     @Test
@@ -192,6 +196,7 @@ class LrcTest {
     fun falseBracketGuardsStayText() {
         for (t in LrcCases.T6_KEPT) assertEquals(listOf(l(12000, t)), parse(LrcCases.timed(t)))
         assertEquals(listOf("a <00:12.50>b"), plain(LrcCases.T6_PLAIN))
+        assertEquals(listOf("say <00:01.00>hi"), plain(LrcCases.T6_LOOSE))
     }
 
     @Test
@@ -210,6 +215,7 @@ class LrcTest {
     fun aWordTimedBodyParsesAsItsPlainTwin() {
         assertEquals(parse(LrcCases.T8_T1), parse(LrcCases.T1))
         assertEquals(parse(LrcCases.T8_T1B), parse(LrcCases.T1B))
+        assertEquals(parse(LrcCases.T8_CLEAN), parse(LrcCases.T8_TIMED))
     }
 
     @Test

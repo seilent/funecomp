@@ -31,6 +31,9 @@ class LrcCaseFileTest {
         "café\u0000tail\n".toByteArray(Charsets.ISO_8859_1),
         u("[offset:+500]\n[00:02.00]あ\n[00:00.20]い\n"),
         u("[ti:曲]\n[00:01.00]ひとつ\nはぐれ\n"),
+        u(LrcCases.T1),
+        u(LrcCases.T2_SQUARE),
+        u(LrcCases.T2_CJK),
     )
 
     private val cuts = listOf("a".repeat(Lrc.LINE_MAX - 1) + "あtail", "あ".repeat(2000), "\ud83c\udfa4".repeat(1100), "a".repeat(Lrc.LINE_MAX - 3) + "あx")
