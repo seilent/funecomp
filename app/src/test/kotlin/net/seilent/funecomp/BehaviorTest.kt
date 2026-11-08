@@ -411,7 +411,8 @@ class BehaviorTest {
         row("set.brightness", "BRIGHTNESS", brightness)
         if (board == "v1") row("set.size", "SIZE", "STANDARD") else row("set.scale", "SCALE", "1.5")
         rule.walkPivots(rows, "screens", "display") { settle(1000) }
-        row("set.saverLyrics", "SAVER LYRICS", "ON")
+        row("set.screenLock", "LOCKSCREEN", "OFF")
+        row("set.saverLyricsScene", "LYRICS SCENE", "OFF")
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag("set.artistPhoto"))
         rule.mainClock.autoAdvance = false

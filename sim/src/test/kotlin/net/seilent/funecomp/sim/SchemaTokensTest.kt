@@ -22,7 +22,6 @@ class SchemaTokensTest {
                 "powerOnScale" to tok.settings_powerOnSteps,
                 "brightness" to Tok.settings_brightnessSteps,
                 "screenOffSeconds" to Tok.settings_screenOffSteps,
-                "saverDelay" to Tok.settings_saverDelaySteps,
                 "idleShutdownMinutes" to Tok.settings_idleSteps,
                 "sleep" to Tok.settings_sleepSteps,
                 "crossfade" to Tok.settings_crossfadeSteps,

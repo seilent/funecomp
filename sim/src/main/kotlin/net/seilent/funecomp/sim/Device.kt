@@ -206,7 +206,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val tok = TokBoard.of(board.name)
     private val prefs = linkedMapOf(
         "volumeStep" to whole(Tok.volume_stepDefault),
-        "accentHue" to whole(Tok.accent_hueDefault), "accentOff" to "off", "saverMode" to "on", "saverDelay" to whole(Tok.settings_saverDefault),
+        "accentHue" to whole(Tok.accent_hueDefault), "accentOff" to "off", "saverMode" to "on",
         "screenOffSeconds" to whole(Tok.settings_screenOffDefault),
         "idleShutdownMinutes" to whole(Tok.settings_idleDefault), "lockKnob" to "off", "screenOffKeys" to "all",
         "inlineRemote" to "on", "clock" to "24h", "batteryPercent" to "off", "playThrough" to "off",
@@ -214,9 +214,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         "balance" to "0", "maxVolume" to whole(Tok.settings_maxVolumeDefault), "powerOnScale" to "0", "replaygain" to "off",
         "quickplay" to "on", "resume" to "position", "autoNowPlaying" to "off",
         "crossfade" to whole(Tok.settings_crossfadeDefault), "crossfeed" to "off", "artistPhoto" to "on",
-        "saverLyrics" to "on", "brightness" to whole(tok.settings_brightnessDefault),
+        "brightness" to whole(tok.settings_brightnessDefault),
         "outputPriority" to "headphones", "outputGain" to "high", "dsdOutput" to "dop", "tube" to "off", "stereoWidth" to "off",
-        "led" to "high", "saverDrift" to "on", "screenLock" to "off", "statusVolume" to "off", "navBar" to "off", "navOrder" to "backLeft",
+        "led" to "high", "screenLock" to "off", "saverLyricsScene" to "off", "statusVolume" to "off", "navBar" to "off", "navOrder" to "backLeft",
         "navButton" to "play", "whenIdle" to "powerOff", "chargeLimit" to "off", "chargeSpeed" to "normal", "swapTrackKeys" to "off", "usbFeedback" to "on", "usbOutput" to "headphones",
         "companion" to if (opts.companion) "on" else "off", "scrobble" to "phone", "size" to "standard",
         "bootLogo" to "fune", "streaming" to if (opts.services.isNotEmpty()) "on" else "off", "btAudio" to "on",
@@ -902,7 +902,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         return prefs.entries.filter { it.key in shown }.joinToString("") { "${it.key}=${it.value}\n" } + (saverSeconds()?.let { "saverSeconds=$it\n" } ?: "")
     }
 
-    private fun saverSeconds() = if (prefs["saverMode"] == "off") "0" else prefs["saverDelay"]
+    private fun saverSeconds() = when (prefs["saverMode"]) {
+        null -> null
+        "off" -> "0"
+        else -> Tok.settings_saverSteps.split(',').first { it.toInt() > 0 }
+    }
 
     private fun pushSettings(out: Out) = send(out, Msg.SETTINGS, Settings(settingsRev, settingsText()).encode())
 
@@ -1214,7 +1218,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private val readOnlyToSet = setOf("usbMode", "btCodec", "btCodecHeadphones")
-    private val setWhileHidden = setOf("saverMode", "saverDelay", "saverSeconds", "saverLyrics", "saverDrift")
+    private val setWhileHidden = setOf("saverMode", "saverSeconds")
 
     private fun scaleN(at: Int, top: Int): Int {
         val p = at.coerceIn(0, 100)
@@ -1265,9 +1269,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (key == "playThrough" && value == "playlist" && (opts.through == null || !mounted())) return null
         if (key in setWhileHidden) return when (key) {
             "saverMode" -> value.takeIf { it == "off" || it == "on" || it == "charge" }
-            "saverDelay" -> nearest(rows.firstOrNull { it.key == key }?.values ?: return null, value)
             "saverSeconds" -> nearest(Tok.settings_saverSteps.split(','), value)
-            else -> value.takeIf { it == "on" || it == "off" }
+            else -> null
         }
         val r = structureRows().firstOrNull { it.key == key } ?: return null
         if (Enums.RowFlag.readOnly in r.flags || key in readOnlyToSet) return null
@@ -1321,10 +1324,6 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             if (old == "off" || prefs["saverMode"] == "off") {
                 next["saverMode"] = old
                 if ("saverMode" !in kept) kept += "saverMode"
-            }
-            if (old != "off") {
-                next["saverDelay"] = seconds
-                if ("saverDelay" !in kept) kept += "saverDelay"
             }
         }
         if ("powerOnScale" !in kept) powerOnKeep(next)

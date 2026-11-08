@@ -144,8 +144,8 @@ class DeviceTest {
 
     @Test
     fun rowCountsAtTheDefaultsAndWithEveryRuntimeRowShown() {
-        for ((b, n) in listOf("ap80" to 49, "v1" to 59, "r1" to 59)) assertEquals(b, n, device(b).schemaRows().size)
-        for ((b, n) in listOf("ap80" to 52, "v1" to 63, "r1" to 63)) {
+        for ((b, n) in listOf("ap80" to 47, "v1" to 57, "r1" to 57)) assertEquals(b, n, device(b).schemaRows().size)
+        for ((b, n) in listOf("ap80" to 50, "v1" to 61, "r1" to 61)) {
             val d = Device(Options(Board.of(b), headset = true, companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
             assertEquals(b, n, d.schemaRows().size)
@@ -154,8 +154,8 @@ class DeviceTest {
     }
 
     @Test
-    fun pivotsAsFuneos71eaf7418() {
-        val screens = listOf("saverMode", "saverDelay", "saverLyrics", "saverDrift", "screenLock", "quickplay", "artistPhoto", "navBar", "navOrder", "navButton")
+    fun pivotsAsFuneos032080031() {
+        val screens = listOf("saverMode", "screenLock", "saverLyricsScene", "quickplay", "artistPhoto", "navBar", "navOrder", "navButton")
         for (b in listOf("ap80", "v1", "r1")) {
             val d = Device(Options(Board.of(b), companion = true, services = listOf(SvcInfo("tidal", "TIDAL", listOf("client_id"), true))), Library.synthetic()) { t }
             ok(req(d, Msg.SET, Req.set("navBar=on\n")))
@@ -370,16 +370,16 @@ class DeviceTest {
         for (b in listOf("ap80", "v1", "r1")) {
             val d = device(b)
             val keys = d.rows.map { it.key }
-            assertEquals(keys.indexOf("saverMode") + 1, keys.indexOf("saverDelay"))
-            assertEquals(keys.indexOf("saverDelay") + 1, keys.indexOf("saverLyrics"))
-            assertEquals(keys.indexOf("saverLyrics") + 1, keys.indexOf("saverDrift"))
-            assertEquals(keys.indexOf("saverDrift") + 1, keys.indexOf("screenLock"))
+            assertEquals(keys.indexOf("saverMode") + 1, keys.indexOf("screenLock"))
+            assertEquals(keys.indexOf("screenLock") + 1, keys.indexOf("saverLyricsScene"))
+            assertEquals(keys.indexOf("saverLyricsScene") + 1, keys.indexOf("quickplay"))
             assertEquals(keys.indexOf("crossfeed") + 1, keys.indexOf("tube"))
             assertEquals(keys.indexOf("tube") + 1, keys.indexOf("stereoWidth"))
-            val row = d.rows.first { it.key == "saverLyrics" }
+            assertEquals("LOCKSCREEN", d.rows.first { it.key == "screenLock" }.label)
+            val row = d.rows.first { it.key == "saverLyricsScene" }
             assertEquals("screens", row.pivot)
             assertEquals(Enums.RowKind.toggle, row.kind)
-            assertEquals("SAVER LYRICS", row.label)
+            assertEquals("LYRICS SCENE", row.label)
             assertEquals(listOf("off", "on"), row.values)
             assertTrue(row.flags.isEmpty())
             assertEquals(listOf("OFF", "50%", "75%", "125%", "150%", "200%"), d.rows.first { it.key == "stereoWidth" }.words)
@@ -387,12 +387,13 @@ class DeviceTest {
             val out = Sink()
             d.greet(out)
             val text = Settings.from(out.of(Msg.SETTINGS).single()).text.lines()
-            assertTrue("saverLyrics=on" in text && "saverDrift=on" in text && "tube=off" in text && "stereoWidth=off" in text && "scrobble=phone" in text)
+            assertTrue("saverLyricsScene=off" in text && "screenLock=off" in text && "tube=off" in text && "stereoWidth=off" in text && "scrobble=phone" in text)
+            assertTrue(text.none { it.startsWith("saverDelay=") || it.startsWith("saverLyrics=") || it.startsWith("saverDrift=") })
             val set = Sink()
-            val r = SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverLyrics=off\nstereoWidth=150\n"), set))))
-            assertEquals(listOf("saverLyrics", "stereoWidth"), r.kept)
-            assertTrue("saverLyrics=off" in Settings.from(set.of(Msg.SETTINGS).single()).text.lines())
-            assertEquals(listOf("saverLyrics"), fail(req(d, Msg.SET, Req.set("saverLyrics=yes\n"))).refused)
+            val r = SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverLyricsScene=on\nstereoWidth=150\n"), set))))
+            assertEquals(listOf("saverLyricsScene", "stereoWidth"), r.kept)
+            assertTrue("saverLyricsScene=on" in Settings.from(set.of(Msg.SETTINGS).single()).text.lines())
+            assertEquals(listOf("saverLyricsScene"), fail(req(d, Msg.SET, Req.set("saverLyricsScene=yes\n"))).refused)
         }
     }
 
@@ -422,7 +423,7 @@ class DeviceTest {
     }
 
     @Test
-    fun saverOffHidesItsRowsAndTheirSetStillLands() {
+    fun saverOffKeepsTheScreensRowsAndLyricsSceneLands() {
         fun settings(out: Sink) = Settings.from(out.of(Msg.SETTINGS).last()).text.lines()
         fun keys(d: Device) = Sink().also { d.greet(it) }.of(Msg.SCHEMA).map { Schema.from(it) }.flatMap { it.rows }.mapNotNull { it.key }
         for (b in listOf("ap80", "v1", "r1")) {
@@ -431,26 +432,16 @@ class DeviceTest {
             assertEquals(b, listOf("saverMode"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverMode=off\n"), off)))).kept)
             val text = settings(off)
             assertTrue(b, "saverMode=off" in text && "saverSeconds=0" in text)
-            assertTrue(b, text.none { it.startsWith("saverDelay=") || it.startsWith("saverLyrics=") || it.startsWith("saverDrift=") })
-            val hidden = keys(d)
-            assertTrue(b, "saverMode" in hidden && "saverDelay" !in hidden && "saverLyrics" !in hidden && "saverDrift" !in hidden)
-            val delay = Sink()
-            assertEquals(b, listOf("saverDelay"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverDelay=60\n"), delay)))).kept)
-            assertTrue(b, "saverSeconds=0" in settings(delay))
-            val lyrics = Sink()
-            assertEquals(b, listOf("saverLyrics", "saverDrift"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverLyrics=off\nsaverDrift=off\n"), lyrics)))).kept)
-            assertTrue(b, settings(lyrics).none { it.startsWith("saverLyrics=") })
-            assertEquals(b, listOf("saverLyrics"), fail(req(d, Msg.SET, Req.set("saverLyrics=1\n"))).refused)
+            val shown = keys(d)
+            assertEquals(b, shown.indexOf("saverMode") + 1, shown.indexOf("screenLock"))
+            assertEquals(b, shown.indexOf("screenLock") + 1, shown.indexOf("saverLyricsScene"))
+            val scene = Sink()
+            assertEquals(b, listOf("saverLyricsScene"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverLyricsScene=on\n"), scene)))).kept)
+            assertTrue(b, "saverLyricsScene=on" in settings(scene))
             assertEquals(b, listOf("navOrder"), fail(req(d, Msg.SET, Req.set("navOrder=backRight\n"))).refused)
             val on = Sink()
             ok(req(d, Msg.SET, Req.set("saverMode=charge\n"), on))
-            val back = settings(on)
-            assertTrue(b, "saverMode=charge" in back && "saverDelay=60" in back && "saverSeconds=60" in back)
-            assertTrue(b, "saverLyrics=off" in back && "saverDrift=off" in back)
-            val shown = keys(d)
-            assertEquals(b, shown.indexOf("saverMode") + 1, shown.indexOf("saverDelay"))
-            assertEquals(b, shown.indexOf("saverDelay") + 1, shown.indexOf("saverLyrics"))
-            assertEquals(b, shown.indexOf("saverLyrics") + 1, shown.indexOf("saverDrift"))
+            assertTrue(b, "saverMode=charge" in settings(on) && "saverSeconds=10" in settings(on))
             for (v in listOf("10", "30")) {
                 val screen = Sink()
                 ok(req(d, Msg.SET, Req.set("screenOffSeconds=$v\n"), screen))
@@ -460,29 +451,17 @@ class DeviceTest {
     }
 
     @Test
-    fun screenLockShowsTheSaverLinesWhileTheSaverIsOff() {
+    fun theScreensRowsHoldAtEverySaverAndLockValue() {
+        val screens = listOf("saverMode", "screenLock", "saverLyricsScene", "quickplay", "artistPhoto", "navBar")
         fun settings(out: Sink) = Settings.from(out.of(Msg.SETTINGS).last()).text.lines()
-        fun keys(d: Device) = Sink().also { d.greet(it) }.of(Msg.SCHEMA).map { Schema.from(it) }.flatMap { it.rows }.mapNotNull { it.key }
-        fun set(d: Device, text: String) = Sink().also { ok(req(d, Msg.SET, Req.set(text), it)) }
+        fun keys(d: Device) = Sink().also { d.greet(it) }.of(Msg.SCHEMA).map { Schema.from(it) }.flatMap { it.rows }.filter { it.pivot == "screens" }.mapNotNull { it.key }
         for (b in listOf("ap80", "v1", "r1")) {
             val d = device(b)
-            assertTrue(b, "screenLock=off" in settings(Sink().also { d.greet(it) }))
-            set(d, "saverLyrics=off\n")
-            val off = set(d, "saverMode=off\n")
-            val hidden = keys(d)
-            assertTrue(b, "saverDelay" !in hidden && "saverLyrics" !in hidden && "saverDrift" !in hidden)
-            assertEquals(b, hidden.indexOf("saverMode") + 1, hidden.indexOf("screenLock"))
-            assertTrue(b, "screenLock=off" in settings(off) && settings(off).none { it.startsWith("saverLyrics=") || it.startsWith("saverDrift=") })
-            val on = set(d, "screenLock=on\n")
-            val shown = keys(d)
-            assertEquals(b, listOf("saverMode", "saverLyrics", "saverDrift", "screenLock"), shown.subList(shown.indexOf("saverMode"), shown.indexOf("screenLock") + 1))
-            assertTrue(b, "saverLyrics=off" in settings(on) && "saverDrift=on" in settings(on) && "screenLock=on" in settings(on))
-            set(d, "screenLock=off\n")
-            assertTrue(b, keys(d).none { it == "saverLyrics" || it == "saverDrift" })
-            set(d, "saverMode=on\n")
-            val saver = keys(d)
-            set(d, "screenLock=on\n")
-            assertEquals(b, saver, keys(d))
+            for (mode in listOf("off", "on", "charge")) for (lock in listOf("off", "on")) {
+                val out = Sink().also { ok(req(d, Msg.SET, Req.set("saverMode=$mode\nscreenLock=$lock\n"), it)) }
+                assertEquals("$b $mode $lock", screens, keys(d))
+                assertTrue("$b $mode $lock", "screenLock=$lock" in settings(out) && "saverLyricsScene=off" in settings(out))
+            }
             assertEquals(b, listOf("screenLock"), fail(req(d, Msg.SET, Req.set("screenLock=yes\n"))).refused)
         }
     }
@@ -520,36 +499,73 @@ class DeviceTest {
             assertEquals(b, listOf("saverSeconds", "saverMode"), set(d, "saverSeconds=0\n", off))
             assertTrue(b, "saverMode=off" in settings(off) && "saverSeconds=0" in settings(off))
             val on = Sink()
-            assertEquals(b, listOf("saverSeconds", "saverMode", "saverDelay"), set(d, "saverSeconds=30\n", on))
-            assertTrue(b, "saverMode=on" in settings(on) && "saverDelay=30" in settings(on) && "saverSeconds=30" in settings(on))
-            set(d, "saverDelay=120\n", Sink())
+            assertEquals(b, listOf("saverSeconds", "saverMode"), set(d, "saverSeconds=30\n", on))
+            assertTrue(b, "saverMode=on" in settings(on) && "saverSeconds=10" in settings(on))
             val snap = Sink()
-            assertEquals(b, listOf("saverSeconds", "saverDelay"), set(d, "saverSeconds=40\n", snap))
-            assertTrue(b, "saverMode=on" in settings(snap) && "saverDelay=30" in settings(snap))
+            assertEquals(b, listOf("saverSeconds"), set(d, "saverSeconds=40\n", snap))
+            assertTrue(b, "saverMode=on" in settings(snap) && "saverSeconds=10" in settings(snap))
+            val tie = Sink()
+            assertEquals(b, listOf("saverSeconds", "saverMode"), set(d, "saverSeconds=5\n", tie))
+            assertTrue(b, "saverMode=off" in settings(tie) && "saverSeconds=0" in settings(tie))
+            val six = Sink()
+            assertEquals(b, listOf("saverSeconds", "saverMode"), set(d, "saverSeconds=6\n", six))
+            assertTrue(b, "saverMode=on" in settings(six) && "saverSeconds=10" in settings(six))
         }
     }
 
     @Test
-    fun theOldSaverSecondsKeyAtChargeKeepsChargeAndSetsTheDelay() {
+    fun theOldSaverSecondsKeyAtChargeKeepsCharge() {
         fun settings(out: Sink) = Settings.from(out.of(Msg.SETTINGS).last()).text.lines()
+        fun set(d: Device, text: String, out: Sink) = SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set(text), out)))).kept
         for (b in listOf("ap80", "v1", "r1")) {
             val d = device(b)
             ok(req(d, Msg.SET, Req.set("saverMode=charge\n")))
             val charge = Sink()
-            assertEquals(b, listOf("saverSeconds", "saverDelay"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverSeconds=60\n"), charge)))).kept)
-            assertTrue(b, "saverMode=charge" in settings(charge) && "saverDelay=60" in settings(charge) && "saverSeconds=60" in settings(charge))
+            assertEquals(b, listOf("saverSeconds"), set(d, "saverSeconds=60\n", charge))
+            assertTrue(b, "saverMode=charge" in settings(charge) && "saverSeconds=10" in settings(charge))
+            val off = Sink()
+            assertEquals(b, listOf("saverSeconds", "saverMode"), set(d, "saverSeconds=0\n", off))
+            assertTrue(b, "saverMode=off" in settings(off))
         }
     }
 
     @Test
-    fun saverDelaySnapsToTheNearestStepAndATieTakesTheFirst() {
-        fun delay(d: Device, v: String) = Sink().also { ok(req(d, Msg.SET, Req.set("saverDelay=$v\n"), it)) }.let { Settings.from(it.of(Msg.SETTINGS).last()).text.lines() }
+    fun lyricsSceneIsAToggleBelowLockscreen() {
         for (b in listOf("ap80", "v1", "r1")) {
             val d = device(b)
-            assertTrue(b, "saverDelay=30" in delay(d, "45"))
-            assertTrue(b, "saverDelay=120" in delay(d, "100"))
-            assertTrue(b, "saverDelay=300" in delay(d, "1000"))
+            val keys = d.rows.map { it.key }
+            assertEquals(b, keys.indexOf("screenLock") + 1, keys.indexOf("saverLyricsScene"))
+            assertEquals(b, keys.indexOf("saverLyricsScene") + 1, keys.indexOf("quickplay"))
+            assertEquals(b, null, d.conditionOf("screenLock"))
+            assertEquals(b, null, d.conditionOf("saverLyricsScene"))
+            val out = Sink()
+            d.greet(out)
+            assertTrue(b, "saverLyricsScene=off" in Settings.from(out.of(Msg.SETTINGS).single()).text.lines())
+            assertEquals(b, listOf("saverLyricsScene"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverLyricsScene=on\n"))))).kept)
         }
+    }
+
+    @Test
+    fun theRemovedSaverKeysAreRefused() {
+        for (b in listOf("ap80", "v1", "r1")) {
+            val d = device(b)
+            for (kv in listOf("saverDelay=30", "saverLyrics=on", "saverDrift=on")) {
+                val f = fail(req(d, Msg.SET, Req.set("$kv\n")))
+                assertEquals("$b $kv", Err.refused, f.code)
+                assertEquals("$b $kv", listOf(kv.substringBefore('=')), f.refused)
+            }
+            val r = SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverDelay=30\nquickplay=off\n")))))
+            assertEquals(b, listOf("quickplay"), r.kept)
+            assertEquals(b, listOf("saverDelay"), r.refused)
+        }
+    }
+
+    @Test
+    fun aSchemaWithNoSaverRowSendsNoSaverSeconds() {
+        val d = Device(Options(Board("ap80", 360, 480, 360, 480, "schema-sleepmin.txt")), Library.synthetic()) { t }
+        val out = Sink()
+        d.greet(out)
+        assertTrue(Settings.from(out.of(Msg.SETTINGS).single()).text.lines().none { it.startsWith("saverSeconds=") })
     }
 
     @Test
