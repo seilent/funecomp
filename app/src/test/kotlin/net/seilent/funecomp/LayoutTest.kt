@@ -28,7 +28,6 @@ import net.seilent.funecomp.ui.freqText
 import net.seilent.funecomp.ui.gridHz
 import net.seilent.funecomp.ui.headerBaseline
 import net.seilent.funecomp.ui.headerScale
-import net.seilent.funecomp.ui.homeBarAlpha
 import net.seilent.funecomp.ui.homeMenuX
 import net.seilent.funecomp.ui.homePitch
 import net.seilent.funecomp.ui.homeRingEnter
@@ -192,16 +191,6 @@ class LayoutTest {
         assertEquals(302f, land.homeRingHitRight, 1e-3f)
         assertEquals(72.2f, land.homeSlotTop(1), 1e-3f)
         assertEquals(112f, land.homeRingHitBottom(1), 1e-3f)
-    }
-
-    @Test
-    fun homeBarFadesNearMusic() {
-        assertEquals(0f, homeBarAlpha(1f, 1), 1e-6f)
-        assertEquals(1f, homeBarAlpha(0f, 1), 1e-6f)
-        assertEquals(1f, homeBarAlpha(2f, 1), 1e-6f)
-        assertEquals(1f, homeBarAlpha(5f, 1), 1e-6f)
-        assertEquals(0.5f, homeBarAlpha(0.5f, 1), 1e-6f)
-        assertEquals(0.5f, homeBarAlpha(1.5f, 1), 1e-6f)
     }
 
     @Test

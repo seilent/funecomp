@@ -2,7 +2,6 @@ package net.seilent.funecomp.ui
 
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.gen.TokBoard
-import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 
@@ -251,5 +250,3 @@ val Ui.homeRingHitRight get() = homeMenuX + min(Held.Home.homeBarX, Held.Home.ho
 fun Ui.homeRingHitBottom(music: Int) = music * homePitch + Held.Home.homeRingHitBottom
 
 fun homeRingEnter(ms: Float) = Decel.transform((ms / Tok.motion_homeEnterPeek).coerceIn(0f, 1f))
-
-fun homeBarAlpha(focus: Float, music: Int) = abs(focus - music).coerceIn(0f, 1f)

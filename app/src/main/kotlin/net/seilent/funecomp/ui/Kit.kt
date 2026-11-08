@@ -95,20 +95,24 @@ private const val NS_PER_S = 1_000_000_000L
 @Composable
 fun Float.dp() = with(LocalDensity.current) { this@dp.toDp() }
 
-fun Modifier.press(onTap: (Offset) -> Unit, onLong: (() -> Unit)? = null, press: PressState? = null) = composed {
+fun Modifier.press(onTap: (Offset) -> Unit, onLong: (() -> Unit)? = null, press: PressState? = null, onDown: () -> Unit = {}) = composed {
     val tap by rememberUpdatedState(onTap)
     val long by rememberUpdatedState(onLong)
+    val down by rememberUpdatedState(onDown)
     val hasLong = onLong != null
     if (press == null) {
         pointerInput(hasLong) {
             detectTapGestures(
-                onPress = { tryAwaitRelease() },
+                onPress = {
+                    down()
+                    tryAwaitRelease()
+                },
                 onLongPress = if (hasLong) { _: Offset -> long?.invoke() } else null,
                 onTap = { tap(it) },
             )
         }
     } else {
-        pointerInput(hasLong, press) { pressGesture(press, hasLong, { long?.invoke() }) { tap(it) } }
+        pointerInput(hasLong, press) { pressGesture(press, hasLong, { long?.invoke() }, { down() }) { tap(it) } }
     }
 }
 
@@ -138,10 +142,11 @@ private suspend fun AwaitPointerEventScope.untilUp(first: PointerInputChange, co
     }
 }
 
-private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: Boolean, long: () -> Unit, tap: (Offset) -> Unit) = awaitEachGesture {
+private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: Boolean, long: () -> Unit, down: () -> Unit, tap: (Offset) -> Unit) = awaitEachGesture {
     val first = awaitFirstDown()
     first.consume()
     press.down(first.uptimeMillis)
+    down()
     val slop = viewConfiguration.touchSlop
     val outcome = if (hasLong) withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) { track(first, slop) } else track(first, slop)
     when (outcome) {
@@ -164,9 +169,9 @@ private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: B
 }
 
 @Composable
-fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, content: @Composable () -> Unit) {
+fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, onDown: () -> Unit = {}, content: @Composable () -> Unit) {
     val p = rememberPress()
-    Box(modifier.press(onTap, onLong, p).pressScale(p)) { content() }
+    Box(modifier.press(onTap, onLong, p, onDown).pressScale(p)) { content() }
 }
 
 @Composable

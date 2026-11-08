@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.click
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
@@ -18,7 +20,6 @@ import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.ui.App
-import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -28,7 +29,6 @@ import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.homePitch
 import net.seilent.funecomp.ui.homeSlotTop
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -89,22 +89,29 @@ class HomeRingTest {
         return max
     }
 
-    private fun barLit(index: Int): Boolean {
-        val ui = ui()
-        val origin = rule.onNodeWithTag("home").fetchSemanticsNode().boundsInWindow
-        val p = frame().getPixel((origin.left + ui.px(Held.Home.homeBarX + Tok.focus_barWidth / 2)).toInt(), (origin.top + ui.px(slotCenter(index))).toInt())
-        return (p shr 16) and 0xff > 230
+    private fun bars() = rule.onAllNodes(hasTestTag("bar") and hasAnyAncestor(hasTestTag("home")), useUnmergedTree = true).fetchSemanticsNodes().size
+
+    @Test
+    fun homeDrawsNoBar() {
+        val shell = start()
+        assertEquals(0, bars())
+        rule.onNodeWithTag("home.ring").performClick()
+        settle(1000)
+        assertEquals(0, bars())
+        tapHome(100f, slotCenter(4))
+        assertEquals(listOf(Page.Home, Page.Online()), shell.nav.stack.toList())
+        shell.nav.pop()
+        settle(1000)
+        assertEquals(0, bars())
     }
 
     @Test
     fun aRingTapShufflesTheLibraryAndStaysHome() {
         val shell = start()
-        assertTrue(barLit(0))
         rule.onNodeWithTag("home.ring").performClick()
         settle(1000)
         assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
         assertEquals(listOf(Page.Home), shell.nav.stack.toList())
-        assertTrue(barLit(0))
         val s = sim.device.playback.state
         assertEquals(sim.sim.lib.tracks.size.toLong(), s.slots)
         assertEquals(true, s.shuffle)
@@ -128,10 +135,6 @@ class HomeRingTest {
         tapHome(63f, slotCenter(1))
         assertEquals(listOf(Page.Home, Page.Music), shell.nav.stack.toList())
         assertTrue(sim.actions.isEmpty())
-        shell.nav.pop()
-        settle(1000)
-        assertFalse(barLit(1))
-        assertFalse(barLit(0))
     }
 
     @Test

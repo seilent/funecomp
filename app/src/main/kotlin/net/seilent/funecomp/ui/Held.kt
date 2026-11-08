@@ -19,7 +19,6 @@ object Held {
         const val homeRingHitBottom = 64f
         const val homeBarX = 62f
         const val homeBarTop = 23.8f
-        const val homeBarH = 37.4f
 
         val entries = listOf(
             Entry("homeTextX", "homeTextX", homeTextX, "M1, M4", "zhome"),
@@ -35,7 +34,6 @@ object Held {
             Entry("homeRingHitBottom", "homeRingHitBottom", homeRingHitBottom, "M2", "zhome"),
             Entry("homeBarX", "homeBarX", homeBarX, "M3", "zhome"),
             Entry("homeBarTop", "homeBarTop", homeBarTop, "M3", "zhome"),
-            Entry("homeBarH", "homeBarH", homeBarH, "M3", "zhome"),
         )
     }
 

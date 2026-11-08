@@ -273,7 +273,7 @@ class StackTurnTest {
         return Return(first!!, firstAt, outStart + Tok.motion_turnstileOut.toLong(), marks, drawn, itemsAt!!, ringAt!!)
     }
 
-    private fun checkReturn(name: String, r: Return, items: List<String>, bar: Boolean) {
+    private fun checkReturn(name: String, r: Return, items: List<String>) {
         settle(1000)
         val rest = capture()
         val mark = crop(rest, bounds("home.watermark")!!)
@@ -284,7 +284,6 @@ class StackTurnTest {
         ratios.forEachIndexed { i, x -> assertEquals("$name item $i stagger", ratios[0], x, NEAR) }
         val pose = Decel.transform(((r.firstAt - r.outEnd).toFloat() / Tok.motion_homeEnter).coerceIn(0f, 1f))
         assertEquals("$name first pose at ${r.firstAt - r.outEnd} ms", pose, ratios[0], NEAR)
-        if (bar) assertEquals("$name bar", ratios[0], peak(r.first, bounds("bar")!!).toFloat() / peak(rest, bounds("bar")!!), NEAR)
         val ring = peak(r.first, bounds("home.ring")!!).toFloat() / peak(rest, bounds("home.ring")!!)
         assertEquals("$name first ring pose", homeRingEnter((r.firstAt - r.outEnd).toFloat()), ring, NEAR)
         items.forEach { assertEquals("$name $it at rest", crop(rest, text(it)), r.itemsAt.getValue(it)) }
@@ -303,10 +302,10 @@ class StackTurnTest {
         val items = homeItems(c.device, LinkView(Phase.LIVE, "AP80", everLive = true)).map { "home.${it.name}" }
         shell.nav.push(Page.Settings)
         settle(1500)
-        checkReturn("settings pop", homeReturn("settings pop", { shell.nav.pop() }, items), items, bar = true)
+        checkReturn("settings pop", homeReturn("settings pop", { shell.nav.pop() }, items), items)
         rule.onNodeWithTag("home.music").performClick()
         settle(1500)
-        checkReturn("music pop", homeReturn("music pop", { shell.nav.pop() }, items), items, bar = false)
+        checkReturn("music pop", homeReturn("music pop", { shell.nav.pop() }, items), items)
     }
 
     private companion object {

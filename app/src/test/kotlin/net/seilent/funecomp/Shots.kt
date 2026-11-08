@@ -777,6 +777,20 @@ private fun svcLogin(uri: String = "https://link.svcdemo.test/ABCDE"): (SimContr
     c.push(Msg.SVC_LOGIN, SvcLogin("tidal", uri, "link.svcdemo.test", "ABCDE", 300, 7).encode())
 }
 
+private fun Shots.homeEnd() {
+    rule.mainClock.autoAdvance = true
+    rule.onNodeWithTag("home.column").performTouchInput { swipeUp() }
+    rule.mainClock.autoAdvance = false
+}
+
+private fun Shots.homeShow(tag: String) {
+    val column = rule.onNodeWithTag("home.column").fetchSemanticsNode().boundsInRoot
+    val item = rule.onNodeWithTag(tag).fetchSemanticsNode()
+    if (item.positionInRoot.y + item.size.height <= column.bottom) return
+    homeEnd()
+    settle(1000)
+}
+
 private fun Shots.svcKeys() {
     tapRow("svc.tidal")
     rule.onNodeWithTag("sheet.item.0").performClick()
@@ -814,12 +828,18 @@ val SHOTS = listOf(
     Shot("home-long", pages = HOME, prep = ::longTitle),
     Shot("home-empty", pages = HOME, prep = ::emptyQueue),
     Shot("home-down", pages = HOME, prep = ::playing, link = LinkView(Phase.DOWN, "AP80", everLive = true)),
-    Shot("home-end", pages = HOME, prep = ::playing) {
-        rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("home.column").performTouchInput { swipeUp() }
-        rule.mainClock.autoAdvance = false
-    },
+    Shot("home-end", pages = HOME, prep = ::playing) { homeEnd() },
     Shot("home-ring-down", pages = HOME, prep = ::playing, held = true) { rule.onNodeWithTag("home.ring").performTouchInput { down(center) } },
+    Shot("home-item-down", pages = HOME, prep = ::playing, held = true) {
+        homeShow("home.settings")
+        rule.onNodeWithTag("home.settings").performTouchInput { down(center) }
+    },
+    Shot("home-tap-back", pages = HOME, prep = ::playing) {
+        homeShow("home.settings")
+        rule.onNodeWithTag("home.settings").performClick()
+        settle(1000)
+        it.nav.pop()
+    },
     Shot("nowplaying", pages = NP, prep = ::playing),
     Shot("nowplaying-v1", board = "v1", pages = NP, prep = ::playing),
     Shot("nowplaying-last", pages = NP, prep = { it.queueOp(Enums.QueueCmd.playAt, slot = it.device.playback.state.slots!! - 1) }),
