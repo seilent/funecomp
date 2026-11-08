@@ -13,9 +13,6 @@ class HeldTest {
         assertEquals(
             listOf(
                 listOf("type_homeItem_style", "type_homeItem_style", "Light", "M1, M4", "zhome"),
-                listOf("homeRingSize", "homeRingSize", 28.6f, "M2", "zhome"),
-                listOf("homeRingX", "homeRingX", 50f, "M2", "zhome"),
-                listOf("homeBarX", "homeBarX", 62f, "M3", "zhome"),
             ),
             rows(Held.Home.entries),
         )
@@ -32,7 +29,7 @@ class HeldTest {
             ),
             rows(Held.Np.entries),
         )
-        assertEquals(12, Held.entries.size)
+        assertEquals(9, Held.entries.size)
         assertEquals(setOf("Entry", "Home", "Np"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }

@@ -36,6 +36,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -46,8 +47,9 @@ class HomeRingTest {
 
     private lateinit var sim: SimControl
 
-    private fun start(lib: Library = Library.synthetic(), ms: Long = 1000): Shell {
+    private fun start(lib: Library = Library.synthetic(), ms: Long = 1000, off: Boolean = false): Shell {
         val c = SimControl("ap80", lib).also { sim = it }
+        if (off) c.set("accentOff", "on")
         val shell = Shell(Nav(listOf(Page.Home)))
         rule.mainClock.autoAdvance = false
         rule.setContent {
@@ -117,6 +119,29 @@ class HomeRingTest {
         assertEquals(true, s.shuffle)
     }
 
+    private fun lit(p: Int) = (p shr 16 and 0xff) > (Tok.alpha_mid * 255 / 2).toInt()
+
+    @Test
+    fun theRingIsTheDeviceRing() {
+        start(off = true)
+        val ui = ui()
+        val u = ui.u
+        val o = rule.onNodeWithTag("home").fetchSemanticsNode().boundsInWindow
+        val b = frame()
+        val row = (o.top + ui.px(142.4f)).roundToInt()
+        val xs = (o.left.roundToInt() until (o.left + ui.px(50f)).roundToInt()).filter { lit(b.getPixel(it, row)) }
+        val left = xs.first()
+        val right = xs.last() + 1
+        val stroke = generateSequence(left) { it + 1 }.takeWhile { lit(b.getPixel(it, row)) }.count()
+        assertEquals(35f, (right - left) / u, 0.5f)
+        assertEquals(4f, stroke / u, 0.5f)
+        assertEquals(25.7f, ((left + right) / 2f - o.left) / u, 0.5f)
+        val column = ((left + right) / 2f).roundToInt()
+        val ys = ((o.top + ui.px(112f)).roundToInt() until (o.top + ui.px(172f)).roundToInt()).filter { lit(b.getPixel(column, it)) }
+        assertEquals(35f, (ys.last() + 1 - ys.first()) / u, 0.5f)
+        assertEquals(142.4f, ((ys.first() + ys.last() + 1) / 2f - o.top) / u, 0.5f)
+    }
+
     @Test
     fun aTapLeftOfNowPlayingSendsNothing() {
         val shell = start()
@@ -128,13 +153,18 @@ class HomeRingTest {
     @Test
     fun tapsJustRightOfTheRingBoxOpenTheItems() {
         val shell = start()
-        tapHome(63f, slotCenter(0))
+        tapHome(45f, slotCenter(0))
         assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
         shell.nav.pop()
         settle(1000)
-        tapHome(63f, slotCenter(1))
+        tapHome(45f, slotCenter(1))
         assertEquals(listOf(Page.Home, Page.Music), shell.nav.stack.toList())
         assertTrue(sim.actions.isEmpty())
+        shell.nav.pop()
+        settle(1000)
+        tapHome(43.5f, slotCenter(1))
+        assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
+        assertEquals(listOf(Page.Home), shell.nav.stack.toList())
     }
 
     @Test

@@ -7,15 +7,9 @@ object Held {
 
     object Home {
         const val type_homeItem_style = "Light"
-        const val homeRingSize = 28.6f
-        const val homeRingX = 50f
-        const val homeBarX = 62f
 
         val entries = listOf(
             Entry("type_homeItem_style", "type_homeItem_style", type_homeItem_style, "M1, M4", "zhome"),
-            Entry("homeRingSize", "homeRingSize", homeRingSize, "M2", "zhome"),
-            Entry("homeRingX", "homeRingX", homeRingX, "M2", "zhome"),
-            Entry("homeBarX", "homeBarX", homeBarX, "M3", "zhome"),
         )
     }
 

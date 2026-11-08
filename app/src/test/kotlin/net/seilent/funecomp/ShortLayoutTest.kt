@@ -290,7 +290,7 @@ class ShortLayoutTest {
             val frame = box("home") ?: return@each run { findings += "${canvas.name} no home" }
             val items = listOf("now playing", "music", "connection", "playlists", "online", "settings").map { "home.$it" to whole("home.$it") } + ("home.ring" to whole("home.ring"))
             need(items, items.map { it.first })
-            found(items, frame, RING_IN_MUSIC, bottomEdge = false)
+            found(items, frame, bottomEdge = false)
         }
     }
 
@@ -335,7 +335,6 @@ class ShortLayoutTest {
         const val MIN_W = 640
         val LONG_TRACKS = listOf(3_600_000L to listOf(5_000L), 720_000L to listOf(5_000L, 300_000L, 660_000L))
         const val MAX_W = 1920
-        val RING_IN_MUSIC = setOf(setOf("home.ring", "home.music"))
         const val PX = 2.625f
         val ALBUM: String = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim.Library.synthetic().tracks.first().id)
         val COLUMNS = listOf(960f to 1440f, 960f to 1395f, 960f to 1347f, 960f to 1200f, 1600f to 1823f, 1600f to 1822f, 1600f to 1643f, 1600f to 1642f, 960f to 960f)

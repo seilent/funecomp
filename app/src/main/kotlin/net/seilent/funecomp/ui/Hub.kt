@@ -206,7 +206,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                             .press({ onShuffle() }, press = press)
                             .testTag("home.ring"),
                     ) {
-                        Box(Modifier.at(ui.px(ui.homeRingX + fit) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(Held.Home.homeRingSize, GlyphName.PLAY, Look.Focus(false), press = press, tag = "home.ring") }
+                        Box(Modifier.at(ui.px(ui.homeRingX + fit) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(LayoutTok.homeRingSize, GlyphName.PLAY, Look.Focus(false), press = press, tag = "home.ring", stroke = LayoutTok.homeRingStroke) }
                     }
                 }
                 items.forEachIndexed { i, item ->
