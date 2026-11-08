@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "543acface2254abb6c8c0699455c67fabd8b9d9f"
-    const val PROTO_SHA256 = "205fd28c5192a1e435ed1cceb7587426d93abc0af1423a692bb4a44907dbbf38"
-    const val VECTORS_SHA256 = "5d13da7b6f119bad952ef57e4434f245b61451e884039af7783861abd22958f3"
+    const val COMMIT = "c60cb3ca143a23e2cbf17d10cff9c3e7c4d67020"
+    const val PROTO_SHA256 = "c625a48c6f28e77df2463ee6c805601486590d8e54ff35f9f82dd42cf212ea64"
+    const val VECTORS_SHA256 = "19dbb100f2c70942008f8c65f7cc89ddb72cb6187eab940946e4beb09be887b5"
     const val TOKENS_SHA256 = "93c871ab2f1313778d86b7008835b7c7e2f539c85cadf0c44f8394348faee1e3"
     const val TOKENSV1_SHA256 = "b50457f99b7a390637c9f89902ac9d65baa56ec1f6a80ff6090e8c80a93130d2"
     const val TOKENSR1_SHA256 = "fe29bb3dce2df696ec51a998ec9f8a16b5966cc7a5075a5d4ee4407e4d88b889"
@@ -117,6 +117,11 @@ object Msg {
     const val SVC_LOGIN_START = 0x48
     const val SVC_LOGOUT = 0x49
     const val SVC_STATE = 0x4a
+    const val APP_BEGIN = 0x4b
+    const val APP_DATA = 0x4c
+    const val APP_END = 0x4d
+    const val APP_ABORT = 0x4e
+    const val APP_STATE = 0x4f
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -169,6 +174,11 @@ object Msg {
         SVC_LOGIN_START to MsgInfo(SVC_LOGIN_START, "SVC_LOGIN_START", "app", false),
         SVC_LOGOUT to MsgInfo(SVC_LOGOUT, "SVC_LOGOUT", "app", false),
         SVC_STATE to MsgInfo(SVC_STATE, "SVC_STATE", "dev", true),
+        APP_BEGIN to MsgInfo(APP_BEGIN, "APP_BEGIN", "app", false),
+        APP_DATA to MsgInfo(APP_DATA, "APP_DATA", "app", true),
+        APP_END to MsgInfo(APP_END, "APP_END", "app", false),
+        APP_ABORT to MsgInfo(APP_ABORT, "APP_ABORT", "dev", true),
+        APP_STATE to MsgInfo(APP_STATE, "APP_STATE", "dev", true),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -228,7 +238,8 @@ object Feature {
     const val svcLogin = 32
     const val svcAccount = 35
     const val imgFocusX = 36
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin", 35 to "svcAccount", 36 to "imgFocusX")
+    const val appPkg = 37
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin", 35 to "svcAccount", 36 to "imgFocusX", 37 to "appPkg")
 }
 
 object Enums {
@@ -407,6 +418,13 @@ object Enums {
         const val cancelled = 2
         val names: Map<Int, String> = mapOf(0 to "done", 1 to "expired", 2 to "cancelled")
     }
+    object AppResult {
+        const val installed = 0
+        const val declined = 1
+        const val refused = 2
+        const val updatePending = 3
+        val names: Map<Int, String> = mapOf(0 to "installed", 1 to "declined", 2 to "refused", 3 to "updatePending")
+    }
     val byName: Map<String, Map<Int, String>> = mapOf(
         "SOURCE" to Source.names,
         "OUTPUT" to Output.names,
@@ -432,6 +450,7 @@ object Enums {
         "LYRICS_KIND" to LyricsKind.names,
         "IMG_ORIGIN" to ImgOrigin.names,
         "SVC_LOGIN_RESULT" to SvcLoginResult.names,
+        "APP_RESULT" to AppResult.names,
     )
 }
 
@@ -908,6 +927,34 @@ object Tags {
     }
     object SvcState {
         const val service = 1
+    }
+    object AppBegin {
+        const val id = 1
+        const val version = 2
+        const val size = 3
+        const val sha = 4
+    }
+    object AppBeginReply {
+        const val offset = 1
+        const val stage = 2
+    }
+    object AppData {
+        const val offset = 1
+        const val `data` = 2
+    }
+    object AppEnd {
+        const val sha = 1
+    }
+    object AppAbort {
+        const val offset = 1
+        const val code = 2
+    }
+    object AppState {
+        const val id = 1
+        const val version = 2
+        const val state = 3
+        const val text = 4
+        const val stage = 5
     }
     object Error {
         const val code = 1
@@ -1509,6 +1556,34 @@ object Tags {
         ),
         "SVC_STATE" to mapOf(
             1 to Field(1, "service", Base.RECORD, "SvcInfo", true),
+        ),
+        "APP_BEGIN" to mapOf(
+            1 to Field(1, "id", Base.STR, null, false),
+            2 to Field(2, "version", Base.U32, null, false),
+            3 to Field(3, "size", Base.U32, null, false),
+            4 to Field(4, "sha", Base.BYTES, null, false),
+        ),
+        "APP_BEGIN.reply" to mapOf(
+            1 to Field(1, "offset", Base.U32, null, false),
+            2 to Field(2, "stage", Base.U32, null, false),
+        ),
+        "APP_DATA" to mapOf(
+            1 to Field(1, "offset", Base.U32, null, false),
+            2 to Field(2, "data", Base.BYTES, null, false),
+        ),
+        "APP_END" to mapOf(
+            1 to Field(1, "sha", Base.BYTES, null, false),
+        ),
+        "APP_ABORT" to mapOf(
+            1 to Field(1, "offset", Base.U32, null, false),
+            2 to Field(2, "code", Base.ENUM, "ABORT_CODE", false),
+        ),
+        "APP_STATE" to mapOf(
+            1 to Field(1, "id", Base.STR, null, false),
+            2 to Field(2, "version", Base.U32, null, false),
+            3 to Field(3, "state", Base.ENUM, "APP_RESULT", false),
+            4 to Field(4, "text", Base.STR, null, false),
+            5 to Field(5, "stage", Base.U32, null, false),
         ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),

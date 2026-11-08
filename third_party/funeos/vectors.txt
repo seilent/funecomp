@@ -5786,14 +5786,14 @@ dec svc_login_start_off 0.body.code 16
 dec svc_login_start_off 0.body.text off
 act svc_login_start_off accept
 vec svc_login_start_unknown dev
-hex svc_login_start_unknown 16004803f9000101000a020f006e6f7420696e206669726d77617265
+hex svc_login_start_unknown 14004803f9000101000a020d006e6f7420696e7374616c6c6564
 re svc_login_start_unknown svc_login_start
-dec svc_login_start_unknown 0.len 22
+dec svc_login_start_unknown 0.len 20
 dec svc_login_start_unknown 0.type SVC_LOGIN_START
 dec svc_login_start_unknown 0.flags 0x03
 dec svc_login_start_unknown 0.seq 249
 dec svc_login_start_unknown 0.body.code 10
-dec svc_login_start_unknown 0.body.text not in firmware
+dec svc_login_start_unknown 0.body.text not installed
 act svc_login_start_unknown accept
 vec svc_login_start_busy dev
 hex svc_login_start_busy 0b004803f9000101000302040062757379
@@ -6004,14 +6004,14 @@ dec svc_logout_nobit32 0.body.code 1
 dec svc_logout_nobit32 0.body.text unknown
 act svc_logout_nobit32 accept
 vec svc_logout_notfw dev
-hex svc_logout_notfw 16004903fa000101000a020f006e6f7420696e206669726d77617265
+hex svc_logout_notfw 14004903fa000101000a020d006e6f7420696e7374616c6c6564
 re svc_logout_notfw svc_logout
-dec svc_logout_notfw 0.len 22
+dec svc_logout_notfw 0.len 20
 dec svc_logout_notfw 0.type SVC_LOGOUT
 dec svc_logout_notfw 0.flags 0x03
 dec svc_logout_notfw 0.seq 250
 dec svc_logout_notfw 0.body.code 10
-dec svc_logout_notfw 0.body.text not in firmware
+dec svc_logout_notfw 0.body.text not installed
 act svc_logout_notfw accept
 vec svc_logout_stopped dev
 hex svc_logout_stopped 0e004903fa000101000402070073746f70706564
@@ -6189,3 +6189,80 @@ dec hello_reply_bit36 0.body.backdropW 512
 dec hello_reply_bit36 0.body.backdropH 800
 dec hello_reply_bit36 0.body.features 75161927679
 act hello_reply_bit36 accept
+vec app_begin app
+hex app_begin 3a004b044600010600706164646c6502040003000000030400400d0300042000202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f
+dec app_begin 0.len 58
+dec app_begin 0.type APP_BEGIN
+dec app_begin 0.flags 0x04
+dec app_begin 0.seq 70
+dec app_begin 0.body.id paddle
+dec app_begin 0.body.version 3
+dec app_begin 0.body.size 200000
+dec app_begin 0.body.sha 202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f
+act app_begin accept
+vec app_begin_reply dev
+hex app_begin_reply 0e004b014600010400c03f000002040007000000
+re app_begin_reply app_begin
+dec app_begin_reply 0.len 14
+dec app_begin_reply 0.type APP_BEGIN
+dec app_begin_reply 0.flags 0x01
+dec app_begin_reply 0.seq 70
+dec app_begin_reply 0.body.offset 16320
+dec app_begin_reply 0.body.stage 7
+act app_begin_reply accept
+vec app_data app
+hex app_data 22004c004700010400c03f0000021800505152535455565758595a5b5c5d5e5f6061626364656667
+dec app_data 0.len 34
+dec app_data 0.type APP_DATA
+dec app_data 0.flags 0x00
+dec app_data 0.seq 71
+dec app_data 0.body.offset 16320
+dec app_data 0.body.data 505152535455565758595a5b5c5d5e5f6061626364656667
+act app_data accept
+vec app_end app
+hex app_end 23004d044800012000202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f
+dec app_end 0.len 35
+dec app_end 0.type APP_END
+dec app_end 0.flags 0x04
+dec app_end 0.seq 72
+dec app_end 0.body.sha 202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f
+act app_end accept
+vec app_end_reply dev
+hex app_end_reply 00004d014800
+re app_end_reply app_end
+dec app_end_reply 0.len 0
+dec app_end_reply 0.type APP_END
+dec app_end_reply 0.flags 0x01
+dec app_end_reply 0.seq 72
+act app_end_reply accept
+vec app_end_error dev
+hex app_end_error 10004d0348000101000f0209007369676e6174757265
+re app_end_error app_end
+dec app_end_error 0.len 16
+dec app_end_error 0.type APP_END
+dec app_end_error 0.flags 0x03
+dec app_end_error 0.seq 72
+dec app_end_error 0.body.code 15
+dec app_end_error 0.body.text signature
+act app_end_error accept
+vec app_abort dev
+hex app_abort 0b004e004900010400807f000002010004
+dec app_abort 0.len 11
+dec app_abort 0.type APP_ABORT
+dec app_abort 0.flags 0x00
+dec app_abort 0.seq 73
+dec app_abort 0.body.offset 32640
+dec app_abort 0.body.code offsetMismatch
+act app_abort accept
+vec app_state dev
+hex app_state 27004f004a00010600706164646c650204000300000003010000040900696e7374616c6c656405040007000000
+dec app_state 0.len 39
+dec app_state 0.type APP_STATE
+dec app_state 0.flags 0x00
+dec app_state 0.seq 74
+dec app_state 0.body.id paddle
+dec app_state 0.body.version 3
+dec app_state 0.body.state installed
+dec app_state 0.body.text installed
+dec app_state 0.body.stage 7
+act app_state accept

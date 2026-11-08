@@ -510,7 +510,7 @@ class OldPeerTest {
         val errors = mapOf(
             "svc_login_start_signed_in" to (Err.exists to "signed in"),
             "svc_login_start_off" to (Err.off to "off"),
-            "svc_login_start_unknown" to (Err.notFound to "not in firmware"),
+            "svc_login_start_unknown" to (Err.notFound to "not installed"),
             "svc_login_start_busy" to (Err.busy to "busy"),
             "svc_login_start_card" to (Err.noCard to "card not available"),
             "svc_login_start_refused" to (Err.refused to "refused"),
@@ -530,7 +530,7 @@ class OldPeerTest {
             "svc_logout_refused" to (Err.refused to "refused"),
             "svc_logout_bad" to (Err.badValue to "bad value"),
             "svc_logout_nobit32" to (Err.unknown to "unknown"),
-            "svc_logout_notfw" to (Err.notFound to "not in firmware"),
+            "svc_logout_notfw" to (Err.notFound to "not installed"),
             "svc_logout_stopped" to (Err.refused to "stopped"),
             "svc_logout_broken" to (Err.refused to "broken"),
             "svc_logout_timeout" to (Err.busy to "timeout"),
@@ -539,6 +539,37 @@ class OldPeerTest {
             val e = ErrorReply.from(Node.decode("error", body(v)))
             assertEquals(v, want, e.code to e.text)
         }
+    }
+
+    @Test
+    fun protocol117AppFramesDecodeWithThe116TableToEmptyFields() {
+        val scopes = mapOf("app_begin" to "APP_BEGIN", "app_begin_reply" to "APP_BEGIN.reply", "app_data" to "APP_DATA", "app_end" to "APP_END", "app_abort" to "APP_ABORT", "app_state" to "APP_STATE")
+        for (scope in scopes.values) assertNull(scope, v1_16[scope])
+        for (m in listOf("0x4b", "0x4c", "0x4d", "0x4e", "0x4f")) assertFalse(m, Regex("^msg \\S+ $m ", RegexOption.MULTILINE).containsMatchIn(text("/proto-1.16.txt")))
+        assertFalse("feature appPkg 37" in text("/proto-1.16.txt"))
+        for ((vec, scope) in scopes) assertEquals(vec, Tlv.parse(body(vec)).map { it.tag }.toSet(), Node.decode(scope, body(vec), v1_16).unknownTags.toSet())
+        assertEquals(AppBeginReply(0, null), AppBeginReply.from(Node.decode("APP_BEGIN.reply", body("app_begin_reply"), v1_16)))
+        assertEquals(AppState(null, null, null, null, null), AppState.from(Node.decode("APP_STATE", body("app_state"), v1_16)))
+        assertTrue(body("app_end_reply").isEmpty())
+        assertEquals(Err.badSignature to "signature", ErrorReply.from(Node.decode("error", body("app_end_error"), v1_16)).let { it.code to it.text })
+    }
+
+    @Test
+    fun appBuildersMatchTheVectors() {
+        val sha = ByteArray(32) { (0x20 + it).toByte() }
+        assertArrayEquals(body("app_begin"), Req.appBegin("paddle", 3, 200000, sha))
+        assertArrayEquals(body("app_data"), Req.appData(16320, ByteArray(24) { (0x50 + it).toByte() }))
+        assertArrayEquals(body("app_end"), Req.appEnd(sha))
+        assertEquals(AppBeginReply(16320, 7), AppBeginReply.from(Node.decode("APP_BEGIN.reply", body("app_begin_reply"))))
+        assertEquals(AppAbort(32640, Enums.AbortCode.offsetMismatch), AppAbort.from(Node.decode("APP_ABORT", body("app_abort"))))
+        assertEquals(AppState("paddle", 3, Enums.AppResult.installed, "installed", 7), AppState.from(Node.decode("APP_STATE", body("app_state"))))
+        val bareReply = body("app_begin_reply").copyOf(7)
+        assertArrayEquals(bareReply, AppBeginReply(16320, null).encode())
+        assertEquals(AppBeginReply(16320, null), AppBeginReply.from(Node.decode("APP_BEGIN.reply", bareReply)))
+        val bareState = body("app_state").copyOf(body("app_state").size - 7)
+        assertArrayEquals(bareState, AppState("paddle", 3, Enums.AppResult.installed, "installed", null).encode())
+        assertEquals(null, AppState.from(Node.decode("APP_STATE", bareState)).stage)
+        assertEquals(Err.badSignature to "signature", ErrorReply.from(Node.decode("error", body("app_end_error"))).let { it.code to it.text })
     }
 
     @Test

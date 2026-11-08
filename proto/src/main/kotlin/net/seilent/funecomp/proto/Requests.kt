@@ -211,6 +211,12 @@ object Req {
 
     fun updEnd(md5: String) = tlv { str(Tags.UpdEnd.md5, md5) }
 
+    fun appBegin(id: String, version: Long, size: Long, sha: ByteArray) = AppBegin(id, version, size, sha).encode()
+
+    fun appData(offset: Long, data: ByteArray) = AppData(offset, data).encode()
+
+    fun appEnd(sha: ByteArray) = AppEnd(sha).encode()
+
     fun svcKeys(service: String, keys: List<SvcKey>) = SvcKeys(service, keys).encode()
 
     fun svcLoginStart(service: String) = SvcLoginStart(service).encode()

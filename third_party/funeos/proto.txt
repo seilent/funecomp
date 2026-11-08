@@ -95,6 +95,7 @@ feature liveRows 30
 feature svcLogin 32
 feature svcAccount 35
 feature imgFocusX 36
+feature appPkg 37
 enum SOURCE 0 local
 enum SOURCE 1 phone
 enum SOURCE 2 phoneFile
@@ -198,6 +199,10 @@ enum IMG_ORIGIN 1 phone
 enum SVC_LOGIN_RESULT 0 done
 enum SVC_LOGIN_RESULT 1 expired
 enum SVC_LOGIN_RESULT 2 cancelled
+enum APP_RESULT 0 installed
+enum APP_RESULT 1 declined
+enum APP_RESULT 2 refused
+enum APP_RESULT 3 updatePending
 msg HELLO 0x01 app req
 tag HELLO 1 magic u32 one
 tag HELLO 2 major u16 one
@@ -584,6 +589,27 @@ tag SVC_LOGOUT 2 account str one
 tag SVC_LOGOUT 3 downloads u32 one
 msg SVC_STATE 0x4a dev push
 tag SVC_STATE 1 service SvcInfo list
+msg APP_BEGIN 0x4b app req
+tag APP_BEGIN 1 id str one
+tag APP_BEGIN 2 version u32 one
+tag APP_BEGIN 3 size u32 one
+tag APP_BEGIN 4 sha bytes one
+tag APP_BEGIN.reply 1 offset u32 one
+tag APP_BEGIN.reply 2 stage u32 one
+msg APP_DATA 0x4c app push
+tag APP_DATA 1 offset u32 one
+tag APP_DATA 2 data bytes one
+msg APP_END 0x4d app req
+tag APP_END 1 sha bytes one
+msg APP_ABORT 0x4e dev push
+tag APP_ABORT 1 offset u32 one
+tag APP_ABORT 2 code ABORT_CODE one
+msg APP_STATE 0x4f dev push
+tag APP_STATE 1 id str one
+tag APP_STATE 2 version u32 one
+tag APP_STATE 3 state APP_RESULT one
+tag APP_STATE 4 text str one
+tag APP_STATE 5 stage u32 one
 tag error 1 code u8 one
 tag error 2 text str one
 tag error 3 refused str list

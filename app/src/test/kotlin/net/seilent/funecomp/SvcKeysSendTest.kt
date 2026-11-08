@@ -54,6 +54,7 @@ class SvcKeysSendTest {
         assertEquals(Svc.OFF, line(failed(Err.off)))
         assertEquals(Svc.BAD_KEY, line(failed(Err.badValue)))
         assertEquals(Svc.BUSY, line(failed(Err.busy)))
+        assertEquals("not installed", line(failed(Err.notFound)))
         assertEquals(Svc.REFUSED, line(failed(Err.unknown)))
         assertEquals(Svc.NO_REPLY, line(Session.Result.Timeout))
         assertEquals(Svc.NO_REPLY, line(Session.Result.Closed))

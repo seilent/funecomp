@@ -46,7 +46,7 @@ object Svc {
     const val NO_REPLY = "dap not answering"
     const val SIGNED_OUT = "signed out"
     const val NO_KEYS = "no keys on the dap"
-    const val NOT_IN_FIRMWARE = "not in firmware"
+    const val NOT_INSTALLED = "not installed"
     const val NO_CARD = "card not available"
     const val ACCOUNT_CHANGED = "account changed"
     const val NOT_COUNTED = "downloads not counted yet"
@@ -646,7 +646,7 @@ object Svc {
         is Session.Result.Failed -> when (r.error.code) {
             Err.exists -> SIGNED_IN
             Err.off -> OFF
-            Err.notFound -> NOT_IN_FIRMWARE
+            Err.notFound -> NOT_INSTALLED
             Err.noCard -> NO_CARD
             Err.cancelled -> ENDED
             Err.refused -> when (r.error.text) {
@@ -671,7 +671,7 @@ object Svc {
                 else -> REFUSED
             }
             Err.off -> OFF
-            Err.notFound -> NOT_IN_FIRMWARE
+            Err.notFound -> NOT_INSTALLED
             Err.noCard -> NO_CARD
             Err.busy -> when (r.error.text) {
                 TIMEOUT -> if (signedOut) SIGNED_OUT else NO_REPLY
@@ -689,6 +689,7 @@ object Svc {
             Err.off -> OFF
             Err.badValue -> BAD_KEY
             Err.busy -> BUSY
+            Err.notFound -> NOT_INSTALLED
             else -> REFUSED
         }
         else -> NO_REPLY

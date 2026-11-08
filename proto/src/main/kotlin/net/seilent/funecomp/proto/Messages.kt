@@ -45,6 +45,7 @@ object Groups {
         "svcLogin" to setOf(Msg.SVC_LOGIN, Msg.SVC_LOGIN_END, Msg.SVC_PKCE, Msg.SVC_KEYS),
         "svcAccount" to setOf(Msg.SVC_LOGIN_START, Msg.SVC_LOGOUT, Msg.SVC_STATE),
         "imgFocusX" to emptySet(),
+        "appPkg" to setOf(Msg.APP_BEGIN, Msg.APP_DATA, Msg.APP_END, Msg.APP_ABORT, Msg.APP_STATE),
     )
     val unserved: Set<String> = setOf(
         "eqPass",
@@ -54,6 +55,7 @@ object Groups {
         "receiver",
         "phoneFiles",
         "imgSource",
+        "appPkg",
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -1074,6 +1076,74 @@ data class UpdAbort(val offset: Long, val code: Int) {
 
     companion object {
         fun from(n: Node) = UpdAbort(n.long(Tags.UpdAbort.offset) ?: 0, n.int(Tags.UpdAbort.code) ?: -1)
+    }
+}
+
+data class AppBegin(val id: String?, val version: Long?, val size: Long?, val sha: ByteArray?) {
+    fun encode() = tlv {
+        str(Tags.AppBegin.id, id)
+        u32(Tags.AppBegin.version, version)
+        u32(Tags.AppBegin.size, this@AppBegin.size)
+        bytes(Tags.AppBegin.sha, sha)
+    }
+
+    companion object {
+        fun from(n: Node) = AppBegin(n.str(Tags.AppBegin.id), n.long(Tags.AppBegin.version), n.long(Tags.AppBegin.size), n.bytes(Tags.AppBegin.sha))
+    }
+}
+
+data class AppBeginReply(val offset: Long, val stage: Long?) {
+    fun encode() = tlv {
+        u32(Tags.AppBeginReply.offset, offset)
+        u32(Tags.AppBeginReply.stage, stage)
+    }
+
+    companion object {
+        fun from(n: Node) = AppBeginReply(n.long(Tags.AppBeginReply.offset) ?: 0, n.long(Tags.AppBeginReply.stage))
+    }
+}
+
+data class AppData(val offset: Long?, val data: ByteArray?) {
+    fun encode() = tlv {
+        u32(Tags.AppData.offset, offset)
+        bytes(Tags.AppData.data, data)
+    }
+
+    companion object {
+        fun from(n: Node) = AppData(n.long(Tags.AppData.offset), n.bytes(Tags.AppData.data))
+    }
+}
+
+data class AppEnd(val sha: ByteArray?) {
+    fun encode() = tlv { bytes(Tags.AppEnd.sha, sha) }
+
+    companion object {
+        fun from(n: Node) = AppEnd(n.bytes(Tags.AppEnd.sha))
+    }
+}
+
+data class AppAbort(val offset: Long, val code: Int) {
+    fun encode() = tlv {
+        u32(Tags.AppAbort.offset, offset)
+        enum(Tags.AppAbort.code, code)
+    }
+
+    companion object {
+        fun from(n: Node) = AppAbort(n.long(Tags.AppAbort.offset) ?: 0, n.int(Tags.AppAbort.code) ?: -1)
+    }
+}
+
+data class AppState(val id: String?, val version: Long?, val state: Int?, val text: String?, val stage: Long?) {
+    fun encode() = tlv {
+        str(Tags.AppState.id, id)
+        u32(Tags.AppState.version, version)
+        enum(Tags.AppState.state, state)
+        str(Tags.AppState.text, text)
+        u32(Tags.AppState.stage, stage)
+    }
+
+    companion object {
+        fun from(n: Node) = AppState(n.str(Tags.AppState.id), n.long(Tags.AppState.version), n.int(Tags.AppState.state), n.str(Tags.AppState.text), n.long(Tags.AppState.stage))
     }
 }
 

@@ -1544,7 +1544,7 @@ val SHOTS = listOf(
     svcToast("account changed"),
     svcToast("no keys on the dap"),
     svcToast("downloads not counted yet"),
-    svcToast("not in firmware"),
+    svcToast("not installed"),
     svcToast("card not available"),
     svcToast("dap busy"),
     svcToast("waiting for the dap"),
