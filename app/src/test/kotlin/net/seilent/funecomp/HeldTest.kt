@@ -14,14 +14,6 @@ class HeldTest {
     fun theHeldValuesKeepTheirOldPin() {
         assertEquals(
             listOf(
-                listOf("npSeekBandX0", "npSeekBandX0", 8f, "N7", "znp", "6e3302724"),
-                listOf("npProgressY", "npProgressY", 200f, "N7", "znp", "6e3302724"),
-                listOf("npSeekBandBottom", "npSeekBandBottom", 219.8f, "N7", "znp", "6e3302724"),
-            ),
-            rows(Held.Np.entries),
-        )
-        assertEquals(
-            listOf(
                 listOf("motion_turnstileOut", "motion_turnstileOut", 250f, "M1, M2, M3, M4", "zmove", "836c8fbc4"),
                 listOf("motion_turnstileIn", "motion_turnstileIn", 350f, "M1, M2, M3, M4", "zmove", "836c8fbc4"),
                 listOf("motion_turnstileOutAngle", "motion_turnstileOutAngle", 50f, "M1, M2, M3, M4", "zmove", "836c8fbc4"),
@@ -63,8 +55,8 @@ class HeldTest {
             ),
             rows(Held.Jump.entries),
         )
-        assertEquals(21, Held.entries.size)
-        assertEquals(setOf("Entry", "Jump", "Nav", "Np", "Pivot", "Qp", "Rest"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
+        assertEquals(18, Held.entries.size)
+        assertEquals(setOf("Entry", "Jump", "Nav", "Pivot", "Qp", "Rest"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }
 

@@ -681,10 +681,10 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         val remainingRight = if (timesW + TIMES_ROUNDING_PX <= artSide) artX + artSide else ui.px(ui.w - Tok.edge)
                         RoleText(elapsed, Roles.npViewTime, Modifier.atBaseline(artX, timeBaseline).testTag("np.elapsed"))
                         RoleText(remaining, Roles.npViewTime, Modifier.atBaseline(remainingRight, timeBaseline, ax = 1f).testTag("np.remaining"))
-                        val margin = ui.px(Tok.edge - Held.Np.npSeekBandX0).roundToInt().toFloat()
+                        val margin = ui.px(LayoutTok.npArtX - LayoutTok.npSeekBandX0).roundToInt().toFloat()
                         val bandW = artSide + 2 * margin
                         if (!onPhone) Box(
-                            Modifier.at(artX - margin, progressY).size(bandW.dp(), (seekBottom - progressY).dp()).systemGestureExclusion().testTag("np.seek")
+                            Modifier.at(artX - margin, progressY).size(bandW.dp(), (seekBottom.roundToInt() - progressY.roundToInt()).toFloat().dp()).systemGestureExclusion().testTag("np.seek")
                                 .pointerInput(duration, artSide) {
                                     awaitEachGesture {
                                         val down = awaitFirstDown()

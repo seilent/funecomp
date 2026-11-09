@@ -23,11 +23,11 @@ import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.proto.gen.TokBoard
 import net.seilent.funecomp.sim.Out
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Control
-import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -329,7 +329,7 @@ class NowPlayingIdleTest {
     }
 
     private companion object {
-        val SEEK_MID = (Held.Np.npSeekBandBottom - Held.Np.npProgressY) / 2
+        val SEEK_MID = (TokBoard.r1.npSeekBandBottom - TokBoard.r1.npProgressY) / 2
         const val DRAG_STEPS = 5
         const val EMPTY_X = 2f
         const val BEFORE_IDLE = 100L

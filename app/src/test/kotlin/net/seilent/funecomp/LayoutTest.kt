@@ -3,10 +3,12 @@ package net.seilent.funecomp
 import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.JumpLayout
 import net.seilent.funecomp.ui.NP_THREE_NEXT_H
 import net.seilent.funecomp.ui.NP_TIMES_ROW
 import net.seilent.funecomp.ui.NP_WIDE_ROW_H
+import net.seilent.funecomp.ui.Roles
 import net.seilent.funecomp.ui.Shape
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.albumArtTop
@@ -235,7 +237,8 @@ class LayoutTest {
     @Test
     fun theSeekBandEndsTheSk1HeightBelowTheProgressLine() {
         val p = Ui.of(1080f, 2520f)
-        for (ui in listOf(Ui.of(2411f, 930.875f), Ui.of(1244f, 1101f), p)) assertEquals(ui.npProgressY + 19.8f, ui.npSeekBottom, 1e-3f)
+        for (ui in listOf(Ui.of(2411f, 930.875f), Ui.of(1244f, 1101f), p)) assertEquals(ui.npProgressY + 25.29f, ui.npSeekBottom, 1e-3f)
+        assertEquals(p.npTitleBaseline - Tok.capHeight * Roles.npViewTitle.size, p.npSeekBottom, 1e-3f)
     }
 
     private class Win(val name: String, val wPx: Float, val hPx: Float, val shape: Shape, val u: Float, val w: Float, val h: Float)
@@ -339,7 +342,7 @@ class LayoutTest {
             assertEquals(n, r.art, ui.npArt, 1e-3f)
             assertEquals(n, r.count, ui.npNextCount)
             assertEquals(n, r.progress, ui.npProgressY, 1e-3f)
-            assertEquals(n, r.progress + 19.8f, ui.npSeekBottom, 1e-3f)
+            assertEquals(n, r.progress + 25.29f, ui.npSeekBottom, 1e-3f)
             assertEquals(n, r.title, ui.npTitleBaseline, 1e-3f)
             assertEquals(n, r.title + 15.2f, ui.npNextBaseline, 1e-3f)
             assertEquals(n, r.lyricBottom, ui.npLyricBottom, 1e-3f)
@@ -412,7 +415,7 @@ class LayoutTest {
             assertEquals(n, 140f, ui.npNextBaseline, 1e-3f)
             assertEquals(n, 3, ui.npNextCount)
             assertEquals(n, 206f, ui.npProgressY, 1e-3f)
-            assertEquals(n, 225.8f, ui.npSeekBottom, 1e-3f)
+            assertEquals(n, 231.29f, ui.npSeekBottom, 1e-3f)
             assertEquals(n, 264f, ui.npRingY, 1e-3f)
             assertEquals(n, 64f, ui.npPlayRing, 1e-3f)
             assertEquals(n, 64f, ui.npRowHit, 1e-3f)

@@ -3,18 +3,6 @@ package net.seilent.funecomp.ui
 object Held {
     class Entry(val name: String, val token: String, val value: Any, val row: String, val branch: String, val pin: String)
 
-    object Np {
-        const val npSeekBandX0 = 8f
-        const val npProgressY = 200f
-        const val npSeekBandBottom = 219.8f
-
-        val entries = listOf(
-            Entry("npSeekBandX0", "npSeekBandX0", npSeekBandX0, "N7", "znp", "6e3302724"),
-            Entry("npProgressY", "npProgressY", npProgressY, "N7", "znp", "6e3302724"),
-            Entry("npSeekBandBottom", "npSeekBandBottom", npSeekBandBottom, "N7", "znp", "6e3302724"),
-        )
-    }
-
     object Nav {
         const val motion_turnstileOut = 250f
         const val motion_turnstileIn = 350f
@@ -81,5 +69,5 @@ object Held {
         )
     }
 
-    val entries get() = Np.entries + Nav.entries + Qp.entries + Pivot.entries + Rest.entries + Jump.entries
+    val entries get() = Nav.entries + Qp.entries + Pivot.entries + Rest.entries + Jump.entries
 }

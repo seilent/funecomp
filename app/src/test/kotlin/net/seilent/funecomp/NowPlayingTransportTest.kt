@@ -28,10 +28,10 @@ import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.proto.gen.TokBoard
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Control
-import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -404,12 +404,43 @@ class NowPlayingTransportTest {
             val band = bounds("np.seek")
             val line = bounds("np.progress")
             val art = bounds("np.art")
-            val margin = (Tok.edge - Held.Np.npSeekBandX0) * ui.u
-            assertEquals(s.name, if (ui.shape == Shape.P || ui.shape == Shape.SN) art.bottom else line.top, band.top, 1f)
-            assertEquals(s.name, (Held.Np.npSeekBandBottom - Held.Np.npProgressY) * ui.u, band.height, 1f)
+            val margin = (LayoutTok.npArtX - LayoutTok.npSeekBandX0) * ui.u
+            val portrait = ui.shape == Shape.P || ui.shape == Shape.SN
+            assertEquals(s.name, if (portrait) art.bottom else line.top, band.top, 1f)
+            assertEquals(s.name, (TokBoard.r1.npSeekBandBottom - TokBoard.r1.npProgressY) * ui.u, band.height, 1f)
             assertEquals(s.name, art.left - margin, band.left, 1f)
             assertEquals(s.name, art.right + margin, band.right, 1.5f)
+            if (portrait) {
+                val titleTop = bounds("np").top + (ui.npTitleBaseline - Tok.capHeight * Roles.npViewTitle.size) * ui.u
+                assertEquals(s.name, titleTop, band.bottom, 1f)
+            }
         }
+    }
+
+    @Test
+    fun theBandEdgesAreTheDeviceBand() {
+        lateinit var seeks: Seeks
+        val c = start { sim -> Seeks(sim).also { seeks = it } }
+        val duration = c.device.playback.state.durationMs!!
+        val np = bounds("np")
+        val ui = ui()
+        val u = ui.u
+        val art = bounds("np.art")
+        val titleTop = np.top + (ui.npTitleBaseline - Tok.capHeight * Roles.npViewTitle.size) * u
+        assertEquals(25.29f * u, bounds("np.seek").height, 1f)
+        fun tap(at: Offset) {
+            seeks.seeks.clear()
+            rule.onRoot().performTouchInput { click(at) }
+            settle(300)
+        }
+        tap(Offset(art.left - 7.9f * u, bandY()))
+        assertEquals(listOf(0L), seeks.seeks)
+        tap(Offset(art.right + 7.9f * u, bandY()))
+        assertEquals(duration.toFloat(), seeks.seeks.single()!!.toFloat(), 0.01f * duration)
+        tap(Offset(art.center.x, titleTop - 0.1f * u))
+        assertEquals(1, seeks.seeks.size)
+        tap(Offset(art.center.x, titleTop + 0.1f * u))
+        assertEquals(emptyList<Long?>(), seeks.seeks)
     }
 
     @Test
@@ -555,7 +586,7 @@ class NowPlayingTransportTest {
     }
 
     private companion object {
-        val SEEK_MID = (Held.Np.npSeekBandBottom - Held.Np.npProgressY) / 2
+        val SEEK_MID = (TokBoard.r1.npSeekBandBottom - TokBoard.r1.npProgressY) / 2
         const val DRAG_STEPS = 5
         const val HELD = 0.61f
         const val OFF_BAND = 60f
