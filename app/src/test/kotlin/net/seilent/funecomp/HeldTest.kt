@@ -17,9 +17,6 @@ class HeldTest {
                 listOf("npSeekBandX0", "npSeekBandX0", 8f, "N7", "znp", "6e3302724"),
                 listOf("npProgressY", "npProgressY", 200f, "N7", "znp", "6e3302724"),
                 listOf("npSeekBandBottom", "npSeekBandBottom", 219.8f, "N7", "znp", "6e3302724"),
-                listOf("npFromBaseline", "npFromBaseline", 66f, "N8", "znp", "6e3302724"),
-                listOf("type_npCount_size", "type_npCount_size", 13f, "N8", "znp", "6e3302724"),
-                listOf("npNextIndent", "npNextIndent", 40f, "N8", "znp", "6e3302724"),
             ),
             rows(Held.Np.entries),
         )
@@ -66,7 +63,7 @@ class HeldTest {
             ),
             rows(Held.Jump.entries),
         )
-        assertEquals(24, Held.entries.size)
+        assertEquals(21, Held.entries.size)
         assertEquals(setOf("Entry", "Jump", "Nav", "Np", "Pivot", "Qp", "Rest"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }

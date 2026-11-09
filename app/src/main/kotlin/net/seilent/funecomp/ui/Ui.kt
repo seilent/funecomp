@@ -111,7 +111,7 @@ object Roles {
     val npViewTitle = Role(LayoutTok.type_npViewTitle_size, weight(LayoutTok.type_npViewTitle_style), case(Tok.type_npViewTitle_case), Tok.type_npViewTitle_alpha)
     val npViewNext = Role(LayoutTok.type_npViewNext_size, weight(Tok.type_npViewNext_style), case(Tok.type_npViewNext_case), Tok.type_npViewNext_alpha)
     val npViewTime = Role(LayoutTok.type_npViewTime_size, weight(LayoutTok.type_npViewTime_style), case(Tok.type_npViewTime_case), Tok.type_npViewTime_alpha)
-    val npCount = Role(Held.Np.type_npCount_size, weight(Tok.type_npCount_style), case(Tok.type_npCount_case), Tok.type_npCount_alpha)
+    val npCount = Role(LayoutTok.type_npCount_size, weight(Tok.type_npCount_style), case(Tok.type_npCount_case), Tok.type_npCount_alpha)
     val time = Role(Tok.type_time_size, weight(Tok.type_time_style), case(Tok.type_time_case), Tok.type_time_alpha)
     val overlayNumber = Role(Tok.type_overlayNumber_size, weight(Tok.type_overlayNumber_style), Case.MIXED, Tok.type_overlayNumber_alpha)
     val overlayLabel = Role(Tok.type_overlayLabel_size, weight(Tok.type_overlayLabel_style), case(Tok.type_overlayLabel_case), Tok.type_overlayLabel_alpha)

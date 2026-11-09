@@ -9,6 +9,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
@@ -16,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
@@ -29,11 +32,15 @@ import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.SettingsMirror
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
+import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.Ui
+import net.seilent.funecomp.ui.npArtistBaseline
+import net.seilent.funecomp.ui.npTextX
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -45,6 +52,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowSystemClock
 import java.time.Duration
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -178,6 +187,30 @@ class RxNowPlayingTest {
         assertFalse(exists("np.next.0"))
         assertFalse(exists("np.heart"))
         assertFalse(exists("np.mark"))
+    }
+
+    private fun layout(tag: String): Pair<SemanticsNode, TextLayoutResult> {
+        val n = rule.onNodeWithTag(tag, useUnmergedTree = true).fetchSemanticsNode()
+        return n to ArrayList<TextLayoutResult>().also { n.config[SemanticsActions.GetTextLayoutResult].action?.invoke(it) }.single()
+    }
+
+    @Test
+    fun theReceiverLinesSitAtTheDeviceIndentAndSize() {
+        start(LyricsFetch.Show.Phone(idol, false, null))
+        val np = rule.onNodeWithTag("np").fetchSemanticsNode()
+        val ui = Ui.of(np.size.width.toFloat(), np.size.height.toFloat())
+        val u = ui.u
+        val o = np.positionInRoot
+        val (count, countText) = layout("np.count")
+        assertEquals(max(Ui.MIN_TEXT_PX, LayoutTok.type_npCount_size * u).roundToInt().toFloat(), with(rule.density) { countText.layoutInput.style.fontSize.toPx() }, 0.01f)
+        assertEquals((ui.npTextX + LayoutTok.npNextIndent) * u, count.positionInRoot.x - o.x, 1f)
+        val (from, fromText) = layout("np.from")
+        assertEquals(ui.npTextX * u, from.positionInRoot.x - o.x, 1f)
+        assertEquals((ui.npArtistBaseline - 20f) * u, from.positionInRoot.y + fromText.firstBaseline - o.y, 1f)
+        local()
+        settle(1000)
+        val (next, _) = layout("np.next.0")
+        assertEquals((ui.npTextX + LayoutTok.npNextIndent) * u, next.positionInRoot.x - o.x, 1f)
     }
 
     @Test

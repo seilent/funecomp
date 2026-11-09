@@ -7,17 +7,11 @@ object Held {
         const val npSeekBandX0 = 8f
         const val npProgressY = 200f
         const val npSeekBandBottom = 219.8f
-        const val npFromBaseline = 66f
-        const val type_npCount_size = 13f
-        const val npNextIndent = 40f
 
         val entries = listOf(
             Entry("npSeekBandX0", "npSeekBandX0", npSeekBandX0, "N7", "znp", "6e3302724"),
             Entry("npProgressY", "npProgressY", npProgressY, "N7", "znp", "6e3302724"),
             Entry("npSeekBandBottom", "npSeekBandBottom", npSeekBandBottom, "N7", "znp", "6e3302724"),
-            Entry("npFromBaseline", "npFromBaseline", npFromBaseline, "N8", "znp", "6e3302724"),
-            Entry("type_npCount_size", "type_npCount_size", type_npCount_size, "N8", "znp", "6e3302724"),
-            Entry("npNextIndent", "npNextIndent", npNextIndent, "N8", "znp", "6e3302724"),
         )
     }
 

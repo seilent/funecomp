@@ -621,7 +621,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
             BackRing(LayoutTok.npBackRing, LayoutTok.npBackRingStroke, LayoutTok.npBackRingX, LayoutTok.npBackRingY, LayoutTok.npBackGlyph) { back() }
             Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
             if (onPhone) s.phoneName?.let { name ->
-                RoleText("from $name", Roles.sectionLabel, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline - (Tok.npTextTop - Held.Np.npFromBaseline)), textW).testTag("np.from"))
+                RoleText("from $name", Roles.sectionLabel, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline + (LayoutTok.npFromBaseline - LayoutTok.npArtistY)), textW).testTag("np.from"))
             }
             if (drawn) {
                 Box(Modifier.fillMaxSize().graphicsLayer { alpha = frame().alpha }) {
@@ -713,13 +713,13 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                     Box(Modifier.at(textX, titleTop).size(textW.dp(), (titleBottom - titleTop).coerceAtLeast(0f).dp()).press({ onQueue() }).testTag("np.titleBlock"))
                     RoleText(s.title ?: "", Roles.npViewTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"))
                     upcoming.forEachIndexed { i, t ->
-                        val x = textX + ui.px(Held.Np.npNextIndent)
+                        val x = textX + ui.px(LayoutTok.npNextIndent)
                         RoleText(t, Roles.npViewNext, Modifier.atBaseline(x, nextBaseline + ui.px(LayoutTok.npNextLinePitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
                     }
                     val n = s.phoneTrackNo
                     val m = s.phoneTracks
                     if (onPhone && n != null && m != null) {
-                        val x = textX + ui.px(Held.Np.npNextIndent)
+                        val x = textX + ui.px(LayoutTok.npNextIndent)
                         RoleText("$n of $m", Roles.npCount, Modifier.atBaseline(x, nextBaseline, ui.px(ui.w - Tok.edge) - x).testTag("np.count"))
                     }
                     val corner = ui.npMarkCorner
