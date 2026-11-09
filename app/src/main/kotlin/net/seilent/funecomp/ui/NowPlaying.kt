@@ -244,14 +244,14 @@ private fun BackdropLayer(art: BackdropArt, alpha: Float) {
 }
 
 @Composable
-fun BackRing(onBack: () -> Unit) {
+fun BackRing(ring: Float = Tok.backRing, stroke: Float? = null, x: Float = Tok.backRingX, y: Float = Tok.backRingY, glyph: Float = ring / 2, onBack: () -> Unit) {
     val ui = LocalUi.current
     val press = rememberPress()
     Box(
-        Modifier.size(ui.px(Tok.backRingX + Tok.backRing).dp(), ui.px(Tok.backRingY + Tok.backRing).dp()).clipToBounds()
+        Modifier.size(ui.px(x + ring).dp(), ui.px(y + ring).dp()).clipToBounds()
             .press({ onBack() }, press = press).testTag("back"),
     ) {
-        Box(Modifier.at(ui.px(Tok.backRingX), ui.px(Tok.backRingY), unbounded = true)) { Ring(Tok.backRing, GlyphName.BACK, Look.Focus(true), press = press, tag = "back") }
+        Box(Modifier.at(ui.px(x), ui.px(y), unbounded = true)) { Ring(ring, GlyphName.BACK, Look.Focus(true), press = press, tag = "back", stroke = stroke, glyphSize = glyph) }
     }
 }
 
@@ -610,7 +610,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                 transformOrigin = TransformOrigin(Tok.motion_nowPlayingOriginX, Tok.motion_nowPlayingOriginY)
             }.testTag("np.layer"),
         ) {
-            BackRing { back() }
+            BackRing(LayoutTok.npBackRing, LayoutTok.npBackRingStroke, LayoutTok.npBackRingX, LayoutTok.npBackRingY, LayoutTok.npBackGlyph) { back() }
             Box(Modifier.fillMaxSize().alpha(idleAlpha)) { Status(device) }
             if (onPhone) s.phoneName?.let { name ->
                 RoleText("from $name", Roles.sectionLabel, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline - (Tok.npTextTop - Held.Np.npFromBaseline)), textW).testTag("np.from"))

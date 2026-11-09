@@ -91,7 +91,7 @@ fun ringLook(look: Look): RingStyle = when (look) {
 }
 
 @Composable
-fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifier, swaps: Int = 0, press: PressState? = null, tag: String? = null, stroke: Float? = null) {
+fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifier, swaps: Int = 0, press: PressState? = null, tag: String? = null, stroke: Float? = null, glyphSize: Float = size / 2) {
     val ui = LocalUi.current
     val side = ui.px(size)
     val dp = with(LocalDensity.current) { side.toDp() }
@@ -117,6 +117,6 @@ fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifie
         Canvas(Modifier.requiredSize(dp).then(if (tag != null) Modifier.testTag("$tag.ring") else Modifier)) {
             drawCircle(color, radius = (side - width) / 2, style = Stroke(width))
         }
-        Glyph(glyph, size / 2, color, Modifier.at(side / 2, side / 2, 0.5f, 0.5f).scale(scale.value).alpha(alpha.value))
+        Glyph(glyph, glyphSize, color, Modifier.at(side / 2, side / 2, 0.5f, 0.5f).scale(scale.value).alpha(alpha.value).then(if (tag != null) Modifier.testTag("$tag.glyph") else Modifier))
     }
 }
