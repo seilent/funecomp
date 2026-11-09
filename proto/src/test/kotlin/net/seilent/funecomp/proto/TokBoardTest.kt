@@ -4,6 +4,7 @@ import net.seilent.funecomp.proto.gen.TokBoard
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
+import java.lang.reflect.Modifier
 
 class TokBoardTest {
     @Test
@@ -28,6 +29,14 @@ class TokBoardTest {
         assertEquals("0,1,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100", TokBoard.r1.settings_powerOnSteps)
         assertEquals(5f, TokBoard.r1.settings_filterCount)
         assertSame(TokBoard.r1, TokBoard.of("r1"))
+    }
+
+    @Test
+    fun theBoardHoldsEveryBoardTokenAndEachBoardLoads() {
+        assertEquals(391, TokBoard.Board::class.java.declaredMethods.count { Modifier.isAbstract(it.modifiers) })
+        assertEquals(0f, TokBoard.ap80.npNextNavCountLarge)
+        assertEquals(0f, TokBoard.v1.npNextNavCountLarge)
+        assertEquals(1f, TokBoard.r1.npNextNavCountLarge)
     }
 
     @Test

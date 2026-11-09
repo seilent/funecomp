@@ -308,7 +308,7 @@ private sealed interface BrowseItem {
 
 private fun BrowseItem.height() = when (this) {
     is BrowseItem.Head -> Tok.qpFirstBaseline + Tok.qpContentDrop
-    is BrowseItem.Gap -> Tok.qpSectionGap - Tok.qpFirstBaseline - (Tok.tileRowPitch - Tok.tileCellH)
+    is BrowseItem.Gap -> Held.Qp.qpSectionGap - Tok.qpFirstBaseline - (Tok.tileRowPitch - Tok.tileCellH)
     is BrowseItem.Row -> Tok.tileRowPitch
     is BrowseItem.Line -> Tok.rowHeight
 }

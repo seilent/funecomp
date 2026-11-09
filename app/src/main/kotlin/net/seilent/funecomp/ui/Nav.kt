@@ -178,10 +178,10 @@ fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Uni
         val scale = currentCoroutineContext()[MotionDurationScale]?.scaleFactor ?: 1f
         var outStart = 0L
         if (home) launch { withFrameMillis { outStart = it } }
-        val outAngle = if (push) Tok.motion_turnstileOutAngle else Tok.motion_turnstileInAngle
-        angle.animateTo(outAngle, tween(Tok.motion_turnstileOut.toInt(), easing = ExpIn6))
+        val outAngle = if (push) Held.Nav.motion_turnstileOutAngle else Held.Nav.motion_turnstileInAngle
+        angle.animateTo(outAngle, tween(Held.Nav.motion_turnstileOut.toInt(), easing = ExpIn6))
         if (home) {
-            val outEnd = outStart + (Tok.motion_turnstileOut * scale).roundToLong()
+            val outEnd = outStart + (Held.Nav.motion_turnstileOut * scale).roundToLong()
             withFrameMillis { f ->
                 homeReturn = HomeReturn(outEnd, f, scale)
                 pinned = 0f
@@ -193,7 +193,7 @@ fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Uni
             return@LaunchedEffect
         }
         pinned = outAngle
-        angle.snapTo(if (push) Tok.motion_turnstileInAngle else Tok.motion_turnstileOutAngle)
+        angle.snapTo(if (push) Held.Nav.motion_turnstileInAngle else Held.Nav.motion_turnstileOutAngle)
         val entry = "${nav.stack.lastIndex}/$top"
         launch {
             withFrameMillis {
@@ -203,7 +203,7 @@ fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Uni
                 pinned = null
             }
         }
-        angle.animateTo(0f, tween(Tok.motion_turnstileIn.toInt(), easing = ExpOut6))
+        angle.animateTo(0f, tween(Held.Nav.motion_turnstileIn.toInt(), easing = ExpOut6))
     }
     val turning = angle.isRunning || pinned != null || top != shown
     SideEffect { nav.turning = turning }

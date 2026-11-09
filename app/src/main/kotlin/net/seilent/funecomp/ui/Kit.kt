@@ -231,13 +231,13 @@ fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit) {
     }
     val rest = ui.px(Tok.hubEdge)
     val target = rest - (positions.getOrNull(active) ?: 0f)
-    val row by animateFloatAsState(target, tween(Tok.motion_pivotStrip.toInt(), easing = Strip), label = "strip")
+    val row by animateFloatAsState(target, tween(Held.Pivot.motion_pivotStrip.toInt(), easing = Strip), label = "strip")
     Box(Modifier.fillMaxWidth().height(ui.px(ui.pivotBottom).dp()).clipToBounds()) {
         labels.forEachIndexed { i, l ->
             val on = i == active
             val role = if (on) Roles.pivotActive else Roles.pivotInactive
-            val c by animateColorAsState(white(role.alpha), tween(Tok.motion_pivotLabel.toInt()), label = "pivot")
-            val px by animateFloatAsState(positions[i], tween(Tok.motion_pivotStrip.toInt(), easing = Strip), label = "label")
+            val c by animateColorAsState(white(role.alpha), tween(Held.Pivot.motion_pivotLabel.toInt()), label = "pivot")
+            val px by animateFloatAsState(positions[i], tween(Held.Pivot.motion_pivotStrip.toInt(), easing = Strip), label = "label")
             RoleText(l, role, Modifier.atBaseline(row + px, ui.px(ui.pivotBaseline)).press({ onPick(i) }).testTag("pivot.$l"), color = c)
         }
     }

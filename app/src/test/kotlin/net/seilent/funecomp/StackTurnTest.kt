@@ -23,6 +23,7 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Decel
+import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.LocalTurnProbe
 import net.seilent.funecomp.ui.LocalUptime
@@ -186,8 +187,8 @@ class StackTurnTest {
         val out = frames.first().second
         val outs = frames.filter { it.second == out }
         val ins = frames.filter { it.second != out }
-        val outEnd = if (push) Tok.motion_turnstileOutAngle else Tok.motion_turnstileInAngle
-        val inStart = if (push) Tok.motion_turnstileInAngle else Tok.motion_turnstileOutAngle
+        val outEnd = if (push) Held.Nav.motion_turnstileOutAngle else Held.Nav.motion_turnstileInAngle
+        val inStart = if (push) Held.Nav.motion_turnstileInAngle else Held.Nav.motion_turnstileOutAngle
         expect(abs(outs.last().third - outEnd) < POSE, "$name: the last frame of the outgoing page draws ${outs.last().third}, not $outEnd")
         expect(outs.none { abs(it.third - inStart) < POSE }, "$name: the outgoing page drawn at the in angle $inStart")
         expect(ins.size > (if (home) 0 else 1), "$name: ${ins.size} incoming frames")
@@ -265,12 +266,12 @@ class StackTurnTest {
             }
             marks += crop(img, mark)
             drawn += drawnOutside(img, mark)
-            val outEnd = outStart + Tok.motion_turnstileOut.toLong()
+            val outEnd = outStart + Held.Nav.motion_turnstileOut.toLong()
             if (itemsAt == null && frame >= outEnd + Tok.motion_homeEnter.toLong() + 2 * FRAME) itemsAt = items.associateWith { crop(img, text(it)) }
             if (ringAt == null && frame >= outEnd + Tok.motion_homeEnterPeek.toLong() + 2 * FRAME) ringAt = crop(img, bounds("home.ring")!!)
         }
         assertTrue("$name reached home", first != null && itemsAt != null && ringAt != null)
-        return Return(first!!, firstAt, outStart + Tok.motion_turnstileOut.toLong(), marks, drawn, itemsAt!!, ringAt!!)
+        return Return(first!!, firstAt, outStart + Held.Nav.motion_turnstileOut.toLong(), marks, drawn, itemsAt!!, ringAt!!)
     }
 
     private fun checkReturn(name: String, r: Return, items: List<String>) {

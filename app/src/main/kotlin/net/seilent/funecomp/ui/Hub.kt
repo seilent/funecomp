@@ -48,7 +48,7 @@ class Entrance {
     suspend fun run(dir: Int) {
         this.dir = dir
         clock.snapTo(0f)
-        val total = Tok.motion_pivotRows + Tok.motion_pivotRowStagger * Tok.motion_pivotRowCap
+        val total = Held.Pivot.motion_pivotRows + Held.Pivot.motion_pivotRowStagger * Tok.motion_pivotRowCap
         clock.animateTo(total, tween(total.toInt(), easing = LinearEasing))
     }
 
@@ -62,8 +62,8 @@ fun Modifier.enter(index: () -> Int): Modifier {
     val e = LocalEntrance.current ?: return this
     val shift = LocalUi.current.px(Tok.motion_pivotShift)
     return graphicsLayer {
-        val delay = Tok.motion_pivotRowStagger * minOf(index().coerceAtLeast(0), Tok.motion_pivotRowCap.toInt())
-        val p = Strip.transform(((e.clock.value - delay) / Tok.motion_pivotRows).coerceIn(0f, 1f))
+        val delay = Held.Pivot.motion_pivotRowStagger * minOf(index().coerceAtLeast(0), Tok.motion_pivotRowCap.toInt())
+        val p = Strip.transform(((e.clock.value - delay) / Held.Pivot.motion_pivotRows).coerceIn(0f, 1f))
         translationX = shift * e.dir * (1f - p)
         alpha = p
     }
@@ -123,7 +123,7 @@ fun HubPage(
             return@LaunchedEffect
         }
         dir = if (active > from) 1 else -1
-        out.animateTo(1f, tween(Tok.motion_pivotOut.toInt(), easing = Strip))
+        out.animateTo(1f, tween(Held.Pivot.motion_pivotOut.toInt(), easing = Strip))
         shownPivot = active
         shownName = target
         out.snapTo(0f)
@@ -189,7 +189,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     val fit = if (ui.shape == Shape.L) minOf(0f, ui.w - Tok.edge - ui.homeTextX - ink / ui.u) else 0f
     val pitch = ui.homePitch
     val x = ui.px(ui.homeTextX + fit)
-    val margin = LayoutTok.homeFirstBaseline - LayoutTok.homeBarTop
+    val margin = Held.Rest.homeFirstBaseline - LayoutTok.homeBarTop
     Box(Modifier.fillMaxSize().testTag("home")) {
         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("home.column")) {
             val height = maxOf(ui.h, 2 * margin + items.size * pitch)
@@ -210,7 +210,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                     }
                 }
                 items.forEachIndexed { i, item ->
-                    val baseline = ui.px(LayoutTok.homeFirstBaseline + i * pitch)
+                    val baseline = ui.px(Held.Rest.homeFirstBaseline + i * pitch)
                     val on = focus == i
                     val c by animateColorAsState(white(if (on) Roles.homeItem.alpha else Roles.homeItem.dim), tween(Tok.motion_focusAlpha.toInt(), easing = LinearEasing), label = "home")
                     val subBaseline = baseline + ui.px(LayoutTok.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size)

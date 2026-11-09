@@ -1,6 +1,7 @@
 package net.seilent.funecomp
 
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.JUMP_EXIT
 import net.seilent.funecomp.ui.JUMP_NONE
 import net.seilent.funecomp.ui.JUMP_SEARCH
@@ -88,7 +89,7 @@ class JumpLayoutTest {
             assertEquals(3, g.hit(g.x(9), g.y(9) - 2.01f - offset, offset, all))
             assertEquals(JUMP_NONE, g.hit(5.99f, y, offset, all))
             assertEquals(JUMP_NONE, g.hit(Tok.canvasW - 5.99f, y, offset, all))
-            assertEquals(JUMP_NONE, g.hit(g.x(0), Tok.jumpTop - 2.01f - offset, offset, all))
+            assertEquals(JUMP_NONE, g.hit(g.x(0), Held.Jump.jumpTop - 2.01f - offset, offset, all))
             assertEquals(JUMP_NONE, g.hit(g.x(0), g.content - offset, offset, all))
             assertEquals(JUMP_NONE, g.hit(g.x(9), y, offset, all - 7))
         }

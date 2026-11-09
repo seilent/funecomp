@@ -254,15 +254,15 @@ object Gen {
         val types = main.indices.map { i -> lit(main[i][1]).type.takeIf { ty -> each.all { lit(it.second[i][1]).type == ty } } ?: "String" }
         fun board(rows: List<List<String>>) = rows.indices.joinToString("") { i ->
             val v = rows[i][1]
-            "        ${tokId(rows[i][0])} = ${if (types[i] == "String") quote(v) else lit(v).text},\n"
+            "        override val ${tokId(rows[i][0])}: ${types[i]} = ${if (types[i] == "String") quote(v) else lit(v).text}\n"
         }
         val o = StringBuilder()
         o.append("package $pkg\n\n")
         o.append("object TokBoard {\n")
-        o.append("    class Board(\n")
-        for (i in main.indices) o.append("        val ${tokId(main[i][0])}: ${types[i]},\n")
-        o.append("    )\n\n")
-        for ((b, rows) in each) o.append("    val $b = Board(\n${board(rows)}    )\n\n")
+        o.append("    abstract class Board {\n")
+        for (i in main.indices) o.append("        abstract val ${tokId(main[i][0])}: ${types[i]}\n")
+        o.append("    }\n\n")
+        for ((b, rows) in each) o.append("    object $b : Board() {\n${board(rows)}    }\n\n")
         o.append("    fun of(board: String): Board = when (board) {\n")
         for ((b, _) in each) o.append("        \"$b\" -> $b\n")
         o.append("        else -> throw IllegalArgumentException(\"board \$board\")\n")

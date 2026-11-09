@@ -48,15 +48,15 @@ private const val SLOT_SEARCH = 1
 private const val SEARCH_CENTER = 27f / 64f
 
 class JumpLayout(val cols: Int, val tile: Float, val left: Float) {
-    val pitch = tile + Tok.jumpGap
+    val pitch = tile + Held.Jump.jumpGap
     val rows = (SLOTS + cols - 1) / cols
-    val content = Tok.jumpTop + (rows - 1) * pitch + tile + Tok.edge
+    val content = Held.Jump.jumpTop + (rows - 1) * pitch + tile + Tok.edge
 
     fun limit(h: Float) = max(0f, content - h)
 
     fun x(slot: Int) = left + (slot % cols) * pitch
 
-    fun y(slot: Int) = Tok.jumpTop + (slot / cols) * pitch
+    fun y(slot: Int) = Held.Jump.jumpTop + (slot / cols) * pitch
 
     fun offsetFor(slot: Int, h: Float): Float {
         val top = y(slot)
@@ -69,8 +69,8 @@ class JumpLayout(val cols: Int, val tile: Float, val left: Float) {
     }
 
     fun hit(x: Float, y: Float, offset: Float, avail: Set<Int>): Int {
-        val cx = x - (left - Tok.jumpGap / 2)
-        val cy = y + offset - (Tok.jumpTop - Tok.jumpGap / 2)
+        val cx = x - (left - Held.Jump.jumpGap / 2)
+        val cy = y + offset - (Held.Jump.jumpTop - Held.Jump.jumpGap / 2)
         if (cx < 0 || cy < 0) return JUMP_NONE
         val col = (cx / pitch).toInt()
         val slot = (cy / pitch).toInt() * cols + col
@@ -86,7 +86,7 @@ class JumpLayout(val cols: Int, val tile: Float, val left: Float) {
     companion object {
         val EXIT_CELLS = Tok.jumpExitCells.toInt()
         val SLOTS = Tok.jumpCells.toInt() + EXIT_CELLS
-        private val MARGIN = (Tok.canvasW - Tok.jumpCols * Tok.tileS - (Tok.jumpCols - 1) * Tok.jumpGap) / 2
+        private val MARGIN = (Tok.canvasW - Tok.jumpCols * Tok.tileS - (Tok.jumpCols - 1) * Held.Jump.jumpGap) / 2
 
         fun slot(letter: Int) = letter + EXIT_CELLS
 
@@ -94,9 +94,9 @@ class JumpLayout(val cols: Int, val tile: Float, val left: Float) {
             val span = ui.w - 2 * MARGIN
             val cols = when (ui.shape) {
                 Shape.P, Shape.SN -> Tok.jumpCols.toInt()
-                Shape.SW, Shape.L -> max(Tok.jumpCols.toInt(), ((span + Tok.jumpGap) / (Tok.tileS + Tok.jumpGap)).toInt())
+                Shape.SW, Shape.L -> max(Tok.jumpCols.toInt(), ((span + Held.Jump.jumpGap) / (Tok.tileS + Held.Jump.jumpGap)).toInt())
             }
-            return JumpLayout(cols, (span - (cols - 1) * Tok.jumpGap) / cols, MARGIN)
+            return JumpLayout(cols, (span - (cols - 1) * Held.Jump.jumpGap) / cols, MARGIN)
         }
     }
 }

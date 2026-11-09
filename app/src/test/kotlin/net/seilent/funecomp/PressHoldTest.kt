@@ -21,6 +21,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.LocalPressProbe
 import net.seilent.funecomp.ui.Nav
@@ -125,7 +126,7 @@ class PressHoldTest {
         assertEquals("${item.name} pinned on the leaving page", Tok.motion_pressScale, width(item.scaled) / rest, FLAT)
         until(t0 + upAt + Tok.motion_touchReturnDelay.toLong())
         frames = 0
-        until(t0 + upAt + Tok.motion_turnstileOut.toLong() - FRAME)
+        until(t0 + upAt + Held.Nav.motion_turnstileOut.toLong() - FRAME)
         assertEquals("${item.name} leaving page asks for no frames", 0, frames)
         settle(1500)
     }
@@ -197,7 +198,7 @@ class PressHoldTest {
         assertEquals("shuffle pinned on the leaving page", Tok.motion_pressScale, width(shuffle.scaled) / rest, FLAT)
         until(t0 + 150 + FRAME * 2)
         frames = 0
-        until(t0 + 150 + Tok.motion_turnstileOut.toLong() - FRAME)
+        until(t0 + 150 + Held.Nav.motion_turnstileOut.toLong() - FRAME)
         assertEquals("leaving page in the hold asks for no frames", 0, frames)
         settle(1500)
     }

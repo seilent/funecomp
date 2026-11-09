@@ -91,7 +91,7 @@ object Roles {
     val homeSubtitle = Role(LayoutTok.type_homeSubtitle_size, weight(Tok.type_homeSubtitle_style), case(Tok.type_homeSubtitle_case), Tok.type_homeSubtitle_alpha)
     val pivotActive = Role(Tok.type_pivotActive_size, weight(Tok.type_pivotActive_style), case(Tok.type_pivotActive_case), Tok.type_pivotActive_alpha)
     val pivotInactive = Role(Tok.type_pivotInactive_size, weight(Tok.type_pivotInactive_style), case(Tok.type_pivotInactive_case), Tok.type_pivotInactive_alpha)
-    val quickplayHeader = Role(Tok.type_quickplayHeader_size, weight(Tok.type_quickplayHeader_style), case(Tok.type_quickplayHeader_case), Tok.type_quickplayHeader_alpha)
+    val quickplayHeader = Role(Held.Qp.type_quickplayHeader_size, weight(Tok.type_quickplayHeader_style), case(Tok.type_quickplayHeader_case), Held.Qp.type_quickplayHeader_alpha)
     val sectionLabel = Role(Tok.type_sectionLabel_size, weight(Tok.type_sectionLabel_style), case(Tok.type_sectionLabel_case), Tok.type_sectionLabel_alpha)
     val listPrimary = Role(Tok.type_listPrimary_size, weight(Tok.type_listPrimary_style), case(Tok.type_listPrimary_case), Tok.type_listPrimary_alpha, Tok.type_listPrimary_alphaDim)
     val listPlaylist = Role(Tok.type_listPlaylist_size, weight(Tok.type_listPlaylist_style), case(Tok.type_listPlaylist_case), Tok.type_listPlaylist_alpha, Tok.type_listPlaylist_alphaDim)
@@ -116,7 +116,7 @@ object Roles {
     val dialogItem = Role(Tok.type_dialogItem_size, weight(Tok.type_dialogItem_style), case(Tok.type_dialogItem_case), Tok.type_dialogItem_alpha, Tok.type_dialogItem_alphaDim)
     val gridCaption = Role(Tok.type_gridCaption_size, weight(Tok.type_gridCaption_style), case(Tok.type_gridCaption_case), Tok.type_gridCaption_alpha)
     val letterGlyph = Role(Tok.type_letterGlyph_size, weight(Tok.type_letterGlyph_style), case(Tok.type_letterGlyph_case), Tok.type_letterGlyph_alpha)
-    val jumpExit = Role(Tok.type_jumpExit_size, weight(Tok.type_jumpExit_style), case(Tok.type_jumpExit_case), Tok.type_jumpExit_alpha)
+    val jumpExit = Role(Held.Jump.type_jumpExit_size, weight(Tok.type_jumpExit_style), case(Tok.type_jumpExit_case), Tok.type_jumpExit_alpha)
     val watermark = Role(Tok.type_watermark_size, weight(Tok.type_watermark_style), case(Tok.type_watermark_case), Tok.type_watermark_alpha)
 }
 
