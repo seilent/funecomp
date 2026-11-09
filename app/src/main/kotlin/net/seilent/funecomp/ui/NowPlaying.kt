@@ -530,7 +530,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
     val timeBaseline = progressY + ui.px(Tok.npTimeDrop)
     val seekBottom = ui.px(ui.npSeekBottom)
     val titleBaseline = ui.px(ui.npTitleBaseline)
-    val titleTop = titleBaseline - ui.px(Tok.capHeight * Roles.npTitle.size)
+    val titleTop = titleBaseline - ui.px(Tok.capHeight * Roles.npViewTitle.size)
     val nextBaseline = ui.px(ui.npNextBaseline)
     val titleBottom = nextBaseline + ui.px(Tok.npNextPitch) * (ui.npNextCount - 1)
     val ringY = ui.px(ui.npRingY)
@@ -621,8 +621,8 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                 }
             } else {
                 Box(Modifier.fillMaxSize().graphicsLayer { alpha = frame().alpha }) {
-                    RoleText(s.artist ?: "", Roles.npArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))
-                    RoleText(s.album ?: "", Roles.npAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("np.album"))
+                    RoleText(s.artist ?: "", Roles.npViewArtist, Modifier.atBaseline(textX, ui.px(ui.npArtistBaseline), textW).testTag("np.artist"))
+                    RoleText(s.album ?: "", Roles.npViewAlbum, Modifier.atBaseline(textX, ui.px(ui.npAlbumBaseline), textW).testTag("np.album"))
                     if (artSide > 0f) {
                         val track = s.library
                         val px = artSide.roundToInt()
@@ -666,12 +666,12 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         Box(Modifier.at(artX, progressY).size((artSide * fraction).dp(), thick).background(Accent).testTag("np.progress"))
                         val elapsed = formatTime(position)
                         val remaining = if (duration > 0) "-" + formatTime(duration - position) else ""
-                        val timeStyle = textStyle(Roles.time, white(Roles.time.alpha))
+                        val timeStyle = textStyle(Roles.npViewTime, white(Roles.npViewTime.alpha))
                         val widest = if (duration > 0) listOf(formatTime(duration), "-" + formatTime(duration)) else listOf(elapsed)
-                        val timesW = widest.sumOf { t -> measurer.measure(shown(t, Roles.time.case), timeStyle).let { (it.getLineRight(0) - it.getLineLeft(0)).toDouble() } }
+                        val timesW = widest.sumOf { t -> measurer.measure(shown(t, Roles.npViewTime.case), timeStyle).let { (it.getLineRight(0) - it.getLineLeft(0)).toDouble() } }
                         val remainingRight = if (timesW + TIMES_ROUNDING_PX <= artSide) artX + artSide else ui.px(ui.w - Tok.edge)
-                        RoleText(elapsed, Roles.time, Modifier.atBaseline(artX, timeBaseline).testTag("np.elapsed"))
-                        RoleText(remaining, Roles.time, Modifier.atBaseline(remainingRight, timeBaseline, ax = 1f).testTag("np.remaining"))
+                        RoleText(elapsed, Roles.npViewTime, Modifier.atBaseline(artX, timeBaseline).testTag("np.elapsed"))
+                        RoleText(remaining, Roles.npViewTime, Modifier.atBaseline(remainingRight, timeBaseline, ax = 1f).testTag("np.remaining"))
                         val margin = ui.px(Tok.edge - Held.Np.npSeekBandX0)
                         val bandW = artSide + 2 * margin
                         if (!onPhone) Box(
@@ -702,10 +702,10 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         )
                     }
                     Box(Modifier.at(textX, titleTop).size(textW.dp(), (titleBottom - titleTop).coerceAtLeast(0f).dp()).press({ onQueue() }).testTag("np.titleBlock"))
-                    RoleText(s.title ?: "", Roles.npTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"))
+                    RoleText(s.title ?: "", Roles.npViewTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"))
                     upcoming.forEachIndexed { i, t ->
                         val x = textX + ui.px(Held.Np.npNextIndent)
-                        RoleText(t, Roles.npNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
+                        RoleText(t, Roles.npViewNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
                     }
                     val n = s.phoneTrackNo
                     val m = s.phoneTracks
