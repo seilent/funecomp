@@ -5,6 +5,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.MutatorMutex
 import androidx.compose.foundation.background
@@ -39,7 +40,10 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import kotlin.math.ceil
+import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import net.seilent.funecomp.art.Thumbs
@@ -932,27 +936,38 @@ private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, np: NpKe
 fun Status(device: DeviceState) {
     val ui = LocalUi.current
     val s = device.playback.state
-    val top = ui.px(Tok.statusTop)
-    var right = ui.px(ui.w - Tok.edge)
-    val step = ui.px(Tok.statusHeight + Tok.statusGap)
+    val top = ui.px(LayoutTok.npStatusTop)
+    var right = ui.px(ui.w - LayoutTok.npStatusRight)
     val battery = s.battery
     if (battery != null) {
         val low = battery < Tok.batteryLowPercent
-        Glyph(
-            GlyphName.BATTERY,
-            Tok.statusHeight,
-            if (low) Accent else white(Tok.alpha_full),
-            Modifier.at(right, top, ax = 1f).testTag("status.battery"),
-            level = battery / 100f,
-        )
-        right -= step
+        val color = if (low) Accent else white(Tok.alpha_full)
+        val bw = ui.px(LayoutTok.npStatusBatteryW)
+        val bh = ui.px(LayoutTok.npStatusBatteryH)
+        val sk = max(1f, ui.px(LayoutTok.npStatusBatteryH * 2 / 9))
+        val nub = max(1f, ui.px(LayoutTok.npStatusBatteryH / 9))
+        val nh = max(1f, ui.px(LayoutTok.npStatusBatteryH / 3))
+        Canvas(Modifier.at(right, top + (ui.px(LayoutTok.npStatusHeight) - bh) / 2, ax = 1f).size(bw.dp(), bh.dp()).testTag("status.battery")) {
+            drawRect(color, Offset(0f, (bh - nh) / 2), Size(nub, nh))
+            drawRect(color, Offset(nub, 0f), Size(bw - nub, sk))
+            drawRect(color, Offset(nub, bh - sk), Size(bw - nub, sk))
+            drawRect(color, Offset(nub, sk), Size(sk, bh - 2 * sk))
+            drawRect(color, Offset(bw - sk, sk), Size(sk, bh - 2 * sk))
+            val iw = bw - nub - 2 * sk
+            val ih = bh - 2 * sk
+            val ix = max(1f, iw / 18)
+            val iy = max(1f, ih / 10)
+            val fw = (iw - 2 * ix) * battery.coerceIn(0, 100) / 100f
+            drawRect(color, Offset(bw - sk - ix - fw, sk + iy), Size(fw, ih - 2 * iy))
+        }
+        right -= bw + ui.px(ui.npStatusGap)
     }
     val playing = s.playing == true
     val paused = !playing && (s.source == Enums.Source.phone || (s.slots ?: 0L) > 0L)
     if (playing || paused) {
         Glyph(
             if (playing) GlyphName.PLAY else GlyphName.PAUSE,
-            Tok.statusHeight,
+            LayoutTok.npStatusHeight,
             white(Tok.alpha_full),
             Modifier.at(right, top, ax = 1f).testTag(if (playing) "status.play" else "status.pause"),
         )

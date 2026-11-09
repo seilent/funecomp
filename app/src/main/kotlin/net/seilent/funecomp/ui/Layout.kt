@@ -152,6 +152,8 @@ fun Ui.npRingCenter(index: Int): Float {
 
 fun Ui.npTransportX(index: Int) = (npRingCenter(index) + npRingCenter(index + 1)) / 2
 
+val Ui.npStatusGap get() = TokBoard.r1.npStatusGap
+
 fun npHeartFits(art: Float) = art >= Held.Np.npRing + 2 * Tok.detailRingInset
 
 fun Ui.npHeartYPx(artY: Float) = artY + px(Tok.detailRingInset) + px(Held.Np.npRing) / 2

@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LayoutTok
@@ -24,6 +25,8 @@ import net.seilent.funecomp.ui.Preview
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -68,6 +71,44 @@ class NowPlayingChromeTest {
         assertEquals((LayoutTok.npBackRingY + LayoutTok.npBackRing) * u, back.size.height.toFloat(), 1f)
         assertEquals(68.7f * u, node("back.ring", "np").size.width.toFloat(), 1f)
         assertEquals(42.5f * u, node("back.glyph", "np").size.width.toFloat(), 1f)
+    }
+
+    @Test
+    fun theBatteryIsTheFramesOutlineWithTheNubLeftAndTheLevelFromTheRight() {
+        start(listOf(Page.Home, Page.NowPlaying)) { it.transport(Enums.TransportCmd.next) }
+        val u = u("np")
+        val node = rule.onNodeWithTag("status.battery", useUnmergedTree = true)
+        val b = node.fetchSemanticsNode()
+        val w = LayoutTok.npStatusBatteryW
+        val h = LayoutTok.npStatusBatteryH
+        assertEquals(w * u, b.size.width.toFloat(), 1f)
+        assertEquals(h * u, b.size.height.toFloat(), 1f)
+        val img = node.pixels().also { System.gc() }
+        fun lit(x: Float, y: Float) = (img.getRGB((x * u).toInt().coerceIn(0, img.width - 1), (y * u).toInt().coerceIn(0, img.height - 1)) shr 16 and 0xff) > 80
+        val nub = h / 9
+        val sk = h * 2 / 9
+        val ix = (w - nub - 2 * sk) / 18
+        assertTrue("nub", lit(nub / 2, h / 2))
+        assertFalse("over the nub", lit(nub / 2, sk / 2))
+        assertTrue("right end", lit(w - sk / 2, h / 2))
+        assertTrue("level at the right", lit(w - sk - ix - 0.5f, h / 2))
+        assertFalse("level not at the left", lit(nub + sk + ix + 0.5f, h / 2))
+    }
+
+    @Test
+    fun theStatusRowSitsAtTheDeviceSizes() {
+        start(listOf(Page.Home, Page.NowPlaying)) { it.transport(Enums.TransportCmd.next) }
+        val np = rule.onNodeWithTag("np").fetchSemanticsNode()
+        val ui = Ui.of(np.size.width.toFloat(), np.size.height.toFloat())
+        val u = ui.u
+        val o = np.positionInRoot
+        val play = rule.onAllNodes(hasTestTag("status.play") or hasTestTag("status.pause"), useUnmergedTree = true).fetchSemanticsNodes().single()
+        val battery = rule.onNodeWithTag("status.battery", useUnmergedTree = true).fetchSemanticsNode()
+        assertEquals(11.5f * u, play.size.width.toFloat(), 1f)
+        assertEquals(11.5f * u, play.size.height.toFloat(), 1f)
+        assertEquals(5.9f * u, play.positionInRoot.y - o.y, 1f)
+        assertEquals((ui.w - 13.7f) * u, battery.positionInRoot.x - o.x + battery.size.width, 1f)
+        assertEquals(7.7f * u, battery.positionInRoot.x - (play.positionInRoot.x + play.size.width), 1f)
     }
 
     @Test
