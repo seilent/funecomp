@@ -405,7 +405,7 @@ class NowPlayingTransportTest {
             val line = bounds("np.progress")
             val art = bounds("np.art")
             val margin = (Tok.edge - Held.Np.npSeekBandX0) * ui.u
-            assertEquals(s.name, line.top, band.top, 1f)
+            assertEquals(s.name, if (ui.shape == Shape.P || ui.shape == Shape.SN) art.bottom else line.top, band.top, 1f)
             assertEquals(s.name, (Held.Np.npSeekBandBottom - Held.Np.npProgressY) * ui.u, band.height, 1f)
             assertEquals(s.name, art.left - margin, band.left, 1f)
             assertEquals(s.name, art.right + margin, band.right, 1.5f)

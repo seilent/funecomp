@@ -534,7 +534,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
     val artY = ui.px(ui.npArtTop)
     val artSide = ui.px(ui.npArt)
     val progressY = ui.px(ui.npProgressY)
-    val timeBaseline = progressY + ui.px(Tok.npTimeDrop)
+    val timeBaseline = ui.px(ui.npTimesBaseline)
     val seekBottom = ui.px(ui.npSeekBottom)
     val titleBaseline = ui.px(ui.npTitleBaseline)
     val titleTop = titleBaseline - ui.px(Tok.capHeight * Roles.npViewTitle.size)
@@ -669,9 +669,10 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         }
                     }
                     if (device.playing != Playing.None && (!onPhone || duration > 0)) {
-                        val thick = ui.px(Tok.npProgressThick).dp()
-                        Box(Modifier.at(artX, progressY).size(artSide.dp(), thick).background(white(Tok.alpha_low)))
-                        Box(Modifier.at(artX, progressY).size((artSide * fraction).dp(), thick).background(Accent).testTag("np.progress"))
+                        val thick = ui.px(LayoutTok.npBarHeight).dp()
+                        val barY = ui.px(ui.npBarY)
+                        Box(Modifier.at(artX, barY).size(artSide.dp(), thick).background(white(Tok.npBarTrack)).testTag("np.track"))
+                        Box(Modifier.at(artX, barY).size((artSide * fraction).dp(), thick).background(Accent).testTag("np.progress"))
                         val elapsed = formatTime(position)
                         val remaining = if (duration > 0) "-" + formatTime(duration - position) else ""
                         val timeStyle = textStyle(Roles.npViewTime, white(Roles.npViewTime.alpha))

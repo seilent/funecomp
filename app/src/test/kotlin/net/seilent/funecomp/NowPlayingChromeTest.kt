@@ -3,11 +3,14 @@ package net.seilent.funecomp
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.Offer
@@ -109,6 +112,30 @@ class NowPlayingChromeTest {
         assertEquals(5.9f * u, play.positionInRoot.y - o.y, 1f)
         assertEquals((ui.w - 13.7f) * u, battery.positionInRoot.x - o.x + battery.size.width, 1f)
         assertEquals(7.7f * u, battery.positionInRoot.x - (play.positionInRoot.x + play.size.width), 1f)
+    }
+
+    @Test
+    fun theBarAndTheTimesSitUnderTheArt() {
+        start(listOf(Page.Home, Page.NowPlaying)) {
+            it.set("accentOff", "on")
+            it.transport(Enums.TransportCmd.next)
+            it.transport(Enums.TransportCmd.seek, seekMs = 1_000)
+        }
+        val np = rule.onNodeWithTag("np").fetchSemanticsNode()
+        val u = Ui.of(np.size.width.toFloat(), np.size.height.toFloat()).u
+        val art = rule.onNodeWithTag("np.art").fetchSemanticsNode().boundsInRoot
+        val track = rule.onNodeWithTag("np.track").fetchSemanticsNode().boundsInRoot
+        val fill = rule.onNodeWithTag("np.progress").fetchSemanticsNode().boundsInRoot
+        assertEquals(LayoutTok.npBarHeight * u, fill.height, 1f)
+        assertEquals(LayoutTok.npBarHeight * u, track.height, 1f)
+        assertEquals(Tok.npBarGap * u, track.top - art.bottom, 1f)
+        assertEquals(art.width, track.width, 1f)
+        val img = rule.onRoot().pixels().also { System.gc() }
+        val p = img.getRGB((track.right - 2f).toInt(), track.center.y.toInt())
+        assertEquals(Tok.npBarTrack * 255f, (p shr 16 and 0xff).toFloat(), 3f)
+        val elapsed = rule.onNodeWithTag("np.elapsed", useUnmergedTree = true).fetchSemanticsNode()
+        val layout = ArrayList<TextLayoutResult>().also { elapsed.config[SemanticsActions.GetTextLayoutResult].action?.invoke(it) }.single()
+        assertEquals(LayoutTok.npTimeBaseline * u, elapsed.positionInRoot.y + layout.firstBaseline - art.bottom, 1f)
     }
 
     @Test

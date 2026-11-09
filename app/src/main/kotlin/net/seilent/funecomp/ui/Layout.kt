@@ -105,6 +105,14 @@ val Ui.npProgressY: Float get() = when (shape) {
     Shape.P, Shape.SN -> npArtBottom
     Shape.SW, Shape.L -> NP_ART_TOP_LANDSCAPE + npArt + NP_PROGRESS_GAP_LANDSCAPE
 }
+val Ui.npBarY: Float get() = when (shape) {
+    Shape.P, Shape.SN -> npArtBottom + Tok.npBarGap
+    Shape.SW, Shape.L -> npProgressY
+}
+val Ui.npTimesBaseline: Float get() = when (shape) {
+    Shape.P, Shape.SN -> npArtBottom + LayoutTok.npTimeBaseline
+    Shape.SW, Shape.L -> npProgressY + Tok.npTimeDrop
+}
 val Ui.npSeekBottom get() = npProgressY + Held.Np.npSeekBandBottom - Held.Np.npProgressY
 val Ui.npArt: Float get() = when (shape) {
     Shape.P, Shape.SN -> min(TokBoard.r1.npArt, npArtBottom - LayoutTok.npArtTop)
