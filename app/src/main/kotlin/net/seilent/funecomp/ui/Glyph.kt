@@ -50,7 +50,7 @@ enum class GlyphName(val fill: Boolean, val d: List<Any>) {
     SEARCH_HANDLE(true, listOf("M", 15.63, 20.58, "L", 11.67, 16.62, "L", 3.4, 24.89, "A", 2.8, 2.8, 0, "0", "0", 7.36, 28.85, "Z")),
 }
 
-private fun path(g: GlyphName, k: Float): Path {
+internal fun path(g: GlyphName, k: Float): Path {
     val arcs = g.d.indices.filter { g.d[it] == "A" }.flatMap { listOf(it + 3, it + 4, it + 5) }.toSet()
     val svg = g.d.mapIndexed { i, t -> if (t is Number && i !in arcs) (t.toFloat() * k).toString() else t.toString() }
     return PathParser().parsePathString(svg.joinToString(" ")).toPath()

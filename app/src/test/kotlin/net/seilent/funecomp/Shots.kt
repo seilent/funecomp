@@ -875,6 +875,16 @@ val SHOTS = listOf(
     Shot("overlay-long", pages = NP, prep = { c -> playing(c); longTitle(c) }, after = 450) { it.overlay.show() },
     Shot("overlay-100", pages = NP, prep = { c -> playing(c); c.volumePercent(100) {} }, after = 450) { it.overlay.show() },
     Shot("overlay-home", pages = HOME, prep = ::playing, after = 450) { it.overlay.show() },
+    Shot("overlay-press-prev", pages = NP, prep = ::playing, held = true, after = 150) {
+        it.overlay.show()
+        settle(400)
+        rule.onNodeWithTag("overlay.prev").performTouchInput { down(center) }
+    },
+    Shot("overlay-press-ring", pages = NP, prep = ::playing, held = true, after = 150) {
+        it.overlay.show()
+        settle(400)
+        rule.onNodeWithTag("overlay.ring").performTouchInput { down(center) }
+    },
     Shot("heart-unlit", pages = NP, prep = ::playing),
     Shot("heart-lit", pages = NP, prep = ::favorite),
     Shot("heart-unknown", pages = NP, prep = ::playing, faults = listOf("favs-busy=1")),

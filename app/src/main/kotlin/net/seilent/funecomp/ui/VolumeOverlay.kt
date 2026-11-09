@@ -1,12 +1,18 @@
 package net.seilent.funecomp.ui
 
+import android.graphics.Bitmap
+import android.graphics.Paint
 import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -23,6 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Layout
@@ -111,8 +120,39 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     val exitLine = rememberTextMeasurer().measure(shown("exit", Roles.volExit.case), exitStyle)
     val exitCaps = with(d) { Offset(exitX + (exitLine.getLineLeft(0) + exitLine.getLineRight(0)) / 2, exitY + exitLine.firstBaseline - Tok.capHeight * exitStyle.fontSize.toPx() / 2) }
 
+    val prevTouch = remember { MutableInteractionSource() }
+    val ringTouch = remember { MutableInteractionSource() }
+    val nextTouch = remember { MutableInteractionSource() }
+    val prevHeld by prevTouch.collectIsPressedAsState()
+    val ringHeld by ringTouch.collectIsPressedAsState()
+    val nextHeld by nextTouch.collectIsPressedAsState()
+    val pressOff = tween<Float>(Held.Vol.motion_volumePressOff.toInt(), easing = LinearEasing)
+    val prevOff by animateFloatAsState(if (prevHeld) 1f else 0f, if (prevHeld) snap() else pressOff, label = "prev")
+    val prevAlpha = if (prevHeld) 1f else prevOff
+    val ringAlpha = if (ringHeld) 1f else 0f
+    val nextOff by animateFloatAsState(if (nextHeld) 1f else 0f, if (nextHeld) snap() else pressOff, label = "next")
+    val nextAlpha = if (nextHeld) 1f else nextOff
+    val skipSide = ui.px(Held.Vol.vol_skip).roundToInt()
+    val ringSide = ui.px(Tok.vol_ring).roundToInt()
+    val stroke = ui.px(Tok.vol_ringStroke)
+    val skipReach = ui.px(Tok.vol_glowSkip)
+    val ringReach = ui.px(Tok.vol_glowRing)
+    val masks = remember(skipSide, ringSide, stroke, skipReach, ringReach, d.density) { arrayOfNulls<ImageBitmap>(3) }
+    if (prevHeld && masks[0] == null) masks[0] = glyphGlow(GlyphName.SKIP_PREVIOUS, skipSide, skipReach)
+    if (ringHeld && masks[1] == null) masks[1] = ringGlow(ringSide, stroke, ringReach)
+    if (nextHeld && masks[2] == null) masks[2] = glyphGlow(GlyphName.SKIP_NEXT, skipSide, skipReach)
+
     Box(Modifier.fillMaxSize().alpha(alpha.value).testTag("overlay")) {
         Box(Modifier.fillMaxSize().bleed(LocalBleed.current).background(Black.copy(alpha = Tok.scrim_overlay_alpha)))
+        Canvas(Modifier.fillMaxSize().testTag("overlay.press")) {
+            fun glow(m: ImageBitmap?, x: Float, a: Float) {
+                if (m != null && a > 0f) drawImage(m, Offset(x - m.width / 2f, ringY - m.height / 2f), alpha = a)
+            }
+            glow(masks[0], cx - skip, prevAlpha)
+            glow(masks[2], cx + skip, nextAlpha)
+            glow(masks[1], cx, ringAlpha)
+            if (ringAlpha > 0f) drawCircle(lit, (ringSide - 2 * stroke) / 2, Offset(cx, ringY), alpha = Tok.vol_discAlpha * ringAlpha)
+        }
         Glyph(GlyphName.PLUS, Tok.vol_plus, lit, Modifier.at(cx, plusY, 0.5f, 0.5f).testTag("overlay.plus.glyph"))
         RoleText(
             number.toString(),
@@ -151,18 +191,61 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
             },
         )
         val touch = remember { MutableInteractionSource() }
-        fun target(x: Float, y: Float, tag: String, box: Dp = hit, act: () -> Unit) = Modifier.at(x, y, 0.5f, 0.5f).size(box).testTag(tag)
-            .clickable(touch, null) {
+        fun target(x: Float, y: Float, tag: String, box: Dp = hit, source: MutableInteractionSource = touch, act: () -> Unit) = Modifier.at(x, y, 0.5f, 0.5f).size(box).testTag(tag)
+            .clickable(source, null) {
                 act()
                 overlay.show()
             }
         Box(target(cx, plusY, "overlay.plus") { actions.volume(1) })
         Box(target(cx, minusY, "overlay.minus") { actions.volume(-1) })
-        Box(target(cx - skip, ringY, "overlay.prev") { actions.transport(Enums.TransportCmd.prev) })
-        Box(target(cx, ringY, "overlay.ring", ringHit) { actions.transport(Enums.TransportCmd.toggle) })
-        Box(target(cx + skip, ringY, "overlay.next") { actions.transport(Enums.TransportCmd.next) })
+        Box(target(cx - skip, ringY, "overlay.prev", source = prevTouch) { actions.transport(Enums.TransportCmd.prev) })
+        Box(target(cx, ringY, "overlay.ring", ringHit, ringTouch) { actions.transport(Enums.TransportCmd.toggle) })
+        Box(target(cx + skip, ringY, "overlay.next", source = nextTouch) { actions.transport(Enums.TransportCmd.next) })
         Box(Modifier.at(exitCaps.x, exitCaps.y, 0.5f, 0.5f).size(exitHit).testTag("overlay.exit.hit").clickable(touch, null) { close() })
     }
+}
+
+internal var glowsBuilt = 0
+    private set
+
+internal fun glyphGlow(name: GlyphName, side: Int, reach: Float): ImageBitmap {
+    val paint = Paint().apply {
+        color = android.graphics.Color.WHITE
+        isAntiAlias = true
+    }
+    return glow(side, (reach / 3).roundToInt().coerceAtLeast(1), 0f) { it.drawPath(path(name, side / Tok.glyphBox).asAndroidPath(), paint) }
+}
+
+internal fun ringGlow(side: Int, stroke: Float, reach: Float): ImageBitmap {
+    val paint = Paint().apply {
+        color = android.graphics.Color.WHITE
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeWidth = stroke
+    }
+    return glow(side, (reach / 3).roundToInt().coerceAtLeast(1), side / 2f) { it.drawCircle(side / 2f, side / 2f, (side - stroke) / 2, paint) }
+}
+
+private fun glow(side: Int, r: Int, inside: Float, cover: (android.graphics.Canvas) -> Unit): ImageBitmap {
+    val pad = 3 * r
+    val b = Bitmap.createBitmap(side + 2 * pad, side + 2 * pad, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(b)
+    canvas.drawColor(android.graphics.Color.BLACK)
+    canvas.translate(pad.toFloat(), pad.toFloat())
+    cover(canvas)
+    val px = IntArray(b.width * b.height)
+    b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
+    CoverBlur.blur(px, b.width, b.height, r)
+    val c = b.width / 2f
+    for (y in 0 until b.height) for (x in 0 until b.width) {
+        val dx = x + 0.5f - c
+        val dy = y + 0.5f - c
+        val a = if (dx * dx + dy * dy < inside * inside) 0 else px[y * b.width + x] shr 16 and 0xFF
+        px[y * b.width + x] = a shl 24 or 0xFFFFFF
+    }
+    b.setPixels(px, 0, b.width, 0, 0, b.width, b.height)
+    glowsBuilt++
+    return b.asImageBitmap()
 }
 
 @Composable
