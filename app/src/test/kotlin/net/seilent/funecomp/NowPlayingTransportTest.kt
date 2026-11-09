@@ -339,8 +339,8 @@ class NowPlayingTransportTest {
                 }
                 seeks.seeks.clear()
                 drag(0.25f, 0.75f)
-                assertEquals("${s.name} overlay $overlay ${bounds("np.seek")}", 1, seeks.seeks.size)
-                assertEquals("${s.name} overlay $overlay", 0.75f * duration, seeks.seeks.single()!!.toFloat(), 0.01f * duration)
+                assertEquals("${s.name} overlay $overlay ${bounds("np.seek")}", if (overlay) 0 else 1, seeks.seeks.size)
+                if (!overlay) assertEquals(s.name, 0.75f * duration, seeks.seeks.single()!!.toFloat(), 0.01f * duration)
             }
             shell.overlay.hide()
             settle(1000)

@@ -520,7 +520,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
     }
     var touches by remember { mutableIntStateOf(0) }
     var idle by remember { mutableStateOf(false) }
-    LaunchedEffect(touches, overlay.shows) {
+    LaunchedEffect(touches, overlay.shows, overlay.hides) {
         idle = false
         delay(Tok.motion_idle.toLong())
         idle = true
