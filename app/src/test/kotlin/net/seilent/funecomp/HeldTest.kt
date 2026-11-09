@@ -55,8 +55,17 @@ class HeldTest {
             ),
             rows(Held.Jump.entries),
         )
-        assertEquals(18, Held.entries.size)
-        assertEquals(setOf("Entry", "Jump", "Nav", "Pivot", "Qp", "Rest"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
+        assertEquals(
+            listOf(
+                listOf("vol_skip", "vol_skip", 42.1f, "V1", "zvol", "frames ff3b9095"),
+                listOf("vol_label", "vol_label", 8.8f, "V1", "zvol", "frames ff3b9095"),
+                listOf("motion_volumePressOff", "motion_volumePressOff", 33f, "V4", "zvol", "frames ff3b9095"),
+                listOf("motion_volumeTouchClose", "motion_volumeTouchClose", 100f, "V8", "zvol", "frames ff3b9095"),
+            ),
+            rows(Held.Vol.entries),
+        )
+        assertEquals(22, Held.entries.size)
+        assertEquals(setOf("Entry", "Jump", "Nav", "Pivot", "Qp", "Rest", "Vol"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }
 

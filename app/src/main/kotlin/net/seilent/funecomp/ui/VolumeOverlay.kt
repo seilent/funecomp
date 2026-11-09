@@ -19,7 +19,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
@@ -62,7 +61,6 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     val ui = LocalUi.current
     val d = LocalDensity.current
     val alpha = remember { Animatable(0f) }
-    val pop = remember { Animatable(1f) }
     LaunchedEffect(overlay.shows, overlay.hides) {
         if (overlay.shows == 0) return@LaunchedEffect
         if (!overlay.visible) {
@@ -70,10 +68,6 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
             return@LaunchedEffect
         }
         launch { alpha.animateTo(1f, tween(Tok.motion_volumeShow.toInt(), easing = LinearEasing)) }
-        launch {
-            pop.snapTo(Tok.motion_toggleScale)
-            pop.animateTo(1f, tween(Tok.motion_volumePop.toInt(), easing = OutBack))
-        }
         delay(Tok.motion_volumeHide.toLong())
         alpha.animateTo(0f, tween(Tok.motion_volumeFade.toInt(), easing = Decel))
     }
@@ -85,6 +79,7 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     val ringY = ui.px(ui.overlayRingY)
     val minusY = ui.px(ui.overlayMinusY)
     val off = ui.px(Tok.overlayGlyphOffset)
+    val skip = ui.px(Tok.vol_skipX)
     val lit = white(Tok.overlayLit)
     val textW = ui.px(ui.w) - 2 * edge
     val number = s.volumePct ?: ((s.volume ?: 0) * 100f / CONTROL_MAX).roundToInt()
@@ -92,22 +87,22 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
 
     Box(Modifier.fillMaxSize().alpha(alpha.value).testTag("overlay")) {
         Box(Modifier.fillMaxSize().bleed(LocalBleed.current).background(Black.copy(alpha = Tok.scrim_overlay_alpha)))
-        Glyph(GlyphName.PLUS, Tok.overlayGlyph, lit, Modifier.at(cx, ui.px(Tok.overlayPlusY), 0.5f, 0.5f))
+        Glyph(GlyphName.PLUS, Tok.vol_plus, lit, Modifier.at(cx, ui.px(ui.volPlusY), 0.5f, 0.5f).testTag("overlay.plus.glyph"))
         RoleText(
             number.toString(),
             Roles.overlayNumber,
-            Modifier.atBaseline(edge, ui.px(ui.overlayNumberBaseline)).scale(pop.value).testTag("overlay.number"),
+            Modifier.atBaseline(edge, ui.px(ui.overlayNumberBaseline)).testTag("overlay.number"),
             alpha = Tok.overlayLit,
         )
-        Glyph(GlyphName.PREVIOUS, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx - off, ringY, 0.5f, 0.5f))
-        Ring(Tok.overlayRing, if (s.playing == true) GlyphName.PAUSE else GlyphName.PLAY, Look.Touch, Modifier.at(cx, ringY, 0.5f, 0.5f))
-        Glyph(GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx + off, ringY, 0.5f, 0.5f))
+        Glyph(GlyphName.SKIP_PREVIOUS, Held.Vol.vol_skip, white(Tok.alpha_full), Modifier.at(cx - skip, ringY, 0.5f, 0.5f).testTag("overlay.prev.glyph"))
+        Ring(Tok.vol_ring, if (s.playing == true) GlyphName.PAUSE_WIDE else GlyphName.PLAY, Look.Touch, Modifier.at(cx, ringY, 0.5f, 0.5f), tag = "overlay.ring", stroke = Tok.vol_ringStroke, glyphSize = Tok.vol_pause)
+        Glyph(GlyphName.SKIP_NEXT, Held.Vol.vol_skip, white(Tok.alpha_full), Modifier.at(cx + skip, ringY, 0.5f, 0.5f).testTag("overlay.next.glyph"))
         Box(Modifier.fillMaxSize().alpha(Tok.overlayDim)) {
-            RoleText("exit", Roles.overlayLabel, Modifier.at(edge, edge), alpha = Tok.alpha_full)
-            RoleText("volume", Roles.overlayLabel, Modifier.at(cx, minusY + ui.px(Tok.overlayGlyph) / 2, ax = 0.5f), alpha = Tok.alpha_full)
+            RoleText("exit", Roles.volExit, Modifier.at(ui.px(ui.volExitX), ui.px(ui.volExitY)).testTag("overlay.exit"), alpha = Tok.alpha_full)
+            RoleText("volume", Roles.volLabel, Modifier.at(cx, minusY + ui.px(Tok.overlayGlyph) / 2, ax = 0.5f).testTag("overlay.volume"), alpha = Tok.alpha_full)
             Lines(s.artist ?: "", s.title ?: "", textW)
         }
-        Glyph(GlyphName.MINUS, Tok.overlayGlyph, lit, Modifier.at(cx, minusY, 0.5f, 0.5f))
+        Glyph(GlyphName.MINUS, Tok.vol_plus, lit, Modifier.at(cx, minusY, 0.5f, 0.5f).testTag("overlay.minus.glyph"))
 
         val touch = remember { MutableInteractionSource() }
         fun target(x: Float, y: Float, tag: String, act: () -> Unit) = Modifier.at(x, y, 0.5f, 0.5f).size(hit).testTag(tag)
@@ -128,8 +123,8 @@ private fun Lines(artist: String, title: String, width: Float) {
     val ui = LocalUi.current
     Layout(
         content = {
-            RoleText(artist, Roles.toastArtist, Modifier, alpha = Tok.type_toastArtist_alpha)
-            RoleText(title, Roles.toastTitle, Modifier, alpha = Tok.type_toastTitle_alpha)
+            RoleText(artist, Roles.toastArtist, Modifier.testTag("overlay.artist"), alpha = Tok.type_toastArtist_alpha)
+            RoleText(title, Roles.toastTitle, Modifier.testTag("overlay.title"), alpha = Tok.type_toastTitle_alpha)
         },
         modifier = Modifier.fillMaxSize(),
     ) { m, c ->

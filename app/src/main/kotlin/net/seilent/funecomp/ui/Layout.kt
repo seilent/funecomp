@@ -250,6 +250,9 @@ val Ui.overlayAnchorScale: Float get() = when (shape) {
     Shape.SN, Shape.SW, Shape.L -> h / Tok.overlayAnchorH
 }
 val Ui.overlayRingY get() = OVERLAY_RING_Y * overlayAnchorScale
+val Ui.volPlusY get() = Tok.overlayPlusY * overlayAnchorScale
+val Ui.volExitX get() = Tok.edge
+val Ui.volExitY get() = Tok.edge
 val Ui.overlayMinusY get() = OVERLAY_MINUS_Y * overlayAnchorScale
 val Ui.overlayNumberBaseline: Float get() = when (shape) {
     Shape.P, Shape.L -> OVERLAY_NUMBER_BASELINE

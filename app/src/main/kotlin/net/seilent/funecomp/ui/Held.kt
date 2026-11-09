@@ -69,5 +69,19 @@ object Held {
         )
     }
 
-    val entries get() = Nav.entries + Qp.entries + Pivot.entries + Rest.entries + Jump.entries
+    object Vol {
+        const val vol_skip = 42.1f
+        const val vol_label = 8.8f
+        const val motion_volumePressOff = 33f
+        const val motion_volumeTouchClose = 100f
+
+        val entries = listOf(
+            Entry("vol_skip", "vol_skip", vol_skip, "V1", "zvol", "frames ff3b9095"),
+            Entry("vol_label", "vol_label", vol_label, "V1", "zvol", "frames ff3b9095"),
+            Entry("motion_volumePressOff", "motion_volumePressOff", motion_volumePressOff, "V4", "zvol", "frames ff3b9095"),
+            Entry("motion_volumeTouchClose", "motion_volumeTouchClose", motion_volumeTouchClose, "V8", "zvol", "frames ff3b9095"),
+        )
+    }
+
+    val entries get() = Nav.entries + Qp.entries + Pivot.entries + Rest.entries + Jump.entries + Vol.entries
 }
