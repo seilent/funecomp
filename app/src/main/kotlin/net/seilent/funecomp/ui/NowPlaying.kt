@@ -768,7 +768,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         Box(Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha)) {
                             when (kind) {
                                 SHUFFLE -> Ring(LayoutTok.npRing, GlyphName.SHUFFLE, Look.Toggle(s.shuffle == true), swaps = swaps, press = press, tag = "np.shuffle", stroke = LayoutTok.npRingStroke)
-                                REPEAT -> Ring(LayoutTok.npRing, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, Look.Toggle(repeat != Enums.Repeat.off), swaps = swaps, press = press, tag = "np.repeat", stroke = LayoutTok.npRingStroke)
+                                REPEAT -> Ring(LayoutTok.npRing, GlyphName.REPEAT, Look.Toggle(repeat != Enums.Repeat.off), swaps = swaps, press = press, tag = "np.repeat", stroke = LayoutTok.npRingStroke, one = repeat == Enums.Repeat.one)
                                 else -> Ring(ui.npPlayRing, if (playing) GlyphName.PAUSE else GlyphName.PLAY, Look.Touch, Modifier.testTag(if (playing) "np.toggle.pause" else "np.toggle.play"), press = press, tag = "np.toggle")
                             }
                         }
