@@ -159,6 +159,9 @@ fun formatTime(ms: Long): String {
     return "${total / 60}:${if (s < 10) "0" else ""}$s"
 }
 
+internal fun upcomingSlots(slot: Long, count: Int, slots: Long, wrap: Boolean): List<Long> =
+    (1L..minOf(count.toLong(), slots - 1)).mapNotNull { i -> if (wrap) (slot + i) % slots else (slot + i).takeIf { it < slots } }
+
 class BackdropArt(val image: ImageBitmap, val face: Pair<Double, Double>? = null, val entry: ArtCache.Entry? = null, val wrongArtist: Boolean = false, val pic: Long? = null, val box: IntSize? = null, val point: Pair<Int, Int>? = null)
 
 val LocalBackdropProbe = staticCompositionLocalOf<((BackdropArt, Float) -> Unit)?> { null }
@@ -526,8 +529,8 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
     var seekFraction by remember { mutableStateOf<Float?>(null) }
 
     val textX = ui.px(ui.npTextX)
-    val textW = ui.px(ui.w - Tok.edge) - textX
-    val artX = ui.px(Tok.edge)
+    val textW = ui.px(ui.npTextRight) - textX
+    val artX = ui.px(ui.npArtX)
     val artY = ui.px(ui.npArtTop)
     val artSide = ui.px(ui.npArt)
     val progressY = ui.px(ui.npProgressY)
@@ -536,18 +539,19 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
     val titleBaseline = ui.px(ui.npTitleBaseline)
     val titleTop = titleBaseline - ui.px(Tok.capHeight * Roles.npViewTitle.size)
     val nextBaseline = ui.px(ui.npNextBaseline)
-    val titleBottom = nextBaseline + ui.px(Tok.npNextPitch) * (ui.npNextCount - 1)
+    val titleBottom = nextBaseline + ui.px(LayoutTok.npNextLinePitch) * (ui.npNextCount - 1)
     val ringY = ui.px(ui.npRingY)
     val measurer = rememberTextMeasurer()
     val duration = s.durationMs ?: 0L
     val position = seekFraction?.let { (it * duration).toLong() } ?: device.positionMs(now)
     val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
     val slot = s.slot
-    val upcoming = if (slot == null || onPhone) emptyList() else (1..ui.npNextCount).mapNotNull { device.queue.items[slot + it]?.title }
-    LaunchedEffect(slot, device.queue.rev, s.queueRev) {
+    val wrap = s.repeat == Enums.Repeat.all
+    val upcoming = if (slot == null || onPhone) emptyList() else upcomingSlots(slot, ui.npNextCount, s.slots ?: 0L, wrap).mapNotNull { device.queue.items[it]?.title }
+    LaunchedEffect(slot, device.queue.rev, s.queueRev, wrap) {
         if (slot == null || !device.has("queue")) return@LaunchedEffect
         val total = s.slots ?: return@LaunchedEffect
-        if (slot + 1 < total && device.queue.items[slot + 1] == null) control.queuePage(slot + 1)
+        upcomingSlots(slot, ui.npNextCount, total, wrap).firstOrNull { device.queue.items[it] == null }?.let { control.queuePage(it) }
     }
     val bleed = LocalBleed.current
     val coverPx = if (artSide > 0f) artSide.roundToInt() else Thumbs.LARGE
@@ -645,15 +649,15 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         }
                         if (Heart.shown(device.hello, s) && npHeartFits(ui.npArt)) {
                             key(HEART) {
-                                val inset = ui.px(Tok.detailRingInset)
-                                val ring = ui.px(Held.Np.npRing)
-                                val hx = artX + artSide - inset - ring / 2
+                                val inset = ui.px(Tok.detailRingInset).roundToInt()
+                                val ring = ui.px(LayoutTok.npRing)
+                                val hx = artX.roundToInt() + artSide.roundToInt() - inset - ring / 2
                                 val hy = ui.npHeartYPx(artY)
                                 val on = Heart.lit(s)
                                 var swaps by remember { mutableIntStateOf(0) }
                                 val press = rememberPress()
                                 Box(Modifier.at(hx, hy, 0.5f, 0.5f).alpha(idleAlpha).testTag(if (on) "np.heart.on" else "np.heart.off")) {
-                                    Ring(Held.Np.npRing, GlyphName.HEART, Look.Toggle(on), swaps = swaps, press = press, tag = "np.heart")
+                                    Ring(LayoutTok.npRing, GlyphName.HEART, Look.Toggle(on), swaps = swaps, press = press, tag = "np.heart", stroke = LayoutTok.npRingStroke)
                                 }
                                 Box(
                                     Modifier.at(hx, hy, 0.5f, 0.5f).size(ui.npHeartHitPx.dp()).testTag("np.heart").press({
@@ -676,7 +680,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         val remainingRight = if (timesW + TIMES_ROUNDING_PX <= artSide) artX + artSide else ui.px(ui.w - Tok.edge)
                         RoleText(elapsed, Roles.npViewTime, Modifier.atBaseline(artX, timeBaseline).testTag("np.elapsed"))
                         RoleText(remaining, Roles.npViewTime, Modifier.atBaseline(remainingRight, timeBaseline, ax = 1f).testTag("np.remaining"))
-                        val margin = ui.px(Tok.edge - Held.Np.npSeekBandX0)
+                        val margin = ui.px(Tok.edge - Held.Np.npSeekBandX0).roundToInt().toFloat()
                         val bandW = artSide + 2 * margin
                         if (!onPhone) Box(
                             Modifier.at(artX - margin, progressY).size(bandW.dp(), (seekBottom - progressY).dp()).systemGestureExclusion().testTag("np.seek")
@@ -709,7 +713,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                     RoleText(s.title ?: "", Roles.npViewTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"))
                     upcoming.forEachIndexed { i, t ->
                         val x = textX + ui.px(Held.Np.npNextIndent)
-                        RoleText(t, Roles.npViewNext, Modifier.atBaseline(x, nextBaseline + ui.px(Tok.npNextPitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
+                        RoleText(t, Roles.npViewNext, Modifier.atBaseline(x, nextBaseline + ui.px(LayoutTok.npNextLinePitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))
                     }
                     val n = s.phoneTrackNo
                     val m = s.phoneTracks
@@ -719,12 +723,12 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                     }
                     val corner = ui.npMarkCorner
                     if (canLyrics && artSide > 0f && npMarkFits(ui.npArt, corner)) {
-                        val ring = ui.px(Held.Np.npRing)
+                        val ring = ui.px(LayoutTok.npRing)
                         val cx = if (corner) artX + artSide - ui.px(Tok.detailRingInset) - ring / 2 else artX + artSide + ui.px(Tok.tileLGutter) + ring / 2
                         val cy = artY + artSide - (if (corner) ui.px(Tok.detailRingInset) else 0f) - ring / 2
                         val press = rememberPress()
                         Box(Modifier.at(cx, cy, 0.5f, 0.5f).testTag("np.mark")) {
-                            Ring(Held.Np.npRing, GlyphName.MIC, Look.Focus(false), press = press, tag = "np.mark")
+                            Ring(LayoutTok.npRing, GlyphName.MIC, Look.Focus(false), press = press, tag = "np.mark", stroke = LayoutTok.npRingStroke)
                         }
                         Box(Modifier.at(cx, cy, 0.5f, 0.5f).size(ring.dp()).press({ lyricsKey() }, longPress, press).testTag("np.mark.hit"))
                     }
@@ -732,21 +736,23 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
             }
             val repeat = s.repeat ?: Enums.Repeat.off
             val queued = device.playing != Playing.None || (s.slots ?: 0L) > 0L
-            val hitW = ui.px(ui.npRingCenter(1) - ui.npRingCenter(0)) / 2
             val hitH = ui.px(ui.npRowHit)
+            val row = listOf(ui.npRingCenter(0), ui.npTransportX(0), ui.npRingCenter(1), ui.npTransportX(1), ui.npRingCenter(2))
+            val edges = listOf(row[0] - (row[1] - row[0]) / 2) + row.zipWithNext { a, b -> (a + b) / 2 } + (row[4] + (row[4] - row[3]) / 2)
             val items = listOfNotNull(
-                SHUFFLE to ui.npRingCenter(0),
-                (PREV to ui.npTransportX(0)).takeIf { queued },
-                (TOGGLE to ui.npRingCenter(1)).takeIf { queued },
-                (NEXT to ui.npTransportX(1)).takeIf { queued },
-                REPEAT to ui.npRingCenter(2),
+                SHUFFLE to 0,
+                (PREV to 1).takeIf { queued },
+                (TOGGLE to 2).takeIf { queued },
+                (NEXT to 3).takeIf { queued },
+                REPEAT to 4,
             )
-            items.forEach { (kind, x) ->
+            items.forEach { (kind, i) ->
                 key(kind) {
-                    val cx = ui.px(x)
+                    val cx = ui.px(row[i])
                     val alpha = if (kind == SHUFFLE || kind == REPEAT) idleAlpha else 1f
                     val tag = ITEM_TAGS.getValue(kind)
-                    val hit = Modifier.at(cx, ringY, 0.5f, 0.5f).size(hitW.dp(), hitH.dp()).testTag(tag)
+                    val left = ui.px(edges[i]).roundToInt()
+                    val hit = Modifier.at(left.toFloat(), ringY, 0f, 0.5f).size((ui.px(edges[i + 1]).roundToInt() - left).toFloat().dp(), hitH.dp()).testTag(tag)
                     if (kind == PREV || kind == NEXT) {
                         val press = rememberPress()
                         Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx, ringY, 0.5f, 0.5f).pressScale(press).alpha(alpha).testTag("$tag.glyph"))
@@ -760,8 +766,8 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         val press = rememberPress()
                         Box(Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha)) {
                             when (kind) {
-                                SHUFFLE -> Ring(Held.Np.npRing, GlyphName.SHUFFLE, Look.Toggle(s.shuffle == true), swaps = swaps, press = press, tag = "np.shuffle")
-                                REPEAT -> Ring(Held.Np.npRing, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, Look.Toggle(repeat != Enums.Repeat.off), swaps = swaps, press = press, tag = "np.repeat")
+                                SHUFFLE -> Ring(LayoutTok.npRing, GlyphName.SHUFFLE, Look.Toggle(s.shuffle == true), swaps = swaps, press = press, tag = "np.shuffle", stroke = LayoutTok.npRingStroke)
+                                REPEAT -> Ring(LayoutTok.npRing, if (repeat == Enums.Repeat.one) GlyphName.REPEAT_ONE else GlyphName.REPEAT, Look.Toggle(repeat != Enums.Repeat.off), swaps = swaps, press = press, tag = "np.repeat", stroke = LayoutTok.npRingStroke)
                                 else -> Ring(ui.npPlayRing, if (playing) GlyphName.PAUSE else GlyphName.PLAY, Look.Touch, Modifier.testTag(if (playing) "np.toggle.pause" else "np.toggle.play"), press = press, tag = "np.toggle")
                             }
                         }

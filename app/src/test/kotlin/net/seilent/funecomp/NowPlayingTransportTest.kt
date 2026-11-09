@@ -32,6 +32,7 @@ import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.Held
+import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -192,8 +193,30 @@ class NowPlayingTransportTest {
             val art = bounds("np.art")
             assertEquals(s.name, Tok.detailRingInset * u, art.right - ring.right, 1f)
             assertEquals(s.name, Tok.detailRingInset * u, ring.top - art.top, 1f)
-            assertEquals(s.name, Held.Np.npRing * u, ring.width, 1f)
+            assertEquals(s.name, LayoutTok.npRing * u, ring.width, 1f)
         }
+    }
+
+    @Test
+    fun theSideRingsAreTheDeviceRingsAtTheDeviceFractions() {
+        start()
+        val np = rule.onNodeWithTag("np").fetchSemanticsNode()
+        val ui = Ui.of(np.size.width.toFloat(), np.size.height.toFloat())
+        val left = np.boundsInRoot.left
+        assertEquals(ui.w * LayoutTok.npRingCx0 / Tok.canvasW * ui.u, bounds("np.shuffle").center.x - left, 1f)
+        assertEquals(ui.w * LayoutTok.npRingCx2 / Tok.canvasW * ui.u, bounds("np.repeat").center.x - left, 1f)
+        val file = File.createTempFile("ring", ".png")
+        rule.onNodeWithTag("np.shuffle.ring").captureRoboImage(file.path)
+        val img = ImageIO.read(file)
+        file.delete()
+        System.gc()
+        val y = img.height / 2
+        val red = (0 until img.width).map { img.getRGB(it, y) shr 16 and 0xff }
+        val lit = red.max() / 2
+        val first = red.indexOfFirst { it > lit }
+        val stroke = red.drop(first).takeWhile { it > lit }.size
+        assertEquals(LayoutTok.npRing, (red.indexOfLast { it > lit } + 1 - first) / ui.u, 0.5f)
+        assertEquals(LayoutTok.npRingStroke, stroke / ui.u, 0.25f)
     }
 
     @Test
@@ -214,8 +237,20 @@ class NowPlayingTransportTest {
                 assertEquals(s.name, Tok.tileLGutter * ui.u, ring.left - art.right, 1.5f)
                 assertEquals(s.name, art.bottom, ring.bottom, 1.5f)
             }
-            assertEquals(s.name, Held.Np.npRing * ui.u, ring.width, 1.5f)
-            assertEquals(s.name, Held.Np.npRing * ui.u, ring.height, 1.5f)
+            assertEquals(s.name, LayoutTok.npRing * ui.u, ring.width, 1.5f)
+            assertEquals(s.name, LayoutTok.npRing * ui.u, ring.height, 1.5f)
+        }
+    }
+
+    @Test
+    fun theRowBoxesMeetEdgeToEdgeOnEveryWindow() {
+        val c = start()
+        lyricsOn()(c)
+        val row = listOf("np.shuffle", "np.prev", "np.toggle", "np.nextTrack", "np.repeat")
+        for (s in SIZES) {
+            size = s
+            settle(1000)
+            row.zipWithNext { a, b -> assertEquals("${s.name} $a $b", bounds(a).right, bounds(b).left, 0.5f) }
         }
     }
 
@@ -374,10 +409,6 @@ class NowPlayingTransportTest {
             assertEquals(s.name, (Held.Np.npSeekBandBottom - Held.Np.npProgressY) * ui.u, band.height, 1f)
             assertEquals(s.name, art.left - margin, band.left, 1f)
             assertEquals(s.name, art.right + margin, band.right, 1.5f)
-            if (ui.shape == Shape.P || ui.shape == Shape.SN) {
-                val titleTop = bounds("np").top + (ui.npTitleBaseline - Tok.capHeight * Roles.npTitle.size) * ui.u
-                assertEquals(s.name, titleTop, band.bottom, 1f)
-            }
         }
     }
 

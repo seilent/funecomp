@@ -4,8 +4,6 @@ object Held {
     class Entry(val name: String, val token: String, val value: Any, val row: String, val branch: String, val pin: String)
 
     object Np {
-        const val npArtTop = 124f
-        const val npRing = 32f
         const val npSeekBandX0 = 8f
         const val npProgressY = 200f
         const val npSeekBandBottom = 219.8f
@@ -14,8 +12,6 @@ object Held {
         const val npNextIndent = 40f
 
         val entries = listOf(
-            Entry("npArtTop", "npArtTop", npArtTop, "N4", "znp", "6e3302724"),
-            Entry("npRing", "npRing", npRing, "N5", "znp", "6e3302724"),
             Entry("npSeekBandX0", "npSeekBandX0", npSeekBandX0, "N7", "znp", "6e3302724"),
             Entry("npProgressY", "npProgressY", npProgressY, "N7", "znp", "6e3302724"),
             Entry("npSeekBandBottom", "npSeekBandBottom", npSeekBandBottom, "N7", "znp", "6e3302724"),

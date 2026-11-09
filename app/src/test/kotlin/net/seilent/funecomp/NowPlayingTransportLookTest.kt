@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -174,14 +175,15 @@ class NowPlayingTransportLookTest {
     fun noRingOfTheRowDrawsTheFocusStroke() {
         start()
         val idle = ui().px(Tok.ringStrokeIdle)
+        val side = ui().px(LayoutTok.npRingStroke)
         assertEquals("play at open", idle, stroke(play()).toFloat(), STROKE_TOLERANCE)
-        assertEquals("shuffle at open", idle, stroke("np.shuffle").toFloat(), STROKE_TOLERANCE)
+        assertEquals("shuffle at open", side, stroke("np.shuffle").toFloat(), STROKE_TOLERANCE)
         rule.onNodeWithTag("np.toggle").performClick()
         settle(600)
         assertEquals("play after a tap", idle, stroke(play()).toFloat(), STROKE_TOLERANCE)
         rule.onNodeWithTag("np.heart").performClick()
         settle(600)
-        assertEquals("heart after a tap", idle, stroke(heart()).toFloat(), STROKE_TOLERANCE)
+        assertEquals("heart after a tap", side, stroke(heart()).toFloat(), STROKE_TOLERANCE)
     }
 
     @Test

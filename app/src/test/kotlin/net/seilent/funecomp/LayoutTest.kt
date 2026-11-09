@@ -3,9 +3,10 @@ package net.seilent.funecomp
 import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
-import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.JumpLayout
-import net.seilent.funecomp.ui.Roles
+import net.seilent.funecomp.ui.NP_THREE_NEXT_H
+import net.seilent.funecomp.ui.NP_TIMES_ROW
+import net.seilent.funecomp.ui.NP_WIDE_ROW_H
 import net.seilent.funecomp.ui.Shape
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.albumArtTop
@@ -78,37 +79,37 @@ class LayoutTest {
         assertEquals(1080f / 272f, ui.u, 1e-4f)
         assertEquals(272f, ui.w, 1e-3f)
         assertEquals(Shape.P, ui.shape)
-        assertEquals(168f, ui.npArt, 1e-3f)
-        assertEquals(405.778f, ui.npProgressY, 1e-3f)
+        assertEquals(149.4f, ui.npArt, 1e-3f)
+        assertEquals(408.021f, ui.npProgressY, 1e-3f)
         assertEquals(ui.npProgressY, ui.npArtTop + ui.npArt, 1e-3f)
-        assertEquals(ui.npArtTop - 14f, ui.npAlbumBaseline, 1e-3f)
-        assertEquals(ui.npAlbumBaseline - 24f, ui.npArtistBaseline, 1e-3f)
-        assertEquals(443.778f, ui.npTitleBaseline, 1e-3f)
+        assertEquals(ui.npArtTop - 5.3f, ui.npAlbumBaseline, 1e-3f)
+        assertEquals(ui.npAlbumBaseline - 24.4f, ui.npArtistBaseline, 1e-3f)
+        assertEquals(447.521f, ui.npTitleBaseline, 1e-3f)
         for (album in listOf(ui, Ui.of(272f, 480f), Ui.of(360f, 640f))) {
             assertEquals(117f, album.albumArtistBaseline, 1e-3f)
             assertEquals(141f, album.albumTitleBaseline, 1e-3f)
             assertEquals(155f, album.albumArtTop, 1e-3f)
         }
         val zune = Ui.of(272f, 480f)
-        assertEquals(137f, zune.npArt, 1e-3f)
-        assertEquals(155f, zune.npArtTop, 1e-3f)
-        assertEquals(117f, zune.npArtistBaseline, 1e-3f)
+        assertEquals(149.4f, zune.npArt, 1e-3f)
+        assertEquals(155.51f, zune.npArtTop, 1e-3f)
+        assertEquals(125.81f, zune.npArtistBaseline, 1e-3f)
     }
 
     @Test
     fun npBottomStackLiftsByAThirdOfTheSurplus() {
         val flip = Ui.of(411f, 960f - 148f / 2.625f)
         assertEquals(598.016f, flip.h, 1e-3f)
-        assertEquals(381.344f, flip.npProgressY, 1e-3f)
-        assertEquals(213.344f, flip.npArtTop, 1e-3f)
-        assertEquals(175.344f, flip.npArtistBaseline, 1e-3f)
-        assertEquals(419.344f, flip.npTitleBaseline, 1e-3f)
-        assertEquals(513.344f, flip.npRingY, 1e-3f)
+        assertEquals(383.587f, flip.npProgressY, 1e-3f)
+        assertEquals(234.187f, flip.npArtTop, 1e-3f)
+        assertEquals(204.487f, flip.npArtistBaseline, 1e-3f)
+        assertEquals(423.087f, flip.npTitleBaseline, 1e-3f)
+        assertEquals(505.937f, flip.npRingY, 1e-3f)
         val small = Ui.of(360f, 640f - 148f / 2.625f)
         assertEquals(480f, small.h, 1e-3f)
-        assertEquals(292f, small.npProgressY, 1e-3f)
-        assertEquals(330f, small.npTitleBaseline, 1e-3f)
-        assertEquals(424f, small.npRingY, 1e-3f)
+        assertEquals(304.91f, small.npProgressY, 1e-3f)
+        assertEquals(344.41f, small.npTitleBaseline, 1e-3f)
+        assertEquals(427.26f, small.npRingY, 1e-3f)
         val land = Ui.of(960f - 109f / 2.625f, 411f - 148f / 2.625f)
         assertEquals(Shape.L, land.shape)
         assertEquals(272f, land.h, 1e-3f)
@@ -123,11 +124,11 @@ class LayoutTest {
             assertEquals(298f, ui.npLyricBottom - ui.npLyricTop, 1e-3f)
         }
         val flip = Ui.of(411f, 960f - 148f / 2.625f)
-        assertEquals(flip.npArtistBaseline, flip.npLyricTop, 1e-3f)
-        assertEquals(86f, Ui.of(272f, 480f).npLyricTop, 1e-3f)
+        assertEquals(163.887f, flip.npLyricTop, 1e-3f)
+        assertEquals(85.21f, Ui.of(272f, 480f).npLyricTop, 1e-3f)
         val land = Ui.of(960f - 109f / 2.625f, 411f - 148f / 2.625f)
         assertEquals(60f, land.npLyricTop, 1e-3f)
-        assertEquals(176f, land.npLyricBottom, 1e-3f)
+        assertEquals(163.6f, land.npLyricBottom, 1e-3f)
     }
 
     @Test
@@ -135,21 +136,21 @@ class LayoutTest {
         val ui = Ui.of(272f, 480f)
         assertEquals((ui.npRingCenter(0) + ui.npRingCenter(1)) / 2, ui.npTransportX(0), 1e-3f)
         assertEquals((ui.npRingCenter(1) + ui.npRingCenter(2)) / 2, ui.npTransportX(1), 1e-3f)
-        assertEquals(85.68f, ui.npTransportX(0), 1e-3f)
+        assertEquals(86.02f, ui.npTransportX(0), 1e-3f)
     }
 
     @Test
-    fun heartFitsOnlyOnA48Art() {
-        assertFalse(npHeartFits(47.9f))
-        assertTrue(npHeartFits(48f))
+    fun heartFitsOnArtOfTheRingAndBothInsets() {
+        assertFalse(npHeartFits(45.6f))
+        assertTrue(npHeartFits(45.7f))
     }
 
     @Test
-    fun theMarkFitsBesideA32ArtAndInTheCornerOfA92Art() {
-        assertFalse(npMarkFits(31.9f, false))
-        assertTrue(npMarkFits(32f, false))
-        assertFalse(npMarkFits(91.9f, true))
-        assertTrue(npMarkFits(92f, true))
+    fun theMarkFitsBesideARingArtAndInTheCornerOfTwoRingsArt() {
+        assertFalse(npMarkFits(29.6f, false))
+        assertTrue(npMarkFits(29.7f, false))
+        assertFalse(npMarkFits(87.3f, true))
+        assertTrue(npMarkFits(87.4f, true))
     }
 
     @Test
@@ -235,7 +236,6 @@ class LayoutTest {
     fun theSeekBandEndsTheSk1HeightBelowTheProgressLine() {
         val p = Ui.of(1080f, 2520f)
         for (ui in listOf(Ui.of(2411f, 930.875f), Ui.of(1244f, 1101f), p)) assertEquals(ui.npProgressY + 19.8f, ui.npSeekBottom, 1e-3f)
-        assertEquals(p.npTitleBaseline - Tok.capHeight * Roles.npTitle.size, p.npSeekBottom, 1e-3f)
     }
 
     private class Win(val name: String, val wPx: Float, val hPx: Float, val shape: Shape, val u: Float, val w: Float, val h: Float)
@@ -289,12 +289,12 @@ class LayoutTest {
             if (npHeartFits(art) && art < least) least = art
             if (npHeartFits(art) && art < (ui.npHeartYPx(0f) + ui.npHeartHitPx / 2) / ui.u) fail("$w x $h ${ui.shape} art $art")
         }
-        assertEquals(52.6f, least, 0.5f)
+        assertEquals(NP_TIMES_ROW, least, 0.5f)
     }
 
     private fun Ui.getters() = listOf(
         pivotTop, pivotBottom, contentTop, npTextX, npArtTop, npAlbumBaseline, npArtistBaseline, npArt, npProgressY,
-        npSeekBottom, npTitleBaseline, npNextBaseline, npRingY, npLyricTop, npLyricBottom, npPlayRing, npRowHit,
+        npSeekBottom, npTitleBaseline, npNextBaseline, npRingY, npLyricBottom, npPlayRing, npRowHit,
         npRingCenter(0), npRingCenter(1), npRingCenter(2), detailNameBaseline, detailRingTop, detailLabelBaseline,
         detailRowsTop, detailNameRight, detailListX, albumArtistBaseline, albumTitleBaseline, albumArtTop, albumRowsTop,
         albumRowsX, albumTextX, overlayRingY, overlayMinusY, overlayNumberBaseline, homePitch, homeMenuX,
@@ -310,6 +310,8 @@ class LayoutTest {
         assertEquals(p.npNextCount, sn.npNextCount)
         assertEquals(p.npMarkCorner, sn.npMarkCorner)
         p.getters().zip(sn.getters()).forEachIndexed { i, (a, b) -> assertEquals("$i", a, b, 0.2f) }
+        assertEquals(85.21f, p.npLyricTop, 1e-3f)
+        assertEquals(86f, sn.npLyricTop, 1e-3f)
     }
 
     private class Sn(
@@ -319,15 +321,17 @@ class LayoutTest {
 
     @Test
     fun shortNarrowTakesTheSectionFourValues() {
+        val three = NP_THREE_NEXT_H
+        val wide = NP_WIDE_ROW_H
         val rows = listOf(
-            Sn(480f, 137f, 3, 292f, 330f, 384f, 424f, 64f, 64f),
-            Sn(449f, 137f, 3, 261f, 299f, 353f, 393f, 64f, 64f),
-            Sn(400f, 88f, 3, 212f, 250f, 304f, 344f, 64f, 64f),
-            Sn(364.6f, 52.6f, 3, 176.6f, 214.6f, 268.6f, 308.6f, 64f, 64f),
-            Sn(364.5f, 88.5f, 1, 212.5f, 250.5f, 268.5f, 308.5f, 64f, 64f),
-            Sn(328.6f, 52.6f, 1, 176.6f, 214.6f, 232.6f, 272.6f, 64f, 64f),
-            Sn(328.5f, 84.5f, 1, 208.5f, 246.5f, 264.5f, 288.5f, 32f, 48f),
-            Sn(320f, 76f, 1, 200f, 238f, 256f, 280f, 32f, 48f),
+            Sn(480f, 149.4f, 3, 304.91f, 344.41f, 383.21f, 427.26f, 64f, 64f),
+            Sn(449f, 149.4f, 3, 281.3f, 320.8f, 359.6f, 403.65f, 64f, 64f),
+            Sn(400f, 113.6f, 3, 232.3f, 271.8f, 310.6f, 354.65f, 64f, 64f),
+            Sn(three, NP_TIMES_ROW, 3, three - 167.7f, three - 128.2f, three - 89.4f, three - 45.35f, 64f, 64f),
+            Sn(three - 0.1f, NP_TIMES_ROW + 23.5f, 1, three - 144.2f, three - 104.7f, three - 89.5f, three - 45.45f, 64f, 64f),
+            Sn(wide, NP_TIMES_ROW, 1, wide - 144.1f, wide - 104.6f, wide - 89.4f, wide - 45.35f, 64f, 64f),
+            Sn(wide - 0.1f, wide - 228.6f, 1, wide - 109.9f, wide - 70.4f, wide - 55.2f, wide - 28.3f, 29.7f, 53.8f),
+            Sn(320f, 91.5f, 1, 210.2f, 249.7f, 264.9f, 291.8f, 29.7f, 53.8f),
         )
         for (r in rows) {
             val ui = Ui(3f, 320f, r.h, Shape.SN)
@@ -337,27 +341,27 @@ class LayoutTest {
             assertEquals(n, r.progress, ui.npProgressY, 1e-3f)
             assertEquals(n, r.progress + 19.8f, ui.npSeekBottom, 1e-3f)
             assertEquals(n, r.title, ui.npTitleBaseline, 1e-3f)
-            assertEquals(n, r.title + 18f, ui.npNextBaseline, 1e-3f)
+            assertEquals(n, r.title + 15.2f, ui.npNextBaseline, 1e-3f)
             assertEquals(n, r.lyricBottom, ui.npLyricBottom, 1e-3f)
             assertEquals(n, 86f, ui.npLyricTop, 1e-3f)
             assertEquals(n, r.ring, ui.npRingY, 1e-3f)
             assertEquals(n, r.play, ui.npPlayRing, 1e-3f)
             assertEquals(n, r.hit, ui.npRowHit, 1e-3f)
             assertEquals(n, ui.npArtTop + ui.npArt, ui.npProgressY, 1e-3f)
-            assertEquals(n, 16f, ui.npTextX, 1e-3f)
+            assertEquals(n, 14.3f, ui.npTextX, 1e-3f)
             assertFalse(n, ui.npMarkCorner)
             assertEquals(n, 160f * r.h / 480f, ui.overlayNumberBaseline, 1e-3f)
             assertEquals(n, 0f, ui.homeMenuX, 1e-3f)
             assertEquals(n, 55f, ui.homePitch, 1e-3f)
-            assertEquals(n, 320f * 0.13f, ui.npRingCenter(0), 1e-3f)
+            assertEquals(n, 320f * 31.9f / 240f, ui.npRingCenter(0), 1e-3f)
         }
         val tall = Ui(3f, 320f, 480f, Shape.SN)
         assertEquals(74f, tall.pivotTop, 1e-3f)
         assertEquals(106f, tall.pivotBottom, 1e-3f)
         assertEquals(128f, tall.contentTop, 1e-3f)
-        assertEquals(117f, tall.npArtistBaseline, 1e-3f)
-        assertEquals(141f, tall.npAlbumBaseline, 1e-3f)
-        assertEquals(155f, tall.npArtTop, 1e-3f)
+        assertEquals(125.81f, tall.npArtistBaseline, 1e-3f)
+        assertEquals(150.21f, tall.npAlbumBaseline, 1e-3f)
+        assertEquals(155.51f, tall.npArtTop, 1e-3f)
         assertEquals(110f, tall.detailNameBaseline, 1e-3f)
         assertEquals(150f, tall.detailRingTop, 1e-3f)
         assertEquals(200f, tall.detailLabelBaseline, 1e-3f)
@@ -368,7 +372,7 @@ class LayoutTest {
         assertEquals(372f, tall.overlayMinusY, 1e-3f)
         val mid = Ui(3f, 320f, 465f, Shape.SN)
         assertEquals(66.3f, mid.pivotTop, 0.05f)
-        assertEquals(140f, mid.npArtTop, 1e-3f)
+        assertEquals(145.51f, mid.npArtTop, 1e-3f)
         assertEquals(268f, mid.albumRowsTop, 1e-3f)
         for (h in listOf(449f, 400f, 364.6f, 320f)) {
             val ui = Ui(3f, 320f, h, Shape.SN)
@@ -376,9 +380,6 @@ class LayoutTest {
             assertEquals(n, 58f, ui.pivotTop, 1e-3f)
             assertEquals(n, 86f, ui.pivotBottom, 1e-3f)
             assertEquals(n, 98f, ui.contentTop, 1e-3f)
-            assertEquals(n, 86f, ui.npArtistBaseline, 1e-3f)
-            assertEquals(n, 110f, ui.npAlbumBaseline, 1e-3f)
-            assertEquals(n, 124f, ui.npArtTop, 1e-3f)
             assertEquals(n, 94f, ui.detailNameBaseline, 1e-3f)
             assertEquals(n, 134f, ui.detailRingTop, 1e-3f)
             assertEquals(n, 184f, ui.detailLabelBaseline, 1e-3f)
@@ -415,9 +416,9 @@ class LayoutTest {
             assertEquals(n, 264f, ui.npRingY, 1e-3f)
             assertEquals(n, 64f, ui.npPlayRing, 1e-3f)
             assertEquals(n, 64f, ui.npRowHit, 1e-3f)
-            assertEquals(n, w * 0.13f, ui.npRingCenter(0), 1e-3f)
-            assertEquals(n, w * 0.5f, ui.npRingCenter(1), 1e-3f)
-            assertEquals(n, w * 0.87f, ui.npRingCenter(2), 1e-3f)
+            assertEquals(n, w * 31.9f / 240f, ui.npRingCenter(0), 1e-3f)
+            assertEquals(n, w * 119.9f / 240f, ui.npRingCenter(1), 1e-3f)
+            assertEquals(n, w * 207.4f / 240f, ui.npRingCenter(2), 1e-3f)
             assertEquals(n, 60f, ui.npLyricTop, 1e-3f)
             assertEquals(n, 224f, ui.npLyricBottom, 1e-3f)
             assertTrue(n, ui.npMarkCorner)

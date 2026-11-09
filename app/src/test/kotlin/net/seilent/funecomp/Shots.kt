@@ -176,6 +176,13 @@ val SIZES = listOf(
     Size("wm361x343", 361, 343, NO_BARS),
 )
 
+private val NP_SIZES = listOf(
+    Size("sn411x588", 411, 588, NO_BARS),
+    Size("sn411x604", 411, 604, NO_BARS),
+)
+
+private val NP_SET = setOf("nowplaying", "nowplaying-v1", "nowplaying-playing", "nowplaying-long", "nowplaying-longtrack", "nowplaying-repeat-one", "nowplaying-art", "nowplaying-overlay", "nowplaying-last-all", "rxnp-phone", "rxnp-phone-cover", "lyrmark-mode")
+
 private val HOME = listOf(Page.Home)
 private const val CLOCK_S = 1792584000L
 private val NP = HOME + Page.NowPlaying
@@ -847,6 +854,7 @@ val SHOTS = listOf(
     Shot("nowplaying", pages = NP, prep = ::playing),
     Shot("nowplaying-v1", board = "v1", pages = NP, prep = ::playing),
     Shot("nowplaying-last", pages = NP, prep = { it.queueOp(Enums.QueueCmd.playAt, slot = it.device.playback.state.slots!! - 1) }),
+    Shot("nowplaying-last-all", pages = NP, prep = { it.transport(Enums.TransportCmd.repeat, repeat = Enums.Repeat.all); it.queueOp(Enums.QueueCmd.playAt, slot = it.device.playback.state.slots!! - 1) }),
     Shot("nowplaying-art", pages = NP, prep = ::playing, art = true),
     Shot("nowplaying-art-v1", board = "v1", pages = NP, prep = ::playing, art = true),
     Shot("nowplaying-backdrop", pages = NP, prep = ::playing, backdrop = true),
@@ -1689,8 +1697,9 @@ class Shots {
             }
         }
         val only = System.getProperty("shots.only").orEmpty()
-        for (size in SIZES) {
+        for (size in SIZES + NP_SIZES) {
             for ((shot, tall) in SHOTS.flatMap { if (it.name in ENTRY_SHOTS) listOf(it to false, it to true) else listOf(it to false) }) {
+                if (size in NP_SIZES && shot.name !in NP_SET) continue
                 val name = if (tall) "${shot.name}-tallime" else shot.name
                 if (only.isNotEmpty() && only.split(',').none { "$name-${size.name}".contains(it) }) continue
                 if (shot.backdrop && backdrop == null) continue

@@ -4,6 +4,7 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.gen.TokBoard
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 private const val PIVOT_TOP = 74f
 private const val PIVOT_BOTTOM = 106f
@@ -11,15 +12,10 @@ private const val PIVOT_BASELINE_DROP = 21f
 private const val CONTENT_TOP = 128f
 private const val NP_ART_TOP = 155f
 private const val NP_ART_MAX = 168f
-private const val NP_ART_STACK = 311f
-private const val NP_ALBUM_RISE = 14f
-private const val NP_ARTIST_RISE = 24f
-private const val NP_PROGRESS_FROM_BOTTOM = 156f
-private const val NP_TITLE_FROM_BOTTOM = 118f
-private const val NP_NEXT_COUNT = 3
-private const val NP_RING_FROM_BOTTOM = 40f
 private const val NP_SURPLUS_BELOW = 1f / 3f
-private const val NP_TIMES_ROW = 52.6f
+internal const val NP_TIMES_ROW = 58.77f
+private const val NP_LYRIC_ROOM = 298f
+private const val NP_RING_MARGIN_LANDSCAPE = 24f
 private const val NP_COLUMN_RIGHT = 216f
 private const val NP_ART_TOP_LANDSCAPE = 72f
 private const val NP_ART_LANDSCAPE_STACK = 106f
@@ -39,9 +35,13 @@ private const val OVERLAY_RING_Y = 216f
 private const val OVERLAY_MINUS_Y = 372f
 private const val HOME_PITCH_LANDSCAPE = 48f
 private const val HOME_MENU_X_LANDSCAPE = 240f
-private val NP_RING_X = listOf(0.13f, 0.5f, 0.87f)
-internal val NP_THREE_NEXT_H = Held.Np.npArtTop + NP_TIMES_ROW + NP_PROGRESS_FROM_BOTTOM + (Tok.overlayRing - Held.Np.npRing)
-internal val NP_WIDE_ROW_H = NP_THREE_NEXT_H - Tok.npNextPitch * (NP_NEXT_COUNT - 1)
+private val NP_RING_X = listOf(TokBoard.v1.npRingCx0, TokBoard.v1.npRingCx1, TokBoard.v1.npRingCx2).map { it / Tok.canvasW }
+private val NP_NEXT_COUNT = TokBoard.r1.npNextCount.toInt()
+private val NP_RING_MARGIN = TokBoard.r1.canvasH - TokBoard.r1.npRingY - TokBoard.r1.npRing / 2
+private val NP_R1_ART_BOTTOM = TokBoard.r1.npArtTop + TokBoard.r1.npArt
+private val NP_R1_RING_TOP = TokBoard.r1.npRingY - TokBoard.r1.npRing / 2
+internal val NP_THREE_NEXT_H = TokBoard.v1.npArtTop + NP_TIMES_ROW + NP_RING_MARGIN + Tok.overlayRing + (NP_R1_RING_TOP - NP_R1_ART_BOTTOM)
+internal val NP_WIDE_ROW_H = NP_THREE_NEXT_H - TokBoard.v1.npNextLinePitch * (NP_NEXT_COUNT - 1)
 
 private fun Ui.shortK(anchor: Float): Float = ((Ui.PORTRAIT_H - h) / (NP_ART_TOP - anchor)).coerceIn(0f, 1f)
 private fun Ui.byK(tall: Float, short: Float, anchor: Float) = tall + (short - tall) * shortK(anchor)
@@ -73,40 +73,50 @@ val Ui.headerScale: Float get() = when (shape) {
 val Ui.headerBaseline get() = Tok.page_headerBaseline * headerScale
 
 val Ui.npTextX: Float get() = when (shape) {
-    Shape.P, Shape.SN -> Tok.edge
+    Shape.P, Shape.SN -> LayoutTok.npTextX
     Shape.SW -> NP_COLUMN_RIGHT - NP_ART_MAX + npArt
     Shape.L -> NP_COLUMN_RIGHT
 }
+val Ui.npTextRight: Float get() = when (shape) {
+    Shape.P, Shape.SN -> w - (Tok.canvasW - LayoutTok.npTextRight)
+    Shape.SW, Shape.L -> w - Tok.edge
+}
+val Ui.npArtX: Float get() = when (shape) {
+    Shape.P, Shape.SN -> LayoutTok.npArtX
+    Shape.SW, Shape.L -> Tok.edge
+}
 val Ui.npArtistBaseline: Float get() = when (shape) {
-    Shape.P, Shape.SN -> npAlbumBaseline - NP_ARTIST_RISE
+    Shape.P, Shape.SN -> npAlbumBaseline - (TokBoard.r1.npAlbumY - TokBoard.r1.npArtistY)
     Shape.SW, Shape.L -> NP_ARTIST_LANDSCAPE
 }
 val Ui.npAlbumBaseline: Float get() = when (shape) {
-    Shape.P, Shape.SN -> npArtTop - NP_ALBUM_RISE
+    Shape.P, Shape.SN -> npArtTop - (TokBoard.r1.npArtTop - TokBoard.r1.npAlbumY)
     Shape.SW, Shape.L -> NP_ALBUM_LANDSCAPE
 }
 val Ui.npArtTop: Float get() = when (shape) {
-    Shape.P -> npProgressY - npArt
-    Shape.SN -> byK(NP_ART_TOP, Held.Np.npArtTop, Held.Np.npArtTop)
+    Shape.P, Shape.SN -> npArtBottom - npArt
     Shape.SW, Shape.L -> NP_ART_TOP_LANDSCAPE
 }
+val Ui.npArtBottom: Float get() = when (shape) {
+    Shape.P, Shape.SN -> NP_R1_ART_BOTTOM + npStackDrop
+    Shape.SW, Shape.L -> NP_ART_TOP_LANDSCAPE + npArt
+}
 val Ui.npProgressY: Float get() = when (shape) {
-    Shape.P, Shape.SN -> h - NP_PROGRESS_FROM_BOTTOM - npRowExtra - npLift + npNextDrop
+    Shape.P, Shape.SN -> npArtBottom
     Shape.SW, Shape.L -> NP_ART_TOP_LANDSCAPE + npArt + NP_PROGRESS_GAP_LANDSCAPE
 }
 val Ui.npSeekBottom get() = npProgressY + Held.Np.npSeekBandBottom - Held.Np.npProgressY
 val Ui.npArt: Float get() = when (shape) {
-    Shape.P -> min(NP_ART_MAX, min(w - 2 * Tok.edge, h - NP_ART_STACK - npRowExtra))
-    Shape.SN -> min(NP_ART_MAX, min(w - 2 * Tok.edge, npProgressY - npArtTop))
+    Shape.P, Shape.SN -> min(TokBoard.r1.npArt, npArtBottom - LayoutTok.npArtTop)
     Shape.SW -> min(NP_ART_MAX, npRingY - npPlayRing / 2 - NP_ART_LANDSCAPE_STACK)
     Shape.L -> min(NP_ART_MAX, h - NP_ART_LANDSCAPE_STACK)
 }.coerceAtLeast(0f)
 val Ui.npTitleBaseline: Float get() = when (shape) {
-    Shape.P, Shape.SN -> h - NP_TITLE_FROM_BOTTOM - npRowExtra - npLift + npNextDrop
+    Shape.P, Shape.SN -> TokBoard.r1.npTitleY + npStackDrop
     Shape.SW, Shape.L -> NP_TITLE_LANDSCAPE
 }
 val Ui.npNextBaseline: Float get() = when (shape) {
-    Shape.P, Shape.SN -> npTitleBaseline + Tok.npNextPitch
+    Shape.P, Shape.SN -> npTitleBaseline + LayoutTok.npNextDrop
     Shape.SW, Shape.L -> NP_NEXT_LANDSCAPE
 }
 val Ui.npNextCount: Int get() = when (shape) {
@@ -115,32 +125,32 @@ val Ui.npNextCount: Int get() = when (shape) {
 }
 val Ui.npPlayRing: Float get() = when (shape) {
     Shape.P, Shape.SW, Shape.L -> Tok.overlayRing
-    Shape.SN -> if (h >= NP_WIDE_ROW_H) Tok.overlayRing else Held.Np.npRing
+    Shape.SN -> if (h >= NP_WIDE_ROW_H) Tok.overlayRing else LayoutTok.npRing
 }
 val Ui.npRowHit: Float get() = when (shape) {
     Shape.P, Shape.SW, Shape.L -> Tok.overlayRing
-    Shape.SN -> if (h >= NP_WIDE_ROW_H) Tok.overlayRing else 2 * (npRingY - npNextBaseline - Tok.npNextPitch * (npNextCount - 1))
+    Shape.SN -> if (h >= NP_WIDE_ROW_H) Tok.overlayRing else 2 * (npRingY - npNextBaseline - LayoutTok.npNextLinePitch * (npNextCount - 1))
 }
-val Ui.npRingY: Float get() = h - (NP_RING_FROM_BOTTOM - Held.Np.npRing / 2) - npPlayRing / 2 - npLift
+val Ui.npRingY: Float get() = when (shape) {
+    Shape.P, Shape.SN -> h - NP_RING_MARGIN - npPlayRing / 2 - npLift
+    Shape.SW, Shape.L -> h - NP_RING_MARGIN_LANDSCAPE - npPlayRing / 2
+}
 val Ui.npLyricTop: Float get() = when (shape) {
     Shape.P -> npLyricBottom - NP_LYRIC_ROOM
     Shape.SN -> max(Tok.npTextTop, npLyricBottom - NP_LYRIC_ROOM)
     Shape.SW, Shape.L -> npAlbumBaseline - (Tok.npAlbumBaseline - Tok.npTextTop)
 }
 val Ui.npLyricBottom: Float get() = when (shape) {
-    Shape.P, Shape.SN, Shape.L -> npNextBaseline + Tok.npNextPitch * (npNextCount - 1)
+    Shape.P, Shape.SN, Shape.L -> npNextBaseline + LayoutTok.npNextLinePitch * (npNextCount - 1)
     Shape.SW -> npRingY - npPlayRing / 2 - Tok.statusGap
 }
+private val Ui.npH0: Float get() = Ui.PORTRAIT_H * Tok.canvasW / Ui.PORTRAIT_W + NP_RING_MARGIN + npPlayRing + NP_R1_RING_TOP - TokBoard.r1.canvasH
 private val Ui.npLift: Float get() = when (shape) {
-    Shape.P -> (h - Ui.PORTRAIT_H - npRowExtra).coerceAtLeast(0f) * NP_SURPLUS_BELOW
-    Shape.SN, Shape.SW, Shape.L -> 0f
+    Shape.P, Shape.SN -> (h - npH0).coerceAtLeast(0f) * NP_SURPLUS_BELOW
+    Shape.SW, Shape.L -> 0f
 }
-private val Ui.npRowExtra: Float get() = when (shape) {
-    Shape.P, Shape.SN, Shape.SW -> npPlayRing - Held.Np.npRing
-    Shape.L -> 0f
-}
-private val Ui.npNextDrop: Float get() = Tok.npNextPitch * (NP_NEXT_COUNT - npNextCount)
-private val NP_LYRIC_ROOM = NP_ART_MAX + NP_ALBUM_RISE + (Tok.npAlbumBaseline - Tok.npTextTop) + (NP_PROGRESS_FROM_BOTTOM - NP_TITLE_FROM_BOTTOM) + Tok.npNextPitch * NP_NEXT_COUNT
+private val Ui.npStackDrop: Float get() = h - npLift - NP_RING_MARGIN - npPlayRing - NP_R1_RING_TOP + npNextDrop
+private val Ui.npNextDrop: Float get() = LayoutTok.npNextLinePitch * (NP_NEXT_COUNT - npNextCount)
 
 fun Ui.npRingCenter(index: Int): Float {
     val f = NP_RING_X[index]
@@ -154,17 +164,17 @@ fun Ui.npTransportX(index: Int) = (npRingCenter(index) + npRingCenter(index + 1)
 
 val Ui.npStatusGap get() = TokBoard.r1.npStatusGap
 
-fun npHeartFits(art: Float) = art >= Held.Np.npRing + 2 * Tok.detailRingInset
+fun npHeartFits(art: Float) = art >= LayoutTok.npRing + 2 * Tok.detailRingInset
 
-fun Ui.npHeartYPx(artY: Float) = artY + px(Tok.detailRingInset) + px(Held.Np.npRing) / 2
-val Ui.npHeartHitPx get() = px(Held.Np.npRing) + px(Tok.detailRingGap)
+fun Ui.npHeartYPx(artY: Float) = artY.roundToInt() + px(Tok.detailRingInset).roundToInt() + px(LayoutTok.npRing) / 2
+val Ui.npHeartHitPx get() = px(LayoutTok.npRing) + px(Tok.detailRingGap)
 
 val Ui.npMarkCorner: Boolean get() = when (shape) {
     Shape.P, Shape.SN -> false
     Shape.SW, Shape.L -> true
 }
 
-fun npMarkFits(art: Float, corner: Boolean) = art >= if (corner) 2 * Tok.detailRingInset + 2 * Held.Np.npRing + Tok.detailRingGap / 2 else Held.Np.npRing
+fun npMarkFits(art: Float, corner: Boolean) = art >= if (corner) 2 * Tok.detailRingInset + 2 * LayoutTok.npRing + Tok.detailRingGap / 2 else LayoutTok.npRing
 
 val Ui.detailNameBaseline get() = pivotBaseline + Tok.detailNameDrop
 val Ui.detailRingTop: Float get() = when (shape) {

@@ -14,8 +14,6 @@ class HeldTest {
     fun theHeldValuesKeepTheirOldPin() {
         assertEquals(
             listOf(
-                listOf("npArtTop", "npArtTop", 124f, "N4", "znp", "6e3302724"),
-                listOf("npRing", "npRing", 32f, "N5", "znp", "6e3302724"),
                 listOf("npSeekBandX0", "npSeekBandX0", 8f, "N7", "znp", "6e3302724"),
                 listOf("npProgressY", "npProgressY", 200f, "N7", "znp", "6e3302724"),
                 listOf("npSeekBandBottom", "npSeekBandBottom", 219.8f, "N7", "znp", "6e3302724"),
@@ -68,7 +66,7 @@ class HeldTest {
             ),
             rows(Held.Jump.entries),
         )
-        assertEquals(26, Held.entries.size)
+        assertEquals(24, Held.entries.size)
         assertEquals(setOf("Entry", "Jump", "Nav", "Np", "Pivot", "Qp", "Rest"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }

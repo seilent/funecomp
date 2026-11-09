@@ -26,6 +26,7 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Held
+import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.NP_THREE_NEXT_H
 import net.seilent.funecomp.ui.NP_WIDE_ROW_H
@@ -142,7 +143,7 @@ class ShortLayoutTest {
         val texts = listOf("np.elapsed", "np.remaining", "np.title", "np.artist", "np.album", "np.next.0", "np.next.1", "np.next.2") + extra
         val heartRing = listOf("np.heart.off", "np.heart.on").firstNotNullOfOrNull { box(it) }
         val visuals = texts.map { it to ink(it) } + listOf("np.art" to box("np.art"), "np.mark" to box("np.mark"), "np.heart.ring" to heartRing) +
-            listOf(ring("np.shuffle", Held.Np.npRing, ui), ring("np.repeat", Held.Np.npRing, ui), ring("np.toggle", ui.npPlayRing, ui), ring("np.prev", Tok.overlayGlyph, ui), ring("np.nextTrack", Tok.overlayGlyph, ui))
+            listOf(ring("np.shuffle", LayoutTok.npRing, ui), ring("np.repeat", LayoutTok.npRing, ui), ring("np.toggle", ui.npPlayRing, ui), ring("np.prev", Tok.overlayGlyph, ui), ring("np.nextTrack", Tok.overlayGlyph, ui))
         need(visuals, listOf("np.title", "np.artist", "np.album") + next + extra + listOfNotNull("np.elapsed".takeIf { seek }, "np.remaining".takeIf { seek }, "np.art".takeIf { art }, "np.heart.ring".takeIf { heart }, "np.mark".takeIf { mark }))
         val onArt = when (ui.shape) {
             Shape.P, Shape.SN -> HEART_ON_ART
@@ -207,7 +208,7 @@ class ShortLayoutTest {
         times(c)
         start(c, listOf(Page.Home, Page.NowPlaying))
         val canvases = listOf(
-            Canvas("sn960x986", 960f / PX, 986f / PX), Canvas("sn1600x1643", 1600f / PX, 1643f / PX), CANVASES.first(),
+            wide(960f), wide(1600f), CANVASES.first(),
             Canvas("p960x1440", 960f / PX, 1440f / PX), Canvas("l1503x1000", 1503f / PX, 1000f / PX),
         )
         for (s in canvases) {
@@ -337,10 +338,11 @@ class ShortLayoutTest {
         const val MAX_W = 1920
         const val PX = 2.625f
         val ALBUM: String = java.lang.Long.toUnsignedString(net.seilent.funecomp.sim.Library.synthetic().tracks.first().id)
-        val COLUMNS = listOf(960f to 1440f, 960f to 1395f, 960f to 1347f, 960f to 1200f, 1600f to 1823f, 1600f to 1822f, 1600f to 1643f, 1600f to 1642f, 960f to 960f)
-        val BOUNDARIES = listOf(
-            960f to 1440f, 960f to 1439f, 960f to 1094f, 960f to 1093f, 960f to 986f, 960f to 985f, 1000f to 1001f, 1001f to 1000f,
-            1061f to 960f, 1063f to 960f, 1497f to 1000f, 1503f to 1000f,
+        private fun wide(w: Float) = ceil(NP_WIDE_ROW_H * w / 320f).let { Canvas("sn${w.toInt()}x${it.toInt()}", w / PX, it / PX) }
+        private fun steps(w: Float) = listOf(NP_THREE_NEXT_H, NP_WIDE_ROW_H).flatMap { h -> ceil(h * w / 320f).let { listOf(w to it, w to it - 1f) } }
+        val COLUMNS = listOf(960f to 1440f, 960f to 1395f, 960f to 1347f, 960f to 1200f) + steps(1600f) + listOf(960f to 960f)
+        val BOUNDARIES = listOf(960f to 1440f, 960f to 1439f) + steps(960f) + listOf(
+            1000f to 1001f, 1001f to 1000f, 1061f to 960f, 1063f to 960f, 1497f to 1000f, 1503f to 1000f,
         )
         val CANVASES = SIZES.filter { it.name == "cover474x419" || it.name == "sn411x438" || it.name == "wm361x343" }.map { Canvas(it.name, it.w, it.h, it.bars) } +
             BOUNDARIES.map { (w, h) -> Canvas("${w.toInt()}x${h.toInt()}", w / PX, h / PX) } +
