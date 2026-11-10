@@ -2,6 +2,7 @@ package net.seilent.funecomp
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.click
@@ -9,6 +10,7 @@ import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -16,6 +18,10 @@ import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.espresso.Espresso
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tags
@@ -29,6 +35,7 @@ import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.proto.gen.Tok
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -53,11 +60,20 @@ class SelectorUiTest {
 
     private fun startAt(w: Int, h: Int, board: String = "ap80", to: String? = null): SimControl = startAt(w.dp, h.dp, board, to)
 
+    private class Owner : LifecycleOwner {
+        val registry = LifecycleRegistry(this).apply { currentState = Lifecycle.State.RESUMED }
+        override val lifecycle: Lifecycle get() = registry
+    }
+
+    private val owner = Owner()
+
     private fun startAt(w: Dp, h: Dp, board: String = "ap80", to: String? = null): SimControl {
         val c = SimControl(board, btRole = role)
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(w, h)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
+            CompositionLocalProvider(LocalLifecycleOwner provides owner) {
+                Box(Modifier.requiredSize(w, h)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
+            }
         }
         settle(1000)
         to?.let { rule.walkPivots(c.device.schema.rows, it) { settle(1000) } }
@@ -145,10 +161,127 @@ class SelectorUiTest {
         assertTrue(shell.sheet.shown)
         assertTrue(top("set.navBar") < before)
         clearsThePanel("navBar", 411, 640)
+        val open = top("set.navBar")
         shell.sheet.close()
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeBy(Tok.motion_scroll.toLong() / 2)
+        val half = top("set.navBar")
+        assertTrue("$open $half $before", half - open > (before - open) / 2)
+        rule.mainClock.advanceTimeBy(Tok.motion_scroll.toLong())
+        assertEquals(before, top("set.navBar"), 1.5f)
+        assertTrue(rule.onAllNodesWithTag("sheet.panel").fetchSemanticsNodes().isNotEmpty())
         settle(1000)
         assertEquals(before, top("set.navBar"), 1.5f)
         assertEquals(emptyList<String>(), writes(c))
+    }
+
+    private fun pastTheEnd(): Float {
+        startAt(411, 640, "ap80", "screens")
+        val before = scrolledTo("navBar")
+        rule.onNodeWithTag("set.navBar").performClick()
+        settle(600)
+        assertTrue(shell.sheet.shown)
+        assertTrue(shell.sheet.pastList != null)
+        return before
+    }
+
+    private fun atItsEnd(before: Float) {
+        assertEquals(0f, shell.sheet.past)
+        assertNull(shell.sheet.pastList)
+        assertEquals(before, top("set.navBar"), 1.5f)
+    }
+
+    @Test
+    fun aBackDuringThePreScrollPutsTheListAtItsEndAtOnce() {
+        startAt(411, 640, "ap80", "screens")
+        val before = scrolledTo("navBar")
+        rule.onNodeWithTag("set.navBar").performClick()
+        val end = rule.mainClock.currentTime + Tok.motion_scroll.toLong()
+        while (top("set.navBar") >= before && rule.mainClock.currentTime < end) rule.mainClock.advanceTimeByFrame()
+        assertTrue(shell.sheet.pastList != null)
+        assertTrue(top("set.navBar") < before)
+        rule.runOnIdle { shell.sheet.close() }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        atItsEnd(before)
+    }
+
+    @Test
+    fun aSyntheticKeeplessSwapPutsTheListAtItsEndAtOnce() {
+        val before = pastTheEnd()
+        rule.runOnIdle { shell.sheet.openEntry("minutes") {} }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        atItsEnd(before)
+    }
+
+    @Test
+    fun aSheetReplacedByAnotherWithAKeepKeepsItsRowAbovePanel() {
+        val before = pastTheEnd()
+        val keep = shell.sheet.keep
+        rule.runOnIdle { shell.sheet.open("again", listOf("a", "b"), keep = keep) {} }
+        settle(600)
+        assertTrue(shell.sheet.shown)
+        assertTrue(top("set.navBar") < before)
+        clearsThePanel("navBar", 411, 640)
+    }
+
+    @Test
+    fun aSheetReplacedByAShorterOneOnTheSameListLandsTheRowJustAboveIt() {
+        val before = pastTheEnd()
+        val keep = shell.sheet.keep
+        val first = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot.top
+        rule.runOnIdle { shell.sheet.open("again", listOf("a"), keep = keep) {} }
+        settle(600)
+        val panel = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot
+        assertTrue("${panel.top} $first", panel.top > first)
+        val d = rule.density.density
+        val gutter = Ui.of((411 * d).roundToInt().toFloat(), (640 * d).roundToInt().toFloat()).px(Tok.gutter)
+        val row = rule.onNodeWithTag("set.navBar").fetchSemanticsNode().boundsInRoot
+        assertTrue("${row.top} $before", row.top < before)
+        assertEquals(panel.top - gutter, row.bottom, 1.5f)
+    }
+
+    @Test
+    fun aCloseAfterAPageChangePutsTheListAtItsEndAtOnce() {
+        pastTheEnd()
+        rule.runOnIdle {
+            shell.nav.reset(listOf(Page.Home, Page.NowPlaying))
+            shell.sheet.close()
+        }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(0f, shell.sheet.past)
+        assertNull(shell.sheet.pastList)
+    }
+
+    @Test
+    fun aCloseWhileStoppedPutsTheListAtItsEndAtOnce() {
+        val before = pastTheEnd()
+        rule.runOnIdle {
+            owner.registry.currentState = Lifecycle.State.CREATED
+            shell.sheet.close()
+            owner.registry.currentState = Lifecycle.State.RESUMED
+        }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        atItsEnd(before)
+    }
+
+    @Test
+    fun aCloseOnItsPageReturnsWithTheClose() {
+        val before = pastTheEnd()
+        rule.runOnIdle { shell.sheet.close() }
+        rule.waitForIdle()
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        assertTrue(shell.sheet.pastList != null)
+        settle(1000)
+        atItsEnd(before)
     }
 
     private fun rowClearsTheGutterAt(w: Dp, h: Dp) {

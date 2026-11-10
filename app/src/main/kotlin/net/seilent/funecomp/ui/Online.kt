@@ -164,7 +164,7 @@ private fun ArtRows(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, cr
                     val u = usage?.get(id)
                     if (!on && u != null && u.photos > 0) clearSheet(ctx, Sources.label(id), u, keep) { clear(id) }
                 }, { onSources(sources.moved(id, it)) }) {
-                    ctx.sheet.openEntry("fanart.tv key") {
+                    ctx.sheet.openEntry("fanart.tv key", keep = keep) {
                         TextEntry(sources.fanartTvKey, secret = true) { k ->
                             ctx.sheet.close()
                             onSources(sources.copy(fanartTvKey = k.trim()))

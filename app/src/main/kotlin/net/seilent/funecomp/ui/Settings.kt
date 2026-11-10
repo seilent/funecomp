@@ -322,9 +322,9 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
             null -> {}
         }
     }
-    fun typeMinutes(r: Row, token: Any) {
+    fun typeMinutes(r: Row, token: Any, keep: Keep) {
         val hint = minutesLeft().toString()
-        ctx.sheet.openEntry((r.label ?: r.key ?: "").lowercase(), owner = token) {
+        ctx.sheet.openEntry((r.label ?: r.key ?: "").lowercase(), owner = token, keep = keep) {
             Entry("", unit = r.words.lastOrNull()?.substringAfterLast(' ', "")?.lowercase().orEmpty(), keyboard = KeyboardType.Number, hint = hint) { text ->
                 val s = r.typedMinutes(text, minutesLeft())
                 if (s !is Send.Refuse) ctx.sheet.close()
@@ -338,7 +338,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
         val sel = r.selector(values[key], minutesLeft())
         opened = Opened(token, r)
         ctx.sheet.open((r.label ?: key).lowercase(), sel.items, sel.focus, sel.info, owner = token, keep = keep) { i ->
-            if (sel.typed && i == sel.items.lastIndex) typeMinutes(r, token) else send(r.picked(i, live.settings.values[key], minutesLeft()), r)
+            if (sel.typed && i == sel.items.lastIndex) typeMinutes(r, token, keep) else send(r.picked(i, live.settings.values[key], minutesLeft()), r)
         }
     }
     fun confirm() {

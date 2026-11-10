@@ -140,6 +140,19 @@ class OnlineTest {
         settle(600)
     }
 
+    private fun keptClearOfThePanel(shell: Shell, tag: String, w: Int, h: Int) {
+        val d = rule.density.density
+        val gutter = Ui.of((w * d).roundToInt().toFloat(), (h * d).roundToInt().toFloat()).px(Tok.gutter)
+        val row = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+        val panel = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot
+        assertTrue("${row.bottom} ${panel.top} $gutter", row.bottom <= panel.top - gutter + 0.5f)
+        if (shell.sheet.past > 0f) {
+            assertEquals(panel.top - gutter, row.bottom, 1.5f)
+        } else {
+            assertNull(shell.sheet.pastList)
+        }
+    }
+
     private fun shows(tag: String, text: String) {
         rule.onNode(hasText(text) and hasAnyAncestor(hasTestTag(tag)), useUnmergedTree = true).assertExists()
     }
@@ -498,6 +511,36 @@ class OnlineTest {
         assertTrue(bounds("lyr.src.netease").top < bounds("lyr.src.lrclib").top)
         tap("lyr.src.netease")
         assertEquals(listOf("off", "on", "move down"), shell.sheet.items)
+    }
+
+    @Test
+    fun theFanartKeyEntryKeepsItsRowJustAboveThePanel() {
+        sources = Sources.COMMONS.copy(theAudioDb = true, fanartTv = true, deezer = true, order = Sources.order("deezer,commons,theaudiodb"))
+        val (_, shell) = start(listOf(Page.Home, Page.Online()), w = 360.dp, h = 640.dp, ime = 256.dp)
+        tap("art.src.fanarttv")
+        pick(4)
+        assertEquals("fanart.tv key", shell.sheet.title)
+        keptClearOfThePanel(shell, "art.src.fanarttv", 360, 640)
+    }
+
+    @Test
+    fun theListenBrainzTokenEntryKeepsItsRowJustAboveThePanel() {
+        val accounts = Accounts(true, "", "", "seilent", "session", true, "token", "seilent")
+        val (_, shell) = start(listOf(Page.Home, Page.Online(ONLINE_SCROBBLING)), scrobble = ScrobbleView(accounts, queued = 3), w = 360.dp, h = 640.dp)
+        tap("scrobble.token")
+        pick(0)
+        assertEquals("listenbrainz token", shell.sheet.title)
+        keptClearOfThePanel(shell, "scrobble.token", 360, 640)
+    }
+
+    @Test
+    fun theListenBrainzSignOutConfirmKeepsItsRowJustAboveThePanel() {
+        val accounts = Accounts(true, "", "", "seilent", "session", true, "token", "seilent")
+        val (_, shell) = start(listOf(Page.Home, Page.Online(ONLINE_SCROBBLING)), scrobble = ScrobbleView(accounts, queued = 3), w = 360.dp, h = 640.dp)
+        tap("scrobble.token")
+        pick(1)
+        assertEquals(2, shell.sheet.items.size)
+        keptClearOfThePanel(shell, "scrobble.token", 360, 640)
     }
 
     @Test

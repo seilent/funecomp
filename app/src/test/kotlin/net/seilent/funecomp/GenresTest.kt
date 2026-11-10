@@ -15,6 +15,7 @@ import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Tags
+import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.QueueMirror
 import net.seilent.funecomp.ui.App
@@ -119,6 +120,27 @@ class GenresTest {
         settle()
         assertEquals(0, rule.onAllNodesWithTag("pivot.genres").fetchSemanticsNodes().size)
         assertEquals(Enums.View.folders, gets.last())
+    }
+
+    @Test
+    fun aGenrePlayPickClosesItsSheetWithTheMotionOverNowPlaying() {
+        start()
+        pivot("genres")
+        hold("row.3")
+        val open = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot
+        rule.runOnIdle { shell.sheet.accept(0) }
+        rule.waitForIdle()
+        val mid = rule.mainClock.currentTime + Tok.motion_sheet.toLong() / 2
+        rule.mainClock.advanceTimeByFrame()
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(Page.NowPlaying, shell.nav.top)
+        assertEquals(0f, shell.sheet.past)
+        assertNull(shell.sheet.pastList)
+        rule.mainClock.advanceTimeBy(mid - rule.mainClock.currentTime)
+        assertTrue(rule.onAllNodesWithTag("sheet.panel").fetchSemanticsNodes().isNotEmpty())
+        val top = rule.onNodeWithTag("sheet.panel").fetchSemanticsNode().boundsInRoot.top
+        assertTrue("${open.top} $top ${open.bottom}", top > open.top + 1f && top < open.bottom - 1f)
+        assertEquals("J-Pop", plays.single().parent)
     }
 
     @Test

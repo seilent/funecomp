@@ -23,6 +23,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -50,10 +51,15 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.max
 import kotlin.math.roundToInt
 
 internal const val OFF = "off"
@@ -107,6 +113,12 @@ class SheetState {
     private var owner: Any? = null
     var keep: Keep? = null
         private set
+    var page: () -> Any? = { null }
+    var started: () -> Boolean = { true }
+    private var openedOn: Any? = null
+    var stoppedClose = false
+        private set
+    val pageChanged: Boolean get() = page() != openedOn
     var past by mutableFloatStateOf(0f)
     var pastList by mutableStateOf<LazyListState?>(null)
 
@@ -135,6 +147,8 @@ class SheetState {
         this.owner = owner
         this.guard = guard
         armed = guard > 0
+        openedOn = page()
+        stoppedClose = false
         opened++
         this.accent = accent
         this.onPress = onPress
@@ -158,17 +172,19 @@ class SheetState {
         shown = true
     }
 
-    fun openEntry(title: String, owner: Any? = null, entry: @Composable () -> Unit) {
+    fun openEntry(title: String, owner: Any? = null, keep: Keep? = null, entry: @Composable () -> Unit) {
         this.owner = owner
         guard = 0L
         armed = false
+        openedOn = page()
+        stoppedClose = false
         opened++
         this.accent = { -1 }
         this.onPress = null
         this.onHold = null
         this.onScrim = null
         holds = false
-        this.keep = null
+        this.keep = keep
         this.title = title
         this.lines = { emptyList() }
         this.lineValues = { emptyList() }
@@ -224,6 +240,7 @@ class SheetState {
 
     fun close(dismissed: Boolean = true) {
         if (!shown) return
+        stoppedClose = !started()
         shown = false
         armed = false
         owner = null
@@ -255,13 +272,23 @@ fun onOffSheet(ctx: Ctx, title: String, on: Boolean, keep: Keep? = null, owner: 
 }
 
 private suspend fun SheetState.keepRow(k: Keep, panelTop: Float, gutter: Float) {
-    past = 0f
-    pastList = null
+    val lifted = if (pastList === k.list) past else 0f
+    if (lifted == 0f) {
+        past = 0f
+        pastList = null
+    }
     val info = k.list.layoutInfo
     val row = info.visibleItemsInfo.firstOrNull { it.index == k.index } ?: return
     val top = k.top.roundToInt().toFloat()
     val rowTop = top + row.offset
     val d = ceil(rowTop + row.size - (panelTop.roundToInt() - gutter))
+    if (d < 0f && lifted > 0f) {
+        val back = max(d, -lifted)
+        k.list.animateScrollBy(back, tween(Tok.motion_scroll.toInt(), easing = EaseIn))
+        past = lifted + back
+        if (past == 0f) pastList = null
+        return
+    }
     if (d <= 0f || rowTop - d < top) return
     val last = info.visibleItemsInfo.last()
     val left = if (last.index == info.totalItemsCount - 1) (last.offset + last.size - info.viewportEndOffset).toFloat() else 0f
@@ -324,17 +351,36 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
     val ui = LocalUi.current
     val progress = remember { Animatable(0f) }
     val panelTop = remember { floatArrayOf(0f) }
-    LaunchedEffect(state.shown) {
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(state, lifecycle) {
+        state.started = { lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED) }
+        onDispose { state.started = { true } }
+    }
+    LaunchedEffect(state.shown, state.opened) {
         if (state.shown) {
+            if (state.pastList != null && state.pastList !== state.keep?.list) {
+                state.past = 0f
+                state.pastList = null
+            }
             state.keep?.let { state.keepRow(it, panelTop[0], ui.px(Tok.gutter)) }
             progress.animateTo(1f, tween(Tok.motion_sheet.toInt(), easing = Decel))
-        } else {
-            progress.animateTo(0f, tween(Tok.motion_sheet.toInt(), easing = Decel))
-            val back = state.pastList
-            val over = back?.pastEnd() ?: 0f
-            if (back != null && over > 0f) back.animateScrollBy(-over, tween(Tok.motion_scroll.toInt(), easing = EaseIn))
+        } else if (progress.value == 0f || state.stoppedClose) {
+            progress.snapTo(0f)
             state.past = 0f
             state.pastList = null
+        } else if (state.pageChanged) {
+            state.past = 0f
+            state.pastList = null
+            progress.animateTo(0f, tween(Tok.motion_sheet.toInt(), easing = Decel))
+        } else {
+            val back = state.pastList
+            val over = back?.pastEnd() ?: 0f
+            coroutineScope {
+                launch { progress.animateTo(0f, tween(Tok.motion_sheet.toInt(), easing = Decel)) }
+                if (back != null && over > 0f) back.animateScrollBy(-over, tween(Tok.motion_scroll.toInt(), easing = Decel))
+                state.past = 0f
+                state.pastList = null
+            }
         }
     }
     LaunchedEffect(state.opened) {

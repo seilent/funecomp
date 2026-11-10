@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -129,6 +130,7 @@ fun App(
             LocalSheet provides shell.sheet,
         ) {
             val nav = shell.nav
+            SideEffect { shell.sheet.page = { nav.top } }
             val browse = remember(nav) { BrowseSessions() }
             val current by rememberUpdatedState(device)
             val ctx = Ctx(device, control, nav, shell.sheet, shell.toast, browse) { current }
