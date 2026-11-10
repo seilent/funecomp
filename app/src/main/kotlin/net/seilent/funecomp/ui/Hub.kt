@@ -34,6 +34,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
@@ -185,7 +186,9 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     val music = items.indexOfFirst { it.page == Page.Music }
     val measurer = rememberTextMeasurer()
     val wordStyle = textStyle(Roles.homeItem, white(Roles.homeItem.alpha))
-    val ink = remember(items, wordStyle, ui) { items.maxOfOrNull { val t = shown(it.name, Roles.homeItem.case); measurer.measure(t, wordStyle, softWrap = false, maxLines = 1).getPathForRange(0, t.length).getBounds().right } ?: 0f }
+    val bold = Roles.homeItem.copy(weight = FontWeight.Bold)
+    val boldStyle = textStyle(bold, white(bold.alpha))
+    val ink = remember(items, wordStyle, boldStyle, ui) { items.maxOfOrNull { val t = shown(it.name, Roles.homeItem.case); listOf(wordStyle, boldStyle).maxOf { s -> measurer.measure(t, s, softWrap = false, maxLines = 1).getPathForRange(0, t.length).getBounds().right } } ?: 0f }
     val fit = if (ui.shape == Shape.L) minOf(0f, ui.w - Tok.edge - ui.homeTextX - ink / ui.u) else 0f
     val pitch = ui.homePitch
     val x = ui.px(ui.homeTextX + fit)
@@ -230,13 +233,15 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                         val line = remember(sub, subStyle, ui) { measurer.measure(shown(sub, Roles.homeSubtitle.case), subStyle, softWrap = false, maxLines = 1) }
                         val blockX = x - ui.px(barX) + maxOf(word.size.width.toFloat(), ui.px(LayoutTok.homeSubtitleX) + minOf(line.size.width.toFloat(), subW)) / 2
                         val blockY = (baseline - top - word.firstBaseline + subBaseline - top + line.size.height - line.firstBaseline) / 2
+                        val press = rememberPress()
                         Pressable(
                             { onOpen(item.page) },
                             Modifier.at(ui.px(barX), top).size((ui.px(ui.w) - ui.px(barX)).dp(), ui.px(pitch).dp()).testTag("home.${item.name}"),
                             onDown = { focus = i },
                             origin = TransformOrigin(blockX / (ui.px(ui.w) - ui.px(barX)), blockY / ui.px(pitch)),
+                            press = press,
                         ) {
-                            RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c)
+                            RoleText(item.name, if (press.held) bold else Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c)
                             RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(LayoutTok.homeSubtitleX), subBaseline - top, subW))
                         }
                     }

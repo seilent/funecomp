@@ -170,9 +170,8 @@ private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: B
 }
 
 @Composable
-fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, onDown: () -> Unit = {}, origin: TransformOrigin = TransformOrigin.Center, content: @Composable () -> Unit) {
-    val p = rememberPress()
-    Box(modifier.press(onTap, onLong, p, onDown).pressScale(p, origin)) { content() }
+fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, onDown: () -> Unit = {}, origin: TransformOrigin = TransformOrigin.Center, press: PressState = rememberPress(), content: @Composable () -> Unit) {
+    Box(modifier.press(onTap, onLong, press, onDown).pressScale(press, origin)) { content() }
 }
 
 @Composable

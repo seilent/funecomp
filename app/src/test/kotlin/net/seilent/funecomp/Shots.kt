@@ -840,6 +840,7 @@ val SHOTS = listOf(
         homeShow("home.settings")
         rule.onNodeWithTag("home.settings").performTouchInput { down(center) }
     },
+    Shot("home-np-down", pages = HOME, prep = ::playing, held = true) { rule.onNodeWithTag("home.now playing").performTouchInput { down(center) } },
     Shot("home-tap-back", pages = HOME, prep = ::playing) {
         homeShow("home.settings")
         rule.onNodeWithTag("home.settings").performClick()

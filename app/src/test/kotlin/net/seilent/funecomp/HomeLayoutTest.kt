@@ -33,6 +33,7 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.Roles
 import net.seilent.funecomp.ui.Shape
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
@@ -104,6 +105,16 @@ class HomeLayoutTest {
 
     private fun inkRight(item: String) = layout(word(item)).let { it.getPathForRange(0, it.layoutInput.text.length).getBounds().right }
 
+    private fun boldInkRight(item: String) = layout(word(item)).layoutInput.let { input ->
+        TextMeasurer(input.fontFamilyResolver, input.density, input.layoutDirection).measure(input.text, input.style.copy(fontWeight = FontWeight.Bold), softWrap = false, maxLines = 1).let { it.getPathForRange(0, it.layoutInput.text.length).getBounds().right }
+    }
+
+    private fun sub(item: String) = word(item).let { wn -> texts(item).single { it.id != wn.id } }
+
+    private fun pressed(item: String?) {
+        names.forEach { assertEquals("$it with ${item ?: "nothing"} pressed", if (it == item) FontWeight.Bold else FontWeight(350), layout(word(it)).layoutInput.style.fontWeight) }
+    }
+
     private fun scroll() = rule.onNodeWithTag("home.column").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].value()
 
     private fun marked(item: String) {
@@ -147,11 +158,14 @@ class HomeLayoutTest {
         val sub = layout(texts("playlists").single { it.id != wn.id })
         assertTrue("the word is the block's width", layout(wn).size.width > 11.1f * u + sub.size.width)
         val rest = wn.boundsInRoot
+        val ox = rest.left + maxOf(rest.width, 11.1f * u + sub.size.width) / 2
         rule.onNodeWithTag("home.playlists").performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(200)
+        val bold = layout(word("playlists"))
         val held = word("playlists").boundsInRoot
-        assertEquals(Tok.motion_pressScale, held.width / rest.width, 0.005f)
-        assertEquals(rest.center.x, held.center.x, 0.5f * u)
+        assertEquals(FontWeight.Bold, bold.layoutInput.style.fontWeight)
+        assertEquals(Tok.motion_pressScale, held.width / bold.size.width, 0.005f)
+        assertEquals(ox + (rest.left - ox) * Tok.motion_pressScale, held.left, 0.5f * u)
         assertEquals(rest.center.y, held.center.y, 0.5f * u)
         rule.onNodeWithTag("home.playlists").performTouchInput { cancel() }
         settle(1000)
@@ -180,6 +194,66 @@ class HomeLayoutTest {
     }
 
     @Test
+    fun theWidestWordStaysWholeWhilePressed() {
+        for ((w, h) in listOf(960 to 600, 1280 to 800, 960 to 411, 411 to 960)) {
+            show(w, h)
+            val ui = ui()
+            val u = ui.u
+            val home = node("home")
+            val o = home.positionInRoot
+            val n = "$w x $h"
+            val widest = names.maxBy { layout(word(it)).size.width }
+            rule.onNodeWithTag("home.$widest").performTouchInput { down(center) }
+            rule.mainClock.advanceTimeBy(200)
+            val wn = word(widest)
+            val held = wn.boundsInRoot
+            val img = rule.onRoot().pixels().also { System.gc() }
+            val rows = held.top.roundToInt() until (held.top + layout(wn).firstBaseline * Tok.motion_pressScale).roundToInt()
+            val cols = held.left.roundToInt() until (o.x + home.size.width).roundToInt()
+            val ink = cols.lastOrNull { x -> rows.any { y -> img.getRGB(x, y).let { p -> minOf(p shr 16 and 0xff, p shr 8 and 0xff, p and 0xff) > 40 } } }
+            val right = (checkNotNull(ink) { "$n $widest has no ink" } + 1 - o.x) / u
+            val limit = if (h > w) ui.w else ui.w - Tok.edge
+            assertTrue("$n pressed $widest ink ends at $right past $limit", right <= limit)
+            rule.onNodeWithTag("home.$widest").performTouchInput { cancel() }
+            settle(1000)
+        }
+    }
+
+    @Test
+    fun aPressedItemDrawsBoldUntilTheUp() {
+        val shell = show(411, 960)
+        val slop = ui().px(Tok.touchSlop)
+        val item = rule.onNodeWithTag("home.settings")
+        item.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeByFrame()
+        pressed("settings")
+        assertEquals(Roles.homeSubtitle.weight, layout(sub("settings")).layoutInput.style.fontWeight)
+        item.performTouchInput { moveBy(Offset(slop * 2, 0f)) }
+        rule.mainClock.advanceTimeByFrame()
+        pressed(null)
+        item.performTouchInput { up() }
+        settle(1000)
+        item.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeByFrame()
+        pressed("settings")
+        item.performTouchInput { cancel() }
+        rule.mainClock.advanceTimeByFrame()
+        pressed(null)
+        settle(1000)
+        assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+        val rest = sub("settings").boundsInRoot.width
+        item.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(150)
+        pressed("settings")
+        item.performTouchInput { up() }
+        rule.mainClock.advanceTimeByFrame()
+        pressed(null)
+        assertEquals(Tok.motion_pressScale, sub("settings").boundsInRoot.width / rest, 0.005f)
+        settle(1000)
+        assertEquals(listOf(Page.Home, Page.Settings), shell.nav.stack.toList())
+    }
+
+    @Test
     fun theItemsSitAtTheDevicePlaces() {
         for ((w, h) in listOf(411 to 960, 411 to 438, 960 to 600)) {
             val shell = show(w, h)
@@ -187,7 +261,7 @@ class HomeLayoutTest {
             val u = ui.u
             val home = node("home")
             val o = home.positionInRoot
-            val x = if (ui.shape == Shape.L) minOf(240f, ui.w - 16f - 52f - names.maxOf { inkRight(it) } / u) + 52f else 52f
+            val x = if (ui.shape == Shape.L) minOf(240f, ui.w - 16f - 52f - names.maxOf { maxOf(inkRight(it), boldInkRight(it)) } / u) + 52f else 52f
             val pitch = if (ui.shape == Shape.L) 48f else 55f
             val n = "$w x $h"
             names.forEachIndexed { i, item ->

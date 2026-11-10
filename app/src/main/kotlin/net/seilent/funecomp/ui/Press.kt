@@ -30,6 +30,9 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
     var lit by mutableStateOf(false)
         private set
 
+    var held by mutableStateOf(false)
+        private set
+
     internal var frozen: () -> Boolean = { false }
 
     internal var probe: (() -> Unit)? = null
@@ -40,8 +43,6 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
     private var span = 0L
     private var releaseAt = -1L
     private var job: Job? = null
-
-    private val held get() = to != 1f && releaseAt < 0
 
     private fun legMs(): Long {
         val k = scope?.coroutineContext?.get(MotionDurationScale)?.scaleFactor ?: 1f
@@ -92,16 +93,19 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
         releaseAt = -1L
         run(now, v, Tok.motion_pressScale)
         lit = true
+        held = true
         kick()
     }
 
     fun tap(now: Long) {
-        if (to != 1f && releaseAt < 0) releaseAt = now + Tok.motion_touchReturnDelay.toLong()
+        if (held) releaseAt = now + Tok.motion_touchReturnDelay.toLong()
+        held = false
         kick()
     }
 
     fun cancel(now: Long) {
         if (!held) return
+        held = false
         val v = value(now)
         releaseAt = -1L
         if (v == 1f) set(1f) else run(now, v, 1f)
@@ -115,6 +119,7 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
         job = null
         scale = 1f
         lit = false
+        held = false
     }
 
     fun drop() {
