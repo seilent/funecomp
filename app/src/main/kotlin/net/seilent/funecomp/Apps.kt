@@ -45,10 +45,12 @@ class Apps(
         var liveAt: Long? = null
         var mismatch = 0
         var last = -1L
+        var part = 0L
         var busySince: Long? = null
         var cardWait: Int? = null
         var held: String? = null
         var line = ""
+        var cardHeld = false
         @Volatile var cancelled = false
     }
 
@@ -199,7 +201,10 @@ class Apps(
             }
         }
         p.held = byeText(bye)
-        if (p.ended && p.waitFrom == null) p.waitFrom = now()
+        if (p.ended && p.waitFrom == null && !p.cardHeld) {
+            p.waitFrom = now()
+            schedule(resultMs) { bound(p) }
+        }
         set { it.copy(info = p.held.orEmpty()) }
     }
 
@@ -263,7 +268,11 @@ class Apps(
 
     private fun hold(p: Push, why: String) {
         p.held = why
-        if (why == CardView.REFUSED && p.cardWait == null) p.cardWait = Remote.device.card.epoch
+        if (why == CardView.REFUSED && p.cardWait == null) {
+            p.cardWait = Remote.device.card.epoch
+            p.cardHeld = true
+            if (!p.replied) p.waitFrom = null
+        }
         set { it.copy(info = why) }
         if (linked && p.cardWait == null) schedule(Proto.pushGateMs.toLong()) { retry(p) }
     }
@@ -300,17 +309,27 @@ class Apps(
         Log.i(Remote.TAG, "app send ${p.src.name} -> ${r?.javaClass?.simpleName?.lowercase() ?: "read failed"}")
         if (push !== p || p.cancelled) return
         if (r == null) return end(p, SEND_FAILED)
-        if (r.ended) p.ended = true
+        if (r is AppPush.Outcome.Aborted) {
+            p.part = r.abort.offset
+            p.ended = false
+        } else if (r.ended) {
+            p.ended = true
+            p.part = p.src.size
+        }
         outcome(p, r)
     }
 
     private fun begun(p: Push, reply: AppBeginReply) {
-        if (reply.offset == 0L && p.last > 0) {
+        p.cardHeld = false
+        if (reply.offset == 0L && (p.last > 0 || p.part > 0)) {
             p.mismatch = 0
             p.ended = false
+            p.waitFrom = null
+            p.liveAt = null
         }
         if (reply.offset > p.last) p.mismatch = 0
         p.last = reply.offset
+        p.part = reply.offset
         p.stage = reply.stage
         untake(p.dap, reply.stage)
     }
@@ -355,6 +374,8 @@ class Apps(
 
     private fun cardWait(p: Push) {
         p.cardWait = Remote.device.card.epoch
+        p.cardHeld = true
+        p.waitFrom = null
         set { it.copy(info = CardView.REFUSED) }
     }
 
@@ -368,6 +389,7 @@ class Apps(
 
     private fun wait(p: Push, line: String) {
         p.replied = true
+        p.cardHeld = false
         p.line = line
         p.waitFrom = now()
         unbulk()
@@ -389,6 +411,7 @@ class Apps(
         if (push !== p || !linked) return
         val from = p.waitFrom
         if (!p.replied) {
+            if (from != null && now() - from >= resultMs) return end(p, NO_ANSWER)
             attempt()
             return
         }

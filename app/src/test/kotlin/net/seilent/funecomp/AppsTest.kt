@@ -123,7 +123,8 @@ class AppsTest {
         lib: Library = Library.synthetic(),
         lrcDir: File? = null,
         log: (String) -> Unit = { logs += it },
-    ) = Sim(Options(Board.of(board), Faults(faults), log = log, appReplyMs = replyMs, minor = minor, version = version, lrcDir = lrcDir), lib).also { sims += it }
+        clock: (() -> Long)? = null,
+    ) = Sim(Options(Board.of(board), Faults(faults), log = log, appReplyMs = replyMs, minor = minor, version = version, lrcDir = lrcDir, deviceClock = clock), lib).also { sims += it }
 
     private fun live(vararg faults: String, replyMs: Long = Proto.svcReplyMs.toLong(), minor: Int = Proto.minor, lib: Library = Library.synthetic(), lrcDir: File? = null) {
         Firmwares.init(app, Http { _, _ -> Response(404, ByteArray(0)) })
@@ -133,13 +134,13 @@ class AppsTest {
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
     }
 
-    private fun swap(vararg faults: String, board: String = "v1", version: String? = null): List<String> {
+    private fun swap(vararg faults: String, board: String = "v1", version: String? = null, clock: (() -> Long)? = null): List<String> {
         val own = CopyOnWriteArrayList<String>()
         sim.stop()
-        sim = start(faults.toList(), board = board, version = version) {
+        sim = start(faults.toList(), board = board, version = version, log = {
             logs += it
             own += it
-        }
+        }, clock = clock)
         sim.listen(port)
         return own
     }
@@ -265,6 +266,14 @@ class AppsTest {
     @Test
     fun anOffsetMismatchTwiceInARowStops() {
         live("app-begins=stop/stop")
+        send()
+        info(Apps.SEND_FAILED)
+        assertEquals(2, begins())
+    }
+
+    @Test
+    fun anOffsetMismatchTwiceInARowWithTheAbortAtTheEndStops() {
+        live("app-begins=stop/stop", "app-abort-late")
         send()
         info(Apps.SEND_FAILED)
         assertEquals(2, begins())
@@ -742,6 +751,31 @@ class AppsTest {
     }
 
     @Test
+    fun mismatchBusyBusyMismatchWithTheAbortsAtTheEndStops() {
+        live("app-begins=stop/busy/busy/stop", "app-abort-late")
+        send()
+        info(Apps.SEND_FAILED, advance = true)
+        assertEquals(4, begins())
+    }
+
+    @Test
+    fun aBusyAbortAtTheEndThenADropPastTheBoundRestartsAndInstalls() {
+        live("app-begins=step@busy", "app-abort-late")
+        send()
+        info(Apps.DAP_BUSY)
+        apps.sync()
+        val lives = apps.lives
+        sim.stop()
+        info(byeText(null))
+        tick(70_000)
+        swap()
+        waitFor { apps.lives > lives }
+        tick(30_000)
+        apps.sync()
+        info(Apps.INSTALLED, 20_000)
+    }
+
+    @Test
     fun aMismatchThenARestartFromZeroThenAMismatchResumesAgain() {
         live("app-begins=step/stop/zero+stop")
         send()
@@ -880,6 +914,206 @@ class AppsTest {
         live("app-begins=endcard")
         send()
         relinkResumes()
+    }
+
+    @Test
+    fun anEndRetriedThenDroppedEndsOnNoAnswerAtTheBound() {
+        fresh(retryMs = 20_000, busyBoundMs = 120_000)
+        live("app-end-busy")
+        send()
+        info(Apps.DAP_BUSY)
+        apps.sync()
+        tick(10_000)
+        val lives = apps.lives
+        sim.stop()
+        info(byeText(null))
+        tick(10_000)
+        apps.sync()
+        assertEquals(lives, apps.lives)
+        swap("app-begins=busy/busy/busy/busy/busy/busy/busy")
+        waitFor(20_000) { apps.lives > lives }
+        tick(30_000)
+        apps.sync()
+        info(Apps.DAP_BUSY)
+        assertEquals(2, begins())
+        tick(20_000)
+        apps.sync()
+        assertEquals(Apps.NO_ANSWER, apps.view.info)
+        assertEquals(2, begins())
+    }
+
+    @Test
+    fun anEndRetriedThenDroppedPastItsBoundEndsAtTheNextAfterLive() {
+        fresh(retryMs = 20_000)
+        live("app-end-busy")
+        send()
+        info(Apps.DAP_BUSY)
+        apps.sync()
+        val lives = apps.lives
+        sim.stop()
+        info(byeText(null))
+        tick(60_000)
+        apps.sync()
+        assertEquals(byeText(null), apps.view.info)
+        assertEquals(lives, apps.lives)
+        swap()
+        waitFor(20_000) { apps.lives > lives }
+        tick(30_000)
+        apps.sync()
+        assertEquals(Apps.NO_ANSWER, apps.view.info)
+        assertEquals(1, begins())
+    }
+
+    @Test
+    fun aBoundDueInsideLiveOnAnUnrepliedPushEndsAtTheNextAfterLive() {
+        live("app-check-ms=600000")
+        send()
+        waitFor { logs.any { "rx APP_END" in it } }
+        sim.stop()
+        apps.sync()
+        val lives = apps.lives
+        tick(40_000)
+        apps.sync()
+        assertEquals(lives, apps.lives)
+        swap()
+        waitFor(20_000) { apps.lives > lives }
+        tick(20_000)
+        apps.sync()
+        assertEquals(1, begins())
+        assertTrue(apps.view.info != Apps.NO_ANSWER)
+        tick(10_000)
+        apps.sync()
+        assertEquals(Apps.NO_ANSWER, apps.view.info)
+        assertEquals(1, begins())
+    }
+
+    private fun restartedUploadEndsOnItsOwnResult(end: String, begins: String, after: Int, resume: Boolean = true) {
+        fresh(retryMs = 20_000, busyBoundMs = 600_000)
+        live(end, "app-begins=$begins")
+        send()
+        if (end == "app-end-busy" || resume) info(Apps.DAP_BUSY)
+        apps.sync()
+        val lives = apps.lives
+        if (resume) {
+            tick(20_000)
+            apps.sync()
+        }
+        if (end == "app-end-busy") {
+            info(Apps.DAP_BUSY)
+            sim.current!!.drop("test")
+        }
+        info(byeText(null))
+        waitFor { apps.lives > lives }
+        repeat(after) {
+            tick(10_000)
+            apps.sync()
+            assertTrue(apps.view.info != Apps.NO_ANSWER)
+        }
+        info(Apps.INSTALLED)
+        assertTrue(logs.any { it.startsWith("app begin ") && it.endsWith(" offset=0") && "stage=1 " !in it })
+    }
+
+    @Test
+    fun aRestartedUploadAfterADroppedEndRetryNeverEndsOnTheOldBound() =
+        restartedUploadEndsOnItsOwnResult("app-end-busy", "step@busy/ok/zero+step@busy/busy/busy/busy/busy", 8)
+
+    @Test
+    fun aRestartedUploadAfterALostEndNeverEndsOnTheOldBound() =
+        restartedUploadEndsOnItsOwnResult("app-end-lost", "step@busy/ok/zero+step@busy/busy", 8)
+
+    @Test
+    fun aRestartedPlainUploadAfterADroppedEndRetryNeverEndsOnTheOldBound() =
+        restartedUploadEndsOnItsOwnResult("app-end-busy", "ok/zero+step@busy/busy/busy/busy", 8, resume = false)
+
+    @Test
+    fun aRestartedPlainUploadAfterALostEndNeverEndsOnTheOldBound() =
+        restartedUploadEndsOnItsOwnResult("app-end-lost", "ok/zero+step@busy/busy", 8, resume = false)
+
+    @Test
+    fun anEndCardErrorThenADropWaitsForTheCardPastTheBound() {
+        live("app-begins=endcard")
+        send()
+        info(CardView.REFUSED)
+        apps.sync()
+        val lives = apps.lives
+        sim.stop()
+        info(byeText(null))
+        tick(70_000)
+        apps.sync()
+        assertEquals(lives, apps.lives)
+        val dc = AtomicLong(1_000_000)
+        swap("card-run=1000+0@hello", clock = dc::get)
+        waitFor(20_000) { apps.lives > lives && PushGate.card(Remote.device) }
+        tick(30_000)
+        apps.sync()
+        assertEquals(CardView.REFUSED, apps.view.info)
+        dc.addAndGet(2000)
+        info(Apps.INSTALLED, 20_000)
+    }
+
+    @Test
+    fun aCardWaitKeepsOutOfTheBoundAcrossASecondDrop() {
+        live("app-begins=endcard")
+        send()
+        info(CardView.REFUSED)
+        apps.sync()
+        var lives = apps.lives
+        sim.stop()
+        info(byeText(null))
+        swap("card-run=1000+0@hello", clock = AtomicLong(1_000_000)::get)
+        waitFor(20_000) { apps.lives > lives && PushGate.card(Remote.device) }
+        lives = apps.lives
+        sim.stop()
+        info(byeText(null))
+        tick(70_000)
+        apps.sync()
+        assertEquals(lives, apps.lives)
+        val dc = AtomicLong(1_000_000)
+        swap("card-run=1000+0@hello", clock = dc::get)
+        waitFor(20_000) { apps.lives > lives && PushGate.card(Remote.device) }
+        tick(30_000)
+        apps.sync()
+        assertEquals(CardView.REFUSED, apps.view.info)
+        dc.addAndGet(2000)
+        info(Apps.INSTALLED, 20_000)
+    }
+
+    @Test
+    fun aCardDownAtTheRelinkAfterADroppedEndLeavesTheResultBound() {
+        live("app-check-ms=600000")
+        send()
+        waitFor { logs.any { "rx APP_END" in it } }
+        sim.stop()
+        apps.sync()
+        val lives = apps.lives
+        val dc = AtomicLong(1_000_000)
+        swap("card-run=1000+0@hello", clock = dc::get)
+        waitFor(20_000) { apps.lives > lives && PushGate.card(Remote.device) }
+        tick(30_000)
+        apps.sync()
+        assertEquals(CardView.REFUSED, apps.view.info)
+        tick(30_000)
+        apps.sync()
+        assertEquals(CardView.REFUSED, apps.view.info)
+        dc.addAndGet(2000)
+        info(Apps.INSTALLED, 20_000)
+    }
+
+    @Test
+    fun aCardWaitAfterALostEndLeavesTheResultBound() {
+        live("app-end-lost", "app-begins=ok/endcard", "card-run=300+0@manual")
+        send()
+        apps.sync()
+        val lives = apps.lives
+        waitFor { apps.lives > lives }
+        tick(30_000)
+        apps.sync()
+        info(CardView.REFUSED)
+        tick(30_000)
+        apps.sync()
+        assertEquals(CardView.REFUSED, apps.view.info)
+        sim.device.startCard()
+        info(Apps.INSTALLED)
     }
 
     @Test
