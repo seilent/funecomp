@@ -85,7 +85,11 @@ data class LibMirror(val rev: Long? = null, val pages: Map<LibKey, LibList> = em
     fun lists(libRev: Long) = copy(rev = libRev, pages = pages.filterKeys { !listView(it.view) })
 }
 
-data class LibList(val total: Long = 0, val rows: Map<Long, LibRow> = emptyMap())
+data class LibList(val total: Long = 0, val rows: Map<Long, LibRow> = emptyMap()) {
+    fun firstMissing(from: Long, to: Long): Long? = (from until to).firstOrNull { it !in rows }
+
+    fun reAsk(offset: Long, count: Long): Long? = firstMissing(offset, minOf(offset + count, total))?.takeIf { it > offset }
+}
 
 data class CardView(val value: Int? = null, val seen: Boolean = false, val epoch: Int = 0) {
     val down: Boolean get() = value != null && value != Enums.Card.ready

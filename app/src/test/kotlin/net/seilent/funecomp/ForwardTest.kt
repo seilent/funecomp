@@ -186,6 +186,18 @@ class ForwardTest {
     }
 
     @Test
+    fun theArtistSweepReadsEveryRowOfACutPage() {
+        val s = Sim(
+            Options(Board.of("v1"), Faults(listOf("lib-cut=1")), log = { lines += it }, imgDir = tmp.newFolder(), minor = 1),
+            Library((1..200).map { i -> Library.track("Artist %03d ".format(i) + "x".repeat(150), "Album $i", "Song $i", 1, 200_000, mbids = listOf("mb-%03d".format(i))) }),
+        )
+        sims += s
+        val r = forward(Lookups()).run(session(s.listen(0))) { true }
+        assertEquals(ArtPusher.Stop.DONE, r.stop)
+        assertEquals(200, s.device.stored.size)
+    }
+
+    @Test
     fun currentThenQueueThenTheLibraryEachPushedOnce() {
         val (sim, port) = sim()
         val looked = Lookups()

@@ -62,6 +62,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.security.MessageDigest
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.zip.CRC32
 import javax.imageio.IIOImage
 import javax.imageio.ImageIO
@@ -77,6 +78,8 @@ interface Out {
 
     val phone: String get() = "phone"
 }
+
+data class LibAsk(val view: Int?, val offset: Long, val count: Long, val result: Int?)
 
 private class Forms(val rows: List<Row>, val legacy: List<Row>, val live: String)
 
@@ -310,6 +313,10 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val arts = HashMap<Pair<Long, Int>, Art>()
     private var upd: Upd? = null
     private var favsBusy = faults.favsBusy
+    val libAsks = CopyOnWriteArrayList<LibAsk>()
+    private var libAnswers = 0
+    private var libBusied = 0
+    private var libCuts = 0
     private var flagTrack: Long? = null
     private var flagAt = 0L
     private var late = false
@@ -1046,7 +1053,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             }
             Msg.PLAY -> play(body)
             Msg.QUEUE_OP -> queueOp(body, out)
-            Msg.LIB_GET -> libGet(body, out)
+            Msg.LIB_GET -> libGet(body, out).also { libAsks += LibAsk(body.int(Tags.LibGet.view), body.long(Tags.LibGet.offset) ?: 0L, body.long(Tags.LibGet.count) ?: 100L, (it as? Answer.Fail)?.code) }
             Msg.ACTION -> action(body, out)
             Msg.IMG_BEGIN -> imgBegin(body, out).also { duringStream() }
             Msg.IMG_END -> imgEnd(body).also { duringStream() }
@@ -1679,6 +1686,13 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private fun libGet(b: Node, out: Out): Answer {
+        faults.libBusyAfter?.let { (k, n) ->
+            if (libAnswers >= k && libBusied < n) {
+                libBusied++
+                return Answer.Fail(Err.busy, "busy")
+            }
+        }
+        libAnswers++
         val view = b.int(Tags.LibGet.view) ?: return Answer.Fail(Err.badValue, "no view")
         if (!viewServed(view)) return Answer.Fail(Err.badValue, "bad view")
         revCode(b, Tags.LibGet.libRev, Tags.LibGet.snapRev, listView(view), false)?.let { return revFail(it) }
@@ -1688,12 +1702,24 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (offset > rows.size) return Answer.Fail(Err.badValue, "offset past end")
         val end = minOf(rows.size, offset + n(b.long(Tags.LibGet.count), 100))
         val fixed = Lib(lib.rev, view, parent, PageInfo(0, 0, false), emptyList(), if (v13) lib.snapRev else null).encode().size + 8
+        val cut = faults.libCut?.takeIf { libCuts < faults.libCutTimes }
+        var bytes = 0L
         var at = offset
         do {
             val n = PageInfo.fill(rows.map { it.size }, at, fixed, count = end - at)
-            send(out, Msg.LIB, Lib(lib.rev, view, parent, PageInfo(at.toLong(), rows.size.toLong(), at + n < rows.size), rows.subList(at, at + n), if (v13) lib.snapRev else null).encode())
+            val page = Lib(lib.rev, view, parent, PageInfo(at.toLong(), rows.size.toLong(), at + n < rows.size), rows.subList(at, at + n), if (v13) lib.snapRev else null).encode()
+            if (cut != null && at > offset && bytes + page.size > cut) {
+                libCuts++
+                break
+            }
+            send(out, Msg.LIB, page)
+            bytes += page.size
             at += n
         } while (at < end)
+        if (faults.libSnapMove.compareAndSet(true, false)) {
+            rescan(null)
+            send(out, Msg.STATE, state(out = out))
+        }
         return Answer.Ok()
     }
 

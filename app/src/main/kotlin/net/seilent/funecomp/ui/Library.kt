@@ -57,7 +57,7 @@ fun libList(device: DeviceState, control: Control, view: Int, parent: String): L
 fun LibList.row(i: Int, control: Control, view: Int, parent: String): LibRow? {
     val r = rows[i.toLong()]
     LaunchedEffect(r == null, i) {
-        if (r == null) control.libGet(view, parent, i / LIB_PAGE * LIB_PAGE)
+        if (r == null) control.libGet(view, parent, firstMissing(i / LIB_PAGE * LIB_PAGE, i + 1L) ?: i.toLong())
     }
     return r
 }

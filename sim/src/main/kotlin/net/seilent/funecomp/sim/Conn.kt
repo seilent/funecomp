@@ -302,7 +302,9 @@ class Conn(
             return
         }
         val pushing = if (f.type == Msg.IMG_END) device.pushing else null
-        answer(f, device.request(f.type, body, this), at, pushing)
+        val a = device.request(f.type, body, this)
+        if (f.type == Msg.LIB_GET) faults.libOkHold?.let { check(it.await(10, TimeUnit.SECONDS)) { "lib-ok-hold: not released in 10 s" } }
+        answer(f, a, at, pushing)
     }
 
     private fun askLater(name: String) {

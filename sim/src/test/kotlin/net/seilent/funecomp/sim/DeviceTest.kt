@@ -2,6 +2,9 @@ package net.seilent.funecomp.sim
 
 import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Eq
+import net.seilent.funecomp.proto.Frame
+import net.seilent.funecomp.proto.FrameReader
+import net.seilent.funecomp.proto.Hello
 import net.seilent.funecomp.proto.ImgAbort
 import net.seilent.funecomp.proto.ImgBeginReply
 import net.seilent.funecomp.proto.ImgListReply
@@ -19,12 +22,15 @@ import net.seilent.funecomp.proto.SvcKey
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tok
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
 import java.util.zip.CRC32
 
 class DeviceTest {
@@ -1049,5 +1055,63 @@ class DeviceTest {
             } catch (_: IllegalArgumentException) {
             }
         }
+    }
+
+    private fun longSongs(n: Int) = Library((1..n).map { Library.track("Artist", "Album", "Song $it " + "x".repeat(240), 1, 200_000) })
+
+    private fun pages(out: Sink) = out.of(Msg.LIB).map { Lib.from(it) }
+
+    @Test
+    fun libCutStopsAfterAPageAndAnswersOk() {
+        val d = Device(Options(Board.of("v1"), Faults(listOf("lib-cut=1"))), longSongs(400)) { t }
+        val out = Sink()
+        ok(req(d, Msg.LIB_GET, Req.libGet(Enums.View.songs, "", 0, 400, d.lib.rev), out))
+        val first = pages(out)
+        assertEquals(1, first.size)
+        assertTrue(first[0].page.more)
+        val k = first[0].rows.size.toLong()
+        assertTrue(k in 1L..399L)
+        val next = Sink()
+        ok(req(d, Msg.LIB_GET, Req.libGet(Enums.View.songs, "", k, 400 - k, d.lib.rev), next))
+        assertEquals(listOf(k), pages(next).map { it.page.offset })
+
+        val faults = Faults(listOf("lib-ok-hold"))
+        val opts = Options(Board.of("v1"), faults)
+        val held = Device(opts, longSongs(400)) { t }
+        val input = ByteArrayOutputStream()
+        input.write(Frame(Msg.HELLO, Proto.flagWant, 1, Hello(Proto.major, Proto.minor, "test").encode()).encode())
+        input.write(Frame(Msg.LIB_GET, Proto.flagWant, 2, Req.libGet(Enums.View.songs, "", 0, 100, held.lib.rev)).encode())
+        val output = ByteArrayOutputStream()
+        val run = Thread { Conn(1, ByteArrayInputStream(input.toByteArray()), output, {}, held, opts) { t }.run() }.apply { start() }
+        fun frames() = output.toByteArray().let { FrameReader().feed(it, 0, it.size) }
+        val end = System.currentTimeMillis() + 10_000
+        while (frames().filter { it.type == Msg.LIB }.sumOf { Lib.from(Node.decode("LIB", it.payload)).rows.size } < 100) {
+            check(System.currentTimeMillis() < end) { "timed out" }
+            Thread.sleep(10)
+        }
+        assertTrue(frames().none { it.type == Msg.LIB_GET && it.isReply })
+        faults.libOkHold!!.countDown()
+        run.join(10_000)
+        assertTrue(frames().any { it.type == Msg.LIB_GET && it.isReply })
+
+        val s = Device(Options(Board.of("v1"), Faults(listOf("lib-snap-move"))), longSongs(400)) { t }
+        val snap = s.lib.snapRev
+        val moved = Sink()
+        ok(req(s, Msg.LIB_GET, Req.libGet(Enums.View.songs, "", 0, 100, s.lib.rev), moved))
+        assertEquals(Msg.STATE, moved.frames.last().first)
+        assertTrue(moved.frames.dropLast(1).isNotEmpty() && moved.frames.dropLast(1).all { it.first == Msg.LIB })
+        assertEquals(snap + 1, State.from(moved.of(Msg.STATE).single()).snapRev)
+        assertEquals(snap + 1, s.lib.snapRev)
+        val again = Sink()
+        ok(req(s, Msg.LIB_GET, Req.libGet(Enums.View.songs, "", 0, 100, s.lib.rev), again))
+        assertTrue(again.of(Msg.STATE).isEmpty())
+
+        val b = Device(Options(Board.of("v1"), Faults(listOf("lib-busy-after=1:2"))), longSongs(400)) { t }
+        ok(req(b, Msg.LIB_GET, Req.libGet(Enums.View.songs, "", 0, 100, b.lib.rev)))
+        assertEquals(Err.busy, fail(req(b, Msg.LIB_GET, Req.libGet(Enums.View.songs, "", 100, 100, b.lib.rev))).code)
+        assertEquals(Err.busy, fail(req(b, Msg.LIB_GET, Req.libGet(Enums.View.songs, "", 100, 50, b.lib.rev))).code)
+        ok(req(b, Msg.LIB_GET, Req.libGet(Enums.View.songs, "", 100, 50, b.lib.rev)))
+        val songs = Enums.View.songs
+        assertEquals(listOf(LibAsk(songs, 0, 100, null), LibAsk(songs, 100, 100, Err.busy), LibAsk(songs, 100, 50, Err.busy), LibAsk(songs, 100, 50, null)), b.libAsks)
     }
 }

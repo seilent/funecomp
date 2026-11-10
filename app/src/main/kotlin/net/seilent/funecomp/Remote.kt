@@ -92,6 +92,7 @@ import net.seilent.funecomp.state.ClockSync
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.Heart
+import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
@@ -219,6 +220,8 @@ object Remote : Control {
     private var spec: String? = null
     internal val linkSpec: String? get() = spec
     private val asked = HashSet<String>()
+    private val blocks = HashSet<String>()
+    @Volatile internal var libRetryAt = 0L
     private var artist: ArtistArt? = null
     private var pending: Pending? = null
     @Volatile private var art: ArtWorker? = null
@@ -1129,12 +1132,12 @@ object Remote : Control {
         return open
     }
 
-    private fun libPage(s: Session, offset: Long, rev: Long?): Session.Result {
+    internal fun libPage(s: Session, offset: Long, rev: Long?): Session.Result {
         val key = "lib ${Enums.View.artists}  $offset $rev"
         once(key)
         val snap = device.lib.keyed(Enums.View.artists)
         val r = s.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", offset, LIB_PAGE, rev.takeUnless { snap }, rev.takeIf { snap }))
-        if (r !is Session.Result.Ok) forget(key)
+        forget(key)
         return r
     }
 
@@ -1270,7 +1273,10 @@ object Remote : Control {
         Firmwares.dropped()
         heartToast = null
         spec = null
-        synchronized(asked) { asked.clear() }
+        synchronized(asked) {
+            asked.clear()
+            blocks.clear()
+        }
         art?.stop()
         art = null
         artKey = null
@@ -1334,9 +1340,51 @@ object Remote : Control {
 
     override fun libGet(view: Int, parent: String, offset: Long) {
         val lib = device.lib
+        val rev = askRev(view)
+        val start = offset / LIB_PAGE * LIB_PAGE
+        val block = "libblock $view $parent $rev $start"
         val key = lib.askKey(view, parent, offset)
-        if (!once(key)) return
-        send(Msg.LIB_GET, Req.libGet(view, parent, offset, LIB_PAGE, lib.libRev(view), lib.snapRev(view)), key, fail = { forget(key) })
+        val end = lib.pages[LibKey(view, parent)]?.total?.let { minOf(start + LIB_PAGE, it) } ?: (start + LIB_PAGE)
+        if (end <= offset) return
+        synchronized(asked) {
+            if (block in blocks || key in asked) return
+            blocks += block
+            asked += key
+        }
+        libAsk(view, parent, offset, end - offset, block, rev, true)
+    }
+
+    private fun askRev(view: Int) = device.lib.let { it.snapRev(view) ?: it.libRev(view) }
+
+    private fun unblock(block: String) = synchronized(asked) { blocks.remove(block) }
+
+    private fun libAsk(view: Int, parent: String, offset: Long, count: Long, block: String, rev: Long?, first: Boolean, retry: Boolean = !first) {
+        val lib = device.lib
+        val key = lib.askKey(view, parent, offset)
+        if (!first) once(key)
+        send(Msg.LIB_GET, Req.libGet(view, parent, offset, count, lib.libRev(view), lib.snapRev(view)), key, done = { code, _ ->
+            forget(key)
+            when {
+                code == null -> {
+                    val list = device.lib.pages[LibKey(view, parent)]?.takeIf { askRev(view) == rev }
+                    val m = list?.reAsk(offset, count)
+                    if (list == null || m == null) unblock(block) else libAsk(view, parent, m, minOf(offset + count, list.total) - m, block, rev, false)
+                }
+                code == Err.busy && retry -> {
+                    val session = link?.session
+                    val at = SystemClock.uptimeMillis() + Proto.backoffMs.first()
+                    libRetryAt = at
+                    main.postAtTime({
+                        when {
+                            link?.session !== session -> Unit
+                            askRev(view) == rev -> libAsk(view, parent, offset, count, block, rev, false, false)
+                            else -> unblock(block)
+                        }
+                    }, at)
+                }
+                else -> unblock(block)
+            }
+        })
     }
 
     override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>) {
@@ -1528,7 +1576,10 @@ object Remote : Control {
             }
             update { it.withHello(hello, LINK_FEATURES) }
             backdropSeen(hello)
-            synchronized(asked) { asked.clear() }
+            synchronized(asked) {
+                asked.clear()
+                blocks.clear()
+            }
             bye = null
             everLive = true
             board = hello.board
@@ -1566,7 +1617,7 @@ object Remote : Control {
             if (type == Msg.SVC_STATE) Svc.state(device.accounts)
             if (type == Msg.APP_STATE) apps.state(AppState.from(body))
             if (type == Msg.STATE || type == Msg.QUEUE) Lyrics.poke()
-            if (type == Msg.LIB || type == Msg.QUEUE) synchronized(asked) { asked.removeAll { k -> k.startsWith(if (type == Msg.LIB) "lib " else "queue ") } }
+            if (type == Msg.QUEUE) synchronized(asked) { asked.removeAll { k -> k.startsWith("queue ") } }
             if (type != Msg.STATE) return
             dapLyrics.poke()
             val s = pushed!!

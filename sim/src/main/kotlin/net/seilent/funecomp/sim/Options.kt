@@ -8,6 +8,7 @@ import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
 import java.io.File
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicInteger
 
 class Board(
@@ -141,6 +142,11 @@ class Faults(specs: List<String>) {
     var askPick: Pair<String, Long>? = null
     var favsBusy = 0
     var favsBusyText = "busy"
+    var libCut: Long? = null
+    var libCutTimes = Int.MAX_VALUE
+    @Volatile var libOkHold: CountDownLatch? = null
+    val libSnapMove = java.util.concurrent.atomic.AtomicBoolean(false)
+    var libBusyAfter: Pair<Int, Int>? = null
     var staleState = false
     val eqHidden = HashSet<String>()
     var eqHeadsetAt: Pair<String?, Long>? = null
@@ -270,6 +276,14 @@ class Faults(specs: List<String>) {
                     favsBusy = v.substringBefore(':').toIntOrNull() ?: throw IllegalArgumentException("favs-busy: count missing in $v")
                     favsBusyText = v.substringAfter(':', "busy")
                 }
+                "lib-cut" -> {
+                    libCut = v.substringBefore(':').toLongOrNull() ?: throw IllegalArgumentException("lib-cut: bytes missing in $v")
+                    if (':' in v) libCutTimes = v.substringAfter(':').toIntOrNull() ?: throw IllegalArgumentException("lib-cut: bad count in $v")
+                }
+                "lib-ok-hold" -> libOkHold = CountDownLatch(1)
+                "lib-snap-move" -> libSnapMove.set(true)
+                "lib-busy-after" -> libBusyAfter = (v.substringBefore(':').toIntOrNull() ?: throw IllegalArgumentException("lib-busy-after: answers missing in $v")) to
+                    (v.substringAfter(':', "").toIntOrNull() ?: throw IllegalArgumentException("lib-busy-after: count missing in $v"))
                 "ask-block" -> {
                     val cmd = Enums.BlockCmd.names.entries.firstOrNull { it.value == v.substringBefore('@') }?.key
                         ?: throw IllegalArgumentException("ask-block: unknown cmd in $v")
