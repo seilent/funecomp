@@ -21,6 +21,7 @@ class AppPush(
     private val gate: () -> Boolean = { true },
     private val progress: (Long) -> Unit = {},
     private val begun: (AppBeginReply) -> Unit = {},
+    private val replyMs: Long = Proto.svcReplyMs.toLong(),
 ) {
     sealed class Outcome {
         abstract val ended: Boolean
@@ -45,7 +46,7 @@ class AppPush(
         session.appAbortListener = { abort.set(it) }
         session.pushBegin()
         try {
-            val begin = when (val r = session.call(Msg.APP_BEGIN, Req.appBegin(id, version, size, sha), Proto.svcReplyMs.toLong())) {
+            val begin = when (val r = session.call(Msg.APP_BEGIN, Req.appBegin(id, version, size, sha), replyMs)) {
                 is Session.Result.Ok -> r
                 is Session.Result.Failed -> return if (r.error.code == Err.busy) Outcome.Retry(r.error, false) else Outcome.Failed(r.error, false)
                 Session.Result.Unsupported -> return Outcome.Failed(null, false)
@@ -74,7 +75,7 @@ class AppPush(
                 }
             }
             abort.get()?.let { return Outcome.Aborted(it, false) }
-            return when (val end = session.call(Msg.APP_END, Req.appEnd(sha), Proto.svcReplyMs.toLong())) {
+            return when (val end = session.call(Msg.APP_END, Req.appEnd(sha), replyMs)) {
                 is Session.Result.Ok -> abort.get()?.let { Outcome.Aborted(it, true) } ?: Outcome.Asked
                 is Session.Result.Failed -> abort.get()?.let { Outcome.Aborted(it, true) } ?: when {
                     end.error.code == Err.busy && end.error.text == CHECKING -> Outcome.Checking

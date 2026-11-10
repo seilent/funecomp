@@ -4,6 +4,7 @@ import net.seilent.funecomp.proto.AppBeginReply
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
@@ -54,12 +55,26 @@ class AppPushTest {
     private val events = CopyOnWriteArrayList<String>()
     private val seen = CopyOnWriteArrayList<Long>()
 
-    private fun push(s: Session) = AppPush(
+    private fun push(s: Session, replyMs: Long = Proto.svcReplyMs.toLong()) = AppPush(
         s, "paddle", 3, size, sha,
         { off -> ByteArrayInputStream(bytes, off.toInt(), bytes.size - off.toInt()) },
         progress = { events += "data"; seen += it },
         begun = { r: AppBeginReply -> events += "begin ${r.offset}" },
+        replyMs = replyMs,
     ).run()
+
+    @Test
+    fun aBeginPastTheCallBoundRetriesAsBusyTimeout() {
+        val r = push(session(sim("app-open-ms=2000")), replyMs = 1000)
+        assertTrue("$r", r is AppPush.Outcome.Retry && r.error.code == Err.busy && r.error.text == AppPush.TIMEOUT && !r.ended)
+        assertTrue(events.none { it.startsWith("begin") })
+    }
+
+    @Test
+    fun anEndPastTheCallBoundRetriesWithTheEndSentMark() {
+        val r = push(session(sim("app-check-ms=5000", replyMs = 5000)), replyMs = 1000)
+        assertTrue("$r", r is AppPush.Outcome.Retry && r.error.code == Err.busy && r.error.text == AppPush.TIMEOUT && r.ended)
+    }
 
     @Test
     fun theBeginWaitsForTheDeviceReplyBound() {
