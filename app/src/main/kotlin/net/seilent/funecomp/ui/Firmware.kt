@@ -15,7 +15,6 @@ import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.PushGate
 import java.util.Locale
 
-private const val NO_UPDATER = "device has no updater"
 private const val CANCEL = "cancel"
 private const val READY = "ready on the dap"
 private const val PATH = "settings > about > update firmware"
@@ -24,6 +23,7 @@ const val UNSIGNED_FIRMWARE = "unsigned firmware"
 const val PICK_ONE = "pick one image and its signature"
 private const val FROM_CARD = "update from the card"
 private const val PICK_HINT = "pick the image and its signature"
+private const val FIRMWARE_SHEET = "firmware.sheet"
 
 @Immutable
 data class FirmwareView(
@@ -60,13 +60,14 @@ fun firmwareText(v: FirmwareView) = when {
 private class FwItem(val title: String, val value: String, val tag: String, val info: Boolean = false, val tap: (Int) -> Unit = {})
 
 private fun pickFile(ctx: Ctx) = ctx.control.firmwareFile { p ->
+    if (ctx.live().updater == false) return@firmwareFile
     val updater = ctx.device.has("update")
     val signing = ctx.device.has("updSig")
     val unsigned = (signing && !p.signed) || p.mismatch
     val send = updater && p.size > 0 && !unsigned
-    val info = listOf(sizeText(p.size), "board ${p.board ?: "unknown"}") + (if (updater) emptyList() else listOf(NO_UPDATER)) +
-        (if (unsigned) listOf(UNSIGNED_FIRMWARE) else emptyList()) + if (unsigned && signing) listOf(FROM_CARD) else emptyList()
-    ctx.sheet.open(p.name.ifEmpty { "firmware" }, if (send) listOf("send", CANCEL) else listOf(CANCEL), info = info, titleMixed = p.name.isNotEmpty()) {
+    val info = listOf(sizeText(p.size), "board ${p.board ?: "unknown"}") + (if (unsigned) listOf(UNSIGNED_FIRMWARE) else emptyList()) +
+        if (unsigned && signing) listOf(FROM_CARD) else emptyList()
+    ctx.sheet.open(p.name.ifEmpty { "firmware" }, if (send) listOf("send", CANCEL) else listOf(CANCEL), info = info, owner = FIRMWARE_SHEET, titleMixed = p.name.isNotEmpty()) {
         if (send && it == 0) ctx.control.firmwareSend(picked = true)
     }
 }
@@ -78,6 +79,11 @@ fun FirmwarePage(ctx: Ctx, view: FirmwareView) {
     val board = ctx.device.hello?.board
     val list = rememberLazyListState()
     LaunchedEffect(Unit) { ctx.control.firmwareOpened() }
+    LaunchedEffect(ctx.device.hello, ctx.device.updater) {
+        if (ctx.device.hello == null || ctx.device.updater != false || ctx.nav.top != Page.Firmware) return@LaunchedEffect
+        ctx.sheet.closeIf(FIRMWARE_SHEET)
+        ctx.nav.pop()
+    }
     fun keep(i: Int) = Keep(list, i, ui.px(ui.contentTop))
     val signing = ctx.device.has("updSig")
     val waiting = view.ready && signing && !view.signed && view.sigListed
@@ -89,7 +95,7 @@ fun FirmwarePage(ctx: Ctx, view: FirmwareView) {
         if (view.info == UNSIGNED_RELEASE) add(FwItem(FROM_CARD, "", "card", info = true))
         if (view.info == READY) add(FwItem(PATH, "", "path", info = true))
         if (view.send.isNotEmpty()) add(FwItem("firmware", view.send.removePrefix("firmware "), "send") {
-            ctx.sheet.open("firmware", listOf(CANCEL)) { ctx.control.firmwareStopSend() }
+            ctx.sheet.open("firmware", listOf(CANCEL), owner = FIRMWARE_SHEET) { ctx.control.firmwareStopSend() }
         })
         val tag = view.tag
         if (tag != null) {
@@ -104,36 +110,35 @@ fun FirmwarePage(ctx: Ctx, view: FirmwareView) {
             }
             add(FwItem("$tag, ${sizeText(view.size)}", value, "release") {
                 when {
-                    view.downloading -> ctx.sheet.open(tag, listOf("cancel download")) { ctx.control.firmwareCancel() }
-                    waiting -> ctx.sheet.open(tag, listOf("download", CANCEL, "delete"), info = listOf(sizeText(view.size), "board ${board ?: "unknown"}")) {
+                    view.downloading -> ctx.sheet.open(tag, listOf("cancel download"), owner = FIRMWARE_SHEET) { ctx.control.firmwareCancel() }
+                    waiting -> ctx.sheet.open(tag, listOf("download", CANCEL, "delete"), info = listOf(sizeText(view.size), "board ${board ?: "unknown"}"), owner = FIRMWARE_SHEET) {
                         when (it) {
                             0 -> ctx.control.firmwareDownload()
                             2 -> ctx.control.firmwareCancel()
                         }
                     }
-                    view.ready && signing && !view.signed -> ctx.sheet.open(tag, listOf(CANCEL, "delete"), info = listOf(sizeText(view.size), "board ${board ?: "unknown"}", UNSIGNED_RELEASE, FROM_CARD)) {
+                    view.ready && signing && !view.signed -> ctx.sheet.open(tag, listOf(CANCEL, "delete"), info = listOf(sizeText(view.size), "board ${board ?: "unknown"}", UNSIGNED_RELEASE, FROM_CARD), owner = FIRMWARE_SHEET) {
                         if (it == 1) ctx.control.firmwareCancel()
                     }
                     view.ready -> {
                         val send = ctx.device.has("update")
                         val items = if (send) listOf("send", CANCEL, "delete") else listOf(CANCEL, "delete")
-                        val info = listOf(sizeText(view.size), "board ${board ?: "unknown"}") + if (send) emptyList() else listOf(NO_UPDATER)
-                        ctx.sheet.open(tag, items, info = info) {
+                        ctx.sheet.open(tag, items, info = listOf(sizeText(view.size), "board ${board ?: "unknown"}"), owner = FIRMWARE_SHEET) {
                             when (items[it]) {
                                 "send" -> ctx.control.firmwareSend(picked = false)
                                 "delete" -> ctx.control.firmwareCancel()
                             }
                         }
                     }
-                    else -> ctx.sheet.open(tag, listOf("download", CANCEL), info = listOf(sizeText(view.size))) { if (it == 0) ctx.control.firmwareDownload() }
+                    else -> ctx.sheet.open(tag, listOf("download", CANCEL), info = listOf(sizeText(view.size)), owner = FIRMWARE_SHEET) { if (it == 0) ctx.control.firmwareDownload() }
                 }
             })
         }
         add(FwItem("pick file", "", "pick") {
-            if (signing) ctx.sheet.open("pick file", listOf("pick", CANCEL), info = listOf(PICK_HINT)) { if (it == 0) pickFile(ctx) } else pickFile(ctx)
+            if (signing) ctx.sheet.open("pick file", listOf("pick", CANCEL), info = listOf(PICK_HINT), owner = FIRMWARE_SHEET) { if (it == 0) pickFile(ctx) } else pickFile(ctx)
         })
-        add(FwItem("auto check", if (view.checkDaily) ON else OFF, "daily") { i -> onOffSheet(ctx, "auto check", view.checkDaily, keep(i)) { ctx.control.firmwareSettings(it, view.prereleases) } })
-        add(FwItem("prereleases", if (view.prereleases) ON else OFF, "pre") { i -> onOffSheet(ctx, "prereleases", view.prereleases, keep(i)) { ctx.control.firmwareSettings(view.checkDaily, it) } })
+        add(FwItem("auto check", if (view.checkDaily) ON else OFF, "daily") { i -> onOffSheet(ctx, "auto check", view.checkDaily, keep(i), FIRMWARE_SHEET) { ctx.control.firmwareSettings(it, view.prereleases) } })
+        add(FwItem("prereleases", if (view.prereleases) ON else OFF, "pre") { i -> onOffSheet(ctx, "prereleases", view.prereleases, keep(i), FIRMWARE_SHEET) { ctx.control.firmwareSettings(view.checkDaily, it) } })
     }
     val at = items.indexOfFirst { it.tag == focus }.coerceAtLeast(0)
     HubPage("firmware", { ctx.nav.pop() }, count = firmwareText(view)) {

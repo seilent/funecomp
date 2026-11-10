@@ -119,6 +119,7 @@ data class DeviceState(
     val logins: SvcLogins = SvcLogins(),
     val accounts: Map<String, SvcAccount>? = null,
     val appFeatures: Long = 0,
+    val updater: Boolean? = null,
 ) {
     val cardDown: Boolean get() = card.down
 
@@ -167,7 +168,7 @@ data class DeviceState(
         else -> this
     }
 
-    fun withHello(h: HelloReply, app: Long = 0) = DeviceState(hello = h, lib = LibMirror(h.libRev, snap = h.snapRev), appFeatures = app)
+    fun withHello(h: HelloReply, app: Long = 0) = DeviceState(hello = h, lib = LibMirror(h.libRev, snap = h.snapRev), appFeatures = app, updater = h.has("update"))
 
     fun unlinked() = copy(hello = null, logins = SvcLogins(), accounts = null)
 

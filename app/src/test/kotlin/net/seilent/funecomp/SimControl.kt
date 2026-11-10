@@ -58,6 +58,8 @@ import net.seilent.funecomp.ui.Previewed
 import java.io.ByteArrayOutputStream
 import java.io.File
 
+internal val NO_UPDATER_FAULTS = listOf("features=${Groups.all and Groups.mask("update", "updSig", "svcLogin", "svcAccount", "appPkg").inv()}")
+
 class SimControl(
     board: String,
     lib: Library = Library.synthetic(),
@@ -657,8 +659,13 @@ class SimControl(
     }
 
     var pickName = "funeos-v0.4.0-v1.upt"
+    var holdPick = false
+    var picked: (() -> Unit)? = null
 
-    override fun firmwareFile(done: (PickedFile) -> Unit) = done(PickedFile(pickName, 28_043_264, "v1", pickSigned, pickMismatch))
+    override fun firmwareFile(done: (PickedFile) -> Unit) {
+        val p = PickedFile(pickName, 28_043_264, "v1", pickSigned, pickMismatch)
+        if (holdPick) picked = { done(p) } else done(p)
+    }
 
     override fun firmwareSettings(checkDaily: Boolean, prereleases: Boolean) {
         firmware += "settings $checkDaily $prereleases"

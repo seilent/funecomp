@@ -1095,6 +1095,7 @@ val SHOTS = listOf(
     Shot("settings-system", pages = HOME + Page.Settings) { walk("system") },
     Shot("settings-connect-v1", board = "v1", pages = HOME + Page.Settings) { walk("connect") },
     Shot("settings-system-v1", board = "v1", pages = HOME + Page.Settings) { walk("system") },
+    Shot("settings-system-noupdate", board = "v1", pages = HOME + Page.Settings, faults = NO_UPDATER_FAULTS) { walk("system") },
     Shot("eq", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired)),
     Shot("eq-custom", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired), prep = ::custom) { tapRow("eq.band.0") },
     Shot("eq-entry", pages = HOME + Page.Settings + Page.Eq(Enums.EqOutput.wired), prep = ::custom) {
@@ -1530,6 +1531,7 @@ val SHOTS = listOf(
     Shot("settings-about-v1", board = "v1", pages = HOME + Page.Settings) { about() },
     Shot("settings-about-sending", board = "v1", pages = HOME + Page.Settings, firmware = FOUND.copy(ready = true, send = "firmware 42%")) { about() },
     Shot("settings-about-nohello", pages = HOME + Page.Settings, prep = { it.device = it.device.copy(hello = null) }) { about() },
+    Shot("settings-about-noupdate", board = "v1", pages = HOME + Page.Settings, faults = NO_UPDATER_FAULTS) { about() },
     Shot("settings-about-fallback", pages = HOME + Page.Settings, prep = { it.device = it.device.copy(schema = it.device.schema.copy(rows = it.device.schema.rows.filter { r -> r.key != "about" })) }) { about() },
     Shot("settings-about-scrolled", pages = HOME + Page.Settings) {
         about()

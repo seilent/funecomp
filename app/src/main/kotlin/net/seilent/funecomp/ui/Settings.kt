@@ -101,6 +101,7 @@ private const val SYSTEM = "system"
 private const val CREDIT = "seilent"
 private const val UPDATE_FIRMWARE = "update firmware"
 private const val SUPPORT_ME = "support me"
+private const val ABOUT_SHEET = "about.sheet"
 
 fun Row.word(v: String?): String {
     if (v == null) return words.firstOrNull() ?: ""
@@ -248,10 +249,20 @@ fun settingsRows(rows: List<Row>): List<Row> {
 
 fun settingsPivots(rows: List<Row>) = settingsRows(rows).mapNotNull { it.pivot }.distinct()
 
+private class AboutItem(val title: String, val value: () -> String = { "" }, val act: () -> Unit)
+
+private fun aboutItems(ctx: Ctx, updater: Boolean?, firmware: () -> FirmwareView) = buildList {
+    if (updater != false) add(AboutItem(UPDATE_FIRMWARE, { firmwareText(firmware()) }) { ctx.nav.push(Page.Firmware) })
+    add(AboutItem(INSTALL_APP) { ctx.nav.push(Page.Apps) })
+    add(AboutItem(SUPPORT_ME) { ctx.control.openSupport() })
+}
+
 fun aboutSheet(ctx: Ctx, device: () -> DeviceState, firmware: () -> FirmwareView) {
+    val items = aboutItems(ctx, device().updater, firmware)
     ctx.sheet.open(
         ABOUT_KEY,
-        listOf(UPDATE_FIRMWARE, INSTALL_APP, SUPPORT_ME),
+        items.map { it.title },
+        owner = ABOUT_SHEET,
         infoLines = {
             val h = device().hello
             if (h == null) listOf(CREDIT) else listOf("funeOS ${h.version ?: ""}".trim(), CREDIT, "board", "dap battery", "card")
@@ -263,14 +274,8 @@ fun aboutSheet(ctx: Ctx, device: () -> DeviceState, firmware: () -> FirmwareView
             if (h == null) emptyList() else listOf("", "", h.board ?: "", if (st.battery != null) batteryText(st) else "", cardText(st) ?: "")
         },
         infoMixed = { if (device().hello == null) listOf(true) else listOf(true, true) },
-        itemValues = { listOf(firmwareText(firmware()), "", "") },
-    ) {
-        when (it) {
-            0 -> ctx.nav.push(Page.Firmware)
-            1 -> ctx.nav.push(Page.Apps)
-            else -> ctx.control.openSupport()
-        }
-    }
+        itemValues = { items.map { it.value() } },
+    ) { items[it].act() }
 }
 
 @Composable
@@ -304,6 +309,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
             opened = null
         }
     }
+    LaunchedEffect(ctx.device.updater) { if (ctx.sheet.items != aboutItems(ctx, live.updater, { fw }).map { it.title }) ctx.sheet.closeIf(ABOUT_SHEET) }
     fun minutesLeft() = SleepLeft.minutes(live.sleepLeftMs(SystemClock.elapsedRealtime()))
     fun send(s: Send?, row: Row) {
         when (s) {

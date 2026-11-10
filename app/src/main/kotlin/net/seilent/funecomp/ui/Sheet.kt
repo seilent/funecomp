@@ -250,8 +250,8 @@ private suspend fun AwaitPointerEventScope.held(state: SheetState) {
 
 private fun firstRow(at: Int, total: Int, items: Int, rows: Int): Int = (if (items > rows) at - rows + 1 else minOf(at, total - rows)).coerceAtLeast(0)
 
-fun onOffSheet(ctx: Ctx, title: String, on: Boolean, keep: Keep? = null, set: (Boolean) -> Unit) {
-    ctx.sheet.open(title, listOf(OFF, ON), if (on) 1 else 0, keep = keep) { if ((it == 1) != on) set(it == 1) }
+fun onOffSheet(ctx: Ctx, title: String, on: Boolean, keep: Keep? = null, owner: Any? = null, set: (Boolean) -> Unit) {
+    ctx.sheet.open(title, listOf(OFF, ON), if (on) 1 else 0, keep = keep, owner = owner) { if ((it == 1) != on) set(it == 1) }
 }
 
 private suspend fun SheetState.keepRow(k: Keep, panelTop: Float, gutter: Float) {
