@@ -34,6 +34,10 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.io.ByteArrayInputStream
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -117,8 +121,30 @@ class NoUpdaterMainTest {
         return shadowOf(a.get()).nextStartedActivityForResult.requestCode
     }
 
+    private val picked = Uri.parse("content://net.seilent.funecomp.test/app.fpk")
+    private val reads = AtomicInteger()
+
     private fun returned(a: ActivityController<Main>, code: Int) =
-        shadowOf(a.get()).callOnActivityResult(code, Activity.RESULT_OK, Intent().setData(Uri.parse("content://net.seilent.funecomp.test/app.fpk")))
+        shadowOf(a.get()).callOnActivityResult(code, Activity.RESULT_OK, Intent().setData(picked))
+
+    private fun held(): CountDownLatch {
+        val go = CountDownLatch(1)
+        shadowOf(app.contentResolver).registerInputStreamSupplier(picked) {
+            reads.incrementAndGet()
+            go.await(10, TimeUnit.SECONDS)
+            ByteArrayInputStream(ByteArray(0))
+        }
+        return go
+    }
+
+    private fun readEnds(go: CountDownLatch) {
+        assertEquals(Apps.CHECKING_FILE, Remote.apps.view.send)
+        go.countDown()
+        Remote.apps.sync()
+        assertEquals(2, reads.get())
+        assertEquals(Apps.BAD_PACKAGE, Remote.apps.view.info)
+        assertEquals("", Remote.apps.view.send)
+    }
 
     @Test
     fun aPickReturningAfterAHelloWithoutTheInstallerReadsNothing() {
@@ -137,8 +163,9 @@ class NoUpdaterMainTest {
     fun aPickOnADeviceWithTheInstallerIsRead() {
         Remote.apps = Apps().also { it.init(app) }
         val a = main(emptyList())
+        val go = held()
         returned(a, launched(a))
-        assertEquals(Apps.CHECKING_FILE, Remote.apps.view.send)
+        readEnds(go)
     }
 
     @Test
@@ -146,8 +173,9 @@ class NoUpdaterMainTest {
         Remote.apps = Apps().also { it.init(app) }
         val a = main(emptyList(), minor = 16)
         waitFor { Remote.apps.view.info == Apps.NO_INSTALLER }
+        val go = held()
         returned(a, launched(a))
-        assertEquals(Apps.CHECKING_FILE, Remote.apps.view.send)
+        readEnds(go)
     }
 
     @Test
