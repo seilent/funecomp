@@ -232,6 +232,14 @@ class DapLyricsTest {
     private fun times(r: Rig) = shown(r)?.copy?.lines?.map { it.ms }
 
     @Test
+    fun aWordTimedPutShowsCleanLinesInTheLyricsView() {
+        val r = rig()
+        r.lyrics.shown(true)
+        assertTrue(put(r, "[00:12.00]<00:12.00>Hello <00:12.50>world\n") is Session.Result.Ok)
+        waitFor("clean") { shown(r)?.copy?.lines?.map { it.ms to it.text } == listOf(12000L to "Hello world") }
+    }
+
+    @Test
     fun anOffsetSetShiftsTheLinesAndADifferentBodyResetsIt() {
         lrc("[00:01.00]one\n[00:03.00]two\n")
         val r = rig()
@@ -247,7 +255,7 @@ class DapLyricsTest {
 
     @Test
     fun aStepRepliedDuringARefetchKeepsTheHoldPastItsLanding() {
-        lrc(lines(1024))
+        lrc(lines(1024, len = 53))
         val r = rig(faults = listOf("stall-ms=40"))
         r.lyrics.shown(true)
         waitFor("lines") { times(r)?.get(1) == 1000L }
@@ -325,23 +333,23 @@ class DapLyricsTest {
     }
 
     @Test
-    fun a1024LineFileTakesSevenPages() {
-        lrc(lines(1024))
+    fun a1024LineFileTakesSixPages() {
+        lrc(lines(1024, len = 53))
         val r = rig()
         r.lyrics.shown(true)
         waitFor("lines") { shown(r) != null }
         assertEquals(1024, shown(r)!!.copy.lines.size)
-        assertEquals(7, asks().size)
+        assertEquals(6, asks().size)
         neverTwoPending()
     }
 
     @Test
-    fun sixteenLinesOf4096BytesTakeEightPages() {
-        lrc((0 until 16).joinToString("") { "[00:%02d.00]%s\n".format(it, "a".repeat(5000)) })
+    fun fifteenLinesOf4096BytesTakeEightPages() {
+        lrc((0 until 15).joinToString("") { "[00:%02d.00]%s\n".format(it, "a".repeat(4097)) })
         val r = rig()
         r.lyrics.shown(true)
         waitFor("lines") { shown(r) != null }
-        assertEquals(16, shown(r)!!.copy.lines.size)
+        assertEquals(15, shown(r)!!.copy.lines.size)
         assertTrue(shown(r)!!.copy.lines.all { it.text.length == Proto.lyrLineMax })
         assertEquals(8, asks().size)
     }

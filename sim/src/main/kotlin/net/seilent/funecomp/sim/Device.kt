@@ -55,6 +55,7 @@ import net.seilent.funecomp.state.ArtKey
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.EqSlots
+import net.seilent.funecomp.state.Lrc
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream
@@ -98,10 +99,6 @@ private const val LIBRARY = 1
 private const val PHONE = 2
 private const val CROSS_MIN_MS = 30_000L
 private const val CROSS_CAP_MS = 240_000L
-private val SYNCED = Regex("^\\[[0-9]+:[0-9]{2}(\\.[0-9]+)?]", RegexOption.MULTILINE)
-private val STAMP = Regex("^\\[([0-9]+):([0-9]{2}(\\.[0-9]+)?)]")
-private val ID_TAG = Regex("^\\[[A-Za-z]+:.*]$")
-private val OFFSET = Regex("^\\[offset:\\s*([+-]?[0-9]+)\\s*]$", RegexOption.IGNORE_CASE)
 
 class Lyr(val kind: Int, val lines: List<LyrLine>) {
     val crc: Long = lyricsCrc(kind, lines)
@@ -109,25 +106,11 @@ class Lyr(val kind: Int, val lines: List<LyrLine>) {
     fun shifted(by: Int): Lyr = if (kind != Enums.LyricsKind.synced) this else Lyr(kind, lines.map { it.copy(ms = ((it.ms ?: 0) - by).coerceAtLeast(0)) })
 
     companion object {
-        fun parse(text: String): Lyr? {
-            val raw = text.lines().map { it.trim() }
-            if (!SYNCED.containsMatchIn(text)) {
-                val plain = raw.filterNot { ID_TAG.matches(it) }.dropLastWhile { it.isEmpty() }
-                return if (plain.isEmpty()) null else Lyr(Enums.LyricsKind.plain, plain.map { LyrLine(null, cut(it)) })
-            }
-            val shift = raw.firstNotNullOfOrNull { OFFSET.find(it)?.groupValues?.get(1)?.toLong() } ?: 0L
-            val out = ArrayList<LyrLine>()
-            for (l in raw) {
-                var rest = l
-                val stamps = ArrayList<Long>()
-                while (true) {
-                    val m = STAMP.find(rest) ?: break
-                    stamps += m.groupValues[1].toLong() * 60_000 + Math.round(m.groupValues[2].toDouble() * 1000)
-                    rest = rest.substring(m.range.last + 1)
-                }
-                for (ms in stamps) out += LyrLine(ms - shift, cut(rest.trim()))
-            }
-            return Lyr(Enums.LyricsKind.synced, out.sortedBy { it.ms })
+        fun parse(bytes: ByteArray): Lyr? {
+            val p = Lrc.parse(bytes)
+            if (p.lines.isNotEmpty()) return Lyr(Enums.LyricsKind.synced, p.lines.map { LyrLine(it.ms, cut(it.text)) })
+            if (p.plain.isNotEmpty()) return Lyr(Enums.LyricsKind.plain, p.plain.map { LyrLine(null, cut(it)) })
+            return null
         }
 
         private fun cut(s: String) = Req.cap(s, Proto.lyrLineMax)!!
@@ -347,7 +330,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f ->
             val id = f.name.removeSuffix(".lrc").toULongOrNull()?.toLong()
             val bytes = f.readBytes()
-            val l = Lyr.parse(String(bytes, Charsets.UTF_8))
+            val l = Lyr.parse(bytes)
             if (id != null && l != null) {
                 lyrs[id] = l
                 phone[id] = bytes
@@ -2110,10 +2093,10 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val text = b.bytes(Tags.LrcPut.text) ?: return Answer.Fail(Err.badValue, "no text")
         if (text.size > Proto.lrcMaxBytes) return Answer.Fail(Err.tooBig, "too big")
         if (b.long(Tags.LrcPut.crc) != crc(text)) return Answer.Fail(Err.crc, "crc")
-        val s = String(text, Charsets.UTF_8)
-        val synced = SYNCED.containsMatchIn(s)
+        val parsed = Lyr.parse(text)
+        val synced = parsed?.kind == Enums.LyricsKind.synced
         if (!synced && !v14) return Answer.Fail(Err.badValue, "not synced lrc")
-        val parsed = Lyr.parse(s) ?: return Answer.Fail(Err.badValue, "empty")
+        if (parsed == null) return Answer.Fail(Err.badValue, "empty")
         if (!synced && hasSynced(track)) return Answer.Fail(Err.refused, "refused")
         opts.lrcDir?.let { File(it.apply { mkdirs() }, "${java.lang.Long.toUnsignedString(track)}.lrc").writeBytes(text) }
         lyrs[track] = parsed

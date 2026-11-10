@@ -11,6 +11,8 @@ import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.lyricsCrc
+import net.seilent.funecomp.state.Lrc
+import net.seilent.funecomp.state.LrcCases
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -38,6 +40,8 @@ class Proto17Test {
 
     private fun file(text: String, id: Long = track) = File(dir.apply { mkdirs() }, "${java.lang.Long.toUnsignedString(id)}.lrc").writeText(text)
 
+    private fun file(bytes: ByteArray, id: Long = track) = File(dir.apply { mkdirs() }, "${java.lang.Long.toUnsignedString(id)}.lrc").writeBytes(bytes)
+
     private fun get(d: Device, offset: Long = 0, have: Long? = null, id: Long = track) = d.request(Msg.LYR_GET, Node.decode("LYR_GET", Req.lyrGet(id, offset, have)), Sink())
 
     private fun page(a: Answer) = LyrGetReply.from(Node.decode("LYR_GET.reply", (a as Answer.Ok).payload))
@@ -57,6 +61,19 @@ class Proto17Test {
         }
         return out
     }
+
+    private fun lines(d: Device): List<LyrLine> {
+        val first = page(get(d))
+        val out = ArrayList(first.lines)
+        var p = first
+        while (p.more == true) {
+            p = page(get(d, out.size.toLong(), first.crc))
+            out += p.lines
+        }
+        return out
+    }
+
+    private fun put(d: Device, text: ByteArray) = d.request(Msg.LRC_PUT, Node.decode("LRC_PUT", Req.lrcPut(track, lib.rev, text, CRC32().apply { update(text) }.value)), Sink())
 
     @Test
     fun syncedFilesParseSortedWithTheOffsetAndOneLinePerStamp() {
@@ -81,10 +98,10 @@ class Proto17Test {
 
     @Test
     fun pagesHaveRestartAndErrors() {
-        file((0 until 1024).joinToString("") { "[%02d:%02d.00]%s\n".format(it / 60, it % 60, "x".repeat(64)) })
+        file((0 until 1024).joinToString("") { "[%02d:%02d.00]%s\n".format(it / 60, it % 60, "x".repeat(53)) })
         val d = device()
         val pages = all(d)
-        assertEquals(7, pages.size)
+        assertEquals(6, pages.size)
         assertEquals(1024, pages.sumOf { it.second })
         val crc = page(get(d)).crc!!
         assertEquals(LyrGetReply(crc, Enums.LyricsKind.synced, 1024, 0, false, emptyList()), page(get(d, 0, crc)))
@@ -103,7 +120,7 @@ class Proto17Test {
 
     @Test
     fun longLinesAreCutAt4096BytesAndTakeTwoAPage() {
-        file((0 until 16).joinToString("") { "[00:%02d.00]%s\n".format(it, "あ".repeat(1400)) })
+        file((0 until 15).joinToString("") { "[00:%02d.00]%s\n".format(it, "あ".repeat(1400)) })
         val d = device()
         assertEquals(8, all(d).size)
         val l = page(get(d)).lines.first().text
@@ -120,6 +137,73 @@ class Proto17Test {
         assertTrue(d.request(Msg.LRC_DEL, Node.decode("LRC_DEL", Req.lrcDel(track)), Sink()) is Answer.Ok)
         assertNull(state(d).lyricsCrc)
         assertEquals(Err.notFound, code(get(d)))
+    }
+
+    @Test
+    fun aWordTimedFileServesCleanLines() {
+        file("[00:12.00]<00:12.00>Hello <00:12.50>world\n")
+        assertEquals(listOf(LyrLine(12000, "Hello world")), page(get(device())).lines)
+    }
+
+    @Test
+    fun spacedLeadingStampsSplitIntoTwoLines() {
+        file("[00:01.00] [00:02.00]x\n")
+        assertEquals(listOf(LyrLine(1000, "x"), LyrLine(2000, "x")), page(get(device())).lines)
+    }
+
+    @Test
+    fun squareAndMixedWordStampsAreStripped() {
+        file("[00:05.00]a [00:05.50]b <00:06.00>c\n")
+        assertEquals(listOf(LyrLine(5000, "a b c")), page(get(device())).lines)
+    }
+
+    @Test
+    fun anLrcPutOfAWordTimedBodyMovesTheCrcToTheCleanLines() {
+        val d = device()
+        assertTrue(put(d, "[00:12.00]<00:12.00>Hello <00:12.50>world\n".toByteArray()) is Answer.Ok)
+        val word = state(d).lyricsCrc
+        assertEquals(lyricsCrc(Enums.LyricsKind.synced, listOf(LyrLine(12000, "Hello world"))), word)
+        assertTrue(put(d, "[00:12.00]Hello world\n".toByteArray()) is Answer.Ok)
+        assertEquals(word, state(d).lyricsCrc)
+    }
+
+    @Test
+    fun aLatin1FileServesItsText() {
+        file("[00:01.00]caf".toByteArray() + byteArrayOf(0xE9.toByte()) + "\n".toByteArray())
+        assertEquals(listOf(LyrLine(1000, "café")), page(get(device())).lines)
+    }
+
+    @Test
+    fun aFileOver64KiBServesNothing() {
+        file("[00:00.00]" + "a".repeat(65526) + "\n")
+        val d = device()
+        assertEquals(Err.notFound, code(get(d)))
+        assertNull(state(d).lyricsCrc)
+        file("[00:00.00]" + "a".repeat(65525) + "\n")
+        assertEquals(listOf(LyrLine(0, "a".repeat(Proto.lyrLineMax))), page(get(device())).lines)
+    }
+
+    @Test
+    fun anLrcPutTakesItsKindFromTheParse() {
+        val d = device(3)
+        assertTrue(put(d, "[0:5.00]x\n".toByteArray()) is Answer.Ok)
+        assertEquals(listOf(LyrLine(5000, "x")), page(get(d)).lines)
+    }
+
+    @Test
+    fun thePortsCasesServeAsThePortParsesThem() {
+        for (input in LrcCases.inputs) {
+            val bytes = input.toByteArray()
+            file(bytes)
+            val d = device()
+            val p = Lrc.parse(bytes)
+            val want = when {
+                p.lines.isNotEmpty() -> p.lines.map { LyrLine(it.ms.coerceAtLeast(0), Req.cap(it.text, Proto.lyrLineMax)!!) }
+                p.plain.isNotEmpty() -> p.plain.map { LyrLine(null, Req.cap(it, Proto.lyrLineMax)!!) }
+                else -> null
+            }
+            if (want == null) assertEquals(input.take(40), Err.notFound, code(get(d))) else assertEquals(input.take(40), want, lines(d))
+        }
     }
 
     @Test
