@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -58,6 +59,9 @@ class Overlay {
 
     var until by mutableLongStateOf(0L)
         private set
+
+    var drawn by mutableStateOf(false)
+        internal set
 
     val visible get() = SystemClock.uptimeMillis() < until
 
@@ -99,6 +103,7 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
         touchClose = true
         overlay.hide()
     }
+    SideEffect { overlay.drawn = alpha.value > 0f }
     if (alpha.value <= 0f) return
 
     val s = device.playback.state

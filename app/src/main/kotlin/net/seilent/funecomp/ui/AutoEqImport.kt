@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -163,6 +164,11 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
                 }
             }
             SearchField(query.value, { query.value = it }, "aeq.field", ImeAction.Done, modifier = Modifier.focusRequester(field))
+        }
+        val shown = list != null && grid != null
+        DisposableEffect(shown) {
+            ctx.toast.grid = shown
+            onDispose { ctx.toast.grid = false }
         }
         if (list != null) {
             JumpGrid(letters, grid ?: JUMP_NONE, grid != null, jump, { letter ->

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.snapshotFlow
 import kotlinx.coroutines.flow.first
@@ -505,6 +506,8 @@ class ToastState {
         private set
     var shows by mutableIntStateOf(0)
         private set
+    var grid by mutableStateOf(false)
+        internal set
 
     fun show(artist: String, title: String) {
         this.artist = artist
@@ -514,10 +517,15 @@ class ToastState {
 }
 
 @Composable
-fun Toast(state: ToastState, held: Pair<String, String>? = null) {
+fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolean = false) {
     val ui = LocalUi.current
     val progress = remember { Animatable(0f) }
     var leaving by remember { mutableStateOf(false) }
+    var risen by remember { mutableStateOf(false) }
+    val cover by rememberUpdatedState(covered)
+    LaunchedEffect(covered) {
+        if (covered) risen = true
+    }
     var artist by remember { mutableStateOf(held?.first ?: "") }
     var title by remember { mutableStateOf(held?.second ?: "") }
     LaunchedEffect(held) {
@@ -542,14 +550,19 @@ fun Toast(state: ToastState, held: Pair<String, String>? = null) {
             return@LaunchedEffect
         }
         leaving = false
+        risen = cover
         progress.animateTo(1f, tween(Tok.motion_toastIn.toInt(), easing = LinearEasing))
         if (held != null) return@LaunchedEffect
         delay(Tok.motion_toastHold.toLong())
         leaving = true
         progress.animateTo(0f, tween(Tok.motion_toastOut.toInt(), easing = LinearEasing))
     }
-    if (progress.value <= 0f) return
-    val e = if (leaving) 1f - ExpOut6.transform(1f - progress.value) else ExpOut6.transform(progress.value)
+    if (progress.value <= 0f || covered) return
+    val e = when {
+        leaving -> 1f - ExpOut6.transform(1f - progress.value)
+        risen -> 1f
+        else -> ExpOut6.transform(progress.value)
+    }
     val travel = ui.px(Tok.motion_toastTravel)
     val edge = ui.px(Tok.edge)
     Box(

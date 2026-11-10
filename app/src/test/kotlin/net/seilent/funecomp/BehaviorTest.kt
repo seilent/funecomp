@@ -782,6 +782,55 @@ class BehaviorTest {
     }
 
     @Test
+    fun aGridOpenedDuringTheRiseReturnsTheToastWithNoRise() {
+        val (_, shell) = openAutoEq()
+        shell.toast.show("artist", "title")
+        settle(50)
+        rule.onNodeWithTag("aeq.div.#").performClick()
+        var frames = 0
+        while (!gridOpen()) {
+            check(frames++ < 5) { "no grid after the divider" }
+            rule.mainClock.advanceTimeByFrame()
+            rule.waitForIdle()
+        }
+        frames = 0
+        while (rule.onAllNodesWithTag("toast").fetchSemanticsNodes().isNotEmpty()) {
+            check(frames++ < 3) { "the toast stays over the grid" }
+            rule.mainClock.advanceTimeByFrame()
+            rule.waitForIdle()
+        }
+        rule.onNodeWithTag("jump.exit").performSemanticsAction(SemanticsActions.OnClick)
+        frames = 0
+        while (rule.onAllNodesWithTag("toast").fetchSemanticsNodes().isEmpty()) {
+            check(frames++ < 5) { "no toast after the close" }
+            rule.mainClock.advanceTimeByFrame()
+            rule.waitForIdle()
+        }
+        val first = rule.onNodeWithTag("toast").fetchSemanticsNode().boundsInRoot.top
+        settle(500)
+        assertEquals(rule.onNodeWithTag("toast").fetchSemanticsNode().boundsInRoot.top, first, 0.5f)
+    }
+
+    @Test
+    fun noToastDrawsOverTheJumpGridAndItReturnsWithNoRise() {
+        val (_, shell) = openAutoEq()
+        openGrid()
+        shell.toast.show("artist", "title")
+        settle(100)
+        assertTrue(rule.onAllNodesWithTag("toast").fetchSemanticsNodes().isEmpty())
+        rule.onNodeWithTag("jump.exit").performSemanticsAction(SemanticsActions.OnClick)
+        var frames = 0
+        while (rule.onAllNodesWithTag("toast").fetchSemanticsNodes().isEmpty()) {
+            check(frames++ < 5) { "no toast after the close" }
+            rule.mainClock.advanceTimeByFrame()
+            rule.waitForIdle()
+        }
+        val first = rule.onNodeWithTag("toast").fetchSemanticsNode().boundsInRoot.top
+        settle(500)
+        assertEquals(rule.onNodeWithTag("toast").fetchSemanticsNode().boundsInRoot.top, first, 0.5f)
+    }
+
+    @Test
     fun autoEqGridSwipeScrollsAndStopsAtTheLimit() {
         openAutoEq()
         openGrid()
