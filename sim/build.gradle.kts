@@ -18,6 +18,7 @@ dependencies {
     implementation(project(":proto"))
     implementation(project(":state"))
     testImplementation(testFixtures(project(":proto")))
+    testImplementation(testFixtures(project(":state")))
     testImplementation(libs.junit)
 }
 
