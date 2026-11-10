@@ -109,14 +109,14 @@ class CardToastTest {
         Entry("home ring", { open() }) { tap("home.ring") },
         Entry("list play", { songs() }) { tap("row.0") },
         Entry("song sheet play next", { songs() }) { sheet("row.0", 1) },
-        Entry("song sheet add to queue", { songs() }) { sheet("row.0", 2) },
+        Entry("song sheet add to now playing", { songs() }) { sheet("row.0", 2) },
         Entry("collection sheet play", { albums() }) { sheet("row.0", 0) },
         Entry("collection sheet play next", { albums() }) { sheet("row.0", 1) },
-        Entry("collection sheet add to queue", { albums() }) { sheet("row.0", 2) },
+        Entry("collection sheet add to now playing", { albums() }) { sheet("row.0", 2) },
         Entry("queue page tap", { open(Page.NowPlaying, Page.Queue) }) { tap("queue.1") },
     )
 
-    private val adds = setOf("song sheet play next", "song sheet add to queue", "collection sheet play next", "collection sheet add to queue")
+    private val adds = setOf("song sheet play next", "song sheet add to now playing", "collection sheet play next", "collection sheet add to now playing")
 
     private fun refusedEverywhere(line: String, at: (Entry) -> Boolean = { true }) {
         for (e in entries.filter(at)) {
@@ -153,7 +153,7 @@ class CardToastTest {
     @Test
     fun aPhoneStreamSendsPlayNextAndAddToQueue() {
         start(phone = true)
-        val sent = mapOf("song sheet play next" to "queue playNext", "song sheet add to queue" to "add add", "collection sheet play next" to "add playNext", "collection sheet add to queue" to "add add")
+        val sent = mapOf("song sheet play next" to "queue playNext", "song sheet add to now playing" to "add add", "collection sheet play next" to "add playNext", "collection sheet add to now playing" to "add add")
         for (e in entries.filter { it.name in adds }) {
             e.prep()
             calls.clear()

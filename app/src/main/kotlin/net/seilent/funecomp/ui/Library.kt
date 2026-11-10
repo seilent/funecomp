@@ -64,7 +64,7 @@ fun LibList.row(i: Int, control: Control, view: Int, parent: String): LibRow? {
 
 class Ctx(val device: DeviceState, val control: Control, val nav: Nav, val sheet: SheetState, val toast: ToastState, val browse: BrowseSessions, val live: () -> DeviceState = { device })
 
-const val ADD_TO_QUEUE = "add to queue"
+const val ADD_TO_NOW_PLAYING = "add to now playing"
 private const val PLAY_NEXT = "play next"
 
 fun musicViews(device: DeviceState) = listOf(Enums.View.albums, Enums.View.artists, Enums.View.playlists, Enums.View.songs) +
@@ -193,7 +193,7 @@ private fun queueAdd(ctx: Ctx, cmd: Int, title: String, view: Int?, parent: Stri
 }
 
 private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
-    val items = listOf("play", PLAY_NEXT) + if (ctx.device.has("queueAdd")) listOf(ADD_TO_QUEUE) else emptyList()
+    val items = listOf("play", PLAY_NEXT) + if (ctx.device.has("queueAdd")) listOf(ADD_TO_NOW_PLAYING) else emptyList()
     ctx.sheet.open(r.name ?: "", items) {
         when (it) {
             0 -> play()
@@ -213,7 +213,7 @@ private fun groupSheet(ctx: Ctx, title: String, view: Int, parent: String, count
         add("play" to { playSource(ctx, view, parent, count) })
         if (add) {
             add(PLAY_NEXT to { queueAdd(ctx, Enums.QueueCmd.playNext, title, view, parent) })
-            add(ADD_TO_QUEUE to { queueAdd(ctx, Enums.QueueCmd.add, title, view, parent) })
+            add(ADD_TO_NOW_PLAYING to { queueAdd(ctx, Enums.QueueCmd.add, title, view, parent) })
         }
         add("shuffle" to { playSource(ctx, view, parent, count, shuffle = true) })
         if (artist != null) add(PICK_IMAGE to { pickSheet(ctx, PickFor(title, artist.mbid, library = true)) })
@@ -225,7 +225,7 @@ private fun genreRow(ctx: Ctx, r: LibRow): RowSpec {
     val name = r.name ?: ""
     val key = r.key ?: name
     return RowSpec(name, songs(r.count ?: 0), bold = true, tap = { playSource(ctx, Enums.View.genres, key, r.count) }) {
-        val items = listOf("play") + if (ctx.device.has("queueAdd")) listOf(ADD_TO_QUEUE) else emptyList()
+        val items = listOf("play") + if (ctx.device.has("queueAdd")) listOf(ADD_TO_NOW_PLAYING) else emptyList()
         ctx.sheet.open(name, items) {
             if (it == 0) playSource(ctx, Enums.View.genres, key, r.count) else queueAdd(ctx, Enums.QueueCmd.add, name, Enums.View.genres, key)
         }

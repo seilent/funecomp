@@ -951,7 +951,7 @@ class ArtPickUiTest {
         settle(1000)
         rule.pivotTo("music", "artists") { settle(it) }
         hold("row.1")
-        assertEquals(listOf("play", "play next", "add to queue", "shuffle", "pick image"), shell.sheet.items)
+        assertEquals(listOf("play", "play next", "add to now playing", "shuffle", "pick image"), shell.sheet.items)
         tap("sheet.item.4")
         assertEquals("Other", shell.sheet.title)
         tap("sheet.item.1")

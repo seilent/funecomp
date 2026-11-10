@@ -17,7 +17,6 @@ import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Tags
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.QueueMirror
-import net.seilent.funecomp.ui.ADD_TO_QUEUE
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
@@ -148,7 +147,7 @@ class GenresTest {
         val c = start()
         pivot("genres")
         hold("row.3")
-        assertEquals(listOf("play", ADD_TO_QUEUE), shell.sheet.items)
+        assertEquals(listOf("play", "add to now playing"), shell.sheet.items)
         shell.sheet.accept(1)
         settle()
         val b = lastAdd(c)
@@ -178,12 +177,12 @@ class GenresTest {
         start()
         pivot("artists")
         hold("row.0")
-        assertEquals(listOf("play", "play next", ADD_TO_QUEUE, "shuffle", "pick image"), shell.sheet.items)
+        assertEquals(listOf("play", "play next", "add to now playing", "shuffle", "pick image"), shell.sheet.items)
         shell.sheet.close()
         settle()
         pivot("songs")
         hold("row.0")
-        assertEquals(listOf("play", "play next", ADD_TO_QUEUE), shell.sheet.items)
+        assertEquals(listOf("play", "play next", "add to now playing"), shell.sheet.items)
     }
 
     @Test
