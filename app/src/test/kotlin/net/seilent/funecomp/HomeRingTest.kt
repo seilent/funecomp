@@ -128,7 +128,7 @@ class HomeRingTest {
         val u = ui.u
         val o = rule.onNodeWithTag("home").fetchSemanticsNode().boundsInWindow
         val b = frame()
-        val row = (o.top + ui.px(142.4f)).roundToInt()
+        val row = (o.top + ui.px(146.6f)).roundToInt()
         val xs = (o.left.roundToInt() until (o.left + ui.px(50f)).roundToInt()).filter { lit(b.getPixel(it, row)) }
         val left = xs.first()
         val right = xs.last() + 1
@@ -139,7 +139,7 @@ class HomeRingTest {
         val column = ((left + right) / 2f).roundToInt()
         val ys = ((o.top + ui.px(112f)).roundToInt() until (o.top + ui.px(172f)).roundToInt()).filter { lit(b.getPixel(column, it)) }
         assertEquals(35f, (ys.last() + 1 - ys.first()) / u, 0.5f)
-        assertEquals(142.4f, ((ys.first() + ys.last() + 1) / 2f - o.top) / u, 0.5f)
+        assertEquals(146.6f, ((ys.first() + ys.last() + 1) / 2f - o.top) / u, 0.5f)
     }
 
     @Test

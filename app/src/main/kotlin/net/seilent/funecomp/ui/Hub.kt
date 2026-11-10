@@ -189,7 +189,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     val fit = if (ui.shape == Shape.L) minOf(0f, ui.w - Tok.edge - ui.homeTextX - ink / ui.u) else 0f
     val pitch = ui.homePitch
     val x = ui.px(ui.homeTextX + fit)
-    val margin = Held.Rest.homeFirstBaseline - LayoutTok.homeBarTop
+    val margin = LayoutTok.homeFirstBaseline - LayoutTok.homeBarTop
     Box(Modifier.fillMaxSize().testTag("home")) {
         Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), flingBehavior = rememberFling(Tok.motion_listFlingRetention)).testTag("home.column")) {
             val height = maxOf(ui.h, 2 * margin + items.size * pitch)
@@ -210,7 +210,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                     }
                 }
                 items.forEachIndexed { i, item ->
-                    val baseline = ui.px(Held.Rest.homeFirstBaseline + i * pitch)
+                    val baseline = ui.px(LayoutTok.homeFirstBaseline + i * pitch)
                     val on = focus == i
                     val c by animateColorAsState(white(if (on) Roles.homeItem.alpha else Roles.homeItem.dim), tween(Tok.motion_focusAlpha.toInt(), easing = LinearEasing), label = "home")
                     val subBaseline = baseline + ui.px(LayoutTok.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size)

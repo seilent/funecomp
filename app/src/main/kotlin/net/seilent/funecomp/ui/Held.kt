@@ -33,18 +33,6 @@ object Held {
         )
     }
 
-    object Rest {
-        const val homeFirstBaseline = 96.4f
-        const val homeRingY = 87.4f
-        const val homeRingHitBottom = 111.7f
-
-        val entries = listOf(
-            Entry("homeFirstBaseline", "homeFirstBaseline", homeFirstBaseline, "R1", "zhome2", "836c8fbc4"),
-            Entry("homeRingY", "homeRingY", homeRingY, "R1", "zhome2", "836c8fbc4"),
-            Entry("homeRingHitBottom", "homeRingHitBottom", homeRingHitBottom, "R1", "zhome2", "836c8fbc4"),
-        )
-    }
-
     object Vol {
         const val vol_skip = 42.1f
         const val vol_label = 8.8f
@@ -59,5 +47,5 @@ object Held {
         )
     }
 
-    val entries get() = Nav.entries + Pivot.entries + Rest.entries + Vol.entries
+    val entries get() = Nav.entries + Pivot.entries + Vol.entries
 }

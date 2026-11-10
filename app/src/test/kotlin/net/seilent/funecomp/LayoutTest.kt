@@ -181,19 +181,19 @@ class LayoutTest {
     fun homeRingSitsLeftOfMusic() {
         val portrait = Ui.of(411f, 960f)
         assertEquals(25.7f, portrait.homeRingX, 1e-3f)
-        assertEquals(142.4f, portrait.homeRingY(1), 1e-3f)
+        assertEquals(146.6f, portrait.homeRingY(1), 1e-3f)
         assertEquals(0f, portrait.homeMenuX, 1e-3f)
         assertEquals(44f, portrait.homeRingHitRight, 1e-3f)
-        assertEquals(123.61f, portrait.homeSlotTop(1), 1e-3f)
-        assertEquals(166.7f, portrait.homeRingHitBottom(1), 1e-3f)
+        assertEquals(127.81f, portrait.homeSlotTop(1), 1e-3f)
+        assertEquals(170.9f, portrait.homeRingHitBottom(1), 1e-3f)
         val land = Ui.of(960f, 600f)
         assertEquals(Shape.L, land.shape)
         assertEquals(265.7f, land.homeRingX, 1e-3f)
-        assertEquals(135.4f, land.homeRingY(1), 1e-3f)
+        assertEquals(139.6f, land.homeRingY(1), 1e-3f)
         assertEquals(240f, land.homeMenuX, 1e-3f)
         assertEquals(284f, land.homeRingHitRight, 1e-3f)
-        assertEquals(116.61f, land.homeSlotTop(1), 1e-3f)
-        assertEquals(159.7f, land.homeRingHitBottom(1), 1e-3f)
+        assertEquals(120.81f, land.homeSlotTop(1), 1e-3f)
+        assertEquals(163.9f, land.homeRingHitBottom(1), 1e-3f)
     }
 
     @Test

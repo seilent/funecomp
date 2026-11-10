@@ -198,7 +198,7 @@ class HomeLayoutTest {
                 val baseline = wn.positionInRoot.y + wl.firstBaseline - o.y
                 assertEquals("$n $item size", 39.7f, px(wl) / u, 0.5f / u + 1e-3f)
                 assertEquals("$n $item x", x * u, wn.positionInRoot.x - o.x, 1f)
-                assertEquals("$n $item baseline", (96.4f + pitch * i) * u, baseline, 1f)
+                assertEquals("$n $item baseline", (100.6f + pitch * i) * u, baseline, 1f)
                 assertEquals("$n $item subtitle size", 9f, px(sl) / u, 0.5f / u + 1e-3f)
                 assertEquals("$n $item subtitle x", 11.1f * u, sn.positionInRoot.x - wn.positionInRoot.x, 1f)
                 assertEquals("$n $item subtitle cap top", 3.5f * u, sn.positionInRoot.y + sl.firstBaseline - Tok.capHeight * px(sl) - o.y - baseline, 1f)

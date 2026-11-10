@@ -1,7 +1,12 @@
 package net.seilent.funecomp
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -21,6 +26,7 @@ import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.homeItems
 import net.seilent.funecomp.ui.statusText
 import org.junit.Assert.assertEquals
@@ -41,13 +47,23 @@ class HomeEntryTest {
 
     private var sim: SimControl? = null
 
-    private fun start(w: Int, h: Int, link: LinkView = LinkView(Phase.LIVE, "AP80", everLive = true)): Shell {
+    private class Frame(val w: Int, val h: Int, val c: SimControl, val link: LinkView, val shell: Shell, val bars: WindowInsets?)
+
+    private var frame by mutableStateOf<Frame?>(null)
+    private var shown = false
+
+    private fun start(w: Int, h: Int, link: LinkView = LinkView(Phase.LIVE, "AP80", everLive = true), bars: WindowInsets? = null): Shell {
         val c = SimControl("ap80").also { sim = it }
         val shell = Shell(Nav(listOf(Page.Home)))
-        rule.mainClock.autoAdvance = false
-        rule.setContent {
-            Box(Modifier.requiredSize(w.dp, h.dp)) { App(c.device, link, c, shell) }
+        if (!shown) {
+            shown = true
+            rule.mainClock.autoAdvance = false
+            rule.setContent {
+                val f = frame ?: return@setContent
+                key(f) { Box(Modifier.requiredSize(f.w.dp, f.h.dp)) { if (f.bars == null) App(f.c.device, f.link, f.c, f.shell) else App(f.c.device, f.link, f.c, f.shell, insets = f.bars) } }
+            }
         }
+        frame = Frame(w, h, c, link, shell, bars)
         settle(1000)
         return shell
     }
@@ -59,6 +75,8 @@ class HomeEntryTest {
     }
 
     private fun scrollMax() = rule.onNodeWithTag("home.column").fetchSemanticsNode().config[SemanticsProperties.VerticalScrollAxisRange].maxValue()
+
+    private fun ui() = rule.onNodeWithTag("home").fetchSemanticsNode().size.let { Ui.of(it.width.toFloat(), it.height.toFloat()) }
 
     @Test
     fun nowPlayingIsTheFirstHomeItemWithItsStateAsSubtitle() {
@@ -125,12 +143,16 @@ class HomeEntryTest {
     fun portraitHomeDoesNotScroll() {
         start(411, 960)
         assertEquals(0f, scrollMax())
+        val s = SIZES.first { it.name == "360x640" }
+        start(s.w.toInt(), s.h.toInt(), bars = s.bars)
+        assertEquals(s.name, 0f, scrollMax())
     }
 
     @Test
     fun landscapeHomeScrollsToTheLastItem() {
         val shell = start(960, 600)
-        assertTrue(scrollMax() > 0f)
+        val ui = ui()
+        assertEquals((433.62f - ui.h) * ui.u, scrollMax(), 1f)
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("home.column").performTouchInput { swipeUp() }
         rule.mainClock.autoAdvance = false
