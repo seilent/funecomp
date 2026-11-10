@@ -1267,6 +1267,7 @@ object Remote : Control {
         Svc.dropped()
         heart.down()
         Scrobbles.unlinked()
+        Firmwares.dropped()
         heartToast = null
         spec = null
         synchronized(asked) { asked.clear() }
@@ -1533,7 +1534,7 @@ object Remote : Control {
             board = hello.board
             Scrobbles.session(hello.has("stateClock"))
             link?.session?.let { Scrobbles.linked(it, hello.has("playLog")) }
-            Firmwares.hello(hello.board, hello.version, hello.has("updSig"))
+            Firmwares.hello(hello.board, hello.version, hello.has("updSig"), hello.has("update"))
             Lyrics.session()
             dapLyrics.session()
             Svc.hello(hello, spec)

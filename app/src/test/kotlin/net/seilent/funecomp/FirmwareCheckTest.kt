@@ -192,6 +192,44 @@ class FirmwareCheckTest {
         until("repick") { net.lists() == 2 && Firmwares.view.tag == "v0.3.1" && Firmwares.view.status.isEmpty() }
     }
 
+    private fun drained() = Firmwares.idle()
+
+    @Test
+    fun aHelloWithoutTheUpdaterAfterASignedCheckChecksNothing() {
+        val net = signed()
+        Firmwares.init(app, net)
+        checkedWith(true)
+        Firmwares.hello("v1", "v0.3.0", false, updater = false)
+        drained()
+        assertEquals(1, net.lists())
+    }
+
+    @Test
+    fun aDailyCheckSkipsAHelloWithoutTheUpdater() {
+        app.getSharedPreferences("firmware", Context.MODE_PRIVATE).edit().putBoolean("checkDaily", true).putLong("lastCheck", 0).commit()
+        val net = signed()
+        Firmwares.init(app, net)
+        Firmwares.hello("v1", "v0.3.0", false, updater = false)
+        drained()
+        assertEquals(0, net.lists())
+    }
+
+    @Test
+    fun aHelloWithoutTheUpdaterDuringACheckMakesNoRecheck() {
+        val net = signed()
+        val hold = java.util.concurrent.CountDownLatch(1)
+        net.hold = hold
+        Firmwares.init(app, net)
+        Firmwares.hello("v1", "v0.3.0", false)
+        Firmwares.check()
+        until("first get") { net.lists() == 1 }
+        Firmwares.hello("v1", "v0.3.0", true, updater = false)
+        hold.countDown()
+        until("check") { Firmwares.view.status.isEmpty() && Firmwares.view.tag != null }
+        drained()
+        assertEquals(1, net.lists())
+    }
+
     @Test
     fun aStoredOffStaysOffAndOnlyPrereleasesSaysSo() {
         app.getSharedPreferences("firmware", Context.MODE_PRIVATE).edit().putBoolean("prereleases", false).commit()

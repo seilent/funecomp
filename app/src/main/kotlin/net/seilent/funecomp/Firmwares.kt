@@ -59,6 +59,7 @@ object Firmwares {
     private var board: String? = null
     private var version: String? = null
     @Volatile private var updSig = false
+    @Volatile private var updater: Boolean? = null
     @Volatile private var checkedSig: Boolean? = null
     @Volatile private var unsigned = false
     private val sendExec = Executors.newSingleThreadExecutor { Thread(it, "firmware-send").apply { isDaemon = true } }
@@ -93,24 +94,32 @@ object Firmwares {
         view = FirmwareView(checkDaily = prefs(app).getBoolean(DAILY, false), prereleases = prefs(app).getBoolean(PRE, true))
     }
 
-    fun hello(board: String?, version: String?, updSig: Boolean = false) {
+    fun hello(board: String?, version: String?, updSig: Boolean = false, updater: Boolean = true) {
         this.board = board
         this.version = version
         this.updSig = updSig
+        this.updater = updater
         cardWait = null
         val c = context ?: return
+        if (!updater) return
         val p = prefs(c)
         if (checkedSig.let { it != null && it != updSig }) check()
         else if (p.getBoolean(DAILY, false) && System.currentTimeMillis() - p.getLong(LAST, 0) >= DAY_MS) check()
     }
 
+    fun dropped() {
+        updater = null
+    }
+
     fun opened() {
+        if (updater == false) return
         val v = view
         if (unsigned || v.info == Firmware.BAD_SIG || (v.ready && !v.signed && updSig)) check()
     }
 
     fun state() {
         val c = context ?: return
+        if (updater == false) return
         val p = prefs(c)
         if (Remote.phase == Phase.LIVE && p.getBoolean(DAILY, false) && System.currentTimeMillis() - p.getLong(LAST, 0) >= DAY_MS) check()
         if (pending == null || sending || stopSend || Remote.device.playback.state.battery == null) return
@@ -199,6 +208,10 @@ object Firmwares {
         retryNext = retry.schedule({ main.post { pending?.let { start(it) } } }, ms, TimeUnit.MILLISECONDS)
     }
 
+    internal fun idle() {
+        exec.submit {}.get()
+    }
+
     internal fun reset() {
         synchronized(retry) { retryNext?.cancel(false) }
         pending = null
@@ -206,6 +219,7 @@ object Firmwares {
         cardWait = null
         stopSend = false
         updSig = false
+        updater = null
         checkedSig = null
         unsigned = false
         view = FirmwareView()
@@ -306,7 +320,7 @@ object Firmwares {
             prefs(c).edit().putLong(LAST, System.currentTimeMillis()).apply()
             val r = f.check(b, version, prefs(c).getBoolean(PRE, true), sig)
             checkedSig = sig
-            if (sig != updSig) check()
+            if (sig != updSig && updater != false) check()
             unsigned = r == Firmware.Check.Unsigned
             when (r) {
                 is Firmware.Check.Found -> {
