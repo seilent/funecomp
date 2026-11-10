@@ -7,6 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
@@ -14,6 +18,7 @@ import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
@@ -26,6 +31,7 @@ import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
+import net.seilent.funecomp.ui.homeItems
 import net.seilent.funecomp.ui.homePitch
 import net.seilent.funecomp.ui.homeSlotTop
 import org.junit.Assert.assertEquals
@@ -80,16 +86,32 @@ class HomeRingTest {
 
     private fun frame(): Bitmap {
         val view = rule.activity.window.decorView
-        return Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }
+        return Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888).also { view.draw(Canvas(it)) }.also { System.gc() }
     }
 
-    private fun ringBrightness(): Int {
-        val r = rule.onNodeWithTag("home.ring").fetchSemanticsNode().boundsInWindow
+    private fun brightest(r: Rect): Int {
         val b = frame()
         var max = 0
         for (y in r.top.toInt() until r.bottom.toInt()) for (x in r.left.toInt() until r.right.toInt()) max = maxOf(max, (b.getPixel(x, y) shr 16) and 0xff)
         return max
     }
+
+    private fun ringBrightness() = brightest(rule.onNodeWithTag("home.ring").fetchSemanticsNode().boundsInWindow)
+
+    private fun glyphBrightness(): Int {
+        val c = rule.onNodeWithTag("home.ring.glyph").fetchSemanticsNode().boundsInWindow.center
+        val d = ui().px(4f)
+        return brightest(Rect(c.x - d, c.y - d, c.x + d, c.y + d))
+    }
+
+    private fun alphas() = homeItems(sim.device, LinkView(Phase.LIVE, "AP80", everLive = true)).map { it.name }.associateWith { name ->
+        val n = rule.onAllNodes(hasAnyAncestor(hasTestTag("home.$name")) and SemanticsMatcher.keyIsDefined(SemanticsActions.GetTextLayoutResult), useUnmergedTree = true).fetchSemanticsNodes().single { it.config[SemanticsProperties.Text].joinToString("") == name }
+        val out = ArrayList<TextLayoutResult>()
+        n.config[SemanticsActions.GetTextLayoutResult].action?.invoke(out)
+        out.single().layoutInput.style.color.alpha
+    }
+
+    private fun ringWidth() = rule.onNodeWithTag("home.ring.ring").fetchSemanticsNode().boundsInWindow.width
 
     private fun bars() = rule.onAllNodes(hasTestTag("bar") and hasAnyAncestor(hasTestTag("home")), useUnmergedTree = true).fetchSemanticsNodes().size
 
@@ -140,6 +162,50 @@ class HomeRingTest {
         val ys = ((o.top + ui.px(112f)).roundToInt() until (o.top + ui.px(172f)).roundToInt()).filter { lit(b.getPixel(column, it)) }
         assertEquals(35f, (ys.last() + 1 - ys.first()) / u, 0.5f)
         assertEquals(146.6f, ((ys.first() + ys.last() + 1) / 2f - o.top) / u, 0.5f)
+    }
+
+    @Test
+    fun aHeldRingDrawsLit() {
+        start()
+        val rest = alphas()
+        val width = ringWidth()
+        val ring = rule.onNodeWithTag("home.ring")
+        ring.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(255f, ringBrightness().toFloat(), 3f)
+        assertEquals(255f, glyphBrightness().toFloat(), 3f)
+        assertEquals(rest, alphas())
+        rule.mainClock.advanceTimeBy(150)
+        assertEquals(rest, alphas())
+        ring.performTouchInput { up() }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(Tok.alpha_mid * 255, ringBrightness().toFloat(), 3f)
+        assertEquals(rest.getValue("music"), alphas().getValue("music"))
+        assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
+        assertEquals(Tok.motion_pressScale, ringWidth() / width, 0.005f)
+        settle(1000)
+        val slop = ui().px(Tok.touchSlop)
+        ring.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(255f, ringBrightness().toFloat(), 3f)
+        ring.performTouchInput { moveBy(Offset(slop * 2, 0f)) }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(Tok.alpha_mid * 255, ringBrightness().toFloat(), 3f)
+        ring.performTouchInput { up() }
+        settle(1000)
+        assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
+    }
+
+    @Test
+    fun theRingPressLooksTheSameUnderAccentOff() {
+        start(off = true)
+        val ring = rule.onNodeWithTag("home.ring")
+        ring.performTouchInput { down(center) }
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals(255f, ringBrightness().toFloat(), 3f)
+        assertEquals(255f, glyphBrightness().toFloat(), 3f)
+        ring.performTouchInput { cancel() }
+        settle(1000)
     }
 
     @Test
