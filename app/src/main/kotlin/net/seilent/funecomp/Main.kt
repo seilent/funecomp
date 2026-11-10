@@ -115,7 +115,7 @@ class Main : ComponentActivity() {
     }
 
     private val appPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) Remote.apps.read(this, uri, displayName(uri))
+        if (uri != null && Remote.device.installer != false) Remote.apps.read(this, uri, displayName(uri))
     }
 
     private fun displayName(uri: Uri): String = try {

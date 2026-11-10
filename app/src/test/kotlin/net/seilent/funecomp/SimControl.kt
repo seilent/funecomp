@@ -60,6 +60,8 @@ import java.io.File
 
 internal val NO_UPDATER_FAULTS = listOf("features=${Groups.all and Groups.mask("update", "updSig", "svcLogin", "svcAccount", "appPkg").inv()}")
 
+internal val NO_INSTALLER_FAULTS = listOf("features=${Groups.all and Groups.mask(Apps.APP_BIT).inv()}")
+
 class SimControl(
     board: String,
     lib: Library = Library.synthetic(),

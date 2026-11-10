@@ -13,6 +13,8 @@ class UpdaterTest {
 
     private val off = DeviceState().withHello(hello(Groups.all and Groups.mask("update").inv()))
 
+    private val noApp = hello(Groups.all and Groups.mask("appPkg").inv())
+
     @Test
     fun theHelloSetsTheUpdater() {
         assertEquals(true, on.updater)
@@ -30,5 +32,23 @@ class UpdaterTest {
     @Test
     fun aFreshDeviceHasNoAnswer() {
         assertNull(DeviceState().updater)
+    }
+
+    @Test
+    fun aLink17HelloSetsTheInstaller() {
+        assertEquals(true, on.installer)
+        assertEquals(false, DeviceState().withHello(noApp).installer)
+        assertNull(DeviceState().withHello(noApp.copy(minor = 16)).installer)
+    }
+
+    @Test
+    fun aDropKeepsTheInstallerAnswer() {
+        assertEquals(false, DeviceState().withHello(noApp).unlinked().installer)
+        assertEquals(true, on.unlinked().installer)
+    }
+
+    @Test
+    fun aFreshDeviceHasNoInstallerAnswer() {
+        assertNull(DeviceState().installer)
     }
 }

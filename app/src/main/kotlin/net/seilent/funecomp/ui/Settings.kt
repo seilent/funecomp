@@ -251,14 +251,14 @@ fun settingsPivots(rows: List<Row>) = settingsRows(rows).mapNotNull { it.pivot }
 
 private class AboutItem(val title: String, val value: () -> String = { "" }, val act: () -> Unit)
 
-private fun aboutItems(ctx: Ctx, updater: Boolean?, firmware: () -> FirmwareView) = buildList {
+private fun aboutItems(ctx: Ctx, updater: Boolean?, installer: Boolean?, firmware: () -> FirmwareView) = buildList {
     if (updater != false) add(AboutItem(UPDATE_FIRMWARE, { firmwareText(firmware()) }) { ctx.nav.push(Page.Firmware) })
-    add(AboutItem(INSTALL_APP) { ctx.nav.push(Page.Apps) })
+    if (installer != false) add(AboutItem(INSTALL_APP) { ctx.nav.push(Page.Apps) })
     add(AboutItem(SUPPORT_ME) { ctx.control.openSupport() })
 }
 
 fun aboutSheet(ctx: Ctx, device: () -> DeviceState, firmware: () -> FirmwareView) {
-    val items = aboutItems(ctx, device().updater, firmware)
+    val items = aboutItems(ctx, device().updater, device().installer, firmware)
     ctx.sheet.open(
         ABOUT_KEY,
         items.map { it.title },
@@ -309,7 +309,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
             opened = null
         }
     }
-    LaunchedEffect(ctx.device.updater) { if (ctx.sheet.items != aboutItems(ctx, live.updater, { fw }).map { it.title }) ctx.sheet.closeIf(ABOUT_SHEET) }
+    LaunchedEffect(ctx.device.updater, ctx.device.installer) { if (ctx.sheet.items != aboutItems(ctx, live.updater, live.installer, { fw }).map { it.title }) ctx.sheet.closeIf(ABOUT_SHEET) }
     fun minutesLeft() = SleepLeft.minutes(live.sleepLeftMs(SystemClock.elapsedRealtime()))
     fun send(s: Send?, row: Row) {
         when (s) {

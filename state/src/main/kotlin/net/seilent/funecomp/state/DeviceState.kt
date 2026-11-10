@@ -120,6 +120,7 @@ data class DeviceState(
     val accounts: Map<String, SvcAccount>? = null,
     val appFeatures: Long = 0,
     val updater: Boolean? = null,
+    val installer: Boolean? = null,
 ) {
     val cardDown: Boolean get() = card.down
 
@@ -168,7 +169,7 @@ data class DeviceState(
         else -> this
     }
 
-    fun withHello(h: HelloReply, app: Long = 0) = DeviceState(hello = h, lib = LibMirror(h.libRev, snap = h.snapRev), appFeatures = app, updater = h.has("update"))
+    fun withHello(h: HelloReply, app: Long = 0) = DeviceState(hello = h, lib = LibMirror(h.libRev, snap = h.snapRev), appFeatures = app, updater = h.has("update"), installer = if (h.minor >= APP_MINOR) h.has(APP) else null)
 
     fun unlinked() = copy(hello = null, logins = SvcLogins(), accounts = null)
 
@@ -299,6 +300,8 @@ data class DeviceState(
         const val RECEIVER = "bluetooth receiver"
         const val SVC = "svcLogin"
         const val ACCOUNT = "svcAccount"
+        const val APP = "appPkg"
+        const val APP_MINOR = 17
     }
 }
 

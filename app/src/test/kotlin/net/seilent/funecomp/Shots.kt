@@ -1532,6 +1532,7 @@ val SHOTS = listOf(
     Shot("settings-about-sending", board = "v1", pages = HOME + Page.Settings, firmware = FOUND.copy(ready = true, send = "firmware 42%")) { about() },
     Shot("settings-about-nohello", pages = HOME + Page.Settings, prep = { it.device = it.device.copy(hello = null) }) { about() },
     Shot("settings-about-noupdate", board = "v1", pages = HOME + Page.Settings, faults = NO_UPDATER_FAULTS) { about() },
+    Shot("settings-about-noinstaller", board = "v1", pages = HOME + Page.Settings, faults = NO_INSTALLER_FAULTS) { about() },
     Shot("settings-about-fallback", pages = HOME + Page.Settings, prep = { it.device = it.device.copy(schema = it.device.schema.copy(rows = it.device.schema.rows.filter { r -> r.key != "about" })) }) { about() },
     Shot("settings-about-scrolled", pages = HOME + Page.Settings) {
         about()

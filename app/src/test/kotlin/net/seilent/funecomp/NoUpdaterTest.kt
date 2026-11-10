@@ -110,16 +110,14 @@ class NoUpdaterTest {
     }
 
     @Test
-    fun aDeviceWithoutTheUpdaterListsInstallAppAndSupportMe() {
+    fun aDeviceWithoutTheUpdaterOrInstallerListsSupportMe() {
         start(settingsPages, NO_UPDATER_FAULTS)
         system()
         tapAbout()
-        assertEquals(listOf("install app", "support me"), shell.sheet.items)
+        assertEquals(listOf("support me"), shell.sheet.items)
         firmware = FirmwareView(send = "firmware 42%")
         settle(300)
-        assertEquals(listOf("", ""), shell.sheet.itemValues)
-        tapItem("install app")
-        assertEquals(settingsPages + Page.Apps, shell.nav.stack.toList())
+        assertEquals(listOf(""), shell.sheet.itemValues)
     }
 
     @Test
@@ -127,7 +125,7 @@ class NoUpdaterTest {
         start(settingsPages, NO_UPDATER_FAULTS, board = "ap80")
         system()
         tapAbout()
-        assertEquals(listOf("install app", "support me"), shell.sheet.items)
+        assertEquals(listOf("support me"), shell.sheet.items)
     }
 
     @Test
@@ -135,7 +133,7 @@ class NoUpdaterTest {
         start(settingsPages, NO_UPDATER_FAULTS)
         system()
         tapAbout()
-        assertEquals(listOf("install app", "support me"), shell.sheet.items)
+        assertEquals(listOf("support me"), shell.sheet.items)
         tapItem("support me")
         assertEquals(1, c.supports)
         assertEquals(settingsPages, shell.nav.stack.toList())
@@ -205,7 +203,7 @@ class NoUpdaterTest {
         settle(600)
         system()
         tapAbout()
-        assertEquals(listOf("install app", "support me"), shell.sheet.items)
+        assertEquals(listOf("support me"), shell.sheet.items)
     }
 
     @Test

@@ -1,15 +1,18 @@
 package net.seilent.funecomp
 
 import android.Manifest
+import android.app.Activity
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.res.Configuration
+import android.net.Uri
 import android.os.Looper
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.Response
+import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Options
@@ -43,6 +46,8 @@ class NoUpdaterMainTest {
     private val sims = ArrayList<Sim>()
     private var service: ServiceController<LinkService>? = null
     private val open = ArrayList<ActivityController<Main>>()
+    private lateinit var sim: Sim
+    private var port = 0
 
     @Before
     fun setUp() {
@@ -61,6 +66,8 @@ class NoUpdaterMainTest {
         open.filter { !it.get().isDestroyed }.forEach { it.pause().stop().destroy() }
         service?.destroy()
         Remote.stop()
+        Remote.apps.close()
+        Remote.apps = Apps()
         Lyrics.reset()
         Firmwares.reset()
         sims.forEach { it.stop() }
@@ -79,10 +86,12 @@ class NoUpdaterMainTest {
         rule.waitForIdle()
     }
 
-    private fun main(faults: List<String>, page: String? = null): ActivityController<Main> {
-        val s = Sim(Options(Board.of("v1"), Faults(faults)))
+    private fun main(faults: List<String>, page: String? = null, minor: Int = Proto.minor): ActivityController<Main> {
+        val s = Sim(Options(Board.of("v1"), Faults(faults), minor = minor))
         sims += s
-        val spec = "tcp:127.0.0.1:${s.listen(0)}"
+        sim = s
+        port = s.listen(0)
+        val spec = "tcp:127.0.0.1:$port"
         app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE).edit().putString(Main.EXTRA_LINK, spec).commit()
         service = Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, spec)).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE }
@@ -92,6 +101,53 @@ class NoUpdaterMainTest {
         open += a
         waitFor { !a.get().shell.gated }
         return a
+    }
+
+    private fun swap(faults: List<String>) {
+        sim.stop()
+        waitFor { Remote.phase != Phase.LIVE }
+        sim = Sim(Options(Board.of("v1"), Faults(faults))).also { sims += it }
+        sim.listen(port)
+        waitFor { Remote.phase == Phase.LIVE && Remote.device.hello?.has(Apps.APP_BIT) == false && Remote.apps.view.info == Apps.NO_INSTALLER }
+    }
+
+    private fun launched(a: ActivityController<Main>): Int {
+        a.get().control.appFile()
+        waitFor { true }
+        return shadowOf(a.get()).nextStartedActivityForResult.requestCode
+    }
+
+    private fun returned(a: ActivityController<Main>, code: Int) =
+        shadowOf(a.get()).callOnActivityResult(code, Activity.RESULT_OK, Intent().setData(Uri.parse("content://net.seilent.funecomp.test/app.fpk")))
+
+    @Test
+    fun aPickReturningAfterAHelloWithoutTheInstallerReadsNothing() {
+        Remote.apps = Apps().also { it.init(app) }
+        val a = main(emptyList())
+        val code = launched(a)
+        swap(NO_INSTALLER_FAULTS)
+        returned(a, code)
+        assertEquals("", Remote.apps.view.send)
+        waitFor { true }
+        assertEquals("", Remote.apps.view.picked)
+        assertEquals(Apps.NO_INSTALLER, Remote.apps.view.info)
+    }
+
+    @Test
+    fun aPickOnADeviceWithTheInstallerIsRead() {
+        Remote.apps = Apps().also { it.init(app) }
+        val a = main(emptyList())
+        returned(a, launched(a))
+        assertEquals(Apps.CHECKING_FILE, Remote.apps.view.send)
+    }
+
+    @Test
+    fun aPickOnALink16PeerIsRead() {
+        Remote.apps = Apps().also { it.init(app) }
+        val a = main(emptyList(), minor = 16)
+        waitFor { Remote.apps.view.info == Apps.NO_INSTALLER }
+        returned(a, launched(a))
+        assertEquals(Apps.CHECKING_FILE, Remote.apps.view.send)
     }
 
     @Test
