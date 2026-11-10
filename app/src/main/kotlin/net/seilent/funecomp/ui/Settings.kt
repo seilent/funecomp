@@ -179,7 +179,7 @@ fun draftKind(key: String?): Pair<Int, Int?>? = when (key) {
     else -> Enums.DraftKind.names.entries.firstOrNull { it.value == key }?.let { it.key to null }
 }
 
-private class Edit(val key: String, val original: String?, val accentOff: Boolean)
+private class Edit(val key: String, val original: String?)
 
 class Selector(val items: List<String>, val focus: Int, val info: List<String>, val typed: Boolean)
 
@@ -342,16 +342,19 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
         }
     }
     fun confirm() {
+        val e = edit
+        val v = editValue
+        if (e != null && e.key == ACCENT_KEY && v != null && v != e.original) {
+            if (live.settings.values[ACCENT_OFF_KEY] == "on") ctx.control.set(listOf(e.key to v, ACCENT_OFF_KEY to "off")) else ctx.control.set(e.key, v)
+        }
         edit = null
     }
     fun revert() {
         val e = edit ?: return
-        val off = e.accentOff && live.settings.values[ACCENT_OFF_KEY] != "on"
-        if (e.original != null && off) ctx.control.set(listOf(e.key to e.original, ACCENT_OFF_KEY to "on"))
-        else if (e.original != null && editValue != e.original) ctx.control.set(e.key, e.original)
+        if (e.key != ACCENT_KEY && e.original != null && editValue != e.original) ctx.control.set(e.key, e.original)
         edit = null
     }
-    BackHandler(edit != null) { confirm() }
+    BackHandler(edit != null) { if (edit?.key == ACCENT_KEY) revert() else confirm() }
     val back = {
         if (edit != null) revert() else ctx.nav.pop()
         Unit
@@ -408,7 +411,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                         focused = focus == i,
                         editing = editing,
                         info = r.kind == Enums.RowKind.info && !eqRow && !aboutRow,
-                        swatch = if (key != ACCENT_KEY) null else if (AccentOff) white(Tok.alpha_full) else accentFor(v?.toIntOrNull()),
+                        swatch = if (key != ACCENT_KEY) null else if (editing && v != edit?.original) accentFor(v?.toIntOrNull()) else if (AccentOff) white(Tok.alpha_full) else accentFor(v?.toIntOrNull()),
                     ) { x ->
                         if (edit != null && !editing) {
                             confirm()
@@ -420,8 +423,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                                 val next = r.step(editValue, if (x < 0.5f) -1 else 1)
                                 if (next != editValue) {
                                     editValue = next
-                                    if (key == ACCENT_KEY && live.settings.values[ACCENT_OFF_KEY] == "on") ctx.control.set(listOf(key to next, ACCENT_OFF_KEY to "off"))
-                                    else ctx.control.set(key, next)
+                                    if (key != ACCENT_KEY) ctx.control.set(key, next)
                                 }
                             }
                             eqStage != null -> ctx.nav.push(Page.Eq(ctx.device.playingEqSlot(eqStage)?.let { EqSlots.output(it) } ?: ctx.device.playingEqOutput, eqStage))
@@ -433,7 +435,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                             aboutRow -> aboutSheet(ctx, { live }, { fw })
                             !r.editable() -> {}
                             r.kind == Enums.RowKind.range -> {
-                                edit = Edit(key, values[key], key == ACCENT_KEY && values[ACCENT_OFF_KEY] == "on")
+                                edit = Edit(key, values[key])
                                 editValue = values[key]
                             }
                             r.selects() -> select(r, Keep(list, i, ui.px(ui.contentTop)))

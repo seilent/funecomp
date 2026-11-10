@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.click
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.hasAnyAncestor
@@ -1028,6 +1029,16 @@ val SHOTS = listOf(
     },
     Shot("settings-screens", pages = HOME + Page.Settings) { walk("screens") },
     Shot("settings-display-v1", board = "v1", pages = HOME + Page.Settings) { walk("display") },
+    Shot("accent-edit", board = "v1", pages = HOME + Page.Settings) {
+        walk("display")
+        tapRow("set.accentHue")
+        tapRow("set.accentHue")
+    },
+    Shot("accent-edit-off", board = "v1", pages = HOME + Page.Settings, prep = { it.set("accentOff", "on") }) {
+        walk("display")
+        tapRow("set.accentHue")
+        tapRow("set.accentHue")
+    },
     Shot("settings-artistphoto-v1", board = "v1", pages = HOME + Page.Settings) {
         walk("screens")
         scrollTo("set.artistPhoto")
@@ -1634,6 +1645,7 @@ class Shots {
     }
 
     fun scrollTo(tag: String) {
+        if (SemanticsActions.ScrollToIndex !in rule.onNodeWithTag("rows").fetchSemanticsNode().config) return
         rule.mainClock.autoAdvance = true
         rule.onNodeWithTag("rows").performScrollToNode(hasTestTag(tag))
         rule.mainClock.autoAdvance = false

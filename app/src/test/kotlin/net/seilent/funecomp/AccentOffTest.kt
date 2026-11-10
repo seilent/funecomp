@@ -29,6 +29,7 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import androidx.test.espresso.Espresso
 import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
@@ -103,9 +104,11 @@ class AccentOffTest {
     }
 
     private fun tap(tag: String, x: Float = 0.5f) {
-        rule.mainClock.autoAdvance = true
-        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag(tag))
-        rule.mainClock.autoAdvance = false
+        if (SemanticsActions.ScrollToIndex in rule.onNodeWithTag("rows").fetchSemanticsNode().config) {
+            rule.mainClock.autoAdvance = true
+            rule.onNodeWithTag("rows").performScrollToNode(hasTestTag(tag))
+            rule.mainClock.autoAdvance = false
+        }
         step(tag, x)
     }
 
@@ -326,41 +329,113 @@ class AccentOffTest {
     private val ring = (Tok.accent_hueCount * Tok.accent_hueStep).toInt()
     private val next = (first + Tok.accent_hueStep.toInt()) % ring
 
-    @Test
-    fun aHueStepWhileOffTurnsTheAccentBackOnInOneSetAndBackRestoresBoth() {
-        settings(true, "display")
+    private val second = (next + Tok.accent_hueStep.toInt()) % ring
+
+    private fun stepped(off: Boolean, faults: List<String> = emptyList(), steps: Int = 1) {
+        settings(off, "display", faults)
         tap("set.accentHue")
-        step("set.accentHue", 0.9f)
-        assertEquals(listOf("accentHue=$next\naccentOff=off\n"), c.setTexts)
-        assertEquals("off", c.device.settings.values["accentOff"])
-        step("set.accentHue", 0.9f)
-        assertEquals("accentHue=${(next + Tok.accent_hueStep.toInt()) % ring}\n", c.setTexts.last())
-        rule.onNodeWithTag("header").performClick()
-        settle(600)
-        assertEquals("accentHue=$first\naccentOff=on\n", c.setTexts.last())
-        assertEquals(3, c.setTexts.size)
-        assertEquals("on", c.device.settings.values["accentOff"])
-        assertEquals("$first", c.device.settings.values["accentHue"])
+        repeat(steps) { step("set.accentHue", 0.9f) }
     }
 
     @Test
-    fun aHueStepWithOffOffSendsTheHueOnly() {
-        settings(false, "display")
-        tap("set.accentHue")
-        step("set.accentHue", 0.9f)
+    fun aHueStepSendsNothingAndTheApplySendsOneSetTurningOffOff() {
+        stepped(true, steps = 2)
+        assertEquals(emptyList<String>(), c.setTexts)
+        assertEquals("on", c.device.settings.values["accentOff"])
+        tap("set.confirm")
+        assertEquals(listOf("accentHue=$second\naccentOff=off\n"), c.setTexts)
+        assertEquals("off", c.device.settings.values["accentOff"])
+    }
+
+    @Test
+    fun aHueStepWithOffOffAppliesTheHueOnly() {
+        stepped(false)
+        assertEquals(emptyList<String>(), c.setTexts)
+        tap("set.confirm")
+        assertEquals(listOf("accentHue=$next\n"), c.setTexts)
+    }
+
+    @Test
+    fun anUnchangedApplySendsNothing() {
+        stepped(true)
+        step("set.accentHue", 0.1f)
+        assertFalse(chroma(shot(rule.onNodeWithTag("set.accentHue"))))
+        tap("set.confirm")
+        assertEquals(emptyList<String>(), c.setTexts)
+    }
+
+    @Test
+    fun aTapOnAnotherRowAppliesTheHue() {
+        stepped(true)
+        assertEquals(emptyList<String>(), c.setTexts)
+        tap("set.accentOff")
+        assertEquals(listOf("accentHue=$next\naccentOff=off\n"), c.setTexts)
+        assertFalse(shell.sheet.shown)
+    }
+
+    @Test
+    fun theBackRingSendsNothingAndKeepsTheOpenedValue() {
+        stepped(true)
         rule.onNodeWithTag("header").performClick()
         settle(600)
-        assertEquals(listOf("accentHue=$next\n", "accentHue=$first\n"), c.setTexts)
+        assertEquals(emptyList<String>(), c.setTexts)
+        assertEquals("$first", c.device.settings.values["accentHue"])
+        assertEquals("on", c.device.settings.values["accentOff"])
+    }
+
+    @Test
+    fun systemBackSendsNothingAndKeepsTheOpenedValue() {
+        stepped(true)
+        Espresso.pressBack()
+        settle(600)
+        assertEquals(emptyList<String>(), c.setTexts)
+        assertEquals("$first", c.device.settings.values["accentHue"])
+        assertEquals("on", c.device.settings.values["accentOff"])
+    }
+
+    @Test
+    fun aPageChangeDuringTheEditSendsNothing() {
+        stepped(false)
+        rule.runOnIdle { shell.nav.push(Page.Connection) }
+        settle(1000)
+        assertEquals(emptyList<String>(), c.setTexts)
     }
 
     @Test
     fun aPeerWithNoAccentOffRowNeverGetsTheKey() {
-        settings(false, "display", listOf("rows-off=accentOff"))
+        stepped(false, listOf("rows-off=accentOff"))
         assertFalse("accentOff" in c.device.settings.values)
-        tap("set.accentHue")
-        step("set.accentHue", 0.9f)
+        assertEquals(emptyList<String>(), c.setTexts)
+        tap("set.confirm")
+        assertEquals(listOf("accentHue=$next\n"), c.setTexts)
+    }
+
+    @Test
+    fun aStepPreviewsTheHueUnderOffAndLeavesTheAppAccent() {
+        stepped(true)
+        assertTrue(chroma(shot(rule.onNodeWithTag("set.accentHue"))))
+        assertEquals("on", c.device.settings.values["accentOff"])
+        assertEquals(emptyList<String>(), c.setTexts)
+    }
+
+    @Test
+    fun aStepWithOffOffLeavesTheAppAccent() {
+        stepped(false)
+        assertEquals("$first", c.device.settings.values["accentHue"])
+        assertEquals(emptyList<String>(), c.setTexts)
+    }
+
+    @Test
+    fun balanceKeepsItsSetPerStepAndItsRevertSet() {
+        settings(false, "output")
+        val opened = c.device.settings.values["balance"]
+        tap("set.balance")
+        step("set.balance", 0.9f)
+        assertEquals(1, c.setTexts.size)
+        assertTrue(c.setTexts.single().startsWith("balance="))
         rule.onNodeWithTag("header").performClick()
         settle(600)
-        assertEquals(listOf("accentHue=$next\n", "accentHue=$first\n"), c.setTexts)
+        assertEquals(2, c.setTexts.size)
+        assertEquals("balance=$opened\n", c.setTexts.last())
     }
 }
