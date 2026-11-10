@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.test.hasAnyAncestor
@@ -24,6 +26,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.click
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import net.seilent.funecomp.artist.ArtCache
@@ -695,6 +699,31 @@ class ArtPickUiTest {
         assertEquals(ui.px(87.5f), bounds("pick.tile.deezer.1").left - left, 0.5f)
         val next = (1 until 6).map { top("pick.tile.deezer.$it") }.first { it > first.top + 0.5f }
         assertEquals(ui.px(Tok.tileRowPitch), next - first.top, 0.5f)
+    }
+
+    private fun headText(section: String): Pair<SemanticsNode, TextLayoutResult> {
+        val n = rule.onAllNodes(hasAnyAncestor(hasTestTag("pick.head.$section")), useUnmergedTree = true).fetchSemanticsNodes()
+            .single { SemanticsActions.GetTextLayoutResult in it.config }
+        val out = mutableListOf<TextLayoutResult>()
+        n.config[SemanticsActions.GetTextLayoutResult].action?.invoke(out)
+        return n to out.single()
+    }
+
+    @Test
+    fun theBrowseHeadsAreTheQuickplayHeader() {
+        browsePage(listOf(Sources.DEEZER, Sources.DISCOGS))
+        put(Sources.DEEZER, 3)
+        val (ui, _) = canvas()
+        assertEquals(bounds("rows").top, top("pick.head.deezer"), 1f)
+        val (n, layout) = headText(Sources.DEEZER)
+        val style = layout.layoutInput.style
+        with(rule.density) { assertEquals((36.9f * ui.u).roundToInt().toFloat(), style.fontSize.toPx(), 0.5f) }
+        assertEquals(FontWeight.Light, style.fontWeight)
+        assertEquals(0.27f, style.color.alpha, 0.005f)
+        assertEquals(ui.px(35f), n.positionInRoot.y + layout.firstBaseline - top("pick.head.deezer"), 1f)
+        put(Sources.DISCOGS, 3)
+        val (next, nextLayout) = headText(Sources.DISCOGS)
+        assertEquals(ui.px(67.5f), next.positionInRoot.y + nextLayout.firstBaseline - bounds("pick.tile.deezer.2").bottom, 1.5f)
     }
 
     @Test

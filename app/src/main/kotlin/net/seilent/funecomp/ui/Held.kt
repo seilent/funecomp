@@ -17,18 +17,6 @@ object Held {
         )
     }
 
-    object Qp {
-        const val type_quickplayHeader_size = 34f
-        const val type_quickplayHeader_alpha = 0.6f
-        const val qpSectionGap = 70f
-
-        val entries = listOf(
-            Entry("type_quickplayHeader_size", "type_quickplayHeader_size", type_quickplayHeader_size, "W3", "zrows", "836c8fbc4"),
-            Entry("type_quickplayHeader_alpha", "type_quickplayHeader_alpha", type_quickplayHeader_alpha, "W3", "zrows", "836c8fbc4"),
-            Entry("qpSectionGap", "qpSectionGap", qpSectionGap, "W3", "zrows", "836c8fbc4"),
-        )
-    }
-
     object Pivot {
         const val motion_pivotOut = 300f
         const val motion_pivotStrip = 380f
@@ -83,5 +71,5 @@ object Held {
         )
     }
 
-    val entries get() = Nav.entries + Qp.entries + Pivot.entries + Rest.entries + Jump.entries + Vol.entries
+    val entries get() = Nav.entries + Pivot.entries + Rest.entries + Jump.entries + Vol.entries
 }

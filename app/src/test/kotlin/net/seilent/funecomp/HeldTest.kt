@@ -23,14 +23,6 @@ class HeldTest {
         )
         assertEquals(
             listOf(
-                listOf("type_quickplayHeader_size", "type_quickplayHeader_size", 34f, "W3", "zrows", "836c8fbc4"),
-                listOf("type_quickplayHeader_alpha", "type_quickplayHeader_alpha", 0.6f, "W3", "zrows", "836c8fbc4"),
-                listOf("qpSectionGap", "qpSectionGap", 70f, "W3", "zrows", "836c8fbc4"),
-            ),
-            rows(Held.Qp.entries),
-        )
-        assertEquals(
-            listOf(
                 listOf("motion_pivotOut", "motion_pivotOut", 300f, "P1", "zt5", "836c8fbc4"),
                 listOf("motion_pivotStrip", "motion_pivotStrip", 380f, "P1", "zt5", "836c8fbc4"),
                 listOf("motion_pivotLabel", "motion_pivotLabel", 200f, "P1", "zt5", "836c8fbc4"),
@@ -64,8 +56,8 @@ class HeldTest {
             ),
             rows(Held.Vol.entries),
         )
-        assertEquals(22, Held.entries.size)
-        assertEquals(setOf("Entry", "Jump", "Nav", "Pivot", "Qp", "Rest", "Vol"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
+        assertEquals(19, Held.entries.size)
+        assertEquals(setOf("Entry", "Jump", "Nav", "Pivot", "Rest", "Vol"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }
 

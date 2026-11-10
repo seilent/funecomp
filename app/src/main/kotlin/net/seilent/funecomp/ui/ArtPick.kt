@@ -67,6 +67,8 @@ const val NO_IMAGE = "no image"
 const val LINK_BROKEN = "link broken"
 private const val PASTE_LINK = "paste link"
 private const val BROWSE = "browse"
+private const val BROWSE_HEAD_BASELINE = 35f
+private const val BROWSE_TILE_DROP = 5f
 private const val PICK = "pick"
 private const val PICK_X = 75f
 private const val PICK_GAP = 16f
@@ -307,8 +309,8 @@ private sealed interface BrowseItem {
 }
 
 private fun BrowseItem.height() = when (this) {
-    is BrowseItem.Head -> Tok.qpFirstBaseline + Tok.qpContentDrop
-    is BrowseItem.Gap -> Held.Qp.qpSectionGap - Tok.qpFirstBaseline - (Tok.tileRowPitch - Tok.tileCellH)
+    is BrowseItem.Head -> BROWSE_HEAD_BASELINE + BROWSE_TILE_DROP
+    is BrowseItem.Gap -> LayoutTok.qpSectionGap - BROWSE_HEAD_BASELINE - (Tok.tileRowPitch - Tok.tileCellH)
     is BrowseItem.Row -> Tok.tileRowPitch
     is BrowseItem.Line -> Tok.rowHeight
 }
@@ -425,7 +427,7 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse, ime: WindowInsets) {
 private fun BrowseHead(section: String, i: Int) {
     val ui = LocalUi.current
     Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(BrowseItem.Head(section).height()).dp()).testTag("pick.head.$section")) {
-        RoleText(Sources.label(section), Roles.quickplayHeader, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(Tok.qpFirstBaseline)))
+        RoleText(Sources.label(section), Roles.quickplayHeader, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(BROWSE_HEAD_BASELINE)))
     }
 }
 
