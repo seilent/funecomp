@@ -3,6 +3,7 @@ package net.seilent.funecomp.ui
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,6 +53,9 @@ class Ui(val u: Float, val w: Float, val h: Float, val shape: Shape) {
         }
     }
 }
+
+@Composable
+fun rememberUi(widthPx: Float, heightPx: Float): Ui = remember(widthPx, heightPx) { Ui.of(widthPx, heightPx) }
 
 val LocalUi = staticCompositionLocalOf { Ui(1f, Tok.canvasW, LayoutTok.canvasH, Shape.SN) }
 

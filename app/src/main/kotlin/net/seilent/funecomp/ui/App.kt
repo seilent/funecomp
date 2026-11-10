@@ -115,7 +115,7 @@ fun App(
     val dir = LocalLayoutDirection.current
     val bleed = Bleed(insets.getLeft(density, dir), insets.getTop(density), insets.getRight(density, dir), insets.getBottom(density))
     BoxWithConstraints(Modifier.fillMaxSize().background(Black).windowInsetsPadding(insets)) {
-        val ui = Ui.of(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
+        val ui = rememberUi(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
         val base = LocalViewConfiguration.current
         val touch = remember(base, ui.u) { Touch(base, ui.px(Tok.touchSlop)) }
         val accent = AccentState(accentFor(device.settings.values[ACCENT_KEY]?.toIntOrNull()), device.settings.values[ACCENT_OFF_KEY] == "on")

@@ -34,7 +34,7 @@ fun LoginPage(
     val dir = LocalLayoutDirection.current
     val bleed = Bleed(insets.getLeft(density, dir), insets.getTop(density), insets.getRight(density, dir), insets.getBottom(density))
     BoxWithConstraints(Modifier.fillMaxSize().background(Black).windowInsetsPadding(insets)) {
-        val ui = Ui.of(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
+        val ui = rememberUi(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
         CompositionLocalProvider(LocalUi provides ui, LocalBleed provides bleed, LocalOverscrollFactory provides null) {
             HubPage(name, onBack, count = host, keepEnd = true) {
                 Box(Modifier.fillMaxSize().padding(top = ui.px(ui.contentTop).dp()).windowInsetsPadding(remember(ime, insets) { ime.exclude(insets) }).testTag("login.web")) {

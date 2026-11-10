@@ -220,6 +220,28 @@ class HomeLayoutTest {
         }
     }
 
+    private fun lit(p: Int) = (p shr 16 and 0xff) > (Tok.alpha_mid * 255 / 2).toInt()
+
+    @Test
+    fun theRingFollowsTheMenuOnLandscape() {
+        for ((w, h) in listOf(960 to 600, 1280 to 800, 960 to 411)) {
+            show(w, h)
+            val u = ui().u
+            val o = node("home").positionInRoot
+            val n = "$w x $h"
+            val pen = word("music").positionInRoot.x - o.x
+            val box = node("home.ring")
+            assertEquals("$n ring box left", pen - 52f * u, box.positionInRoot.x - o.x, 1f)
+            assertEquals("$n ring box right", pen - 8f * u, box.positionInRoot.x - o.x + box.size.width, 1f)
+            val img = rule.onRoot().pixels().also { System.gc() }
+            val row = node("home.ring.ring").boundsInRoot.center.y.roundToInt()
+            val xs = ((o.x + pen - 52f * u).roundToInt() until (o.x + pen - 8f * u).roundToInt()).filter { lit(img.getRGB(it, row)) }
+            assertTrue("$n no ring on its row", xs.isNotEmpty())
+            assertEquals("$n ring centre", pen - 26.3f * u, (xs.first() + xs.last() + 1) / 2f - o.x, 0.5f * u)
+            if (h == 411) assertEquals("$n menu x stays 240", 292f * u, pen, 1f)
+        }
+    }
+
     @Test
     fun theWordsAreSemilight() {
         show(411, 960)
