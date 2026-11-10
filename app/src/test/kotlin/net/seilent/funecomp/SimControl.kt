@@ -713,6 +713,8 @@ class SimControl(
 
         val FULL: AutoEqList by lazy { AutoEqList.build(AutoEqIndex.parse(INDEX)) }
 
+        val NO_Q: AutoEqList by lazy { AutoEqList.build(AutoEqIndex.parse(INDEX.lines().filterNot { it.startsWith("- [Q", ignoreCase = true) }.joinToString("\n"))) }
+
         val KANJI: AutoEqList by lazy { AutoEqList.build(AutoEqIndex.parse(INDEX.replaceFirst("\n- [", "\n- [漢字 HP1](./crinacle/711%20in-ear/x)\n- ["))) }
     }
 }

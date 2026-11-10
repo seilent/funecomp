@@ -831,6 +831,26 @@ class BehaviorTest {
     }
 
     @Test
+    fun anEmptyJumpLetterIsDimWithNoBorder() {
+        openAutoEq(SimControl.NO_Q)
+        openGrid()
+        val empty = tags(jumpNode).first { tag ->
+            val i = tag.removePrefix("jump.").toIntOrNull()
+            i != null && Section.letter(i).all { it in 'A'..'Z' || it in 'a'..'z' } &&
+                rule.onNodeWithTag(tag).fetchSemanticsNode().config.getOrNull(SemanticsActions.OnClick) == null
+        }
+        assertTrue(empty, Section.letter(empty.removePrefix("jump.").toInt()).equals("q", ignoreCase = true))
+        val img = rule.onNodeWithTag(empty).pixels().also { System.gc() }
+        fun luma(x: Int, y: Int) = img.getRGB(x, y).let { maxOf(it shr 16 and 0xff, it shr 8 and 0xff, it and 0xff) }
+        val ground = luma(img.width / 4, img.height / 4)
+        val ring = (0 until img.width).flatMap { x -> listOf(luma(x, 0), luma(x, img.height - 1)) } +
+            (0 until img.height).flatMap { y -> listOf(luma(0, y), luma(img.width - 1, y)) }
+        assertTrue("$empty ground $ground ring ${ring.min()} to ${ring.max()}", ring.max() - ground <= 2)
+        val glyph = (0 until img.height).maxOf { y -> (0 until img.width).maxOf { x -> luma(x, y) } }
+        assertEquals(empty, Tok.jump_emptyAlpha * 255, (glyph - ground).toFloat(), 6f)
+    }
+
+    @Test
     fun autoEqGridSwipeScrollsAndStopsAtTheLimit() {
         openAutoEq()
         openGrid()

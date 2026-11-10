@@ -278,7 +278,7 @@ private fun JumpLetter(i: Int, x: Float, y: Float, tile: Float, on: Boolean, has
             letter,
             Roles.letterGlyph,
             Modifier.atBaseline(tile - ui.px(Tok.letterInsetX), tile - ui.px(Tok.letterInsetBaseline), ax = 1f),
-            alpha = if (has) Roles.letterGlyph.alpha else Tok.alpha_low,
+            alpha = if (has) Roles.letterGlyph.alpha else Tok.jump_emptyAlpha,
         )
     }
 }
