@@ -1,12 +1,12 @@
 package net.seilent.funecomp
 
 import net.seilent.funecomp.proto.gen.Tok
-import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.JUMP_EXIT
 import net.seilent.funecomp.ui.JUMP_NONE
 import net.seilent.funecomp.ui.JUMP_SEARCH
 import net.seilent.funecomp.ui.JumpLayout
 import net.seilent.funecomp.ui.LayoutTok
+import net.seilent.funecomp.ui.Roles
 import net.seilent.funecomp.ui.Shape
 import net.seilent.funecomp.ui.Ui
 import org.junit.Assert.assertEquals
@@ -20,18 +20,22 @@ class JumpLayoutTest {
 
     private val all = (0 until Tok.jumpCells.toInt()).toSet()
 
+    private val margin = (Tok.canvasW - Tok.jumpCols * Tok.tileS - (Tok.jumpCols - 1) * Tok.jumpGap) / 2
+
+    private val half = Tok.jumpGap / 2
+
     private val table = listOf(
-        Row("dap", dap, 4, 53f, 10, 598f, 278f),
-        Row("360x640", Ui.of(945f, 1532f), 4, 67.0f, 10, 738.2f, 258.2f),
-        Row("411x960", Ui.of(1078.875f, 2372f), 4, 61.0f, 10, 678.0f, 80.0f),
-        Row("600x960", Ui.of(1575f, 2372f), 4, 72.7f, 10, 794.8f, 314.8f),
-        Row("960x600", Ui.of(2411f, 1427f), 8, 54.5f, 5, 320.5f, 36.4f),
-        Row("flip960x411", Ui.of(2411f, 930.875f), 12, 53.7f, 4, 258.8f, 0f),
-        Row("1280x800", Ui.of(3251f, 1952f), 8, 54.5f, 5, 320.5f, 32.3f),
-        Row("cover474x419", Ui.of(1244f, 1101f), 6, 54.26f, 7, 435.8f, 115.8f),
-        Row("sn411x438", Ui.of(1078.875f, 1149.75f), 4, 73.0f, 10, 798.0f, 457.0f),
-        Row("sw320", Ui(3f, 320f, 320f, Shape.SW), 5, 57.6f, 8, 520.8f, 200.8f),
-        Row("sw1001x1000", Ui.of(1001f, 1000f), 5, 57.66f, 8, 521.3f, 201.3f),
+        Row("dap", dap, 4, 53f, 10, 603.7f, 283.7f),
+        Row("360x640", Ui.of(945f, 1532f), 4, 67.02f, 10, 743.91f, 263.91f),
+        Row("411x960", Ui.of(1078.875f, 2372f), 4, 61.0f, 10, 683.7f, 85.68f),
+        Row("600x960", Ui.of(1575f, 2372f), 4, 72.68f, 10, 800.5f, 320.5f),
+        Row("960x600", Ui.of(2411f, 1427f), 8, 54.38f, 5, 324.4f, 40.3f),
+        Row("flip960x411", Ui.of(2411f, 930.875f), 12, 53.55f, 4, 262.45f, 0f),
+        Row("1280x800", Ui.of(3251f, 1952f), 8, 54.38f, 5, 324.4f, 36.19f),
+        Row("cover474x419", Ui.of(1244f, 1101f), 6, 54.18f, 7, 440.24f, 120.24f),
+        Row("sn411x438", Ui.of(1078.875f, 1149.75f), 4, 73.0f, 10, 803.7f, 462.68f),
+        Row("sw320", Ui(3f, 320f, 320f, Shape.SW), 5, 57.55f, 8, 525.64f, 205.64f),
+        Row("sw1001x1000", Ui.of(1001f, 1000f), 5, 57.62f, 8, 526.15f, 206.15f),
     )
 
     private fun center(g: JumpLayout, slot: Int) = (g.x(slot) + g.tile / 2) to (g.y(slot) + g.tile / 2)
@@ -39,12 +43,13 @@ class JumpLayoutTest {
     @Test
     fun theDapCanvasIsTheDapGrid() {
         val g = JumpLayout.of(dap)
-        assertEquals(listOf(8f, 65f, 122f, 179f), (0 until 4).map { g.x(it) })
-        assertEquals(53f, g.tile, 0f)
-        assertEquals(278f, g.limit(LayoutTok.canvasH), 0f)
+        assertEquals(7.64f, margin, 0.001f)
+        listOf(7.64f, 64.88f, 122.12f, 179.36f).forEachIndexed { i, x -> assertEquals("$i", x, g.x(i), 0.01f) }
+        assertEquals(53f, g.tile, 0.001f)
+        assertEquals(283.7f, g.limit(LayoutTok.canvasH), 0.01f)
         for (letter in 0 until 18) assertEquals("$letter", 0f, g.offsetFor(JumpLayout.slot(letter), LayoutTok.canvasH), 0f)
-        for (letter in 18..21) assertEquals("$letter", 50f, g.offsetFor(JumpLayout.slot(letter), LayoutTok.canvasH), 0f)
-        assertEquals(278f, g.offsetFor(JumpLayout.slot(37), LayoutTok.canvasH), 0f)
+        for (letter in 18..21) assertEquals("$letter", 54.74f, g.offsetFor(JumpLayout.slot(letter), LayoutTok.canvasH), 0.01f)
+        assertEquals(283.7f, g.offsetFor(JumpLayout.slot(37), LayoutTok.canvasH), 0.01f)
     }
 
     @Test
@@ -56,7 +61,7 @@ class JumpLayoutTest {
             assertEquals(r.name, r.rows, g.rows)
             assertEquals(r.name, r.content, g.content, 0.05f)
             assertEquals(r.name, r.limit, g.limit(r.ui.h), 0.05f)
-            assertEquals(r.name, r.ui.w - 8f, g.x(g.cols - 1) + g.tile, 0.001f)
+            assertEquals(r.name, r.ui.w - margin, g.x(g.cols - 1) + g.tile, 0.001f)
         }
     }
 
@@ -82,17 +87,22 @@ class JumpLayoutTest {
             val (sx, sy) = center(g, 1)
             assertEquals(JUMP_SEARCH, g.hit(sx, sy - offset, offset, all))
             val y = g.y(9) - offset
-            assertEquals(7, g.hit(g.x(9) - 2f, y, offset, all))
-            assertEquals(7, g.hit(g.x(9) + g.tile + 1.99f, y, offset, all))
-            assertEquals(8, g.hit(g.x(9) + g.tile + 2f, y, offset, all))
-            assertEquals(3, g.hit(g.x(5), g.y(5) - 2f - offset, offset, all))
-            assertEquals(3, g.hit(g.x(9), g.y(9) - 2.01f - offset, offset, all))
-            assertEquals(JUMP_NONE, g.hit(5.99f, y, offset, all))
-            assertEquals(JUMP_NONE, g.hit(Tok.canvasW - 5.99f, y, offset, all))
-            assertEquals(JUMP_NONE, g.hit(g.x(0), Held.Jump.jumpTop - 2.01f - offset, offset, all))
+            assertEquals(7, g.hit(g.x(9) - half + 0.01f, y, offset, all))
+            assertEquals(7, g.hit(g.x(9) + g.tile + half - 0.01f, y, offset, all))
+            assertEquals(8, g.hit(g.x(9) + g.tile + half + 0.01f, y, offset, all))
+            assertEquals(3, g.hit(g.x(5), g.y(5) - half + 0.01f - offset, offset, all))
+            assertEquals(3, g.hit(g.x(9), g.y(9) - half - 0.01f - offset, offset, all))
+            assertEquals(JUMP_NONE, g.hit(margin - half - 0.01f, y, offset, all))
+            assertEquals(JUMP_NONE, g.hit(Tok.canvasW - margin + half + 0.01f, y, offset, all))
+            assertEquals(JUMP_NONE, g.hit(g.x(0), Tok.jumpTop - half - 0.01f - offset, offset, all))
             assertEquals(JUMP_NONE, g.hit(g.x(0), g.content - offset, offset, all))
             assertEquals(JUMP_NONE, g.hit(g.x(9), y, offset, all - 7))
         }
+    }
+
+    @Test
+    fun theExitIsElevenAtEverySize() {
+        for (r in table) assertEquals(r.name, 11f * r.ui.u, r.ui.px(Roles.jumpExit.size), 0.0001f)
     }
 
     @Test

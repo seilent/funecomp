@@ -444,8 +444,8 @@ class LayoutTest {
             assertEquals(n, 248f, ui.overlayMinusY, 1e-3f)
             assertEquals(n, 106.667f, ui.overlayNumberBaseline, 1e-3f)
         }
-        assertEquals(5, JumpLayout.of(Ui(3f, 353.9f, 320f, Shape.SW)).cols)
-        assertEquals(6, JumpLayout.of(Ui(3f, 354.1f, 320f, Shape.SW)).cols)
+        assertEquals(5, JumpLayout.of(Ui(3f, 354.38f, 320f, Shape.SW)).cols)
+        assertEquals(6, JumpLayout.of(Ui(3f, 354.58f, 320f, Shape.SW)).cols)
     }
 
     @Test

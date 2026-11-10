@@ -84,6 +84,8 @@ private fun case(c: String) = when (c) {
     else -> Case.MIXED
 }
 
+const val JUMP_EXIT_SIZE = 11f
+
 object Roles {
     val pageHeader = Role(Tok.type_pageHeader_size, weight(Tok.type_pageHeader_style), case(Tok.type_pageHeader_case), Tok.type_pageHeader_alpha)
     val albumHeader = Role(Tok.type_albumHeader_size, weight(Tok.type_albumHeader_style), case(Tok.type_albumHeader_case), Tok.type_albumHeader_alpha)
@@ -122,7 +124,7 @@ object Roles {
     val dialogItem = Role(Tok.type_dialogItem_size, weight(Tok.type_dialogItem_style), case(Tok.type_dialogItem_case), Tok.type_dialogItem_alpha, Tok.type_dialogItem_alphaDim)
     val gridCaption = Role(Tok.type_gridCaption_size, weight(Tok.type_gridCaption_style), case(Tok.type_gridCaption_case), Tok.type_gridCaption_alpha)
     val letterGlyph = Role(Tok.type_letterGlyph_size, weight(Tok.type_letterGlyph_style), case(Tok.type_letterGlyph_case), Tok.type_letterGlyph_alpha)
-    val jumpExit = Role(Held.Jump.type_jumpExit_size, weight(Tok.type_jumpExit_style), case(Tok.type_jumpExit_case), Tok.type_jumpExit_alpha)
+    val jumpExit = Role(JUMP_EXIT_SIZE, weight(Tok.type_jumpExit_style), case(Tok.type_jumpExit_case), Tok.type_jumpExit_alpha)
     val watermark = Role(Tok.type_watermark_size, weight(Tok.type_watermark_style), case(Tok.type_watermark_case), Tok.type_watermark_alpha)
 }
 

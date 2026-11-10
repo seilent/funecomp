@@ -45,18 +45,6 @@ object Held {
         )
     }
 
-    object Jump {
-        const val type_jumpExit_size = 11f
-        const val jumpGap = 4f
-        const val jumpTop = 16f
-
-        val entries = listOf(
-            Entry("type_jumpExit_size", "type_jumpExit_size", type_jumpExit_size, "T3", "ztoast", "836c8fbc4"),
-            Entry("jumpGap", "jumpGap", jumpGap, "T3", "ztoast", "836c8fbc4"),
-            Entry("jumpTop", "jumpTop", jumpTop, "T3", "ztoast", "836c8fbc4"),
-        )
-    }
-
     object Vol {
         const val vol_skip = 42.1f
         const val vol_label = 8.8f
@@ -71,5 +59,5 @@ object Held {
         )
     }
 
-    val entries get() = Nav.entries + Pivot.entries + Rest.entries + Jump.entries + Vol.entries
+    val entries get() = Nav.entries + Pivot.entries + Rest.entries + Vol.entries
 }
