@@ -678,16 +678,10 @@ private fun Shots.insertAbove(shell: Shell) {
     c.device = c.device.copy(schema = c.device.schema.copy(rev = (c.device.schema.rev ?: 0) + 1, rows = rows.subList(0, at) + nav + rows.subList(at, rows.size)))
 }
 
-private fun Shots.pivotTo(name: String) {
-    for (p in listOf("albums", "songs", "genres", "playlists", "folders")) {
-        rule.onNodeWithTag("pivot.$p").performClick()
-        settle(1000)
-        if (p == name) return
-    }
-}
+private fun Shots.pivotTo(name: String) = rule.pivotTo("music", name) { settle(it) }
 
-private fun Shots.holdRow(pivot: String?, tag: String) {
-    if (pivot != null) pivotTo(pivot)
+private fun Shots.holdRow(pivot: String, tag: String) {
+    pivotTo(pivot)
     rule.onNodeWithTag(tag).performTouchInput { longClick() }
     settle(600)
 }
@@ -902,38 +896,29 @@ val SHOTS = listOf(
     Shot("nowplaying-empty", pages = NP, link = LinkView(Phase.CONNECTING, "AP80"), prep = { it.device = DeviceState() }),
     Shot("queue", pages = NP + Page.Queue, prep = ::playing),
     Shot("queue-sheet", pages = NP + Page.Queue, prep = ::playing) { rule.onNodeWithTag("queue.2").performTouchInput { longClick() } },
-    Shot("music-artists", pages = HOME + Page.Music),
-    Shot("music-albums", pages = HOME + Page.Music) { rule.onNodeWithTag("pivot.albums").performClick() },
-    Shot("music-songs", pages = HOME + Page.Music, prep = ::playing) { rule.onNodeWithTag("pivot.songs").performClick() },
+    Shot("music-artists", pages = HOME + Page.Music) { pivotTo("artists") },
+    Shot("music-albums", pages = HOME + Page.Music),
+    Shot("music-songs", pages = HOME + Page.Music, prep = ::playing) { pivotTo("songs") },
     Shot("cardtoast-list", pages = HOME + Page.Music, prep = cardBusy(), after = 300) {
-        rule.onNodeWithTag("pivot.songs").performClick()
-        settle(1000)
+        pivotTo("songs")
         rule.onNodeWithTag("row.0").performClick()
     },
     Shot("cardtoast-queue", pages = NP + Page.Queue, prep = cardBusy(), after = 300) { rule.onNodeWithTag("queue.1").performClick() },
     Shot("cardtoast-home", pages = HOME, prep = cardBusy(), after = 300) { rule.onNodeWithTag("home.ring").performClick() },
     Shot("cardtoast-receiver", pages = HOME + Page.Music, prep = cardBusy(phone = true), after = 300) {
-        rule.onNodeWithTag("pivot.songs").performClick()
-        settle(1000)
+        pivotTo("songs")
         rule.onNodeWithTag("row.0").performClick()
     },
     Shot("music-folders", pages = HOME + Page.Music) {
-        for (p in listOf("albums", "songs", "genres", "playlists", "folders")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        pivotTo("folders")
         rule.onNodeWithTag("row.0").performClick()
     },
     Shot("music-songs-play", pages = HOME + Page.Music, prep = { it.queueOp(Enums.QueueCmd.playAt, slot = 13) }) {
-        rule.onNodeWithTag("pivot.songs").performClick()
-        settle(1000)
+        pivotTo("songs")
         scrollTo("row.13")
     },
     Shot("music-folders-play", pages = HOME + Page.Music, prep = ::playing) {
-        for (p in listOf("albums", "songs", "genres", "playlists", "folders")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        pivotTo("folders")
         rule.onNodeWithTag("row.2").performClick()
         settle(1000)
         rule.onNodeWithTag("row.1").performClick()
@@ -948,8 +933,8 @@ val SHOTS = listOf(
         holdRow("genres", "row.3")
         shell.sheet.accept(1)
     },
-    Shot("sheet-artist", pages = HOME + Page.Music) { holdRow(null, "row.0") },
-    Shot("sheet-artist-noadd", pages = HOME + Page.Music, faults = listOf(NO_ADD)) { holdRow(null, "row.0") },
+    Shot("sheet-artist", pages = HOME + Page.Music) { holdRow("artists", "row.0") },
+    Shot("sheet-artist-noadd", pages = HOME + Page.Music, faults = listOf(NO_ADD)) { holdRow("artists", "row.0") },
     Shot("sheet-album", pages = HOME + Page.Music) { holdRow("albums", "row.0") },
     Shot("sheet-song", pages = HOME + Page.Music) { holdRow("songs", "row.0") },
     Shot("sheet-folder", pages = HOME + Page.Music) { holdRow("folders", "row.0") },
@@ -1417,7 +1402,10 @@ val SHOTS = listOf(
     }) { shell -> sheetItem(shell, 2) },
     Shot("pick-loading", pages = NP, prep = tsuki("TSUKI")) { shell -> pasted(shell) },
     Shot("pick-refused", pages = NP, prep = { c -> tsuki("TSUKI")(c); c.previewed = Previewed.Refused("image too small") }, after = 400) { shell -> pasted(shell) },
-    Shot("pick-artists-sheet", pages = HOME + Page.Music) { rule.onNodeWithTag("row.0").performTouchInput { longClick() } },
+    Shot("pick-artists-sheet", pages = HOME + Page.Music) {
+        pivotTo("artists")
+        rule.onNodeWithTag("row.0").performTouchInput { longClick() }
+    },
     Shot("pick-browse-loading", pages = NP + Page.Browse(PickFor("TSUKI"))),
     Shot("pick-browse-more", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(5, null)),
     Shot("pick-browse", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)),

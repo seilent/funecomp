@@ -98,13 +98,7 @@ class GenresTest {
         rule.waitForIdle()
     }
 
-    private fun pivot(name: String) {
-        for (p in listOf("albums", "songs", "genres", "playlists", "folders")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle()
-            if (p == name) return
-        }
-    }
+    private fun pivot(name: String) = rule.pivotTo("music", name) { settle() }
 
     private fun hold(tag: String) {
         rule.onNodeWithTag(tag).performTouchInput { longClick() }
@@ -116,9 +110,9 @@ class GenresTest {
     @Test
     fun genresShowsOnlyWithBit24AndTheSavedViewIsKeptByView() {
         val c = SimControl("ap80")
-        assertEquals(listOf(Enums.View.artists, Enums.View.albums, Enums.View.songs, Enums.View.genres, Enums.View.playlists, Enums.View.folders), musicViews(c.device))
+        assertEquals(listOf(Enums.View.albums, Enums.View.artists, Enums.View.playlists, Enums.View.songs, Enums.View.genres, Enums.View.folders), musicViews(c.device))
         val old = SimControl("ap80", minor = 14)
-        assertEquals(listOf(Enums.View.artists, Enums.View.albums, Enums.View.songs, Enums.View.playlists, Enums.View.folders), musicViews(old.device))
+        assertEquals(listOf(Enums.View.albums, Enums.View.artists, Enums.View.playlists, Enums.View.songs, Enums.View.folders), musicViews(old.device))
         val s = start()
         pivot("folders")
         gets.clear()
@@ -182,6 +176,7 @@ class GenresTest {
     @Test
     fun groupSheetsGainPlayNextAndAddToQueueInTheDapOrder() {
         start()
+        pivot("artists")
         hold("row.0")
         assertEquals(listOf("play", "play next", ADD_TO_QUEUE, "shuffle", "pick image"), shell.sheet.items)
         shell.sheet.close()

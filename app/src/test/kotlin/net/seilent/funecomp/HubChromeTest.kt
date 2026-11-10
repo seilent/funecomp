@@ -136,6 +136,7 @@ class HubChromeTest {
         val ns = pivots()
         val active = ns.indexOfFirst { abs(it.positionInRoot.x - c.left - 20f * u) < 1f }
         assertTrue("$name active", active >= 0)
+        assertEquals("pivot.$name", ns[active].config[SemanticsProperties.TestTag])
         if (active > 0) assertEquals("$name lead", -2f * u, ns[active - 1].positionInRoot.x + ns[active - 1].size.width - c.left, 1f)
         var pairs = 0
         for (k in active until ns.size - 1) {
@@ -197,20 +198,7 @@ class HubChromeTest {
         }
     }
 
-    private fun pivotTo(page: String, label: String) {
-        val c = canvas(page)
-        val u = ui(page).u
-        repeat(10) {
-            val ns = pivots()
-            val active = ns.indexOfFirst { abs(it.positionInRoot.x - c.left - 20f * u) < 1f }
-            if (active < 0) error("no pivot $label")
-            if (ns[active].config[SemanticsProperties.TestTag] == "pivot.$label") return
-            val next = ns.getOrNull(active + 1) ?: error("no pivot $label")
-            rule.onNodeWithTag(next.config[SemanticsProperties.TestTag], useUnmergedTree = true).performClick()
-            settle(1500)
-        }
-        error("no pivot $label")
-    }
+    private fun pivotTo(page: String, label: String) = rule.pivotTo(page, label) { settle(it) }
 
     private fun assertPenX(name: String, page: String, at: String) =
         assertEquals(name, -22f * scale(at) * ui(page).u, left("header.word") - canvas(page).left, 1f)
@@ -218,7 +206,7 @@ class HubChromeTest {
     @Test
     fun theHeaderWordStartsAtThePenX() {
         start(Page.Music)
-        assertPenX("artists", "music", "411x960")
+        assertPenX("albums", "music", "411x960")
         for (label in listOf("songs", "folders")) {
             pivotTo("music", label)
             assertPenX(label, "music", "411x960")
@@ -310,19 +298,19 @@ class HubChromeTest {
         start(Page.Music, at = "sn411x438")
         val c = canvas("music")
         val ui = ui("music")
-        val b = bounds("pivot.albums")
+        val b = bounds("pivot.artists")
         assertTrue(b.top - c.top < 70f * ui.u)
         rule.onRoot().performTouchInput { click(Offset(b.center.x, b.top + 0.25f * b.height)) }
         settle(1500)
         assertEquals(Page.Music, shell.nav.top)
-        assertEquals(20f * ui.u, left("pivot.albums") - c.left, 1.5f)
+        assertEquals(20f * ui.u, left("pivot.artists") - c.left, 1.5f)
     }
 
     @Test
     fun thePivotsAreTheDeviceRoles() {
         start(Page.Music)
         val u = ui("music").u
-        for ((tag, weight, alpha) in listOf(Triple("pivot.artists", FontWeight.Bold, 1.0f), Triple("pivot.albums", FontWeight.Normal, 0.28f))) {
+        for ((tag, weight, alpha) in listOf(Triple("pivot.albums", FontWeight.Bold, 1.0f), Triple("pivot.artists", FontWeight.Normal, 0.28f))) {
             val style = layout(tag).layoutInput.style
             with(rule.density) { assertEquals(tag, (24.7f * u).roundToInt().toFloat(), style.fontSize.toPx(), 0.5f) }
             assertEquals(tag, weight, style.fontWeight)
@@ -333,22 +321,21 @@ class HubChromeTest {
     @Test
     fun theInkGapsAreTheDevices() {
         start(Page.Music, off = true)
-        assertInkGaps("artists", "music")
-        rule.onNodeWithTag("pivot.albums").performClick()
-        settle(1500)
         assertInkGaps("albums", "music")
+        pivotTo("music", "artists")
+        assertInkGaps("artists", "music")
     }
 
     @Test
     fun theEqInkGapsAreTheDevices() {
         start(Page.Eq(Enums.EqOutput.wired), off = true, under = listOf(Page.Settings))
-        assertInkGaps("eq", "eq")
+        assertInkGaps("headphones", "eq")
     }
 
     @Test
     fun theCorrectionEqInkGapsAreTheDevices() {
         start(Page.Eq(Enums.EqOutput.wired, EqStage.CORRECTION), off = true, under = listOf(Page.Settings))
-        assertInkGaps("correction eq", "correction eq")
+        assertInkGaps("headphones", "correction eq")
     }
 
     @Test

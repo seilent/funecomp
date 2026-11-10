@@ -949,6 +949,7 @@ class ArtPickUiTest {
     fun theArtistsSheetEndsWithPickImage() {
         val (shell, _) = start(listOf(Page.Home, Page.Music))
         settle(1000)
+        rule.pivotTo("music", "artists") { settle(it) }
         hold("row.1")
         assertEquals(listOf("play", "play next", "add to queue", "shuffle", "pick image"), shell.sheet.items)
         tap("sheet.item.4")

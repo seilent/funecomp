@@ -118,8 +118,7 @@ class PlayingRowTest {
     @Test
     fun songsLightsThePlayingTitle() {
         start(listOf(Page.Home, Page.Music), ::playing)
-        rule.onNodeWithTag("pivot.songs").performClick()
-        settle(1000)
+        rule.pivotTo("music", "songs") { settle(it) }
         assertLit(0 to false, 1 to true, 2 to false)
         focus(0)
         assertLit(0 to false, 1 to true)
@@ -130,10 +129,7 @@ class PlayingRowTest {
     @Test
     fun folderRowsStayUnlitAndFolderTracksLight() {
         start(listOf(Page.Home, Page.Music))
-        for (p in listOf("albums", "songs", "playlists", "folders")) {
-            rule.onNodeWithTag("pivot.$p").performClick()
-            settle(1000)
-        }
+        rule.pivotTo("music", "folders") { settle(it) }
         val root = row("", 2)
         assertEquals("Utada Hikaru", root.name)
         assertEquals(c.device.playback.state.track, root.first)

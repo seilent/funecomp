@@ -206,6 +206,7 @@ class PressHoldTest {
     @Test
     fun aMoveUnderTheSlopNearARowsEdgeStillTaps() {
         start(listOf(Page.Home, Page.Music))
+        rule.pivotTo("music", "artists") { settle(it) }
         val row = node("row.0").fetchSemanticsNode().boundsInRoot
         val slop = slop()
         rule.onRoot().performTouchInput { down(Offset(row.left + slop + 10f, row.center.y)) }
@@ -257,6 +258,7 @@ class PressHoldTest {
     @Test
     fun aListRowTapThatOpensTheArtistHoldsTheRowThroughTheOutLeg() {
         start(listOf(Page.Home, Page.Music))
+        rule.pivotTo("music", "artists") { settle(it) }
         leaving(Item("artist row", "${TEXT}Utada Hikaru", "${TEXT}Utada Hikaru"), 120)
         assertTrue(shell.nav.top is Page.Artist)
     }
@@ -339,6 +341,7 @@ class PressHoldTest {
     @Test
     fun aScrollOrAPivotSwipeOnAPressedRowReturnsAtOnce() {
         start(listOf(Page.Home, Page.Music))
+        rule.pivotTo("music", "artists") { settle(it) }
         val row = Item("artist row", "${TEXT}Utada Hikaru", "${TEXT}Utada Hikaru")
         val slop = slop()
         for (move in listOf(Offset(0f, -slop * 2), Offset(-slop * 2, 0f))) {

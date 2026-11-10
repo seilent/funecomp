@@ -171,16 +171,18 @@ class PressFrameShots {
         File(out, "anim.json").writeText("{\"fps\": 40, \"frames\": [" + names.joinToString(", ") { "\"$it\"" } + "]}\n")
     }
 
+    private fun artists() = rule.pivotTo("music", "artists") { settle(it) }
+
     private fun cases(): List<Case> = listOf(
         Case("ring-tap", NP, "np.toggle.play", act = tap("np.toggle", 50)),
         Case("glyph-tap", NP, "np.nextTrack.glyph", act = tap("np.nextTrack", 50)),
-        Case("row-push", listOf(Page.Home, Page.Music), "${TEXT}Utada Hikaru", act = tap("${TEXT}Utada Hikaru", 50)),
+        Case("row-push", listOf(Page.Home, Page.Music), "${TEXT}Utada Hikaru", prep = { artists() }, act = tap("${TEXT}Utada Hikaru", 50)),
         Case("home-push", listOf(Page.Home), "${TEXT}music", act = tap("home.music", 50)),
         Case("jump-tap", EQ + Page.AutoEq(EqSlots.HEADPHONES), "jump.19", prep = {
             node("aeq.div.#").performClick()
             settle(300)
         }, act = tap("jump.19", 50)),
-        Case("row-drag", listOf(Page.Home, Page.Music), "${TEXT}Utada Hikaru", act = drag("${TEXT}Utada Hikaru", 150, Offset(0f, -slop() * 2))),
+        Case("row-drag", listOf(Page.Home, Page.Music), "${TEXT}Utada Hikaru", prep = { artists() }, act = drag("${TEXT}Utada Hikaru", 150, Offset(0f, -slop() * 2))),
         Case("ring-drag", NP, "np.toggle.play", act = drag("np.toggle", 150, Offset(0f, slop() + 10f))),
         Case("back-ring", NP, "back", act = tap("back", 50)),
         Case("q2", NP, "np.prev", area = "np.nextTrack", act = two()),

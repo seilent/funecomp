@@ -67,13 +67,13 @@ class Ctx(val device: DeviceState, val control: Control, val nav: Nav, val sheet
 const val ADD_TO_QUEUE = "add to queue"
 private const val PLAY_NEXT = "play next"
 
-fun musicViews(device: DeviceState) = listOf(Enums.View.artists, Enums.View.albums, Enums.View.songs) +
-    listOfNotNull(Enums.View.genres.takeIf { device.has("genres") }) + listOf(Enums.View.playlists, Enums.View.folders)
+fun musicViews(device: DeviceState) = listOf(Enums.View.albums, Enums.View.artists, Enums.View.playlists, Enums.View.songs) +
+    listOfNotNull(Enums.View.genres.takeIf { device.has("genres") }) + listOf(Enums.View.folders)
 
 @Composable
 fun Music(ctx: Ctx) {
     val views = musicViews(ctx.device)
-    var saved by rememberSaveable { mutableIntStateOf(Enums.View.artists) }
+    var saved by rememberSaveable { mutableIntStateOf(Enums.View.albums) }
     val pivot = views.indexOf(saved).coerceAtLeast(0)
     var folder by rememberSaveable { mutableStateOf("") }
     val inFolder = views[pivot] == Enums.View.folders && folder.isNotEmpty()

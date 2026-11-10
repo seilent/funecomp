@@ -96,12 +96,11 @@ class CardToastTest {
 
     private fun songs() {
         open(Page.Music)
-        for (p in listOf("albums", "songs")) tap("pivot.$p")
+        rule.pivotTo("music", "songs") { settle() }
     }
 
     private fun albums() {
         open(Page.Music)
-        tap("pivot.albums")
     }
 
     private class Entry(val name: String, val prep: () -> Unit, val act: () -> Unit)

@@ -440,14 +440,13 @@ class BehaviorTest {
     @Test
     fun popKeepsThePageBelow() {
         val (_, shell) = start(listOf(Page.Home, Page.Music))
-        rule.onNodeWithTag("pivot.albums").performClick()
-        settle(1200)
+        rule.pivotTo("music", "artists") { settle(it) }
         shell.nav.push(Page.Album("1", "x", ""))
         settle(1200)
         shell.nav.pop()
         settle(1200)
-        assertTrue(rule.onAllNodesWithText("First Love").fetchSemanticsNodes().isNotEmpty())
-        assertTrue(rule.onAllNodesWithText("Utada Hikaru").fetchSemanticsNodes().isEmpty())
+        assertTrue(rule.onAllNodesWithText("Utada Hikaru").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(rule.onAllNodesWithText("First Love").fetchSemanticsNodes().isEmpty())
     }
 
     @Test
