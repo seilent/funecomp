@@ -72,6 +72,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.ln
 import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
@@ -759,6 +760,25 @@ class BehaviorTest {
         assertNotNull(r)
         assertEquals(0f, gridScroll().value(), 0f)
         assertEquals(ui.px(Tok.edge).roundToInt(), r!!.first)
+    }
+
+    @Test
+    fun theJumpGridKeepsItsDecay() {
+        openAutoEq()
+        openGrid()
+        val size = rule.onRoot().fetchSemanticsNode().size
+        val ui = Ui.of(size.width.toFloat(), size.height.toFloat())
+        val want = (80f - Tok.flingStop) / (1000f / Tok.motion_flingTick * -ln(Tok.motion_flingRetention))
+        val step = ui.px(80f) * 4 / 1000f
+        rule.onNodeWithTag("jump").performTouchInput {
+            down(center)
+            repeat(((ui.px(Tok.touchSlop) + ui.px(2f)) / step).toInt() + 1) { moveBy(Offset(0f, -step), 4L) }
+        }
+        val at = gridScroll().value()
+        assertTrue("$at", at > 0f && (gridScroll().maxValue() - at) / ui.u > want * 1.1f)
+        rule.onNodeWithTag("jump").performTouchInput { up() }
+        settle(4000)
+        assertEquals(want, (gridScroll().value() - at) / ui.u, want * 0.05f)
     }
 
     @Test

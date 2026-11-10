@@ -827,7 +827,7 @@ private fun LyricsColumn(device: DeviceState, lyrics: LyricsFetch.Show, np: NpKe
             off = (off - d).coerceIn(0f, limit)
             old - off
         }
-        Box(surface.scrollable(scroll, Orientation.Vertical, flingBehavior = rememberFling()).press({ onTap() }, onLong).testTag("np.lyrics")) {
+        Box(surface.scrollable(scroll, Orientation.Vertical, flingBehavior = rememberFling(Tok.motion_listFlingRetention)).press({ onTap() }, onLong).testTag("np.lyrics")) {
             Box(Modifier.fillMaxWidth().height(viewH.dp()).clipToBounds()) {
                 val half = ui.px(pitch + Tok.capHeight * PLAIN.size) / 2
                 var i = (off / p).toInt()

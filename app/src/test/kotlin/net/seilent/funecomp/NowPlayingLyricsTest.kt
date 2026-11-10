@@ -42,6 +42,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.espresso.Espresso
+import kotlin.math.ln
 import kotlin.math.roundToInt
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.proto.LyrLine
@@ -322,6 +323,31 @@ class NowPlayingLyricsTest {
         assertTrue(exists("np.title"))
         settle(120)
         normalOn(shell)
+    }
+
+    @Test
+    fun plainLyricsFlingAtTheListDecay() {
+        start(on = false, copy = (0 until 80).map { LyrLine(null, "plain $it") }, kind = Enums.LyricsKind.plain, plain = true)
+        enterBy("np.mark.hit")
+        val size = rule.onRoot().fetchSemanticsNode().size
+        val ui = Ui.of(size.width.toFloat(), size.height.toFloat())
+        fun top(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
+        val box = rule.onNodeWithTag("np.lyrics").fetchSemanticsNode().boundsInRoot
+        val pitch = top("np.lyric.plain.1") - top("np.lyric.plain.0")
+        assertTrue("$pitch", (80 * pitch - box.height) / ui.u > 400f)
+        val step = ui.px(2000f) * 4 / 1000f
+        rule.onNodeWithTag("np.lyrics").performTouchInput {
+            down(center)
+            repeat(((ui.px(Tok.touchSlop) + ui.px(20f)) / step).toInt() + 1) { moveBy(Offset(0f, -step), 4L) }
+        }
+        val line = SemanticsMatcher("plain line") { it.config.getOrNull(SemanticsProperties.TestTag)?.startsWith("np.lyric.plain.") == true }
+        val probe = rule.onAllNodes(line).fetchSemanticsNodes().filter { it.boundsInRoot.top < box.bottom - pitch }.maxBy { it.boundsInRoot.top }.config[SemanticsProperties.TestTag]
+        rule.onNodeWithTag("np.lyrics").performTouchInput { up() }
+        rule.mainClock.advanceTimeByFrame()
+        val at = top(probe)
+        settle(4000)
+        val want = (2000f - Tok.flingStop) / (1000f / Tok.motion_flingTick * -ln(Tok.motion_listFlingRetention))
+        assertEquals(want, (at - top(probe)) / ui.u, want * 0.05f)
     }
 
     private fun normalOn(shell: Shell) {

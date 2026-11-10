@@ -191,7 +191,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     val x = ui.px(ui.homeTextX + fit)
     val margin = Held.Rest.homeFirstBaseline - LayoutTok.homeBarTop
     Box(Modifier.fillMaxSize().testTag("home")) {
-        Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).testTag("home.column")) {
+        Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), flingBehavior = rememberFling(Tok.motion_listFlingRetention)).testTag("home.column")) {
             val height = maxOf(ui.h, 2 * margin + items.size * pitch)
             Box(Modifier.size(ui.px(ui.w).dp(), ui.px(height).dp())) {
                 val barX = ui.homeMenuX + LayoutTok.homeBarX + fit

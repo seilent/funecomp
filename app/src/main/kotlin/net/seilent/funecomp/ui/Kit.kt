@@ -275,10 +275,10 @@ class MicroFling(private val k: Float, private val threshold: Float) : FloatDeca
 }
 
 @Composable
-fun rememberFling(): FlingBehavior {
+fun rememberFling(retention: Float = Tok.motion_flingRetention): FlingBehavior {
     val ui = LocalUi.current
-    return remember(ui.u) {
-        val k = MS_PER_S / Tok.motion_flingTick * -ln(Tok.motion_flingRetention)
+    return remember(ui.u, retention) {
+        val k = MS_PER_S / Tok.motion_flingTick * -ln(retention)
         val decay = MicroFling(k, ui.px(Tok.flingStop)).generateDecayAnimationSpec<Float>()
         val cap = ui.px(Tok.flingCap)
         val min = ui.px(Tok.flingMin)
@@ -292,8 +292,7 @@ fun rememberFling(): FlingBehavior {
                     val delta = value - last
                     val used = scrollBy(delta)
                     last = value
-                    left = velocity
-                    if (abs(delta - used) > 0.5f) cancelAnimation()
+                    if (abs(delta - used) > 0.5f) cancelAnimation() else left = velocity
                 }
                 return left
             }
@@ -330,7 +329,7 @@ fun Rows(
             Modifier.fillMaxSize().testTag("rows"),
             state = state,
             contentPadding = PaddingValues(bottom = past.dp()),
-            flingBehavior = rememberFling(),
+            flingBehavior = rememberFling(Tok.motion_listFlingRetention),
             userScrollEnabled = scroll,
             content = content,
         )
