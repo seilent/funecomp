@@ -671,7 +671,7 @@ private fun EqRows(ctx: Ctx, slot: String) {
                 l.sub -> "eq.band.${l.id.removePrefix("band").substringBefore('.')}.${fieldTags[l.id.substringAfter('.').toInt()]}"
                 else -> "eq.band.${l.id.removePrefix("band")}"
             }
-            val m = if (l.sub) Modifier.enterSub(l.id.substringAfter('.').toInt()) else Modifier.enter { i }
+            val m = if (l.sub) Modifier.enterSub() else Modifier.enter { i }
             SettingsRow(if (l.sub) l.title.uppercase() else l.title, l.value, m.testTag(tag), focused = focus == l.id, sub = l.sub, eqSlot = true) {
                 focus = l.id
                 l.tap()
@@ -727,13 +727,10 @@ private fun presetRows(ctx: Ctx, lines: MutableList<EqLine>, token: Any, key: St
 }
 
 @Composable
-fun Modifier.enterSub(index: Int): Modifier {
+fun Modifier.enterSub(): Modifier {
     val ui = LocalUi.current
     val t = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        delay((Tok.motion_listChangeStagger * minOf(index, Tok.motion_listChangeCap.toInt())).toLong())
-        t.animateTo(1f, tween(Tok.motion_listChange.toInt(), easing = Decel))
-    }
+    LaunchedEffect(Unit) { t.animateTo(1f, tween(Tok.motion_listChange.toInt(), easing = EaseOut)) }
     val shift = ui.px(Tok.motion_listChangeShift)
     return graphicsLayer {
         translationX = shift * (1f - t.value)
