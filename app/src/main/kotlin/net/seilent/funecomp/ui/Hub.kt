@@ -223,16 +223,15 @@ fun HubPage(
         CroppedHeader(header, onBack = onBack, x = headerX, alpha = headerAlpha, case = headerCase)
         if (pivots.isNotEmpty()) PivotStrip(pivots, active, onPivot, land)
         if (count != null) {
-            val d = rememberDip(count)
             val x = ui.px(Tok.hubEdge)
             val room = ui.px(ui.w) - 2 * x
             val measurer = rememberTextMeasurer()
-            if (keepEnd && measurer.measure(shown(d.shown, Roles.listCount.case), textStyle(Roles.listCount, white(Roles.listCount.alpha))).size.width > room) {
+            if (keepEnd && measurer.measure(shown(count, Roles.listCount.case), textStyle(Roles.listCount, white(Roles.listCount.alpha))).size.width > room) {
                 Box(Modifier.at(x, 0f).size(room.dp(), ui.px(ui.h).dp()).clipToBounds()) {
-                    RoleText(d.shown, Roles.listCount, Modifier.atBaseline(room, ui.px(ui.pivotBaseline), ax = 1f).dip(d).testTag("count"))
+                    RoleText(count, Roles.listCount, Modifier.atBaseline(room, ui.px(ui.pivotBaseline), ax = 1f).testTag("count"))
                 }
             } else {
-                RoleText(d.shown, Roles.listCount, Modifier.atBaseline(x, ui.px(ui.pivotBaseline)).dip(d).testTag("count"))
+                RoleText(count, Roles.listCount, Modifier.atBaseline(x, ui.px(ui.pivotBaseline)).testTag("count"))
             }
         }
     }

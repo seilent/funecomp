@@ -8,7 +8,6 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.FloatDecayAnimationSpec
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.generateDecayAnimationSpec
 import androidx.compose.animation.core.tween
@@ -40,13 +39,9 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.runtime.Stable
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
@@ -385,29 +380,6 @@ fun StateRow(text: String, tag: String, onTap: (() -> Unit)? = null) {
     }
 }
 
-@Stable
-class Dip(initial: String) {
-    var shown by mutableStateOf(initial)
-    val alpha = Animatable(1f)
-}
-
-@Composable
-fun rememberDip(value: String): Dip {
-    val d = remember { Dip(value) }
-    LaunchedEffect(value) {
-        if (value == d.shown) {
-            d.alpha.animateTo(1f, tween(Tok.motion_valueChange.toInt(), easing = LinearEasing))
-            return@LaunchedEffect
-        }
-        d.alpha.animateTo(Tok.motion_valueDip, tween(Tok.motion_valueChange.toInt(), easing = LinearEasing))
-        d.shown = value
-        d.alpha.animateTo(1f, tween(Tok.motion_valueChange.toInt(), easing = LinearEasing))
-    }
-    return d
-}
-
-fun Modifier.dip(d: Dip) = graphicsLayer { alpha = d.alpha.value }
-
 @Composable
 fun ListRow(
     primary: String,
@@ -495,14 +467,12 @@ fun SettingsRow(
         tween(Tok.motion_focusAlpha.toInt()),
         label = "value",
     )
-    val dip = rememberDip(value)
-    val shownValue = dip.shown
     val measurer = rememberTextMeasurer()
     val t = measurer.measure(shown(title, titleRole.case), textStyle(titleRole, tc))
     val bold = Roles.settingsValue.copy(weight = FontWeight.Bold)
     val valueRole = if (editing && AccentOff) bold else Roles.settingsValue
-    val v = measurer.measure(shown(shownValue, valueRole.case), textStyle(valueRole, vc))
-    val room = if (AccentOff) measurer.measure(shown(shownValue, bold.case), textStyle(bold, vc)) else v
+    val v = measurer.measure(shown(value, valueRole.case), textStyle(valueRole, vc))
+    val room = if (AccentOff) measurer.measure(shown(value, bold.case), textStyle(bold, vc)) else v
     val edgeX = ui.px(Tok.hubEdge)
     val right = rowW - edgeX
     val baseline = (rowH - t.size.height) / 2 + t.firstBaseline
@@ -521,19 +491,19 @@ fun SettingsRow(
             val slotX = edgeX + t.size.width + ui.px(Tok.eqValueGap)
             val slotW = (right - slotX).coerceAtLeast(0f)
             Box(Modifier.at(slotX, 0f).size(slotW.dp(), rowH.dp()).clipToBounds()) {
-                RoleText(shownValue, valueRole, Modifier.atBaseline(slotW - v.size.width, baseline).dip(dip), color = valueColor)
+                RoleText(value, valueRole, Modifier.atBaseline(slotW - v.size.width, baseline), color = valueColor)
             }
         } else {
             val limit = when {
                 swatch != null -> right - sw - ui.px(Tok.gutter) - edgeX
-                shownValue.isNotEmpty() -> right - room.size.width - ui.px(Tok.gutter) - edgeX
+                value.isNotEmpty() -> right - room.size.width - ui.px(Tok.gutter) - edgeX
                 else -> right - edgeX
             }
             RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline, limit).testTag("settings.title"), color = titleColor, glow = glow)
             if (swatch != null) {
                 Box(Modifier.at(right - sw, (rowH - sw) / 2).size(sw.dp()).background(swatch.copy(alpha = (if (focused) Tok.settingsValueFocused else Tok.settingsValueDim) / Tok.settingsValueFocused)))
-            } else if (shownValue.isNotEmpty()) {
-                RoleText(shownValue, valueRole, Modifier.atBaseline(right - v.size.width, baseline).dip(dip), color = valueColor)
+            } else if (value.isNotEmpty()) {
+                RoleText(value, valueRole, Modifier.atBaseline(right - v.size.width, baseline), color = valueColor)
             }
         }
     }
