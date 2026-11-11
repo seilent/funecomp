@@ -25,6 +25,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.awt.image.BufferedImage
+import kotlin.math.abs
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -97,7 +98,7 @@ class ToastRiseTest {
         assertTrue(shown())
         val rest = y()
         val restImg = capture()
-        val e = frames.map { 1f + (it.y - rest) / travel }
+        val e = frames.map { 1f - abs(it.y - rest) / travel }
         val starts = frames.indices.filter { e[it] in 0.02f..0.98f }.map { k -> frames[k].ms - e[k] * rise }
         assertTrue("too few frames in the rise: ${starts.size}", starts.size >= 3)
         starts.forEach { assertEquals("a Linear rise over $rise from one start", starts.first(), it, 1.5f) }

@@ -1,7 +1,6 @@
 package net.seilent.funecomp.ui
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -30,9 +29,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -62,7 +63,9 @@ import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 internal const val OFF = "off"
 internal const val ON = "on"
@@ -524,15 +527,76 @@ class ToastState {
     }
 }
 
+internal enum class ToastPhase { HIDDEN, IN, HOLD, OUT }
+
+internal class ToastLegs {
+    private var live = false
+    private var inAt = 0L
+    private var holdAt = 0L
+    private var inFrom = 0f
+    private var fadeFrom = 0f
+    var holdEnd = 0L
+        private set
+
+    fun phase(t: Long) = when {
+        !live -> ToastPhase.HIDDEN
+        t < holdAt -> ToastPhase.IN
+        t < holdEnd -> ToastPhase.HOLD
+        t < holdEnd + OUT_MS -> ToastPhase.OUT
+        else -> ToastPhase.HIDDEN
+    }
+
+    fun pos(t: Long) = when (phase(t)) {
+        ToastPhase.IN -> min(1f, inFrom + (t - inAt) / Tok.motion_toastRise)
+        ToastPhase.HOLD -> 1f
+        ToastPhase.OUT -> 1f - ((t - holdEnd - Tok.motion_toastOutMoveAt) / Tok.motion_toastOutMove).coerceIn(0f, 1f)
+        ToastPhase.HIDDEN -> 0f
+    }
+
+    fun fade(t: Long) = when (phase(t)) {
+        ToastPhase.IN -> if (inFrom >= 1f) 1f else fadeFrom + (1f - fadeFrom) * (pos(t) - inFrom) / (1f - inFrom)
+        ToastPhase.HOLD -> 1f
+        ToastPhase.OUT -> 1f - EaseOut.transform(((t - holdEnd - Tok.motion_toastOutAt) / Tok.motion_toastOut).coerceIn(0f, 1f))
+        ToastPhase.HIDDEN -> 0f
+    }
+
+    fun show(t: Long, held: Boolean): ToastPhase {
+        val p = phase(t)
+        if (p == ToastPhase.HOLD) holdAt = t
+        if (p == ToastPhase.HIDDEN || p == ToastPhase.OUT) {
+            fadeFrom = if (p == ToastPhase.OUT) fade(t) else 0f
+            inFrom = if (p == ToastPhase.OUT) pos(t) else 0f
+            inAt = t
+            holdAt = t + (Tok.motion_toastRise * (1f - inFrom)).roundToLong()
+            live = true
+        }
+        holdEnd = if (held) Long.MAX_VALUE else holdAt + Tok.motion_toastHold.toLong()
+        return p
+    }
+
+    fun leave(t: Long) {
+        if (holdEnd == Long.MAX_VALUE) holdEnd = max(t, holdAt)
+    }
+
+    companion object {
+        val OUT_MS = max(Tok.motion_toastOutAt + Tok.motion_toastOut, Tok.motion_toastOutMoveAt + Tok.motion_toastOutMove).toLong()
+    }
+}
+
 @Composable
-fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolean = false) {
+fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolean = false, over: Boolean = false, np: Boolean = false) {
     val ui = LocalUi.current
-    val progress = remember { Animatable(0f) }
-    var leaving by remember { mutableStateOf(false) }
+    val legs = remember { ToastLegs() }
+    var now by remember { mutableLongStateOf(0L) }
+    var top by remember { mutableStateOf(true) }
     var risen by remember { mutableStateOf(false) }
     val cover by rememberUpdatedState(covered)
+    val place by rememberUpdatedState(over || np || held != null)
     LaunchedEffect(covered) {
         if (covered) risen = true
+    }
+    LaunchedEffect(over, held != null) {
+        if (over || held != null) top = true
     }
     var artist by remember { mutableStateOf(held?.first ?: "") }
     var title by remember { mutableStateOf(held?.second ?: "") }
@@ -550,34 +614,38 @@ fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolea
             artist = state.artist
             title = state.title
         }
+        val t = withFrameMillis { it }
         if (held == null && !fresh) {
-            if (progress.value > 0f) {
-                leaving = true
-                progress.animateTo(0f, tween(Tok.motion_toastOut.toInt(), easing = LinearEasing))
-            }
-            return@LaunchedEffect
+            legs.leave(t)
+        } else {
+            val p = legs.show(t, held != null)
+            if (p == ToastPhase.HIDDEN) top = place
+            if (p == ToastPhase.HIDDEN || p == ToastPhase.OUT) risen = cover
         }
-        leaving = false
-        risen = cover
-        progress.animateTo(1f, tween(Tok.motion_toastRise.toInt(), easing = LinearEasing))
-        if (held != null) return@LaunchedEffect
-        delay(Tok.motion_toastHold.toLong())
-        leaving = true
-        progress.animateTo(0f, tween(Tok.motion_toastOut.toInt(), easing = LinearEasing))
+        now = t
+        while (true) {
+            when (legs.phase(now)) {
+                ToastPhase.HIDDEN -> return@LaunchedEffect
+                ToastPhase.HOLD -> if (legs.holdEnd == Long.MAX_VALUE) return@LaunchedEffect else delay(legs.holdEnd - now)
+                else -> {}
+            }
+            withFrameMillis { now = it }
+        }
     }
-    if (progress.value <= 0f || covered) return
-    val e = when {
-        leaving -> 1f - ExpOut6.transform(1f - progress.value)
-        risen -> 1f
-        else -> progress.value
-    }
+    val full = risen && legs.phase(now) == ToastPhase.IN
+    val e = if (full) 1f else legs.pos(now)
+    val a = if (full) 1f else legs.fade(now)
+    if (e <= 0f || a <= 0f || covered) return
+    val h = ui.px(Tok.toastHeight)
     val travel = ui.px(Tok.motion_toastTravel)
+    val y = if (top) -travel * (1f - e) else ui.px(ui.h) - h + travel * (1f - e)
+    val strip = if (top) h else (ui.px(ui.h) - y).coerceIn(0f, h)
     val edge = ui.px(Tok.edge)
     Box(
-        Modifier.offset { IntOffset(0, (-travel * (1f - e)).roundToInt()) }.size(ui.px(ui.w).dp(), ui.px(Tok.toastHeight).dp())
-            .alpha(e).background(Black.copy(alpha = Tok.scrim_overlay_alpha)).testTag("toast"),
+        Modifier.offset { IntOffset(0, y.roundToInt()) }.size(ui.px(ui.w).dp(), strip.dp())
+            .alpha(a).background(Black.copy(alpha = Tok.scrim_overlay_alpha)).testTag("toast"),
     ) {
-        Box(Modifier.at(edge, 0f).size((ui.px(ui.w) - 2 * edge).dp(), ui.px(Tok.toastHeight).dp()).clipToBounds()) {
+        Box(Modifier.at(edge, 0f).size((ui.px(ui.w) - 2 * edge).dp(), h.dp()).clipToBounds()) {
             RoleText(artist, Roles.toastArtist, Modifier.atBaseline(0f, ui.px(Tok.toastArtistBaseline)))
             RoleText(title, Roles.toastTitle, Modifier.atBaseline(0f, ui.px(Tok.toastTitleBaseline)).testTag("toast.title"))
         }

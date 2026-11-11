@@ -231,7 +231,7 @@ fun App(
             VolumeOverlay(shell.overlay, device, control)
             Sheet(shell.sheet, remember(ime, insets) { ime.exclude(insets) })
             val held = if (nav.top == Page.NowPlaying && link.everLive && link.phase != Phase.LIVE) (link.board ?: link.device ?: "") to statusText(link) else null
-            Toast(shell.toast, held, shell.overlay.drawn || shell.toast.grid)
+            Toast(shell.toast, held, shell.overlay.drawn || shell.toast.grid, shell.sheet.shown || ime.getBottom(density) > 0, nav.top == Page.NowPlaying)
         }
     }
 }
