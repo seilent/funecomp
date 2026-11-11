@@ -30,6 +30,9 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
     var lit by mutableFloatStateOf(0f)
         private set
 
+    var framing by mutableFloatStateOf(0f)
+        private set
+
     var held by mutableStateOf(false)
         private set
 
@@ -82,6 +85,12 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
     fun look(now: Long): Float = if (cutAt in 0L..now) 0f else glow(now)
 
     fun scaleAt(now: Long): Float = if (scaled) value(now) else 1f
+
+    fun frameAt(now: Long): Float {
+        if (framed(now)) return if (cutAt in 0L..now) 0f else 1f
+        if (to != 1f || cutAt >= 0 || lookTo != 0f || lookFrom <= 0f) return 0f
+        return glow(now) / lookFrom
+    }
 
     private fun run(now: Long, a: Float, b: Float) {
         from = a
@@ -136,6 +145,7 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
             releaseAt = now + Tok.motion_touchReturnDelay.toLong()
             cutAt = now
             lit = 0f
+            framing = 0f
         }
         held = false
         kick()
@@ -157,6 +167,7 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
         lookSet(0f)
         cutAt = -1L
         lit = 0f
+        framing = 0f
         kick()
     }
 
@@ -169,6 +180,7 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
         job = null
         scale = 1f
         lit = 0f
+        framing = 0f
         held = false
         releaseGlow(this)
     }
@@ -195,6 +207,7 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
     private fun show(now: Long) {
         scale = scaleAt(now)
         lit = look(now)
+        framing = frameAt(now)
     }
 
     private suspend fun drive() {

@@ -2,6 +2,7 @@ package net.seilent.funecomp.ui
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -34,7 +35,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -441,9 +446,24 @@ fun ArtTile(b: BrowseTile, focused: Boolean, modifier: Modifier = Modifier, onTa
     val side = ui.px(Tok.gridTile)
     val edge = ui.px(Tok.focus_border)
     val c by animateColorAsState(white(if (focused) Tok.alpha_full else Roles.gridCaption.alpha), tween(Tok.motion_focusAlpha.toInt()), label = "caption")
-    Pressable({ onTap() }, modifier.size(side.dp(), ui.px(Tok.tileCellH).dp())) {
+    val press = rememberPress()
+    val glow = remember(side, ui) { arrayOfNulls<ImageBitmap>(1) }
+    Pressable({ onTap() }, modifier.size(side.dp(), ui.px(Tok.tileCellH).dp()), press = press) {
         Box(Modifier.size(side.dp()).background(Color(Tok.color_tile))) {
             Image(b.image, null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+        }
+        Canvas(Modifier.size(side.dp()).testTag("pick.frame")) {
+            val inset = ui.px(Tok.boxInset)
+            val band = ui.px(Tok.pressFrame)
+            val lit = press.lit
+            if (lit > 0f) {
+                val grow = ui.px(Tok.pressGlow).roundToInt()
+                val m = glow[0] ?: frameGlow(side.roundToInt(), inset, band, grow).also { glow[0] = it }
+                val pad = (m.width - side.roundToInt()) / 2f
+                clipRect { drawImage(m, Offset(-pad, -pad), alpha = Tok.pressGlowAlpha * lit) }
+            }
+            val frame = press.framing
+            if (frame > 0f) drawRect(white(Tok.alpha_full), Offset(inset, inset), Size(this.size.width - 2 * inset, this.size.height - 2 * inset), alpha = frame, style = Stroke(band))
         }
         if (focused) Box(Modifier.at(-edge, -edge, unbounded = true).size((side + 2 * edge).dp()).border(edge.dp(), white(Tok.alpha_full)).testTag("pick.focus"))
         Box(Modifier.at(0f, side).size(side.dp(), ui.px(Tok.tileCaptionBand).dp()).clipToBounds()) {

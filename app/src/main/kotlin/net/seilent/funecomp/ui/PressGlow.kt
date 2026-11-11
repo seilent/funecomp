@@ -143,6 +143,19 @@ private fun ringMask(side: Int, stroke: Float, r: Int): ImageBitmap {
     return glow(side, r, side / 2f, 0) { it.drawCircle(side / 2f, side / 2f, (side - stroke) / 2, paint) }
 }
 
+internal fun frameGlow(side: Int, inset: Float, band: Float, grow: Int): ImageBitmap {
+    val paint = Paint().apply {
+        color = android.graphics.Color.WHITE
+        isAntiAlias = true
+        style = Paint.Style.STROKE
+        strokeWidth = band
+    }
+    return glow(side, maxOf(1, grow / 3), 0f, 0) {
+        it.clipRect(0f, 0f, side.toFloat(), side.toFloat())
+        it.drawRect(inset, inset, side - inset, side - inset, paint)
+    }
+}
+
 private fun glow(side: Int, r: Int, inside: Float, spread: Int, cover: (android.graphics.Canvas) -> Unit): ImageBitmap {
     val pad = spread + 3 * r
     val b = Bitmap.createBitmap(side + 2 * pad, side + 2 * pad, Bitmap.Config.ARGB_8888)

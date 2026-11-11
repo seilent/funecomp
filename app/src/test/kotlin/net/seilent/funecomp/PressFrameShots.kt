@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -14,14 +15,21 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
+import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.artist.Tile
+import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.BrowseTile
+import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.PickFor
+import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import org.junit.Assume.assumeTrue
@@ -43,7 +51,7 @@ class PressFrameShots {
     @get:Rule
     val rule = createComposeRule()
 
-    private class Case(val name: String, val pages: List<Page>, val scaled: String, val prep: PressFrameShots.() -> Unit = {}, val area: String? = null, val act: PressFrameShots.(Long) -> Unit)
+    private class Case(val name: String, val pages: List<Page>, val scaled: String, val prep: PressFrameShots.() -> Unit = {}, val area: String? = null, val tiles: Boolean = false, val act: PressFrameShots.(Long) -> Unit)
 
     private lateinit var c: SimControl
     private lateinit var shell: Shell
@@ -160,15 +168,34 @@ class PressFrameShots {
         return if (hi < lo) 0 else hi - lo + 1
     }
 
+    private fun browsing(c: SimControl): Control = object : Control by c {
+        override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            deliver = {
+                sections(listOf(Sources.DEEZER))
+                (0 until TILES).forEach { tile(Sources.DEEZER, BrowseTile(Tile(Sources.DEEZER, "${Sources.DEEZER} $it", ByteArray(1), "https://e/${Sources.DEEZER}/$it.jpg", "${Sources.DEEZER}$it", null), ImageBitmap(8, 8))) }
+            }
+            return {}
+        }
+
+        override fun takeTile(t: Tile, done: (Previewed) -> Unit): () -> Unit = {}
+    }
+
+    private var deliver: () -> Unit = {}
+
     private fun run(k: Case, dir: File) {
         c = SimControl("ap80")
         c.autoEq = SimControl.FULL
         shell = Shell(Nav(k.pages))
+        val control = if (k.tiles) browsing(c) else c
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(411.dp, 960.dp).testTag("frame")) { App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), c, shell) }
+            Box(Modifier.requiredSize(411.dp, 960.dp).testTag("frame")) { App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, if (k.tiles) Sources.COMMONS.copy(youtube = true) else Sources()) }
         }
         settle(1000)
+        if (k.tiles) {
+            deliver()
+            settle(500)
+        }
         k.prep(this)
         settle(600)
         val rest = k.area?.let { bounds(k.scaled).let { a -> val b = bounds(it); Rect(minOf(a.left, b.left), minOf(a.top, b.top), maxOf(a.right, b.right), maxOf(a.bottom, b.bottom)) } } ?: bounds(k.scaled)
@@ -222,6 +249,7 @@ class PressFrameShots {
             settle(600)
         }, act = tap("sheet.item.1", 50)),
         Case("settings-tap", listOf(Page.Home, Page.Settings), "set.volumeStep", act = tap("set.volumeStep", 50)),
+        Case("tile-tap", listOf(Page.Home, Page.NowPlaying, Page.Browse(PickFor("TSUKI"))), "pick.tile.deezer.0", tiles = true, act = tap("pick.tile.deezer.0", 50)),
     )
 
     private fun frames(name: String) {
@@ -282,6 +310,9 @@ class PressFrameShots {
     @Test
     fun settingsTap() = frames("settings-tap")
 
+    @Test
+    fun tileTap() = frames("tile-tap")
+
     private companion object {
         const val TEXT = "text:"
         const val STEP = 25L
@@ -295,6 +326,7 @@ class PressFrameShots {
         const val FLING_MS = 4L
         const val CATCH_AT = 50L
         const val RISING = 25L
+        const val TILES = 6
         val NP = listOf(Page.Home, Page.NowPlaying)
         val EQ = listOf(Page.Home, Page.Settings, Page.Eq(Enums.EqOutput.wired))
     }
