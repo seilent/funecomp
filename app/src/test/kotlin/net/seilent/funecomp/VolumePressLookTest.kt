@@ -89,7 +89,7 @@ class VolumePressLookTest {
         val u = u()
         val g = bounds("overlay.prev.glyph")
         val at = Offset(g.left + 1.7f * g.width / Tok.glyphBox - u, g.center.y)
-        val m = glyphGlow(GlyphName.SKIP_PREVIOUS, (Held.Vol.vol_skip * u).roundToInt(), Tok.vol_glowSkip * u).asAndroidBitmap()
+        val m = glyphGlow(GlyphName.SKIP_PREVIOUS, (Tok.vol_skip * u).roundToInt(), Tok.vol_glowSkip * u).asAndroidBitmap()
         val a = square(at).map { (x, y) -> m.getPixel((x - g.center.x + m.width / 2f).toInt(), (y - g.center.y + m.height / 2f).toInt()) ushr 24 }.average().toFloat() / 255f
         return at to a
     }
@@ -163,7 +163,7 @@ class VolumePressLookTest {
     fun theMaskIsTheCoverBlurOfThePaddedCoverage() {
         start()
         val u = u()
-        val side = (Held.Vol.vol_skip * u).roundToInt()
+        val side = (Tok.vol_skip * u).roundToInt()
         val r = (Tok.vol_glowSkip * u / 3).roundToInt().coerceAtLeast(1)
         val got = glyphGlow(GlyphName.SKIP_PREVIOUS, side, Tok.vol_glowSkip * u).asAndroidBitmap()
         val pad = 3 * r

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -193,7 +194,7 @@ class SetFocusTest {
         val left = bounds("set.btCodec").left
         drop(c, "btCodec")
         rule.waitForIdle()
-        rule.mainClock.advanceTimeBy(150)
+        rule.mainClock.advanceTimeBy((Tok.motion_pivotOut / 2).toLong())
         rule.waitForIdle()
         assertTrue(exists("set.btCodec"))
         assertTrue(bounds("set.btCodec").left > left + 1f)

@@ -105,7 +105,7 @@ private val ITEM_TAGS = mapOf(SHUFFLE to "np.shuffle", PREV to "np.prev", TOGGLE
 private const val MODE_ON = "lyrics mode on"
 private const val MODE_OFF = "lyrics mode off"
 private const val ARTIST_PHOTO = "artistPhoto"
-private const val WINDOW_MS = (Tok.motion_trackHide + Tok.motion_trackShow).toLong()
+private const val WINDOW_MS = (Held.Track.motion_trackHide + Held.Track.motion_trackShow).toLong()
 
 private data class Seen(val track: NpKey?, val at: Long, val f: Boolean?, val calm: Long, val hand: Boolean = false)
 

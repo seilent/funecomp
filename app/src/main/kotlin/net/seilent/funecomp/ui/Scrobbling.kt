@@ -112,9 +112,9 @@ fun ScrobbleRows(ctx: Ctx, view: ScrobbleView, labels: Boolean = true) {
     Rows(ui.contentTop, list) {
         itemsIndexed(items, key = { _, l -> l.tag }) { i, l ->
             if (l.label) {
-                SectionLabel(l.title, i)
+                SectionLabel(l.title)
             } else {
-                SettingsRow(l.title, l.value, Modifier.enter { i }.testTag("scrobble.${l.tag}"), focused = at == i, info = l.info) {
+                SettingsRow(l.title, l.value, Modifier.enter().testTag("scrobble.${l.tag}"), focused = at == i, info = l.info) {
                     if (!l.info) {
                         focus = l.tag
                         l.tap(i)

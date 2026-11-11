@@ -89,7 +89,7 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
             live = false
             val touched = touchClose
             touchClose = false
-            alpha.animateTo(0f, if (touched) tween(Held.Vol.motion_volumeTouchClose.toInt(), easing = LinearEasing) else tween(Tok.motion_volumeFade.toInt(), easing = Decel))
+            alpha.animateTo(0f, if (touched) tween(Tok.motion_volumeTouchClose.toInt(), easing = LinearEasing) else tween(Tok.motion_volumeFade.toInt(), easing = Decel))
             return@LaunchedEffect
         }
         live = true
@@ -137,7 +137,7 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     val ringAlpha = if (ringHeld) 1f else 0f
     val nextOff by animateFloatAsState(if (nextHeld) 1f else 0f, if (nextHeld) snap() else pressOff, label = "next")
     val nextAlpha = if (nextHeld) 1f else nextOff
-    val skipSide = ui.px(Held.Vol.vol_skip).roundToInt()
+    val skipSide = ui.px(Tok.vol_skip).roundToInt()
     val ringSide = ui.px(Tok.vol_ring).roundToInt()
     val stroke = ui.px(Tok.vol_ringStroke)
     val skipReach = ui.px(Tok.vol_glowSkip)
@@ -165,9 +165,9 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
             Modifier.atBaseline(edge, ui.px(ui.overlayNumberBaseline)).testTag("overlay.number"),
             alpha = Tok.overlayLit,
         )
-        Glyph(GlyphName.SKIP_PREVIOUS, Held.Vol.vol_skip, white(Tok.alpha_full), Modifier.at(cx - skip, ringY, 0.5f, 0.5f).testTag("overlay.prev.glyph"))
+        Glyph(GlyphName.SKIP_PREVIOUS, Tok.vol_skip, white(Tok.alpha_full), Modifier.at(cx - skip, ringY, 0.5f, 0.5f).testTag("overlay.prev.glyph"))
         Ring(Tok.vol_ring, if (s.playing == true) GlyphName.PAUSE_WIDE else GlyphName.PLAY, Look.Touch, Modifier.at(cx, ringY, 0.5f, 0.5f), tag = "overlay.ring", stroke = Tok.vol_ringStroke, glyphSize = Tok.vol_pause)
-        Glyph(GlyphName.SKIP_NEXT, Held.Vol.vol_skip, white(Tok.alpha_full), Modifier.at(cx + skip, ringY, 0.5f, 0.5f).testTag("overlay.next.glyph"))
+        Glyph(GlyphName.SKIP_NEXT, Tok.vol_skip, white(Tok.alpha_full), Modifier.at(cx + skip, ringY, 0.5f, 0.5f).testTag("overlay.next.glyph"))
         Box(Modifier.fillMaxSize().alpha(Tok.overlayDim)) {
             RoleText("exit", Roles.volExit, Modifier.at(exitX, exitY).testTag("overlay.exit"), alpha = Tok.alpha_full)
             RoleText("volume", Roles.volLabel, Modifier.at(cx, minusY + ui.px(Tok.overlayGlyph) / 2, ax = 0.5f).testTag("overlay.volume"), alpha = Tok.alpha_full)

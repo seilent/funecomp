@@ -407,7 +407,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                             sleepRow -> sleepText(r, minutes)
                             else -> r.display(v, ctx.device.liveWord(key))
                         },
-                        Modifier.enter { i }.testTag("set.$key"),
+                        Modifier.enter().testTag("set.$key"),
                         focused = focus == i,
                         editing = editing,
                         info = r.kind == Enums.RowKind.info && !eqRow && !aboutRow,
@@ -671,7 +671,7 @@ private fun EqRows(ctx: Ctx, slot: String) {
                 l.sub -> "eq.band.${l.id.removePrefix("band").substringBefore('.')}.${fieldTags[l.id.substringAfter('.').toInt()]}"
                 else -> "eq.band.${l.id.removePrefix("band")}"
             }
-            val m = if (l.sub) Modifier.enterSub() else Modifier.enter { i }
+            val m = if (l.sub) Modifier.enterSub() else Modifier.enter()
             SettingsRow(if (l.sub) l.title.uppercase() else l.title, l.value, m.testTag(tag), focused = focus == l.id, sub = l.sub, eqSlot = true) {
                 focus = l.id
                 l.tap()

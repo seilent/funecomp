@@ -22,7 +22,6 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Control
-import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -146,15 +145,15 @@ class VolumeOverlayTouchTest {
         repeat(3) { rule.mainClock.advanceTimeByFrame() }
         rule.waitForIdle()
         val later = red(glyph)
-        rule.mainClock.advanceTimeBy(closed + Held.Vol.motion_volumeTouchClose.toLong() + 48 - rule.mainClock.currentTime)
+        rule.mainClock.advanceTimeBy(closed + Tok.motion_volumeTouchClose.toLong() + 48 - rule.mainClock.currentTime)
         rule.waitForIdle()
         assertFalse(exists("overlay"))
         settle(500)
         val under = red(glyph)
         assertFalse(exists("overlay"))
-        assertEquals(3 * 16f / Held.Vol.motion_volumeTouchClose, (start - later).toFloat() / (full - under), 0.06f)
+        assertEquals(3 * 16f / Tok.motion_volumeTouchClose, (start - later).toFloat() / (full - under), 0.06f)
         open()
-        settle(Tok.motion_volumeHide.toLong() - 400 + Held.Vol.motion_volumeTouchClose.toLong())
+        settle(Tok.motion_volumeHide.toLong() - 400 + Tok.motion_volumeTouchClose.toLong())
         assertTrue(exists("overlay"))
         settle(Tok.motion_volumeFade.toLong())
         assertFalse(exists("overlay"))

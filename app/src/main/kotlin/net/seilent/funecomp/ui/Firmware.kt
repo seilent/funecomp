@@ -144,7 +144,7 @@ fun FirmwarePage(ctx: Ctx, view: FirmwareView) {
     HubPage("firmware", { ctx.nav.pop() }, count = firmwareText(view)) {
         Rows(ui.contentTop, list) {
             itemsIndexed(items, key = { _, l -> l.tag }) { i, l ->
-                SettingsRow(l.title, l.value, Modifier.enter { i }.testTag("fw.${l.tag}"), focused = at == i, info = l.info) {
+                SettingsRow(l.title, l.value, Modifier.enter().testTag("fw.${l.tag}"), focused = at == i, info = l.info) {
                     focus = l.tag
                     l.tap(i)
                 }

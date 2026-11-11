@@ -40,7 +40,7 @@ fun AppsPage(ctx: Ctx, view: AppsView) {
     HubPage("apps", { ctx.nav.pop() }) {
         Rows(ui.contentTop, list) {
             itemsIndexed(items, key = { _, l -> l.tag }) { i, l ->
-                SettingsRow(l.title, l.value, Modifier.enter { i }.testTag("apps.${l.tag}"), focused = at == i, info = l.info) {
+                SettingsRow(l.title, l.value, Modifier.enter().testTag("apps.${l.tag}"), focused = at == i, info = l.info) {
                     focus = l.tag
                     l.tap(i)
                 }

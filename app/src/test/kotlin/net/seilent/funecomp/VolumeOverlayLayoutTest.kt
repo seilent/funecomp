@@ -20,7 +20,6 @@ import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
-import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -119,7 +118,7 @@ class VolumeOverlayLayoutTest {
             val cx = o.left + ui.px(ui.w) / 2
             for ((tag, sign) in listOf("overlay.prev.glyph" to -1, "overlay.next.glyph" to 1)) {
                 val g = bounds(tag)
-                assertEquals("$at $tag", Held.Vol.vol_skip * u, g.width, 1f)
+                assertEquals("$at $tag", Tok.vol_skip * u, g.width, 1f)
                 assertEquals("$at $tag", cx + sign * Tok.vol_skipX * u, g.center.x, 1f)
                 assertEquals("$at $tag", o.top + ui.overlayRingY * u, g.center.y, 1f)
             }
@@ -127,7 +126,7 @@ class VolumeOverlayLayoutTest {
             assertEquals(at, o.top + ui.volPlusY * u, bounds("overlay.plus.glyph").center.y, 1f)
             assertEquals(at, o.top + ui.overlayMinusY * u, bounds("overlay.minus.glyph").center.y, 1f)
             assertEquals(at, o.top + ui.overlayRingY * u, ring.center.y, 1f)
-            for ((tag, want) in listOf("overlay.volume" to Held.Vol.vol_label, "overlay.exit" to Tok.vol_exit)) {
+            for ((tag, want) in listOf("overlay.volume" to Tok.vol_label, "overlay.exit" to Tok.vol_exit)) {
                 val t = layout(tag).second
                 assertEquals("$at $tag", ui.fontPx(want), with(rule.density) { t.layoutInput.style.fontSize.toPx() }, 0.01f)
                 assertEquals("$at $tag", FontWeight.Bold, t.layoutInput.style.fontWeight)

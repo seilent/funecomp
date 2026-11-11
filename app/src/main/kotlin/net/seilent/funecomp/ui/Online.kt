@@ -39,10 +39,10 @@ private const val KEEP_PHOTOS = "keep photos"
 private const val NO_PHOTOS = "no photos"
 
 @Composable
-fun SectionLabel(text: String, i: Int) {
+fun SectionLabel(text: String) {
     val ui = LocalUi.current
     val above = LayoutTok.detailLabelBaseline - LayoutTok.detailRingTop - Tok.detailRing
-    Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(above + Tok.detailLabelDrop).dp())) {
+    Box(Modifier.enter().size(ui.px(ui.w).dp(), ui.px(above + Tok.detailLabelDrop).dp())) {
         RoleText(text, Roles.sectionLabel, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(above)))
     }
 }
@@ -153,7 +153,7 @@ private fun ArtRows(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, cr
     Rows(ui.contentTop, list) {
         itemsIndexed(sources.order, key = { _, id -> "src $id" }) { i, id ->
             val keep = Keep(list, i, ui.px(ui.contentTop))
-            SettingsRow(Sources.label(id), sourceValue(sources, id), Modifier.enter { i }.testTag("art.src.$id"), focused = at == i, onLong = {
+            SettingsRow(Sources.label(id), sourceValue(sources, id), Modifier.enter().testTag("art.src.$id"), focused = at == i, onLong = {
                 focus = tags[i]
                 usage?.let { u -> clearSheet(ctx, Sources.label(id), u[id], keep) { clear(id) } }
             }) {
@@ -176,7 +176,7 @@ private fun ArtRows(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, cr
         lists.forEachIndexed { k, (title, entries, target) ->
             item(key = title) {
                 val i = sources.order.size + k
-                SettingsRow(title, "${entries.size}", Modifier.enter { i }.testTag("art.$title"), focused = at == i) {
+                SettingsRow(title, "${entries.size}", Modifier.enter().testTag("art.$title"), focused = at == i) {
                     focus = title
                     ctx.nav.push(target)
                 }
@@ -185,7 +185,7 @@ private fun ArtRows(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, cr
         item(key = CLEAR_CACHE) {
             val i = tags.size - 1
             val total = usage?.get(null) ?: usage?.let { ArtCache.Usage(0, 0) }
-            SettingsRow(CLEAR_CACHE, total?.let { sizeText(it.bytes) } ?: "", Modifier.enter { i }.testTag("art.clear"), focused = at == i) {
+            SettingsRow(CLEAR_CACHE, total?.let { sizeText(it.bytes) } ?: "", Modifier.enter().testTag("art.clear"), focused = at == i) {
                 focus = CLEAR_CACHE
                 val u = total ?: return@SettingsRow
                 val keep = Keep(list, i, ui.px(ui.contentTop))
@@ -209,11 +209,11 @@ fun LyricsRows(ctx: Ctx, sources: LyricSources) {
     Rows(ui.contentTop, list) {
         itemsIndexed(ids, key = { _, id -> "lyr $id" }) { i, id ->
             val on = sources.on(id)
-            SettingsRow(id, if (on) ON else OFF, Modifier.enter { i }.testTag("lyr.src.$id"), focused = at == i) {
+            SettingsRow(id, if (on) ON else OFF, Modifier.enter().testTag("lyr.src.$id"), focused = at == i) {
                 focus = id
                 sourceSheet(ctx, id, on, i, ids.size, null, Keep(list, i, ui.px(ui.contentTop)), { ctx.control.lyricSource(id, it) }, { ctx.control.lyricMove(id, it) })
             }
         }
-        item(key = COPYRIGHT) { SettingsRow(COPYRIGHT, "", Modifier.enter { ids.size }.testTag("lyrics.copyright"), info = true) }
+        item(key = COPYRIGHT) { SettingsRow(COPYRIGHT, "", Modifier.enter().testTag("lyrics.copyright"), info = true) }
     }
 }

@@ -33,7 +33,7 @@ class TokBoardTest {
 
     @Test
     fun theBoardHoldsEveryBoardTokenAndEachBoardLoads() {
-        assertEquals(391, TokBoard.Board::class.java.declaredMethods.count { Modifier.isAbstract(it.modifiers) })
+        assertEquals(497, TokBoard.Board::class.java.declaredMethods.count { Modifier.isAbstract(it.modifiers) })
         assertEquals(0f, TokBoard.ap80.npNextNavCountLarge)
         assertEquals(0f, TokBoard.v1.npNextNavCountLarge)
         assertEquals(1f, TokBoard.r1.npNextNavCountLarge)

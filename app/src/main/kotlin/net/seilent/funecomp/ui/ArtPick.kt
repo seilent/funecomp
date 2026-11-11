@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.windowInsetsBottomHeight
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -398,11 +398,11 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse, ime: WindowInsets) {
             }
             Box(engage) {
                 Rows(ui.contentTop, state = s.list, size = { ui.px(items[it].height()) }, tail = 1, under = ime) {
-                    itemsIndexed(items, key = { _, it -> it.key }) { i, item ->
+                    items(items, key = { it.key }) { item ->
                         when (item) {
-                            is BrowseItem.Head -> BrowseHead(item.section, i)
+                            is BrowseItem.Head -> BrowseHead(item.section)
                             is BrowseItem.Gap -> Box(Modifier.size(ui.px(ui.w).dp(), ui.px(item.height()).dp()))
-                            is BrowseItem.Row -> Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(item.height()).dp())) {
+                            is BrowseItem.Row -> Box(Modifier.enter().size(ui.px(ui.w).dp(), ui.px(item.height()).dp())) {
                                 item.tiles.forEachIndexed { c, b ->
                                     val n = item.row * cols + c
                                     val at = item.section to n
@@ -424,9 +424,9 @@ fun BrowsePage(ctx: Ctx, page: Page.Browse, ime: WindowInsets) {
 }
 
 @Composable
-private fun BrowseHead(section: String, i: Int) {
+private fun BrowseHead(section: String) {
     val ui = LocalUi.current
-    Box(Modifier.enter { i }.size(ui.px(ui.w).dp(), ui.px(BrowseItem.Head(section).height()).dp()).testTag("pick.head.$section")) {
+    Box(Modifier.enter().size(ui.px(ui.w).dp(), ui.px(BrowseItem.Head(section).height()).dp()).testTag("pick.head.$section")) {
         RoleText(Sources.label(section), Roles.quickplayHeader, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(BROWSE_HEAD_BASELINE)))
     }
 }

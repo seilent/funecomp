@@ -127,7 +127,7 @@ fun Pane(
         val n = (list?.total ?: 0L).toInt()
         items(n) { i ->
             val r = list?.row(i, ctx.control, view, parent)
-            Box(Modifier.enter { i + head - state.firstVisibleItemIndex }) {
+            Box(Modifier.enter()) {
                 if (r == null) {
                     Box(Modifier.size((ui.px(ui.w) - ui.px(x)).dp(), ui.px(Tok.rowHeight).dp()))
                 } else {
@@ -284,13 +284,13 @@ fun PlaylistRows(ctx: Ctx, top: Float? = null) {
     val slots = ctx.device.playback.state.slots ?: 0L
     Rows(top ?: ui.contentTop, state) {
         item {
-            ListRow("now playing", Modifier.enter { 0 }.testTag("row.nowplaying"), songs(slots), bold = true, focused = focus == 0) {
+            ListRow("now playing", Modifier.enter().testTag("row.nowplaying"), songs(slots), bold = true, focused = focus == 0) {
                 focus = 0
                 ctx.nav.popTo(Page.NowPlaying)
             }
         }
         item {
-            ListRow("favorites", Modifier.enter { 1 }.testTag("row.favorites"), songs(fav?.total ?: 0), bold = true, focused = focus == 1, onTap = {
+            ListRow("favorites", Modifier.enter().testTag("row.favorites"), songs(fav?.total ?: 0), bold = true, focused = focus == 1, onTap = {
                 focus = 1
                 if ((fav?.total ?: 0L) > 0L) playSource(ctx, Enums.View.favorites, "", fav?.total)
             }, onLong = { groupSheet(ctx, "favorites", Enums.View.favorites, "", fav?.total) })
@@ -299,7 +299,7 @@ fun PlaylistRows(ctx: Ctx, top: Float? = null) {
         items(n) { i ->
             val r = list?.row(i, ctx.control, Enums.View.playlists, "")
             val name = r?.name ?: ""
-            ListRow(name, Modifier.enter { i + 2 - state.firstVisibleItemIndex }.testTag("row.playlist.$i"), songs(r?.count ?: 0), bold = true, focused = focus == i + 2, onTap = {
+            ListRow(name, Modifier.enter().testTag("row.playlist.$i"), songs(r?.count ?: 0), bold = true, focused = focus == i + 2, onTap = {
                 focus = i + 2
                 if (r != null) playSource(ctx, Enums.View.playlists, r.key ?: name, r.count)
             }, onLong = { if (r != null) groupSheet(ctx, name, Enums.View.playlists, r.key ?: name, r.count) })
@@ -407,7 +407,7 @@ fun Queue(ctx: Ctx) {
                 }
                 val title = item?.title ?: ""
                 ListRow(
-                    title, Modifier.enter { i - state.firstVisibleItemIndex }.testTag("queue.$i"), number = "${i + 1}", playing = i == current, focused = focus == i,
+                    title, Modifier.enter().testTag("queue.$i"), number = "${i + 1}", playing = i == current, focused = focus == i,
                     onTap = {
                         focus = i
                         if (!playRefused(ctx.live(), ctx.toast)) ctx.control.queueOp(Enums.QueueCmd.playAt, slot = i.toLong())

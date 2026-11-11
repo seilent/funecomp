@@ -18,34 +18,32 @@ object Held {
     }
 
     object Pivot {
-        const val motion_pivotOut = 300f
         const val motion_pivotStrip = 380f
         const val motion_pivotLabel = 200f
-        const val motion_pivotRows = 380f
-        const val motion_pivotRowStagger = 22f
 
         val entries = listOf(
-            Entry("motion_pivotOut", "motion_pivotOut", motion_pivotOut, "P1", "zt5", "836c8fbc4"),
             Entry("motion_pivotStrip", "motion_pivotStrip", motion_pivotStrip, "P1", "zt5", "836c8fbc4"),
             Entry("motion_pivotLabel", "motion_pivotLabel", motion_pivotLabel, "P1", "zt5", "836c8fbc4"),
-            Entry("motion_pivotRows", "motion_pivotRows", motion_pivotRows, "P1", "zt5", "836c8fbc4"),
-            Entry("motion_pivotRowStagger", "motion_pivotRowStagger", motion_pivotRowStagger, "P1", "zt5", "836c8fbc4"),
         )
     }
 
     object Vol {
-        const val vol_skip = 42.1f
-        const val vol_label = 8.8f
         const val motion_volumePressOff = 33f
-        const val motion_volumeTouchClose = 100f
 
         val entries = listOf(
-            Entry("vol_skip", "vol_skip", vol_skip, "V1", "zvol", "frames ff3b9095"),
-            Entry("vol_label", "vol_label", vol_label, "V1", "zvol", "frames ff3b9095"),
             Entry("motion_volumePressOff", "motion_volumePressOff", motion_volumePressOff, "V4", "zvol", "frames ff3b9095"),
-            Entry("motion_volumeTouchClose", "motion_volumeTouchClose", motion_volumeTouchClose, "V8", "zvol", "frames ff3b9095"),
         )
     }
 
-    val entries get() = Nav.entries + Pivot.entries + Vol.entries
+    object Track {
+        const val motion_trackHide = 500f
+        const val motion_trackShow = 400f
+
+        val entries = listOf(
+            Entry("motion_trackHide", "motion_trackHide", motion_trackHide, "T9", "zt9", "2cc18f094"),
+            Entry("motion_trackShow", "motion_trackShow", motion_trackShow, "T9", "zt9", "2cc18f094"),
+        )
+    }
+
+    val entries get() = Nav.entries + Pivot.entries + Vol.entries + Track.entries
 }

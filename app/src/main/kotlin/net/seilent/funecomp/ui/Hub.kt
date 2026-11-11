@@ -41,6 +41,8 @@ import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+private const val MS_PER_S = 1000f
+
 @Stable
 class Entrance {
     val clock = Animatable(Float.MAX_VALUE)
@@ -49,7 +51,7 @@ class Entrance {
     suspend fun run(dir: Int) {
         this.dir = dir
         clock.snapTo(0f)
-        val total = Held.Pivot.motion_pivotRows + Held.Pivot.motion_pivotRowStagger * Tok.motion_pivotRowCap
+        val total = maxOf(Tok.motion_pivotRows, Tok.motion_pivotRowFade)
         clock.animateTo(total, tween(total.toInt(), easing = LinearEasing))
     }
 
@@ -59,14 +61,13 @@ class Entrance {
 val LocalEntrance = staticCompositionLocalOf<Entrance?> { null }
 
 @Composable
-fun Modifier.enter(index: () -> Int): Modifier {
+fun Modifier.enter(): Modifier {
     val e = LocalEntrance.current ?: return this
-    val shift = LocalUi.current.px(Tok.motion_pivotShift)
+    val shift = LocalUi.current.px(Tok.motion_pivotRowInShift)
     return graphicsLayer {
-        val delay = Held.Pivot.motion_pivotRowStagger * minOf(index().coerceAtLeast(0), Tok.motion_pivotRowCap.toInt())
-        val p = Strip.transform(((e.clock.value - delay) / Held.Pivot.motion_pivotRows).coerceIn(0f, 1f))
-        translationX = shift * e.dir * (1f - p)
-        alpha = p
+        val t = e.clock.value
+        translationX = shift * e.dir * (1f - EaseOut.transform((t / Tok.motion_pivotRows).coerceIn(0f, 1f)))
+        alpha = (t / Tok.motion_pivotRowFade).coerceIn(0f, 1f)
     }
 }
 
@@ -124,7 +125,7 @@ fun HubPage(
             return@LaunchedEffect
         }
         dir = if (active > from) 1 else -1
-        out.animateTo(1f, tween(Held.Pivot.motion_pivotOut.toInt(), easing = Strip))
+        out.animateTo(1f, tween(Tok.motion_pivotOut.toInt(), easing = LinearEasing))
         shownPivot = active
         shownName = target
         out.snapTo(0f)
@@ -137,7 +138,7 @@ fun HubPage(
         PageSurface()
         Box(
             Modifier.fillMaxSize().graphicsLayer {
-                translationX = -dir * ui.px(Tok.motion_pivotShift) * out.value
+                translationX = -dir * ui.px(Tok.motion_pivotPaneSpeed * Tok.motion_pivotOut / MS_PER_S) * out.value
                 alpha = 1f - out.value
             },
         ) {

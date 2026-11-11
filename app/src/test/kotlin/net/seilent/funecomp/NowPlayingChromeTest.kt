@@ -17,6 +17,7 @@ import net.seilent.funecomp.artist.Offer
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.proto.gen.TokBoard
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
@@ -111,7 +112,7 @@ class NowPlayingChromeTest {
         assertEquals(11.5f * u, play.size.height.toFloat(), 1f)
         assertEquals(5.9f * u, play.positionInRoot.y - o.y, 1f)
         assertEquals((ui.w - 13.7f) * u, battery.positionInRoot.x - o.x + battery.size.width, 1f)
-        assertEquals(7.7f * u, battery.positionInRoot.x - (play.positionInRoot.x + play.size.width), 1f)
+        assertEquals(TokBoard.r1.npStatusGap * u, battery.positionInRoot.x - (play.positionInRoot.x + play.size.width), 1f)
     }
 
     @Test

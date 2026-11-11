@@ -23,25 +23,26 @@ class HeldTest {
         )
         assertEquals(
             listOf(
-                listOf("motion_pivotOut", "motion_pivotOut", 300f, "P1", "zt5", "836c8fbc4"),
                 listOf("motion_pivotStrip", "motion_pivotStrip", 380f, "P1", "zt5", "836c8fbc4"),
                 listOf("motion_pivotLabel", "motion_pivotLabel", 200f, "P1", "zt5", "836c8fbc4"),
-                listOf("motion_pivotRows", "motion_pivotRows", 380f, "P1", "zt5", "836c8fbc4"),
-                listOf("motion_pivotRowStagger", "motion_pivotRowStagger", 22f, "P1", "zt5", "836c8fbc4"),
             ),
             rows(Held.Pivot.entries),
         )
         assertEquals(
             listOf(
-                listOf("vol_skip", "vol_skip", 42.1f, "V1", "zvol", "frames ff3b9095"),
-                listOf("vol_label", "vol_label", 8.8f, "V1", "zvol", "frames ff3b9095"),
                 listOf("motion_volumePressOff", "motion_volumePressOff", 33f, "V4", "zvol", "frames ff3b9095"),
-                listOf("motion_volumeTouchClose", "motion_volumeTouchClose", 100f, "V8", "zvol", "frames ff3b9095"),
             ),
             rows(Held.Vol.entries),
         )
-        assertEquals(13, Held.entries.size)
-        assertEquals(setOf("Entry", "Nav", "Pivot", "Vol"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
+        assertEquals(
+            listOf(
+                listOf("motion_trackHide", "motion_trackHide", 500f, "T9", "zt9", "2cc18f094"),
+                listOf("motion_trackShow", "motion_trackShow", 400f, "T9", "zt9", "2cc18f094"),
+            ),
+            rows(Held.Track.entries),
+        )
+        assertEquals(9, Held.entries.size)
+        assertEquals(setOf("Entry", "Nav", "Pivot", "Vol", "Track"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }
 

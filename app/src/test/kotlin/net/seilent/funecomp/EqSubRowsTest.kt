@@ -33,6 +33,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.awt.image.BufferedImage
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 @RunWith(RobolectricTestRunner::class)
@@ -85,6 +86,19 @@ class EqSubRowsTest {
         return most
     }
 
+    private fun shown(img: BufferedImage, base: BufferedImage, rest: BufferedImage, row: Rect, dx: Float, right: Int): Float {
+        val s = dx.roundToInt()
+        var now = 0L
+        var full = 0L
+        for (y in row.top.toInt().coerceAtLeast(0) until row.bottom.toInt().coerceAtMost(img.height)) {
+            for (x in maxOf(0, s) until minOf(right, right + s)) {
+                now += maxOf(0, red(img, x, y) - red(base, x, y))
+                full += maxOf(0, red(rest, x - s, y) - red(base, x - s, y))
+            }
+        }
+        return if (full == 0L) 0f else now.toFloat() / full
+    }
+
     private fun easeOut(t: Float) = t * (2f - t)
 
     @Test
@@ -127,7 +141,7 @@ class EqSubRowsTest {
         full.forEach { assertTrue("a sub row drew no text at rest", it > 40) }
         frames.forEachIndexed { k, f ->
             subs.indices.forEach { j ->
-                assertEquals("frame $k row $j alpha", progress[k][j], light(f.img, base, rows[j], right).toFloat() / full[j], 0.06f)
+                assertEquals("frame $k row $j alpha", progress[k][j], shown(f.img, base, restImg, rows[j], f.x[j] - rest[j], right), 0.06f)
             }
         }
     }
