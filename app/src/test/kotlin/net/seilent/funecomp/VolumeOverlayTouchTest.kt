@@ -100,6 +100,21 @@ class VolumeOverlayTouchTest {
 
     private fun red(at: Offset) = rule.onRoot().pixels().also { System.gc() }.getRGB(at.x.toInt(), at.y.toInt()) shr 16 and 0xff
 
+    private fun brightest(tag: String): Offset {
+        val img = rule.onRoot().pixels().also { System.gc() }
+        val b = bounds(tag)
+        var best = Offset(b.center.x, b.center.y)
+        var most = -1
+        for (y in b.top.toInt() until b.bottom.toInt()) for (x in b.left.toInt() until b.right.toInt()) {
+            val r = img.getRGB(x, y) shr 16 and 0xff
+            if (r > most) {
+                most = r
+                best = Offset(x.toFloat(), y.toFloat())
+            }
+        }
+        return best
+    }
+
     private fun ui() = rule.onNodeWithTag("np").fetchSemanticsNode().size.let { Ui.of(it.width.toFloat(), it.height.toFloat()) }
 
     @Test
@@ -125,10 +140,10 @@ class VolumeOverlayTouchTest {
     }
 
     @Test
-    fun aClosingTapFadesOutOver100AndTheTimeoutOver380() {
+    fun aClosingTapFadesOutOverTheTouchCloseAndTheRestHideEndsTheTimeout() {
         start()
         open()
-        val glyph = bounds("overlay.plus.glyph").center
+        val glyph = brightest("overlay.number")
         val full = red(glyph)
         val ring = bounds("overlay.ring")
         tap(Offset((ring.right + bounds("overlay.next").left) / 2, ring.center.y))
@@ -153,9 +168,9 @@ class VolumeOverlayTouchTest {
         assertFalse(exists("overlay"))
         assertEquals(3 * 16f / Tok.motion_volumeTouchClose, (start - later).toFloat() / (full - under), 0.06f)
         open()
-        settle(Tok.motion_volumeHide.toLong() - 400 + Tok.motion_volumeTouchClose.toLong())
+        settle(OVERLAY_SPAN - 400 - 100)
         assertTrue(exists("overlay"))
-        settle(Tok.motion_volumeFade.toLong())
+        settle(200)
         assertFalse(exists("overlay"))
     }
 
@@ -174,10 +189,10 @@ class VolumeOverlayTouchTest {
     }
 
     @Test
-    fun exitStillClosesDuringTheTimeoutFade() {
+    fun exitStillClosesDuringTheRestHide() {
         start()
         open()
-        settle(Tok.motion_volumeHide.toLong() - 400 + 50)
+        settle(OVERLAY_REST - 400 + 50)
         assertTrue(shell.overlay.visible)
         tap(bounds("overlay.exit.hit").center)
         assertFalse(shell.overlay.visible)
@@ -218,10 +233,10 @@ class VolumeOverlayTouchTest {
     }
 
     @Test
-    fun duringTheTimeoutFadeTheArtGetsTheTap() {
+    fun duringTheRestHidesOutLegTheArtGetsTheTap() {
         start()
         open()
-        settle(Tok.motion_volumeHide.toLong() - 400 + 50)
+        settle(OVERLAY_OUT - 400 + 50)
         assertTrue(shell.overlay.visible)
         tap(bounds("np.art").center)
         settle(1000)
@@ -242,15 +257,15 @@ class VolumeOverlayTouchTest {
     }
 
     @Test
-    fun duringTheTimeoutFadePlusStepsAndShowsAgain() {
+    fun duringTheRestHidesOutLegPlusStepsAndShowsAgain() {
         start()
         open()
-        settle(Tok.motion_volumeHide.toLong() - 400 + 50)
+        settle(OVERLAY_OUT - 400 + 50)
         steps.clear()
         tap(bounds("overlay.plus").center)
         assertTrue(shell.overlay.visible)
         assertEquals(listOf(1), steps)
-        settle(Tok.motion_volumeHide.toLong() - 200)
+        settle(OVERLAY_REST - 200)
         assertTrue(exists("overlay"))
     }
 

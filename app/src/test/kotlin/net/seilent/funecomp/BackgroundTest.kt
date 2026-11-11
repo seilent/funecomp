@@ -17,7 +17,6 @@ import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
-import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.sim.Battery
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Options
@@ -1589,23 +1588,23 @@ class BackgroundTest {
         fun key(repeat: Int = 0) = main.onKeyDown(android.view.KeyEvent.KEYCODE_VOLUME_UP, android.view.KeyEvent(0, 0, android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_VOLUME_UP, repeat))
         fun quiet() {
             Thread.sleep(300)
-            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis((Tok.motion_volumeHide + Tok.motion_volumeFade).toLong()))
+            shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(OVERLAY_SPAN + 100))
         }
         assertTrue(key())
         Thread.sleep(1000)
         shadowOf(Looper.getMainLooper()).idle()
         assertEquals(0, volumes())
-        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(OVERLAY_SPAN + 500))
         assertTrue(key())
         key()
         waitFor { volumes() == 1 }
         quiet()
         assertEquals(1, volumes())
-        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(OVERLAY_SPAN + 500))
         key()
         quiet()
         assertEquals(1, volumes())
-        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(3))
+        shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(OVERLAY_SPAN + 500))
         key(repeat = 1)
         waitFor { volumes() == 2 }
         a.pause().stop().destroy()

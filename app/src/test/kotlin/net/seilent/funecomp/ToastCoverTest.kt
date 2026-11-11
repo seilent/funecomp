@@ -66,13 +66,13 @@ class ToastCoverTest {
     fun noToastDrawsOverTheVolumeOverlayAndItShowsOnceTheOverlayCloses() {
         start(listOf(Page.Home))
         shell.overlay.show()
-        settle(Tok.motion_volumeShow.toLong())
+        settle(Tok.motion_volumeOpenEnd.toLong())
         assertTrue(shown("overlay"))
         shell.toast.show("artist", "title")
         settle(Tok.motion_toastRise.toLong() + 100)
         assertTrue(!shown("toast"))
         shell.overlay.hide()
-        settle(Tok.motion_volumeFade.toLong() + 100)
+        settle(Tok.motion_volumeTouchScrim.toLong() + 100)
         assertTrue(!shown("overlay"))
         assertTrue(shown("toast"))
     }
@@ -81,7 +81,7 @@ class ToastCoverTest {
     fun aToastUnderATouchClosedOverlayReturnsWithNoRise() {
         start(listOf(Page.Home))
         shell.overlay.show()
-        settle(Tok.motion_volumeShow.toLong())
+        settle(Tok.motion_volumeOpenEnd.toLong())
         shell.toast.show("artist", "title")
         settle(50)
         assertTrue(!shown("toast"))
@@ -109,10 +109,10 @@ class ToastCoverTest {
         settle(1000)
         assertTrue(shown("toast"))
         shell.overlay.show()
-        settle(Tok.motion_volumeShow.toLong())
+        settle(Tok.motion_volumeOpenEnd.toLong())
         assertTrue(!shown("toast"))
         shell.overlay.hide()
-        settle(Tok.motion_volumeFade.toLong() + 100)
+        settle(Tok.motion_volumeTouchScrim.toLong() + 100)
         assertTrue(shown("toast"))
     }
 }

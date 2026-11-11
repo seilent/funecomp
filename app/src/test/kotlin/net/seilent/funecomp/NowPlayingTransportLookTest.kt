@@ -247,6 +247,6 @@ class NowPlayingTransportLookTest {
         const val STROKE_TOLERANCE = 1.5f
         const val EMPTY_X = 2f
         const val WOKEN = 600L
-        val OVERLAY_GONE = (Tok.motion_volumeHide + Tok.motion_volumeFade).toLong() + 300L
+        val OVERLAY_GONE = OVERLAY_SPAN + 300L
     }
 }

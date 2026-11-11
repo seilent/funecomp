@@ -1443,14 +1443,14 @@ class NowPlayingLyricsTest {
     fun theKeyUnderTheVolumeOverlayHidesItFirst() {
         val shell = start(on = false, copy = null)
         shell.overlay.show()
-        settle(Tok.motion_volumeHide.toLong() + 50)
+        settle(OVERLAY_OUT + 50)
         assertTrue(exists("overlay"))
         rule.onNodeWithTag("np.art").performClick()
         assertFalse(shell.overlay.visible)
         settle(100)
         assertTrue(c.mode)
         assertEquals("lyrics mode on", shell.toast.artist)
-        settle(Tok.motion_volumeFade.toLong())
+        settle(OVERLAY_SPAN - OVERLAY_OUT)
         assertFalse(exists("overlay"))
         flags(true)
         settle(1000)
@@ -1459,7 +1459,7 @@ class NowPlayingLyricsTest {
         settle(1000)
         normal()
         shell.overlay.show()
-        settle(Tok.motion_volumeHide.toLong() + 50)
+        settle(OVERLAY_OUT + 50)
         rule.onNodeWithTag("np.art").performClick()
         assertFalse(shell.overlay.visible)
         settle(1000)
@@ -1473,11 +1473,12 @@ class NowPlayingLyricsTest {
         assertTrue(shell.overlay.visible)
         lyricsOn()
         shell.overlay.show()
-        settle(Tok.motion_volumeHide.toLong() - 350)
+        settle(OVERLAY_OUT - Tok.motion_volumeOpenEnd.toLong() - 350)
         back()
         settle(400)
+        val hides = shell.overlay.hides
         rule.onNodeWithTag("np.art").performClick()
-        assertTrue(shell.overlay.visible)
+        assertEquals(hides, shell.overlay.hides)
     }
 
     @Test
@@ -1691,7 +1692,7 @@ class NowPlayingLyricsTest {
         lyricsOn()
         shell.overlay.show()
         track(4, false)
-        val hold = (Tok.motion_volumeHide + Tok.motion_volumeFade).toLong()
+        val hold = OVERLAY_SPAN
         settle(hold - 100)
         lyricsOn()
         settle(500)

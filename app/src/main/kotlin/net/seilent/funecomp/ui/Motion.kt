@@ -7,6 +7,7 @@ import kotlin.math.exp
 import kotlin.math.pow
 
 private const val EXP_SIX = 6f
+private const val POW_OUT = 1.7f
 
 val Decel = CubicBezierEasing(Tok.motion_decel_x1, Tok.motion_decel_y1, Tok.motion_decel_x2, Tok.motion_decel_y2)
 
@@ -21,6 +22,8 @@ val Pop = Easing { t -> if (t >= 1f) 1f else 1f - 2f.pow(-10f * t) }
 val EaseIn = Easing { t -> t * t }
 
 val EaseOut = Easing { t -> t * (2f - t) }
+
+val PowOut17 = Easing { t -> if (t >= 1f) 1f else 1f - (1f - t).pow(POW_OUT) }
 
 val CubicOut = Easing { t ->
     val m = 1f - t

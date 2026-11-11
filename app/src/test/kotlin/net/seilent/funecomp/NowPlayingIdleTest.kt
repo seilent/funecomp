@@ -338,7 +338,7 @@ class NowPlayingIdleTest {
         val DIMMED = (Tok.motion_idle + Tok.motion_idleFade).toLong() + FRAMES
         val IDLE = DIMMED + 100L
         val MID_FADE = Tok.motion_idle.toLong() + FRAMES / 2 + Tok.motion_idleFade.toLong() / 2
-        val OVERLAY_GONE = (Tok.motion_volumeHide + Tok.motion_volumeFade).toLong() + 300L
+        val OVERLAY_GONE = OVERLAY_SPAN + 300L
         const val DIM_TOLERANCE = 0.02f
         val PLAY_CONTROLS = listOf("np.prev", "np.toggle", "np.nextTrack")
     }

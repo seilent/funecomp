@@ -120,7 +120,7 @@ class NewBoardPromptTest {
         detected = r1
         settle(300)
         assertFalse(prompted())
-        settle(3_000)
+        settle(OVERLAY_SPAN)
         assertTrue(prompted())
     }
 
