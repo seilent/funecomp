@@ -222,6 +222,7 @@ object Remote : Control {
     private val asked = HashSet<String>()
     private val blocks = HashSet<String>()
     @Volatile internal var libRetryAt = 0L
+        private set
     private var artist: ArtistArt? = null
     private var pending: Pending? = null
     @Volatile private var art: ArtWorker? = null
@@ -1277,6 +1278,7 @@ object Remote : Control {
             asked.clear()
             blocks.clear()
         }
+        libRetryAt = 0L
         art?.stop()
         art = null
         artKey = null
@@ -1370,8 +1372,7 @@ object Remote : Control {
                     val m = list?.reAsk(offset, count)
                     if (list == null || m == null) unblock(block) else libAsk(view, parent, m, minOf(offset + count, list.total) - m, block, rev, false)
                 }
-                code == Err.busy && retry -> {
-                    val session = link?.session
+                code == Err.busy && retry -> link?.session?.let { session ->
                     val at = SystemClock.uptimeMillis() + Proto.backoffMs.first()
                     libRetryAt = at
                     main.postAtTime({
@@ -1580,6 +1581,7 @@ object Remote : Control {
                 asked.clear()
                 blocks.clear()
             }
+            libRetryAt = 0L
             bye = null
             everLive = true
             board = hello.board

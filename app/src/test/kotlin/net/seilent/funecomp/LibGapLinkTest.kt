@@ -258,6 +258,32 @@ class LibGapLinkTest {
     }
 
     @Test
+    fun aKickClearsTheLibRetryTime() {
+        val (s, _) = live("lib-cut=8192:1", "lib-busy-after=1:1")
+        Remote.libGet(songs, "", 0)
+        waitFor { songAsks(s).size == 2 }
+        barrier()
+        assertTrue("${Remote.libRetryAt}", Remote.libRetryAt != 0L)
+        val old = Remote.session()
+        s.current!!.close("test")
+        waitFor { Remote.phase != Phase.LIVE }
+        Remote.kick("test")
+        waitFor { Remote.session().let { it != null && it !== old } && Remote.phase == Phase.LIVE }
+        assertEquals(0L, Remote.libRetryAt)
+    }
+
+    @Test
+    fun aStopClearsTheLibRetryTime() {
+        val (s, _) = live("lib-cut=8192:1", "lib-busy-after=1:1")
+        Remote.libGet(songs, "", 0)
+        waitFor { songAsks(s).size == 2 }
+        barrier()
+        assertTrue("${Remote.libRetryAt}", Remote.libRetryAt != 0L)
+        Remote.stop()
+        assertEquals(0L, Remote.libRetryAt)
+    }
+
+    @Test
     fun aRetryFromAnEndedSessionSendsNothingBesideTheNextChain() {
         val (s, f) = live("lib-cut=8192:1", "lib-busy-after=1:1")
         Remote.libGet(songs, "", 0)
