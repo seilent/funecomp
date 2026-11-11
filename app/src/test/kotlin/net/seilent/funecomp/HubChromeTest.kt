@@ -200,8 +200,8 @@ class HubChromeTest {
 
     private fun pivotTo(page: String, label: String) = rule.pivotTo(page, label) { settle(it) }
 
-    private fun assertPenX(name: String, page: String, at: String) =
-        assertEquals(name, -22f * scale(at) * ui(page).u, left("header.word") - canvas(page).left, 1f)
+    private fun assertPenX(name: String, page: String, at: String, pen: Float = -22f) =
+        assertEquals(name, pen * scale(at) * ui(page).u, left("header.word") - canvas(page).left, 1f)
 
     @Test
     fun theHeaderWordStartsAtThePenX() {
@@ -223,24 +223,53 @@ class HubChromeTest {
     }
 
     @Test
-    fun theSettingsHeaderWordStartsAtThePenX() {
-        start(Page.Settings)
+    fun theSettingsHeaderWordStartsAtTheSettingsPenX() {
+        for (at in listOf("411x960", "sn411x438", "960x600")) {
+            if (at == "411x960") start(Page.Settings, at = at) else {
+                size = SIZES.first { it.name == at }
+                settle(1500)
+            }
+            assertPenX(at, "settings", at, -17.3f)
+        }
         pivotTo("settings", "system")
-        assertPenX("system", "settings", "411x960")
+        assertPenX("system", "settings", "960x600", -17.3f)
+    }
+
+    @Test
+    fun theSettingsWordEndsAtItsIOnPortrait() {
+        start(Page.Settings, off = true)
+        val u = ui("settings").u
+        val img = rule.onNodeWithTag("header.clip", useUnmergedTree = true).pixels().also { System.gc() }
+        val right = (img.width - 1 downTo 0).first { lit(img, it) }
+        assertEquals("i ink right ${right / u}", 220.45f * Ui.PORTRAIT_W / 240f, (right + 0.5f) / u, 0.8f)
+    }
+
+    @Test
+    fun theEqHeaderWordStartsAtThePenX() {
+        start(Page.Eq(Enums.EqOutput.wired), under = listOf(Page.Settings))
+        assertPenX("eq", "eq", "411x960")
+    }
+
+    @Test
+    fun theCorrectionEqHeaderWordStartsAtThePenX() {
+        start(Page.Eq(Enums.EqOutput.wired, EqStage.CORRECTION), under = listOf(Page.Settings))
+        assertPenX("correction eq", "correction eq", "411x960")
     }
 
     @Test
     fun everyHubPageDrawsThePageHeader() {
         val pages = listOf(
-            Page.Settings to "settings",
-            Page.Online() to "online",
-            Page.Queue to "queue",
-            Page.Connection to "connection",
-            Page.Firmware to "firmware",
-            Page.Browse(PickFor("TSUKI")) to "TSUKI",
+            Triple(Page.Settings, "settings", 0.64f),
+            Triple(Page.Eq(Enums.EqOutput.wired), "eq", 0.64f),
+            Triple(Page.Eq(Enums.EqOutput.wired, EqStage.CORRECTION), "correction eq", 0.64f),
+            Triple(Page.Online(), "online", 0.27f),
+            Triple(Page.Queue, "queue", 0.27f),
+            Triple(Page.Connection, "connection", 0.27f),
+            Triple(Page.Firmware, "firmware", 0.27f),
+            Triple(Page.Browse(PickFor("TSUKI")), "TSUKI", 0.27f),
         )
         start(pages.first().first)
-        for ((page, header) in pages) {
+        for ((page, header, alpha) in pages) {
             if (shell.nav.top != page) {
                 rule.runOnIdle { shell.nav.popTo(Page.Home) }
                 settle(1500)
@@ -251,7 +280,7 @@ class HubChromeTest {
             val style = layout("header.word").layoutInput.style
             with(rule.density) { assertEquals(header, (150f * scale("411x960") * ui.u).roundToInt().toFloat(), style.fontSize.toPx(), 0.5f) }
             assertEquals(header, FontWeight.Light, style.fontWeight)
-            assertEquals(header, 0.27f, style.color.alpha, 0.005f)
+            assertEquals(header, alpha, style.color.alpha, 0.005f)
         }
     }
 

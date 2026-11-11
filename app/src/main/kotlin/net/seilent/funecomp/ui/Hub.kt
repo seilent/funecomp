@@ -155,6 +155,8 @@ fun HubPage(
     onPivot: (Int) -> Unit = {},
     count: String? = null,
     keepEnd: Boolean = false,
+    headerX: Float = Tok.page_headerX,
+    headerAlpha: Float = Roles.pageHeader.alpha,
     content: @Composable (Int) -> Unit,
 ) {
     val entrance = remember { Entrance() }
@@ -217,7 +219,7 @@ fun HubPage(
         ) {
             CompositionLocalProvider(LocalEntrance provides entrance) { content(shownAt) }
         }
-        CroppedHeader(header, onBack = onBack)
+        CroppedHeader(header, onBack = onBack, x = headerX, alpha = headerAlpha)
         if (pivots.isNotEmpty()) PivotStrip(pivots, active, onPivot, land)
         if (count != null) {
             val d = rememberDip(count)

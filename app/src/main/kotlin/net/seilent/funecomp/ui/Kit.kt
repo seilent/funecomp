@@ -220,9 +220,9 @@ fun HeaderWord(text: String, role: Role, x: Float, tracking: Float, tag: String 
 }
 
 @Composable
-fun CroppedHeader(text: String, onBack: (() -> Unit)? = null) {
+fun CroppedHeader(text: String, onBack: (() -> Unit)? = null, x: Float = Tok.page_headerX, alpha: Float = Roles.pageHeader.alpha) {
     val ui = LocalUi.current
-    HeaderWord(text, Roles.pageHeader, ui.px(Tok.page_headerX * ui.headerScale), Tok.trackingHeader, onBack = onBack)
+    HeaderWord(text, Roles.pageHeader.copy(alpha = alpha), ui.px(x * ui.headerScale), Tok.trackingHeader, onBack = onBack)
 }
 
 @Composable

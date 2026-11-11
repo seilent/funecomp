@@ -363,7 +363,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
         revert()
         pivotName = pivots.getOrNull(it)
         pivotIndex = it
-    }) { shown ->
+    }, headerX = Tok.page_settingsHeaderX, headerAlpha = Tok.page_settingsHeaderAlpha) { shown ->
         val drawn = remember { Drawn() }
         val name = pivots.getOrNull(shown)
         val active = name ?: drawn.pivot
@@ -500,7 +500,7 @@ fun EqPage(ctx: Ctx, page: Page.Eq) {
         }
     }
     var pivot by rememberSaveable { mutableIntStateOf(slots.indexOf(EqSlots.of(page.stage, page.output)).coerceAtLeast(0)) }
-    HubPage(if (page.stage == EqStage.CORRECTION) "correction eq" else "eq", { ctx.nav.pop() }, pivots, pivot, { pivot = it }) { shown ->
+    HubPage(if (page.stage == EqStage.CORRECTION) "correction eq" else "eq", { ctx.nav.pop() }, pivots, pivot, { pivot = it }, headerAlpha = Tok.page_settingsHeaderAlpha) { shown ->
         slots.getOrNull(shown)?.let { EqRows(ctx, it) }
     }
 }
