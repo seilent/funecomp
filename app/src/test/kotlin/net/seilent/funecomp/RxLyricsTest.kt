@@ -189,7 +189,7 @@ class RxLyricsTest {
         down = true
         val line = listOf(PhoneLine("Idol", "YOASOBI", "THE BOOK 3", 213_000, 0, true))
         val first = sim(line)
-        val port = first.listen(0)
+        val port = listenBelowEphemeral(first)
         val c = Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:$port")).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.source == Enums.Source.phone }
         Remote.nowPlayingShown(true)
@@ -200,7 +200,7 @@ class RxLyricsTest {
         waitFor { Remote.phase != Phase.LIVE }
         drained()
         assertEquals(PhoneLyrics.Kind.Unavailable, Remote.phoneLyrics.entry(idol)?.kind)
-        sim(line).listen(port)
+        listenAgain(sim(line), port)
         waitFor { Remote.phoneLyrics.entry(idol)?.has == true }
         assertEquals(Phase.LIVE, Remote.phase)
         c.destroy()

@@ -103,7 +103,7 @@ class NoUpdaterLinkTest {
 
     private fun live(faults: List<String>) {
         Firmwares.init(app, net)
-        port = fresh(faults).listen(0)
+        port = listenBelowEphemeral(fresh(faults))
         service = Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:$port")).create().startCommand(0, 1)
         val before = Remote.onState
         Remote.onState = {
@@ -117,7 +117,7 @@ class NoUpdaterLinkTest {
         sim.stop()
         waitFor { Remote.phase != Phase.LIVE }
         stale()
-        fresh(faults).listen(port)
+        listenAgain(fresh(faults), port)
         linked(faults.isEmpty())
     }
 

@@ -129,7 +129,7 @@ class AppsTest {
     private fun live(vararg faults: String, replyMs: Long = Proto.svcReplyMs.toLong(), minor: Int = Proto.minor, lib: Library = Library.synthetic(), lrcDir: File? = null) {
         Firmwares.init(app, Http { _, _ -> Response(404, ByteArray(0)) })
         sim = start(faults.toList(), replyMs, minor, lib = lib, lrcDir = lrcDir)
-        port = sim.listen(0)
+        port = listenBelowEphemeral(sim)
         service = Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, "tcp:127.0.0.1:$port")).create().startCommand(0, 1)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.battery != null }
     }
@@ -141,7 +141,7 @@ class AppsTest {
             logs += it
             own += it
         }, clock = clock)
-        sim.listen(port)
+        listenAgain(sim, port)
         return own
     }
 

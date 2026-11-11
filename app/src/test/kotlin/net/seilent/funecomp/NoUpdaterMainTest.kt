@@ -94,7 +94,7 @@ class NoUpdaterMainTest {
         val s = Sim(Options(Board.of("v1"), Faults(faults), minor = minor))
         sims += s
         sim = s
-        port = s.listen(0)
+        port = listenBelowEphemeral(s)
         val spec = "tcp:127.0.0.1:$port"
         app.getSharedPreferences(Main.PREFS, Context.MODE_PRIVATE).edit().putString(Main.EXTRA_LINK, spec).commit()
         service = Robolectric.buildService(LinkService::class.java, Intent(app, LinkService::class.java).putExtra(Main.EXTRA_LINK, spec)).create().startCommand(0, 1)
@@ -111,7 +111,7 @@ class NoUpdaterMainTest {
         sim.stop()
         waitFor { Remote.phase != Phase.LIVE }
         sim = Sim(Options(Board.of("v1"), Faults(faults))).also { sims += it }
-        sim.listen(port)
+        listenAgain(sim, port)
         waitFor { Remote.phase == Phase.LIVE && Remote.device.hello?.has(Apps.APP_BIT) == false && Remote.apps.view.info == Apps.NO_INSTALLER }
     }
 
