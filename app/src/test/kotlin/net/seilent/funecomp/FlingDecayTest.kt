@@ -63,6 +63,8 @@ class FlingDecayTest {
 
     private val row = SemanticsMatcher("row") { it.config.getOrNull(SemanticsProperties.TestTag)?.matches(Regex("row\\.[0-9]+")) == true }
 
+    private val sheetItem = SemanticsMatcher("sheet item") { it.config.getOrNull(SemanticsProperties.TestTag)?.matches(Regex("sheet\\.item\\.[0-9]+")) == true }
+
     private fun travel(v: Float, retention: Float) = (v - Tok.flingStop) / (1000f / Tok.motion_flingTick * -ln(retention))
 
     private fun settle(ms: Long) {
@@ -72,10 +74,11 @@ class FlingDecayTest {
     }
 
     private lateinit var c: SimControl
+    private lateinit var shell: Shell
 
     private fun app(w: Int, h: Int, pages: List<Page>): Ui {
         c = SimControl("ap80")
-        val shell = Shell(Nav(pages))
+        shell = Shell(Nav(pages))
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(w.dp, h.dp).testTag("box")) { App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), c, shell) }
@@ -140,6 +143,23 @@ class FlingDecayTest {
         val probe = rule.onAllNodes(row).fetchSemanticsNodes().maxBy { it.boundsInRoot.top }.config[SemanticsProperties.TestTag]
         val at = top(probe)
         release("rows")
+        val want = travel(2000f, Tok.motion_listFlingRetention)
+        assertEquals(want, (at - top(probe)) / ui.u, want * 0.05f)
+    }
+
+    @Test
+    fun theSheetListFlingsAtTheListDecay() {
+        val ui = app(411, 960, listOf(Page.Home))
+        val n = 40
+        shell.sheet.open("long", (1..n).map { "item $it" }, 0) {}
+        settle(1000)
+        val items = rule.onAllNodes(sheetItem).fetchSemanticsNodes()
+        val pitch = (top("sheet.item.1") - top("sheet.item.0")) / ui.u
+        assertTrue("$n x $pitch", n * pitch - items.size * pitch > 400f)
+        drag("sheet.list", ui, 2000f, 20f)
+        val probe = rule.onAllNodes(sheetItem).fetchSemanticsNodes().maxBy { it.boundsInRoot.top }.config[SemanticsProperties.TestTag]
+        val at = top(probe)
+        release("sheet.list")
         val want = travel(2000f, Tok.motion_listFlingRetention)
         assertEquals(want, (at - top(probe)) / ui.u, want * 0.05f)
     }

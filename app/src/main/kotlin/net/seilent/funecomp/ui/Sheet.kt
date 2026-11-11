@@ -463,7 +463,7 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
                 LazyColumn(
                     Modifier.fillMaxSize().testTag("sheet.list"),
                     state = list,
-                    flingBehavior = rememberFling(),
+                    flingBehavior = rememberFling(Tok.motion_listFlingRetention),
                 ) {
                     items(scrolled, key = { "info${fixed + it}" }) { j ->
                         val i = fixed + j
