@@ -6,13 +6,7 @@ import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.exp
 import kotlin.math.pow
 
-private const val BACK_OVERSHOOT = 1.70158f
 private const val EXP_SIX = 6f
-
-val OutBack = Easing { t ->
-    val x = t - 1f
-    x * x * ((BACK_OVERSHOOT + 1f) * x + BACK_OVERSHOOT) + 1f
-}
 
 val Decel = CubicBezierEasing(Tok.motion_decel_x1, Tok.motion_decel_y1, Tok.motion_decel_x2, Tok.motion_decel_y2)
 

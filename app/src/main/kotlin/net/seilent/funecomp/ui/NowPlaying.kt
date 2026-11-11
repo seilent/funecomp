@@ -656,14 +656,12 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                                 val hx = artX.roundToInt() + artSide.roundToInt() - inset - ring / 2
                                 val hy = ui.npHeartYPx(artY)
                                 val on = Heart.lit(s)
-                                var swaps by remember { mutableIntStateOf(0) }
                                 val press = rememberPress()
                                 Box(Modifier.at(hx, hy, 0.5f, 0.5f).alpha(idleAlpha).testTag(if (on) "np.heart.on" else "np.heart.off")) {
-                                    Ring(LayoutTok.npRing, GlyphName.HEART, Look.Toggle(on), swaps = swaps, press = press, tag = "np.heart", stroke = LayoutTok.npRingStroke)
+                                    Ring(LayoutTok.npRing, GlyphName.HEART, Look.Toggle(on), press = press, tag = "np.heart", stroke = LayoutTok.npRingStroke)
                                 }
                                 Box(
                                     Modifier.at(hx, hy, 0.5f, 0.5f).size(ui.npHeartHitPx.dp()).testTag("np.heart").press({
-                                        swaps++
                                         control.favorite(s) { line, title -> toast.show(line, title) }
                                     }, {}, press),
                                 )
@@ -766,24 +764,19 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                             }, press = press),
                         )
                     } else {
-                        var swaps by remember { mutableIntStateOf(0) }
                         val press = rememberPress()
                         Box(Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha)) {
                             when (kind) {
-                                SHUFFLE -> Ring(LayoutTok.npRing, GlyphName.SHUFFLE, Look.Toggle(s.shuffle == true), swaps = swaps, press = press, tag = "np.shuffle", stroke = LayoutTok.npRingStroke)
-                                REPEAT -> Ring(LayoutTok.npRing, GlyphName.REPEAT, Look.Toggle(repeat != Enums.Repeat.off), swaps = swaps, press = press, tag = "np.repeat", stroke = LayoutTok.npRingStroke, one = repeat == Enums.Repeat.one)
+                                SHUFFLE -> Ring(LayoutTok.npRing, GlyphName.SHUFFLE, Look.Toggle(s.shuffle == true), press = press, tag = "np.shuffle", stroke = LayoutTok.npRingStroke)
+                                REPEAT -> Ring(LayoutTok.npRing, GlyphName.REPEAT, Look.Toggle(repeat != Enums.Repeat.off), press = press, tag = "np.repeat", stroke = LayoutTok.npRingStroke, one = repeat == Enums.Repeat.one)
                                 else -> Ring(ui.npPlayRing, if (playing) GlyphName.PAUSE else GlyphName.PLAY, Look.Touch, Modifier.testTag(if (playing) "np.toggle.pause" else "np.toggle.play"), press = press, tag = "np.toggle")
                             }
                         }
                         Box(
                             hit.press({
                                 when (kind) {
-                                    SHUFFLE -> {
-                                        if (liveNow().transportRefusal(Enums.TransportCmd.shuffle) == null) swaps++
-                                        control.transport(Enums.TransportCmd.shuffle, on = s.shuffle != true)
-                                    }
+                                    SHUFFLE -> control.transport(Enums.TransportCmd.shuffle, on = s.shuffle != true)
                                     REPEAT -> {
-                                        swaps++
                                         val next = when (repeat) {
                                             Enums.Repeat.off -> Enums.Repeat.all
                                             Enums.Repeat.all -> Enums.Repeat.one

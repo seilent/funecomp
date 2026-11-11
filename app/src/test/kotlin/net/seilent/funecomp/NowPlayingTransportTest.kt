@@ -168,7 +168,7 @@ class NowPlayingTransportTest {
     }
 
     @Test
-    fun thePlayRingSwapsOncePerGlyphChangeAndNotOnATap() {
+    fun thePlayRingCutsItsGlyphAtEveryChangeAndATap() {
         val c = start { sim -> object : Control by sim {
             override fun transport(cmd: Int, seekMs: Long?, on: Boolean?, repeat: Int?) {}
         } }
@@ -176,9 +176,9 @@ class NowPlayingTransportTest {
         rule.onNodeWithTag("np.toggle").performClick()
         assertEquals(0, swapsWhile(800))
         c.transport(Enums.TransportCmd.toggle)
-        assertEquals(1, swapsWhile(1200))
+        assertEquals(0, swapsWhile(1200))
         c.transport(Enums.TransportCmd.toggle)
-        assertEquals(1, swapsWhile(1200))
+        assertEquals(0, swapsWhile(1200))
     }
 
     @Test

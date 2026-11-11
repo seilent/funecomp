@@ -1,17 +1,11 @@
 package net.seilent.funecomp.ui
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -24,7 +18,6 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -40,8 +33,8 @@ enum class GlyphName(val fill: Boolean, val d: List<Any>) {
     NEXT(true, listOf("M", 5, 5, "L", 21, 16, "L", 5, 27, "Z", "M", 23, 5, "H", 27, "V", 27, "H", 23, "Z")),
     PREVIOUS(true, listOf("M", 27, 5, "L", 11, 16, "L", 27, 27, "Z", "M", 5, 5, "H", 9, "V", 27, "H", 5, "Z")),
     SHUFFLE(false, listOf("M", 4, 9, "H", 10, "L", 22, 23, "H", 28, "M", 4, 23, "H", 10, "L", 22, 9, "H", 28, "M", 24, 5, "L", 28, 9, "L", 24, 13, "M", 24, 19, "L", 28, 23, "L", 24, 27)),
-    REPEAT(false, listOf("M", 23, 9, "A", 10, 10, 0, "1", "0", 26, 16, "M", 18, 4, "L", 23, 9, "L", 18, 14)),
-    ONE(true, listOf("M", 14.03, 10.35, "H", 18.43, "V", 18.88, "H", 14.03, "Z", "M", 12.23, 18.88, "H", 20.23, "V", 22.08, "H", 12.23, "Z", "M", 11.77, 10.77, "L", 12.97, 9.92, "L", 15.28, 13.18, "L", 14.08, 14.03, "Z")),
+    REPEAT(false, listOf("M", 13.92, 4.18, "A", 12, 12, 0, "1", "0", 22, 5.61, "M", 5.41, 2.45, "L", 13.92, 4.18, "L", 11.76, 10.58)),
+    ONE(false, listOf("M", 18.2, 10.19, "V", 22.24, "M", 15.1, 12.24, "L", 16.3, 11.39, "M", 14.2, 20.24, "H", 22.2)),
     HEART(true, listOf("M", 16, 28, "L", 5.5, 17, "A", 7, 7, 0, "0", "1", 16, 9, "A", 7, 7, 0, "0", "1", 26.5, 17, "Z")),
     BLUETOOTH(false, listOf("M", 8, 10, "L", 24, 22, "L", 16, 29, "V", 3, "L", 24, 10, "L", 8, 22)),
     BATTERY(false, listOf("M", 3, 9, "H", 25, "V", 23, "H", 3, "Z", "M", 27, 13, "V", 19)),
@@ -104,28 +97,13 @@ fun ringLook(look: Look): RingStyle = when (look) {
 }
 
 @Composable
-fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifier, swaps: Int = 0, press: PressState? = null, tag: String? = null, stroke: Float? = null, glyphSize: Float = size / 2, one: Boolean = false) {
+fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifier, press: PressState? = null, tag: String? = null, stroke: Float? = null, glyphSize: Float = size / 2, one: Boolean = false) {
     val ui = LocalUi.current
     val side = ui.px(size)
     val dp = with(LocalDensity.current) { side.toDp() }
     val style = ringLook(look).let { if (stroke != null) RingStyle(it.alpha, stroke) else it }
     val width = ui.px(style.stroke)
     val color = white(style.alpha)
-    val scale = remember { Animatable(1f) }
-    val alpha = remember { Animatable(1f) }
-    val first = remember { booleanArrayOf(true) }
-    LaunchedEffect(glyph, swaps, one) {
-        if (first[0]) {
-            first[0] = false
-            return@LaunchedEffect
-        }
-        launch {
-            scale.snapTo(Tok.motion_toggleScale)
-            scale.animateTo(1f, tween(Tok.motion_toggle.toInt(), easing = OutBack))
-        }
-        alpha.snapTo(0f)
-        alpha.animateTo(1f, tween(Tok.motion_toggleSwap.toInt(), easing = LinearEasing))
-    }
     val halo = remember(side, width) { arrayOfNulls<ImageBitmap>(1) }
     Box(modifier.requiredSize(dp).pressScale(press)) {
         if (press != null && !press.scaled) {
@@ -146,7 +124,7 @@ fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifie
                 drawCircle(color, radius = (side - width) / 2, style = Stroke(width))
             }
         }
-        Glyph(glyph, glyphSize, color, Modifier.at(side / 2, side / 2, 0.5f, 0.5f).scale(scale.value).alpha(alpha.value).then(if (tag != null) Modifier.testTag("$tag.glyph") else Modifier))
+        Glyph(glyph, glyphSize, color, Modifier.at(side / 2, side / 2, 0.5f, 0.5f).then(if (tag != null) Modifier.testTag("$tag.glyph") else Modifier))
         if (one) {
             val a = Math.toRadians(Tok.npRepeatOneAt.toDouble())
             val r = ui.px(LayoutTok.npRepeatOneR)

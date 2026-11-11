@@ -85,13 +85,13 @@ class RepeatOneRingTest {
         assertEquals(ox, one.center.x, 1f)
         assertEquals(oy, one.center.y, 1f)
         val k = LayoutTok.npRepeatOne * u / Tok.glyphBox
-        val ink = Rect(one.left + 11.77f * k - 1f, one.top + 9.92f * k - 1f, one.left + 20.23f * k + 1f, one.top + 22.08f * k + 1f)
+        val ink = Rect(one.left + 13.94f * k - 1f, one.top + 9.76f * k - 1f, one.left + 22.2f * k + 1f, one.top + 22.24f * k + 1f)
         for (deg in 280..350 step 5) at(deg.toFloat(), r, ring).let { (x, y) -> if (!ink.contains(Offset(x, y))) assertFalse("$deg dark", lit(img, x, y)) }
-        assertTrue("stem", lit(img, one.left + 16.2f * k, one.top + 16f * k))
-        assertTrue("foot", lit(img, one.left + 19.6f * k, one.top + 21f * k))
-        assertFalse("over the foot", lit(img, one.left + 19.6f * k, one.top + 17.5f * k))
-        assertTrue("flag", lit(img, one.left + 13.18f * k, one.top + 11.49f * k))
-        assertFalse("under the flag", lit(img, one.left + 12.4f * k, one.top + 17f * k))
+        assertTrue("stem", lit(img, one.left + 18.2f * k, one.top + 16f * k))
+        assertTrue("foot", lit(img, one.left + 21.2f * k, one.top + 21.24f * k))
+        assertFalse("over the foot", lit(img, one.left + 21.2f * k, one.top + 16.5f * k))
+        assertTrue("flag", lit(img, one.left + 15.7f * k, one.top + 11.82f * k))
+        assertFalse("under the flag", lit(img, one.left + 14.6f * k, one.top + 15.5f * k))
     }
 
     @Test
@@ -106,7 +106,7 @@ class RepeatOneRingTest {
     }
 
     @Test
-    fun allToOnePlaysTheSwap() {
+    fun allToOneCutsTheGlyph() {
         start(Enums.Repeat.all)
         val glyph = bounds("np.repeat.glyph")
         fun peak(): Int {
@@ -121,7 +121,8 @@ class RepeatOneRingTest {
             rule.mainClock.advanceTimeByFrame()
             peak()
         }
-        assertTrue("$rest $frames", frames.min() < rest * 0.3f)
+        frames.forEach { assertEquals("$rest $frames", rest.toFloat(), it.toFloat(), 8f) }
+        assertEquals(glyph.width, bounds("np.repeat.glyph").width, 0.5f)
         settle(1000)
         assertEquals(rest.toFloat(), peak().toFloat(), 8f)
     }
