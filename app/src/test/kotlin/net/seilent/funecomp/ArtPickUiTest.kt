@@ -871,6 +871,8 @@ class ArtPickUiTest {
         rule.onNodeWithTag("pick.head.youtube").assertExists()
         val line = top("pick.state")
         assertTrue(top("pick.head.youtube") < line && line < top("pick.head.deezer"))
+        val (ui, _) = canvas()
+        assertEquals(ui.px(20.5f), top("pick.head.deezer") - bounds("pick.state").bottom, 1f)
     }
 
     @Test
