@@ -21,6 +21,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -34,12 +35,18 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.rememberTextMeasurer
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val MS_PER_S = 1000f
+private const val SWIPE_DX = 10
+private const val SWIPE_DY = 14
 
 @Stable
 class Entrance {
@@ -69,28 +76,73 @@ fun Modifier.enter(): Modifier {
     }
 }
 
-fun Modifier.pivotSwipe(slop: Float, count: Int, active: () -> Int, slots: PressSlots?, onPivot: (Int) -> Unit) = pointerInput(count, slots) {
+@Stable
+class PaneDrag(private val scope: CoroutineScope) {
+    var x by mutableFloatStateOf(0f)
+        private set
+    private val back = Animatable(0f)
+    internal var land: () -> Unit = {}
+
+    val offset: Float get() = x + back.value
+
+    fun follow(dx: Float) {
+        x = dx
+    }
+
+    fun release() {
+        val from = x
+        x = 0f
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            back.snapTo(from)
+            back.animateTo(0f, tween(Tok.motion_pivotStrip.toInt(), easing = ExpOut6))
+        }
+    }
+
+    fun down() {
+        if (back.isRunning) scope.launch(start = CoroutineStart.UNDISPATCHED) { back.snapTo(0f) }
+        land()
+    }
+
+    fun settle() {
+        x = 0f
+    }
+}
+
+fun Modifier.pivotSwipe(slop: Float, swipe: Float, count: Int, active: () -> Int, slots: PressSlots?, pane: PaneDrag, onPivot: (Int) -> Unit) = pointerInput(count, slots, pane) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        pane.down()
         var dx = 0f
         var dy = 0f
         var decided = false
+        var lifted = false
         while (true) {
             val e = awaitPointerEvent(PointerEventPass.Initial)
             val c = e.changes.firstOrNull { it.id == down.id } ?: break
-            if (!c.pressed) break
+            if (!c.pressed) {
+                lifted = true
+                if (decided) {
+                    val t = c.position - down.position
+                    val next = active() + if (t.x < 0) 1 else -1
+                    if (abs(t.x) > swipe && abs(t.x) * SWIPE_DX > abs(t.y) * SWIPE_DY && next in 0 until count) onPivot(next) else pane.release()
+                    c.consume()
+                }
+                break
+            }
             val d = c.positionChange()
             dx += d.x
             dy += d.y
             if (!decided && abs(dx) > slop && abs(dx) > abs(dy)) {
                 decided = true
                 slots?.cut()
-                val next = active() + if (dx < 0) 1 else -1
-                if (next in 0 until count) onPivot(next)
             }
-            if (decided) c.consume()
+            if (decided) {
+                pane.follow(dx)
+                c.consume()
+            }
             if (!decided && abs(dy) > slop) break
         }
+        if (decided && !lifted) pane.release()
     }
 }
 
@@ -110,6 +162,20 @@ fun HubPage(
     var shownName by rememberSaveable { mutableStateOf(pivots.getOrNull(active)) }
     val out = remember { Animatable(0f) }
     var dir by remember { mutableIntStateOf(1) }
+    val scope = rememberCoroutineScope()
+    val pane = remember { PaneDrag(scope) }
+    val landed = remember { booleanArrayOf(false) }
+    var land by remember { mutableIntStateOf(0) }
+    pane.land = {
+        if (out.isRunning) {
+            landed[0] = true
+            scope.launch(start = CoroutineStart.UNDISPATCHED) { out.snapTo(1f) }
+            land++
+        } else if (entrance.clock.isRunning) {
+            scope.launch(start = CoroutineStart.UNDISPATCHED) { entrance.settle() }
+            land++
+        }
+    }
     val target = pivots.getOrNull(active)
     val named = pivots.isNotEmpty()
     val shownAt = if (!named) shownPivot else shownName?.let { pivots.indexOf(it) } ?: active
@@ -120,32 +186,39 @@ fun HubPage(
             shownPivot = active
             shownName = target
             out.snapTo(0f)
+            pane.settle()
             entrance.settle()
             return@LaunchedEffect
         }
         dir = if (active > from) 1 else -1
-        out.animateTo(1f, tween(Tok.motion_pivotOut.toInt(), easing = LinearEasing))
+        landed[0] = false
+        try {
+            out.animateTo(1f, tween(Tok.motion_pivotOut.toInt(), easing = LinearEasing))
+        } catch (e: CancellationException) {
+            if (!landed[0] || !isActive) throw e
+        }
         shownPivot = active
         shownName = target
         out.snapTo(0f)
-        launch { entrance.run(dir) }
+        pane.settle()
+        if (landed[0]) entrance.settle() else launch { entrance.run(dir) }
     }
     val ui = LocalUi.current
     val current by rememberUpdatedState(active)
     val slots = LocalPressSlots.current
-    val swipe = if (pivots.size > 1) Modifier.pivotSwipe(ui.px(Tok.touchSlop), pivots.size, { current }, slots, onPivot) else Modifier
+    val swipe = if (pivots.size > 1) Modifier.pivotSwipe(ui.px(Tok.touchSlop), ui.px(Tok.gesture_swipe), pivots.size, { current }, slots, pane, onPivot) else Modifier
     Box(Modifier.fillMaxSize().then(swipe).testTag("hub.$header")) {
         PageSurface()
         Box(
             Modifier.fillMaxSize().graphicsLayer {
-                translationX = -dir * ui.px(Tok.motion_pivotPaneSpeed * Tok.motion_pivotOut / MS_PER_S) * out.value
+                translationX = pane.offset - dir * ui.px(Tok.motion_pivotPaneSpeed * Tok.motion_pivotOut / MS_PER_S) * out.value
                 alpha = 1f - out.value
             },
         ) {
             CompositionLocalProvider(LocalEntrance provides entrance) { content(shownAt) }
         }
         CroppedHeader(header, onBack = onBack)
-        if (pivots.isNotEmpty()) PivotStrip(pivots, active, onPivot)
+        if (pivots.isNotEmpty()) PivotStrip(pivots, active, onPivot, land)
         if (count != null) {
             val d = rememberDip(count)
             val x = ui.px(Tok.hubEdge)

@@ -10,7 +10,6 @@ import androidx.compose.animation.core.AnimationState
 import androidx.compose.animation.core.FloatDecayAnimationSpec
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateDecay
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.generateDecayAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -39,6 +38,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -226,7 +226,7 @@ fun CroppedHeader(text: String, onBack: (() -> Unit)? = null) {
 }
 
 @Composable
-fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit) {
+fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit, land: Int = 0) {
     val ui = LocalUi.current
     val measurer = rememberTextMeasurer()
     val activeStyle = textStyle(Roles.pivotActive, white(Roles.pivotActive.alpha))
@@ -250,20 +250,24 @@ fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit) {
         p
     }
     val rest = ui.px(Tok.hubEdge)
-    val target = rest - (positions.getOrNull(active) ?: 0f)
-    val row by animateFloatAsState(target, tween(Held.Pivot.motion_pivotStrip.toInt(), easing = Strip), label = "strip")
+    val last = remember { intArrayOf(active) }
+    val pitch = if (last[0] != active && last[0] in positions.indices && active in positions.indices) positions[active] - positions[last[0]] else 0f
+    val shift = remember(active) { Animatable(pitch) }
+    SideEffect { last[0] = active }
+    LaunchedEffect(active) { shift.animateTo(0f, tween(Tok.motion_pivotStrip.toInt(), easing = ExpOut6)) }
+    LaunchedEffect(land) { if (land > 0) shift.snapTo(0f) }
+    val row = (rest - (positions.getOrNull(active) ?: 0f) + shift.value).roundToInt()
     Box(Modifier.fillMaxWidth().height(ui.px(ui.pivotBottom).dp()).clipToBounds()) {
         labels.forEachIndexed { i, l ->
-            val on = i == active
-            val role = if (on) Roles.pivotActive else Roles.pivotInactive
-            val c by animateColorAsState(white(role.alpha), tween(Held.Pivot.motion_pivotLabel.toInt()), label = "pivot")
-            val px by animateFloatAsState(positions[i], tween(Held.Pivot.motion_pivotStrip.toInt(), easing = Strip), label = "label")
+            val role = if (i == active) Roles.pivotActive else Roles.pivotInactive
             val step = rememberStep()
+            val lifted = remember { booleanArrayOf(false) }
             val pick = Modifier.press({
-                step.hold(Held.Pivot.motion_pivotStrip.toLong())
+                lifted[0] = true
+                step.hold(Tok.motion_pivotStrip.toLong())
                 onPick(i)
-            }, step = step)
-            RoleText(l, role, Modifier.atBaseline(row + px, ui.px(ui.pivotBaseline)).then(pick).testTag("pivot.$l"), color = if (step.on) white(Tok.alpha_full) else c)
+            }, onDown = { lifted[0] = false }, step = step)
+            RoleText(l, role, Modifier.atBaseline(row + positions[i], ui.px(ui.pivotBaseline)).then(pick).testTag("pivot.$l"), color = white(if (step.on && (i == active || !lifted[0])) Tok.alpha_full else role.alpha))
         }
     }
 }

@@ -23,20 +23,13 @@ class HeldTest {
         )
         assertEquals(
             listOf(
-                listOf("motion_pivotStrip", "motion_pivotStrip", 380f, "P1", "zt5", "836c8fbc4"),
-                listOf("motion_pivotLabel", "motion_pivotLabel", 200f, "P1", "zt5", "836c8fbc4"),
-            ),
-            rows(Held.Pivot.entries),
-        )
-        assertEquals(
-            listOf(
                 listOf("motion_trackHide", "motion_trackHide", 500f, "T9", "zt9", "2cc18f094"),
                 listOf("motion_trackShow", "motion_trackShow", 400f, "T9", "zt9", "2cc18f094"),
             ),
             rows(Held.Track.entries),
         )
-        assertEquals(8, Held.entries.size)
-        assertEquals(setOf("Entry", "Nav", "Pivot", "Track"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
+        assertEquals(6, Held.entries.size)
+        assertEquals(setOf("Entry", "Nav", "Track"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }
 

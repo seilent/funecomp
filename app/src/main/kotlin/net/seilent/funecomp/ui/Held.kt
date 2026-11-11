@@ -17,16 +17,6 @@ object Held {
         )
     }
 
-    object Pivot {
-        const val motion_pivotStrip = 380f
-        const val motion_pivotLabel = 200f
-
-        val entries = listOf(
-            Entry("motion_pivotStrip", "motion_pivotStrip", motion_pivotStrip, "P1", "zt5", "836c8fbc4"),
-            Entry("motion_pivotLabel", "motion_pivotLabel", motion_pivotLabel, "P1", "zt5", "836c8fbc4"),
-        )
-    }
-
     object Track {
         const val motion_trackHide = 500f
         const val motion_trackShow = 400f
@@ -37,5 +27,5 @@ object Held {
         )
     }
 
-    val entries get() = Nav.entries + Pivot.entries + Track.entries
+    val entries get() = Nav.entries + Track.entries
 }
