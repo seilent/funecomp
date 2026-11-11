@@ -89,7 +89,7 @@ class NowPlayingChromeTest {
         assertEquals(h * u, b.size.height.toFloat(), 1f)
         val img = node.pixels().also { System.gc() }
         fun lit(x: Float, y: Float) = (img.getRGB((x * u).toInt().coerceIn(0, img.width - 1), (y * u).toInt().coerceIn(0, img.height - 1)) shr 16 and 0xff) > 80
-        val nub = h / 9
+        val nub = LayoutTok.npStatusBatteryNub
         val sk = h * 2 / 9
         val ix = (w - nub - 2 * sk) / 18
         assertTrue("nub", lit(nub / 2, h / 2))

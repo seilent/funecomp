@@ -955,10 +955,11 @@ fun Status(device: DeviceState) {
         val bw = ui.px(LayoutTok.npStatusBatteryW)
         val bh = ui.px(LayoutTok.npStatusBatteryH)
         val sk = max(1f, ui.px(LayoutTok.npStatusBatteryH * 2 / 9))
-        val nub = max(1f, ui.px(LayoutTok.npStatusBatteryH / 9))
-        val nh = max(1f, ui.px(LayoutTok.npStatusBatteryH / 3))
+        val nub = max(1f, ui.px(LayoutTok.npStatusBatteryNub))
+        val nh = max(1f, ui.px(LayoutTok.npStatusBatteryNubH))
         Canvas(Modifier.at(right, top + (ui.px(LayoutTok.npStatusHeight) - bh) / 2, ax = 1f).size(bw.dp(), bh.dp()).testTag("status.battery")) {
-            drawRect(color, Offset(0f, (bh - nh) / 2), Size(nub, nh))
+            val ny = (bh - nh) / 2
+            for (k in 0..(nub / 2).toInt()) drawRect(color, Offset(k.toFloat(), ny - k), Size(nub - k, nh + 2 * k))
             drawRect(color, Offset(nub, 0f), Size(bw - nub, sk))
             drawRect(color, Offset(nub, bh - sk), Size(bw - nub, sk))
             drawRect(color, Offset(nub, sk), Size(sk, bh - 2 * sk))
