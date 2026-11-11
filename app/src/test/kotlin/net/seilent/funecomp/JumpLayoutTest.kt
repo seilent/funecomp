@@ -1,6 +1,7 @@
 package net.seilent.funecomp
 
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.state.Section
 import net.seilent.funecomp.ui.JUMP_EXIT
 import net.seilent.funecomp.ui.JUMP_NONE
 import net.seilent.funecomp.ui.JUMP_SEARCH
@@ -47,8 +48,8 @@ class JumpLayoutTest {
         listOf(7.64f, 64.88f, 122.12f, 179.36f).forEachIndexed { i, x -> assertEquals("$i", x, g.x(i), 0.01f) }
         assertEquals(53f, g.tile, 0.001f)
         assertEquals(283.7f, g.limit(LayoutTok.canvasH), 0.01f)
-        for (letter in 0 until 18) assertEquals("$letter", 0f, g.offsetFor(JumpLayout.slot(letter), LayoutTok.canvasH), 0f)
-        for (letter in 18..21) assertEquals("$letter", 54.74f, g.offsetFor(JumpLayout.slot(letter), LayoutTok.canvasH), 0.01f)
+        for (letter in 0 until 19) assertEquals("$letter", 0f, g.offsetFor(JumpLayout.slot(letter), LayoutTok.canvasH), 0f)
+        for (letter in 19..22) assertEquals("$letter", 54.74f, g.offsetFor(JumpLayout.slot(letter), LayoutTok.canvasH), 0.01f)
         assertEquals(283.7f, g.offsetFor(JumpLayout.slot(37), LayoutTok.canvasH), 0.01f)
     }
 
@@ -84,20 +85,45 @@ class JumpLayoutTest {
         for (offset in listOf(0f, 50f)) {
             val (ex, ey) = center(g, 0)
             assertEquals(JUMP_EXIT, g.hit(ex, ey - offset, offset, all))
-            val (sx, sy) = center(g, 1)
+            val (hx, hy) = center(g, 1)
+            assertEquals(0, g.hit(hx, hy - offset, offset, all))
+            val (zx, zy) = center(g, 27)
+            assertEquals(26, g.hit(zx, zy - offset, offset, all))
+            val (sx, sy) = center(g, 28)
             assertEquals(JUMP_SEARCH, g.hit(sx, sy - offset, offset, all))
+            val (kx, ky) = center(g, 29)
+            assertEquals(27, g.hit(kx, ky - offset, offset, all))
             val y = g.y(9) - offset
-            assertEquals(7, g.hit(g.x(9) - half + 0.01f, y, offset, all))
-            assertEquals(7, g.hit(g.x(9) + g.tile + half - 0.01f, y, offset, all))
-            assertEquals(8, g.hit(g.x(9) + g.tile + half + 0.01f, y, offset, all))
-            assertEquals(3, g.hit(g.x(5), g.y(5) - half + 0.01f - offset, offset, all))
-            assertEquals(3, g.hit(g.x(9), g.y(9) - half - 0.01f - offset, offset, all))
+            assertEquals(8, g.hit(g.x(9) - half + 0.01f, y, offset, all))
+            assertEquals(8, g.hit(g.x(9) + g.tile + half - 0.01f, y, offset, all))
+            assertEquals(9, g.hit(g.x(9) + g.tile + half + 0.01f, y, offset, all))
+            assertEquals(4, g.hit(g.x(5), g.y(5) - half + 0.01f - offset, offset, all))
+            assertEquals(4, g.hit(g.x(9), g.y(9) - half - 0.01f - offset, offset, all))
             assertEquals(JUMP_NONE, g.hit(margin - half - 0.01f, y, offset, all))
             assertEquals(JUMP_NONE, g.hit(Tok.canvasW - margin + half + 0.01f, y, offset, all))
             assertEquals(JUMP_NONE, g.hit(g.x(0), Tok.jumpTop - half - 0.01f - offset, offset, all))
             assertEquals(JUMP_NONE, g.hit(g.x(0), g.content - offset, offset, all))
-            assertEquals(JUMP_NONE, g.hit(g.x(9), y, offset, all - 7))
+            assertEquals(JUMP_NONE, g.hit(g.x(9), y, offset, all - 8))
         }
+    }
+
+    @Test
+    fun theSearchTileIsTheSlotAfterZ() {
+        val z = 26
+        assertEquals("z", Section.letter(z))
+        assertEquals("あ", Section.letter(z + 1))
+        assertEquals(1, JumpLayout.slot(0))
+        assertEquals(27, JumpLayout.slot(z))
+        assertEquals(29, JumpLayout.slot(z + 1))
+        val slots = (0 until Tok.jumpCells.toInt()).map { JumpLayout.slot(it) }
+        assertEquals((1 until JumpLayout.SLOTS).toSet() - 28, slots.toSet())
+        val g = JumpLayout.of(dap)
+        for (letter in 0 until Tok.jumpCells.toInt()) {
+            val (x, y) = center(g, JumpLayout.slot(letter))
+            assertEquals("$letter", letter, g.hit(x, y, 0f, all))
+        }
+        val (sx, sy) = center(g, 28)
+        assertEquals(JUMP_SEARCH, g.hit(sx, sy, 0f, all))
     }
 
     @Test

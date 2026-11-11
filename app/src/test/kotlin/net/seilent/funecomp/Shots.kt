@@ -1172,6 +1172,10 @@ val SHOTS = listOf(
     Shot("autoeq-jump-search", pages = AEQ, ime = AEQ_IME) {
         jumpOpen()
         settle(300)
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("jump").performScrollToNode(hasTestTag("jump.search"))
+        rule.mainClock.autoAdvance = false
+        settle(300)
         rule.onNodeWithTag("jump.search").performClick()
     },
     Shot("autoeq-jump-ime", pages = AEQ, ime = AEQ_IME) {

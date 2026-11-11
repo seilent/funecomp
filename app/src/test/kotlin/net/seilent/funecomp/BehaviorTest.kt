@@ -54,6 +54,7 @@ import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.FirmwareView
+import net.seilent.funecomp.ui.JumpLayout
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -848,6 +849,36 @@ class BehaviorTest {
         assertTrue("$empty ground $ground ring ${ring.min()} to ${ring.max()}", ring.max() - ground <= 2)
         val glyph = (0 until img.height).maxOf { y -> (0 until img.width).maxOf { x -> luma(x, y) } }
         assertEquals(empty, Tok.jump_emptyAlpha * 255, (glyph - ground).toFloat(), 6f)
+    }
+
+    @Test
+    fun theSearchTileSitsAfterZWithItsGlyphCentred() {
+        openAutoEq()
+        openGrid()
+        assertEquals(0f, gridScroll().value(), 0f)
+        val grid = rule.onNodeWithTag("jump").fetchSemanticsNode().boundsInRoot
+        val ui = Ui.of(grid.width, grid.height)
+        val g = JumpLayout.of(ui)
+        fun at(tag: String, slot: Int) {
+            val b = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
+            assertEquals("$tag x", ui.px(g.x(slot)), b.left - grid.left, 1f)
+            assertEquals("$tag y", ui.px(g.y(slot)), b.top - grid.top, 1f)
+        }
+        assertEquals("z", Section.letter(26))
+        at("jump.0", 1)
+        at("jump.26", 27)
+        at("jump.search", 28)
+        at("jump.27", 29)
+        val img = rule.onNodeWithTag("jump.search").pixels().also { System.gc() }
+        fun luma(x: Int, y: Int) = img.getRGB(x, y).let { maxOf(it shr 16 and 0xff, it shr 8 and 0xff, it and 0xff) }
+        val ground = luma(img.width / 4, img.height / 4)
+        val cut = ground + (255 - ground) * (Tok.alpha_low + Tok.type_letterGlyph_alpha) / 2
+        val ink = (0 until img.height).flatMap { y -> (0 until img.width).filter { x -> luma(x, y) > cut }.map { x -> x to y } }
+        assertTrue("ground $ground cut $cut", ink.isNotEmpty())
+        val cx = (ink.minOf { it.first } + ink.maxOf { it.first } + 1) / 2f
+        val cy = (ink.minOf { it.second } + ink.maxOf { it.second } + 1) / 2f
+        assertEquals("ink x", img.width / 2f, cx, ui.px(1f))
+        assertEquals("ink y", img.height / 2f, cy, ui.px(1f))
     }
 
     @Test

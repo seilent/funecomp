@@ -44,8 +44,7 @@ const val JUMP_EXIT = -1
 const val JUMP_NONE = -2
 const val JUMP_SEARCH = -3
 private const val SLOT_EXIT = 0
-private const val SLOT_SEARCH = 1
-private const val SEARCH_CENTER = 27f / 64f
+private const val SLOT_SEARCH = 28
 
 class JumpLayout(val cols: Int, val tile: Float, val left: Float) {
     val pitch = tile + Tok.jumpGap
@@ -74,11 +73,12 @@ class JumpLayout(val cols: Int, val tile: Float, val left: Float) {
         if (cx < 0 || cy < 0) return JUMP_NONE
         val col = (cx / pitch).toInt()
         val slot = (cy / pitch).toInt() * cols + col
+        val letter = if (slot < SLOT_SEARCH) slot - 1 else slot - EXIT_CELLS
         return when {
             col >= cols || slot >= SLOTS -> JUMP_NONE
             slot == SLOT_EXIT -> JUMP_EXIT
             slot == SLOT_SEARCH -> JUMP_SEARCH
-            slot - EXIT_CELLS in avail -> slot - EXIT_CELLS
+            letter in avail -> letter
             else -> JUMP_NONE
         }
     }
@@ -88,7 +88,7 @@ class JumpLayout(val cols: Int, val tile: Float, val left: Float) {
         val SLOTS = Tok.jumpCells.toInt() + EXIT_CELLS
         private val MARGIN = (Tok.canvasW - Tok.jumpCols * Tok.tileS - (Tok.jumpCols - 1) * Tok.jumpGap) / 2
 
-        fun slot(letter: Int) = letter + EXIT_CELLS
+        fun slot(letter: Int) = if (letter < SLOT_SEARCH - 1) letter + 1 else letter + EXIT_CELLS
 
         fun of(ui: Ui): JumpLayout {
             val span = ui.w - 2 * MARGIN
@@ -254,8 +254,7 @@ private fun JumpSearch(x: Float, y: Float, tile: Float, press: JumpPress, act: S
             .border(ui.px(Tok.letterTileBorder).dp(), white(Tok.alpha_low))
             .clipToBounds().semanticsWhile(shown) { onClick("search") { act.value(JUMP_SEARCH); true }; testTag = "jump.search" },
     ) {
-        val c = ui.px(Tok.jumpSearchGlyph) * SEARCH_CENTER
-        val at = Modifier.at(tile - ui.px(Tok.letterInsetX) - c, tile - ui.px(Tok.letterInsetBaseline) - c, 0.5f, 0.5f)
+        val at = Modifier.at(tile / 2, tile / 2, 0.5f, 0.5f)
         Glyph(GlyphName.SEARCH_RING, Tok.jumpSearchGlyph, white(Roles.letterGlyph.alpha), at)
         Glyph(GlyphName.SEARCH_HANDLE, Tok.jumpSearchGlyph, white(Roles.letterGlyph.alpha), at)
     }
