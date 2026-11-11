@@ -1,12 +1,18 @@
 package net.seilent.funecomp
 
+import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.RectF
+import android.graphics.Typeface
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.hasAnyAncestor
@@ -20,17 +26,20 @@ import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
+import net.seilent.funecomp.ui.LocalUi
 import net.seilent.funecomp.ui.Nav
+import net.seilent.funecomp.ui.Overlay
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.Shape
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
-import net.seilent.funecomp.ui.overlayMinusY
-import net.seilent.funecomp.ui.overlayRingY
-import net.seilent.funecomp.ui.volPlusY
+import net.seilent.funecomp.ui.VolumeOverlay
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -93,6 +102,26 @@ class VolumeOverlayLayoutTest {
         return Rect(b.left + t.getLineLeft(0), b.top + t.firstBaseline - Tok.capHeight * px, b.left + t.getLineRight(0), b.top + t.firstBaseline)
     }
 
+    private fun outlineInk(tag: String): Rect {
+        val (b, t) = layout(tag)
+        val s = t.layoutInput.style
+        val paint = Paint().apply {
+            typeface = t.layoutInput.fontFamilyResolver.resolve(s.fontFamily, s.fontWeight ?: FontWeight.Normal).value as Typeface
+            textSize = with(rule.density) { s.fontSize.toPx() }
+            letterSpacing = with(rule.density) { s.letterSpacing.toPx() } / textSize
+        }
+        val path = Path()
+        paint.getTextPath(t.layoutInput.text.text, 0, t.layoutInput.text.length, 0f, 0f, path)
+        val r = RectF().also { path.computeBounds(it, true) }
+        return Rect(b.left + r.left, b.top + t.firstBaseline + r.top, b.left + r.right, b.top + t.firstBaseline + r.bottom)
+    }
+
+    private fun capsCentre(tag: String): Float {
+        val (b, t) = layout(tag)
+        val px = with(rule.density) { t.layoutInput.style.fontSize.toPx() }
+        return b.top + t.firstBaseline - Tok.capHeight * px / 2
+    }
+
     private fun ink(tag: String, l: Float, t: Float, r: Float, b: Float): Rect {
         val box = bounds(tag)
         val k = box.width / Tok.glyphBox
@@ -100,7 +129,7 @@ class VolumeOverlayLayoutTest {
     }
 
     @Test
-    fun theOverlayDrawsTheDeviceSizesAtTodaysPlaces() {
+    fun theOverlayDrawsTheDeviceSizes() {
         start()
         for (at in listOf("411x960", "360x640", "sn411x438", "flip960x411")) {
             open(at)
@@ -119,13 +148,8 @@ class VolumeOverlayLayoutTest {
             for ((tag, sign) in listOf("overlay.prev.glyph" to -1, "overlay.next.glyph" to 1)) {
                 val g = bounds(tag)
                 assertEquals("$at $tag", Tok.vol_skip * u, g.width, 1f)
-                assertEquals("$at $tag", cx + sign * Tok.vol_skipX * u, g.center.x, 1f)
-                assertEquals("$at $tag", o.top + ui.overlayRingY * u, g.center.y, 1f)
             }
             for (tag in listOf("overlay.plus.glyph", "overlay.minus.glyph")) assertEquals("$at $tag", Tok.vol_plus * u, bounds(tag).width, 1f)
-            assertEquals(at, o.top + ui.volPlusY * u, bounds("overlay.plus.glyph").center.y, 1f)
-            assertEquals(at, o.top + ui.overlayMinusY * u, bounds("overlay.minus.glyph").center.y, 1f)
-            assertEquals(at, o.top + ui.overlayRingY * u, ring.center.y, 1f)
             for ((tag, want) in listOf("overlay.volume" to Tok.vol_label, "overlay.exit" to Tok.vol_exit)) {
                 val t = layout(tag).second
                 assertEquals("$at $tag", ui.fontPx(want), with(rule.density) { t.layoutInput.style.fontSize.toPx() }, 0.01f)
@@ -134,6 +158,92 @@ class VolumeOverlayLayoutTest {
             shell.overlay.hide()
             settle(1000)
         }
+    }
+
+    @Test
+    fun everyPartSitsAtItsDevicePlace() {
+        start()
+        for (at in listOf("411x960", "360x640", "sn411x438", "flip960x411", "cover474x419")) {
+            open(at)
+            val ui = ui()
+            val u = ui.u
+            val o = root()
+            val cx = o.left + ui.px(ui.w) / 2
+            fun y(v: Float) = o.top + v * ui.h / LayoutTok.canvasH * u
+            val plus = bounds("overlay.plus.glyph")
+            assertEquals("$at plus x", cx, plus.center.x, 1f)
+            assertEquals("$at plus y", y(LayoutTok.vol_plusY), plus.center.y, 1f)
+            assertEquals("$at minus", y(LayoutTok.vol_minusY), bounds("overlay.minus.glyph").center.y, 1f)
+            assertEquals("$at ring", y(LayoutTok.vol_ringY), bounds("overlay.ring.ring").center.y, 1f)
+            for ((tag, sign) in listOf("overlay.prev.glyph" to -1, "overlay.next.glyph" to 1)) {
+                val g = bounds(tag)
+                assertEquals("$at $tag x", cx + sign * Tok.vol_skipX * u, g.center.x, 1f)
+                assertEquals("$at $tag y", y(LayoutTok.vol_ringY), g.center.y, 1f)
+            }
+            val num = outlineInk("overlay.number")
+            assertEquals("$at number left ink", o.left + Tok.vol_numberX * u, num.left, 1f)
+            assertEquals("$at number caps", y(LayoutTok.vol_numberY), capsCentre("overlay.number"), 1f)
+            val n = layout("overlay.number").second
+            assertEquals("$at number size", ui.fontPx(Tok.vol_number), with(rule.density) { n.layoutInput.style.fontSize.toPx() }, 0.01f)
+            assertEquals("$at number weight", FontWeight.Light, n.layoutInput.style.fontWeight)
+            val (vb, vt) = layout("overlay.volume")
+            val vpx = with(rule.density) { vt.layoutInput.style.fontSize.toPx() }
+            assertEquals("$at volume caps top", y(LayoutTok.vol_labelY), vb.top + vt.firstBaseline - Tok.capHeight * vpx, 1f)
+            assertEquals("$at volume centre", cx, vb.left + (vt.getLineLeft(0) + vt.getLineRight(0)) / 2, 1f)
+            val exit = outlineInk("overlay.exit")
+            assertEquals("$at exit x", o.left + Tok.vol_exitX * u, exit.center.x, 1f)
+            assertEquals("$at exit caps", y(LayoutTok.vol_exitY), capsCentre("overlay.exit"), 1f)
+            val box = bounds("overlay.exit.hit")
+            assertEquals("$at exit box x", o.left + Tok.vol_exitX * u, box.center.x, 1f)
+            assertEquals("$at exit box y", y(LayoutTok.vol_exitY), box.center.y, 1f)
+            for (tag in listOf("overlay.number", "overlay.volume", "overlay.exit")) {
+                assertEquals("$at $tag alpha", Tok.overlayLit, layout(tag).second.layoutInput.style.color.alpha, 0.005f)
+            }
+            shell.overlay.hide()
+            settle(1000)
+        }
+    }
+
+    private fun numberPx() = with(rule.density) { layout("overlay.number").second.layoutInput.style.fontSize.toPx() }
+
+    @Test
+    fun aHundredOnThePhoneKeepsItsSizeBeforeThePlusInk() {
+        start()
+        c.device = c.device.withState(c.device.playback.state.copy(volumePct = 100), 0)
+        open("411x960")
+        val ui = ui()
+        val u = ui.u
+        val plusInk = bounds("overlay.plus.glyph").center.x - Tok.vol_plus * 3 / 8 * u
+        val num = outlineInk("overlay.number")
+        assertTrue("$num $plusInk", num.right <= plusInk + 0.5f)
+        assertEquals(root().left + Tok.vol_numberX * u, num.left, 1f)
+        assertEquals(ui.fontPx(Tok.vol_number), numberPx(), 0.01f)
+    }
+
+    @Test
+    fun aHundredOnTheDeviceCanvasShrinksToEndAtThePlusInk() {
+        c = SimControl("v1")
+        c.transport(Enums.TransportCmd.next)
+        c.device = c.device.withState(c.device.playback.state.copy(volumePct = 100), 0)
+        val overlay = Overlay()
+        val ui = Ui(1f, Tok.canvasW, LayoutTok.canvasH, Shape.SN)
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            val d = LocalDensity.current
+            Box(Modifier.requiredSize(with(d) { ui.px(ui.w).toDp() }, with(d) { ui.px(ui.h).toDp() })) {
+                CompositionLocalProvider(LocalUi provides ui) { VolumeOverlay(overlay, c.device, c) }
+            }
+        }
+        settle(1000)
+        overlay.show()
+        settle(400)
+        val u = ui.u
+        val plusInk = bounds("overlay.plus.glyph").center.x - Tok.vol_plus * 3 / 8 * u
+        val num = outlineInk("overlay.number")
+        assertTrue("$num $plusInk", num.right <= plusInk + 0.5f)
+        assertEquals(plusInk, num.right, 2f)
+        assertEquals(root().left + Tok.vol_numberX * u, num.left, 1f)
+        assertTrue(numberPx() < ui.fontPx(Tok.vol_number))
     }
 
     @Test

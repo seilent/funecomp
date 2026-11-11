@@ -30,9 +30,6 @@ private const val ALBUM_TITLE_BASELINE = 141f
 private const val DETAIL_LABEL_BASELINE = 200f
 private const val DETAIL_COLUMN = 200f
 private const val DETAIL_COLUMN_RIGHT = 216f
-private const val OVERLAY_NUMBER_BASELINE = 160f
-private const val OVERLAY_RING_Y = 216f
-private const val OVERLAY_MINUS_Y = 372f
 private const val HOME_PITCH_LANDSCAPE = 48f
 private const val HOME_MENU_X_LANDSCAPE = 240f
 private val NP_RING_X = listOf(TokBoard.v1.npRingCx0, TokBoard.v1.npRingCx1, TokBoard.v1.npRingCx2).map { it / Tok.canvasW }
@@ -245,19 +242,14 @@ val Ui.albumTextX: Float get() = when (shape) {
     Shape.L -> NP_COLUMN_RIGHT
 }
 
-val Ui.overlayAnchorScale: Float get() = when (shape) {
-    Shape.P -> 1f
-    Shape.SN, Shape.SW, Shape.L -> h / Tok.overlayAnchorH
-}
-val Ui.overlayRingY get() = OVERLAY_RING_Y * overlayAnchorScale
-val Ui.volPlusY get() = Tok.overlayPlusY * overlayAnchorScale
-val Ui.volExitX get() = Tok.edge
-val Ui.volExitY get() = Tok.edge
-val Ui.overlayMinusY get() = OVERLAY_MINUS_Y * overlayAnchorScale
-val Ui.overlayNumberBaseline: Float get() = when (shape) {
-    Shape.P, Shape.L -> OVERLAY_NUMBER_BASELINE
-    Shape.SN, Shape.SW -> OVERLAY_NUMBER_BASELINE * overlayAnchorScale
-}
+private fun Ui.volY(y: Float) = y * h / LayoutTok.canvasH
+val Ui.volPlusY get() = volY(LayoutTok.vol_plusY)
+val Ui.volNumberY get() = volY(LayoutTok.vol_numberY)
+val Ui.volRingY get() = volY(LayoutTok.vol_ringY)
+val Ui.volMinusY get() = volY(LayoutTok.vol_minusY)
+val Ui.volLabelY get() = volY(LayoutTok.vol_labelY)
+val Ui.volExitY get() = volY(LayoutTok.vol_exitY)
+val Ui.volTextY get() = volY(LayoutTok.vol_textY)
 
 val Ui.homePitch: Float get() = when (shape) {
     Shape.P, Shape.SN, Shape.SW -> Tok.homePitch

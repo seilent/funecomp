@@ -210,7 +210,7 @@ class NowPlayingTransportLookTest {
     }
 
     @Test
-    fun theOverlayControlsAreLitAndItsLabelsStayDim() {
+    fun theOverlayControlsAndItsLabelsAreLit() {
         start(listOf(Page.Home))
         for (s in SIZES) {
             size = s
@@ -220,7 +220,8 @@ class NowPlayingTransportLookTest {
             lit(s.name, "overlay.prev")
             lit(s.name, "overlay.ring")
             lit(s.name, "overlay.next")
-            assertEquals("${s.name} exit", DIM, luma(rule.onNode(hasText("exit", ignoreCase = true)).pixels().also { System.gc() }), TOLERANCE)
+            assertEquals("${s.name} exit", FULL, luma(rule.onNode(hasText("exit", ignoreCase = true)).pixels().also { System.gc() }), TOLERANCE)
+            assertEquals("${s.name} volume", FULL, luma(rule.onNode(hasText("volume", ignoreCase = true)).pixels().also { System.gc() }), TOLERANCE)
             settle(OVERLAY_GONE)
         }
     }
@@ -239,7 +240,6 @@ class NowPlayingTransportLookTest {
     private companion object {
         const val FULL = 255
         const val MID = 153
-        const val DIM = 102
         const val TOLERANCE = 3
         const val INK_LEFT = 5f
         const val GLOW_LIFT = 60

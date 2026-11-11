@@ -24,24 +24,27 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.FirstBaseline
-import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.Dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 private const val CONTROL_MAX = 255f
+private const val EXIT = "exit"
+private const val VOLUME = "volume"
 
 class Overlay {
     var shows by mutableIntStateOf(0)
@@ -100,29 +103,37 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     if (alpha.value <= 0f) return
 
     val s = device.playback.state
-    val edge = ui.px(Tok.edge)
     val cx = ui.px(ui.w) / 2
-    val ringY = ui.px(ui.overlayRingY)
-    val minusY = ui.px(ui.overlayMinusY)
+    val ringY = ui.px(ui.volRingY)
+    val minusY = ui.px(ui.volMinusY)
     val skip = ui.px(Tok.vol_skipX)
     val lit = white(Tok.overlayLit)
-    val textW = ui.px(ui.w) - 2 * edge
     val number = s.volumePct ?: ((s.volume ?: 0) * 100f / CONTROL_MAX).roundToInt()
     val hit = with(d) { ui.px(Tok.vol_hit).toDp() }
     val ringHit = with(d) { ui.px(Tok.vol_ring).toDp() }
     val exitHit = with(d) { ui.px(Tok.adjustExit).toDp() }
     val plusY = ui.px(ui.volPlusY)
-    val exitX = ui.px(ui.volExitX)
-    val exitY = ui.px(ui.volExitY)
-    val exitStyle = textStyle(Roles.volExit, lit)
-    val exitLine = rememberTextMeasurer().measure(shown("exit", Roles.volExit.case), exitStyle)
-    val exitCaps = with(d) { Offset(exitX + (exitLine.getLineLeft(0) + exitLine.getLineRight(0)) / 2, exitY + exitLine.firstBaseline - Tok.capHeight * exitStyle.fontSize.toPx() / 2) }
+    val resolver = LocalFontFamilyResolver.current
+    val exitCaps = Offset(ui.px(Tok.vol_exitX), ui.px(ui.volExitY))
+    val exitLeft = exitCaps.x - remember(ui, resolver) { ink(shown(EXIT, Roles.volExit.case), Roles.volExit, ui, resolver) }.centerX()
+    val exitBase = exitCaps.y + Tok.capHeight * ui.fontPx(Roles.volExit.size) / 2
+    val numText = (if (number < 10) "0" else "") + number
+    val numRole = remember(numText, ui, resolver) { numberRole(numText, ui.px(ui.w / 2 - Tok.vol_plus * 3 / 8 - Tok.vol_numberX), ui, resolver) }
+    val numLeft = ui.px(Tok.vol_numberX) - remember(numText, numRole, ui, resolver) { ink(numText, numRole, ui, resolver) }.left
+    val numBase = ui.px(ui.volNumberY) + Tok.capHeight * ui.fontPx(numRole.size) / 2
+    val labelPx = ui.fontPx(Roles.volLabel.size)
+    val labelBase = ui.px(ui.volLabelY) + Tok.capHeight * labelPx
+    val phone = s.source == Enums.Source.phone
+    val artist = if (phone) s.phoneName?.let { "from $it" } ?: "" else s.artist ?: ""
+    val title = s.title ?: ""
+    val lines = lineBases(artist, title, labelBase - Tok.capHeight * labelPx / 2, labelBase + remember(ui, resolver) { ink(shown(VOLUME, Roles.volLabel.case), Roles.volLabel, ui, resolver) }.bottom)
 
     val prevPress = rememberPress()
     val ringPress = rememberPress()
     val nextPress = rememberPress()
     val plusPress = rememberPress()
     val minusPress = rememberPress()
+    val exitPress = rememberPress()
     fun pressLit(p: PressState) = if (p.held) 1f else p.lit
     val skipSide = ui.px(Tok.vol_skip).roundToInt()
     val plusSide = ui.px(Tok.vol_plus).roundToInt()
@@ -152,20 +163,12 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
             if (ringAlpha > 0f) drawCircle(lit, (ringSide - 2 * stroke) / 2, Offset(cx, ringY), alpha = Tok.vol_discAlpha * ringAlpha)
         }
         Glyph(GlyphName.PLUS, Tok.vol_plus, lit, Modifier.at(cx, plusY, 0.5f, 0.5f).testTag("overlay.plus.glyph"))
-        RoleText(
-            number.toString(),
-            Roles.overlayNumber,
-            Modifier.atBaseline(edge, ui.px(ui.overlayNumberBaseline)).testTag("overlay.number"),
-            alpha = Tok.overlayLit,
-        )
+        RoleText(numText, numRole, Modifier.atBaseline(numLeft, numBase).testTag("overlay.number"), color = lit)
         Glyph(GlyphName.SKIP_PREVIOUS, Tok.vol_skip, white(Tok.alpha_full), Modifier.at(cx - skip, ringY, 0.5f, 0.5f).testTag("overlay.prev.glyph"))
         Ring(Tok.vol_ring, if (s.playing == true) GlyphName.PAUSE_WIDE else GlyphName.PLAY, Look.Touch, Modifier.at(cx, ringY, 0.5f, 0.5f), tag = "overlay.ring", stroke = Tok.vol_ringStroke, glyphSize = Tok.vol_pause)
         Glyph(GlyphName.SKIP_NEXT, Tok.vol_skip, white(Tok.alpha_full), Modifier.at(cx + skip, ringY, 0.5f, 0.5f).testTag("overlay.next.glyph"))
-        Box(Modifier.fillMaxSize().alpha(Tok.overlayDim)) {
-            RoleText("exit", Roles.volExit, Modifier.at(exitX, exitY).testTag("overlay.exit"), alpha = Tok.alpha_full)
-            RoleText("volume", Roles.volLabel, Modifier.at(cx, minusY + ui.px(Tok.overlayGlyph) / 2, ax = 0.5f).testTag("overlay.volume"), alpha = Tok.alpha_full)
-            Lines(s.artist ?: "", s.title ?: "", textW)
-        }
+        RoleText(VOLUME, Roles.volLabel, Modifier.atBaseline(cx, labelBase, ax = 0.5f).testTag("overlay.volume"), color = lit)
+        Lines(artist, title, lines)
         Glyph(GlyphName.MINUS, Tok.vol_plus, lit, Modifier.at(cx, minusY, 0.5f, 0.5f).testTag("overlay.minus.glyph"))
 
         if (live && overlay.until - Tok.motion_volumeFade.toLong() > SystemClock.uptimeMillis()) Box(
@@ -188,6 +191,8 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
                 }
             },
         )
+        Box(Modifier.at(exitCaps.x, exitCaps.y, 0.5f, 0.5f).size(exitHit).testTag("overlay.exit.hit").press({ close() }, press = exitPress))
+        RoleText(EXIT, Roles.volExit, Modifier.atBaseline(exitLeft, exitBase).testTag("overlay.exit"), color = lit, glow = exitPress.word)
         val touch = remember { MutableInteractionSource() }
         fun target(x: Float, y: Float, tag: String, box: Dp = hit, p: PressState? = null, act: () -> Unit): Modifier {
             val at = Modifier.at(x, y, 0.5f, 0.5f).size(box).testTag(tag)
@@ -202,29 +207,44 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
         Box(target(cx - skip, ringY, "overlay.prev", p = prevPress) { actions.transport(Enums.TransportCmd.prev) })
         Box(target(cx, ringY, "overlay.ring", ringHit, ringPress) { actions.transport(Enums.TransportCmd.toggle) })
         Box(target(cx + skip, ringY, "overlay.next", p = nextPress) { actions.transport(Enums.TransportCmd.next) })
-        Box(Modifier.at(exitCaps.x, exitCaps.y, 0.5f, 0.5f).size(exitHit).testTag("overlay.exit.hit").clickable(touch, null) { close() })
     }
 }
 
+private class LineBases(val artist: Float, val title: Float)
+
+private fun numberRole(text: String, room: Float, ui: Ui, resolver: FontFamily.Resolver): Role {
+    val full = Roles.volNumber
+    fun inkW(px: Float) = ink(text, full.copy(size = px / ui.u), ui, resolver).width()
+    val whole = ui.fontPx(full.size)
+    val w = inkW(whole)
+    if (w <= room) return full
+    var px = (whole * room / w).toInt().toFloat()
+    while (px > 1f && inkW(px) > room) px -= 1f
+    return full.copy(size = px / ui.u)
+}
+
 @Composable
-private fun Lines(artist: String, title: String, width: Float) {
+private fun lineBases(artist: String, title: String, labelCaps: Float, labelInk: Float): LineBases {
     val ui = LocalUi.current
-    Layout(
-        content = {
-            RoleText(artist, Roles.toastArtist, Modifier.testTag("overlay.artist"), alpha = Tok.type_toastArtist_alpha)
-            RoleText(title, Roles.toastTitle, Modifier.testTag("overlay.title"), alpha = Tok.type_toastTitle_alpha)
-        },
-        modifier = Modifier.fillMaxSize(),
-    ) { m, c ->
-        val limit = Constraints(maxWidth = width.roundToInt().coerceAtLeast(0))
-        val a = m[0].measure(limit)
-        val t = m[1].measure(limit)
-        layout(c.maxWidth, c.maxHeight) {
-            val edge = ui.px(Tok.edge).roundToInt()
-            val titleY = c.maxHeight - ui.px(Tok.overlayBottomMargin).roundToInt() - t.height
-            val titleBaseline = titleY + t[FirstBaseline]
-            t.place(edge, titleY)
-            a.place(edge, titleBaseline - ui.px(Tok.overlayTextPitch).roundToInt() - a[FirstBaseline])
-        }
+    val resolver = LocalFontFamilyResolver.current
+    val a = remember(artist, ui, resolver) { ink(shown(artist, Roles.volArtist.case), Roles.volArtist, ui, resolver) }
+    val t = remember(title, ui, resolver) { ink(shown(title, Roles.volTitle.case), Roles.volTitle, ui, resolver) }
+    val top = max(ui.px(ui.volTextY), labelCaps + ui.px(LayoutTok.vol_textGap))
+    val artistBase = top + Tok.capHeight * ui.fontPx(Roles.volArtist.size) / 2
+    val titleBase = artistBase + ui.px(LayoutTok.vol_textPitch)
+    val need = if (title.isEmpty()) 0f else max(0f, titleBase + t.bottom - ui.px(ui.h))
+    val room = max(0f, artistBase + (if (artist.isEmpty()) 0f else a.top) - labelInk)
+    val lift = min(need, room)
+    return LineBases(artistBase - lift, titleBase - lift)
+}
+
+@Composable
+private fun Lines(artist: String, title: String, at: LineBases) {
+    val ui = LocalUi.current
+    val x = ui.px(Tok.vol_textX)
+    val right = ui.px(ui.w - Tok.edge)
+    Box(Modifier.at(x, 0f).size((right - x).coerceAtLeast(0f).dp(), ui.px(ui.h).dp()).clipToBounds()) {
+        RoleText(artist, Roles.volArtist, Modifier.atBaseline(0f, at.artist).testTag("overlay.artist"), color = white(Tok.overlayLit))
+        RoleText(title, Roles.volTitle, Modifier.atBaseline(0f, at.title).testTag("overlay.title"), color = white(Tok.overlayLit))
     }
 }

@@ -267,7 +267,7 @@ fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit, land: I
     }
 }
 
-private fun ink(text: String, role: Role, ui: Ui, resolver: FontFamily.Resolver): RectF {
+fun ink(text: String, role: Role, ui: Ui, resolver: FontFamily.Resolver): RectF {
     val size = ui.fontPx(role.size)
     val paint = Paint().apply {
         typeface = resolver.resolve(Selawik, role.weight).value as Typeface

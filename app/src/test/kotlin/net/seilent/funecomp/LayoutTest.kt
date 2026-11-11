@@ -61,9 +61,6 @@ import net.seilent.funecomp.ui.npSeekBottom
 import net.seilent.funecomp.ui.npTextX
 import net.seilent.funecomp.ui.npTitleBaseline
 import net.seilent.funecomp.ui.npTransportX
-import net.seilent.funecomp.ui.overlayMinusY
-import net.seilent.funecomp.ui.overlayNumberBaseline
-import net.seilent.funecomp.ui.overlayRingY
 import net.seilent.funecomp.ui.pivotBottom
 import net.seilent.funecomp.ui.pivotTop
 import net.seilent.funecomp.ui.step
@@ -300,7 +297,7 @@ class LayoutTest {
         npSeekBottom, npTitleBaseline, npNextBaseline, npRingY, npLyricBottom, npPlayRing, npRowHit,
         npRingCenter(0), npRingCenter(1), npRingCenter(2), detailNameBaseline, detailRingTop, detailLabelBaseline,
         detailRowsTop, detailNameRight, detailListX, albumArtistBaseline, albumTitleBaseline, albumArtTop, albumRowsTop,
-        albumRowsX, albumTextX, overlayRingY, overlayMinusY, overlayNumberBaseline, homePitch, homeMenuX,
+        albumRowsX, albumTextX, homePitch, homeMenuX,
     )
 
     @Test
@@ -353,7 +350,6 @@ class LayoutTest {
             assertEquals(n, ui.npArtTop + ui.npArt, ui.npProgressY, 1e-3f)
             assertEquals(n, 14.3f, ui.npTextX, 1e-3f)
             assertFalse(n, ui.npMarkCorner)
-            assertEquals(n, 160f * r.h / 480f, ui.overlayNumberBaseline, 1e-3f)
             assertEquals(n, 0f, ui.homeMenuX, 1e-3f)
             assertEquals(n, 55f, ui.homePitch, 1e-3f)
             assertEquals(n, 320f * 31.9f / 240f, ui.npRingCenter(0), 1e-3f)
@@ -371,8 +367,6 @@ class LayoutTest {
         assertEquals(212f, tall.detailRowsTop, 1e-3f)
         assertEquals(155f, tall.albumArtTop, 1e-3f)
         assertEquals(283f, tall.albumRowsTop, 1e-3f)
-        assertEquals(216f, tall.overlayRingY, 1e-3f)
-        assertEquals(372f, tall.overlayMinusY, 1e-3f)
         val mid = Ui(3f, 320f, 465f, Shape.SN)
         assertEquals(66.3f, mid.pivotTop, 0.05f)
         assertEquals(145.51f, mid.npArtTop, 1e-3f)
@@ -392,10 +386,6 @@ class LayoutTest {
             assertEquals(n, 124f, ui.albumArtTop, 1e-3f)
             assertEquals(n, 252f, ui.albumRowsTop, 1e-3f)
         }
-        val short = Ui(3f, 320f, 320f, Shape.SN)
-        assertEquals(144f, short.overlayRingY, 1e-3f)
-        assertEquals(248f, short.overlayMinusY, 1e-3f)
-        assertEquals(106.667f, short.overlayNumberBaseline, 1e-3f)
     }
 
     @Test
@@ -440,9 +430,6 @@ class LayoutTest {
             assertEquals(n, 252f, ui.albumRowsTop, 1e-3f)
             assertEquals(n, 0f, ui.albumRowsX, 1e-3f)
             assertEquals(n, 16f, ui.albumTextX, 1e-3f)
-            assertEquals(n, 144f, ui.overlayRingY, 1e-3f)
-            assertEquals(n, 248f, ui.overlayMinusY, 1e-3f)
-            assertEquals(n, 106.667f, ui.overlayNumberBaseline, 1e-3f)
         }
         assertEquals(5, JumpLayout.of(Ui(3f, 354.38f, 320f, Shape.SW)).cols)
         assertEquals(6, JumpLayout.of(Ui(3f, 354.58f, 320f, Shape.SW)).cols)
