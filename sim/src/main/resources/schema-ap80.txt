@@ -28,7 +28,7 @@ display	batteryPercent	toggle	BATTERY PERCENT	off,on	OFF,ON	-	-	-
 display	statusVolume	toggle	STATUS VOLUME	off,on	OFF,ON	-	-	-
 screens	saverMode	choice	SAVER	off,on,charge	OFF,ON,CHARGE	-	-	-
 screens	screenLock	toggle	LOCKSCREEN	off,on	OFF,ON	-	-	-
-screens	saverLyricsScene	toggle	LYRICS SCENE	off,on	OFF,ON	-	-	-
+screens	saverBlur	toggle	SAVER BLUR	off,on	OFF,ON	-	-	-
 screens	quickplay	toggle	QUICKPLAY	off,on	OFF,ON	-	-	-
 screens	artistPhoto	toggle	ARTIST PHOTO	off,on	OFF,ON	-	-	-
 screens	navBar	toggle	NAV BAR	off,on	OFF,ON	-	-	-

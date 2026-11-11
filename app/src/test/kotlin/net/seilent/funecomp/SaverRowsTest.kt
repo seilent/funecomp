@@ -73,12 +73,13 @@ class SaverRowsTest {
     private fun screens() = c.device.schema.rows.filter { it.pivot == "screens" }.map { it.key }
 
     @Test
-    fun saverOffKeepsLockscreenAndLyricsScene() {
+    fun saverOffKeepsLockscreenAndSaverBlur() {
         start()
         rule.walkPivots(c.device.schema.rows, "screens") { settle(1000) }
         shows("set.saverMode", "ON")
         shows("set.screenLock", "OFF")
-        shows("set.saverLyricsScene", "OFF")
+        shows("set.saverBlur", "OFF")
+        rule.onNodeWithTag("set.saverLyricsScene").assertDoesNotExist()
         val before = screens()
         tap("set.saverMode")
         assertEquals("saver", shell.sheet.title)
@@ -106,7 +107,7 @@ class SaverRowsTest {
     }
 
     @Test
-    fun lockscreenAndLyricsSceneSheets() {
+    fun lockscreenAndSaverBlurSheets() {
         start()
         rule.walkPivots(c.device.schema.rows, "screens") { settle(1000) }
         tap("set.screenLock")
@@ -118,15 +119,15 @@ class SaverRowsTest {
         settle(1000)
         assertEquals("on", c.device.settings.values["screenLock"])
         shows("set.screenLock", "ON")
-        tap("set.saverLyricsScene")
-        assertEquals("lyrics scene", shell.sheet.title)
+        tap("set.saverBlur")
+        assertEquals("saver blur", shell.sheet.title)
         assertEquals(listOf("OFF", "ON"), shell.sheet.items)
         assertEquals(0, shell.sheet.focus)
         pick(1)
         c.tick()
         settle(1000)
-        assertEquals("on", c.device.settings.values["saverLyricsScene"])
-        shows("set.saverLyricsScene", "ON")
+        assertEquals("on", c.device.settings.values["saverBlur"])
+        shows("set.saverBlur", "ON")
         assertTrue(c.failed.isEmpty())
     }
 
