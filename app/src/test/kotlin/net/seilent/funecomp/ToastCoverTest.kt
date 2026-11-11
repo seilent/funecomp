@@ -69,7 +69,7 @@ class ToastCoverTest {
         settle(Tok.motion_volumeShow.toLong())
         assertTrue(shown("overlay"))
         shell.toast.show("artist", "title")
-        settle(Tok.motion_toastIn.toLong() + 100)
+        settle(Tok.motion_toastRise.toLong() + 100)
         assertTrue(!shown("toast"))
         shell.overlay.hide()
         settle(Tok.motion_volumeFade.toLong() + 100)

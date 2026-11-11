@@ -550,7 +550,7 @@ fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolea
         }
         leaving = false
         risen = cover
-        progress.animateTo(1f, tween(Tok.motion_toastIn.toInt(), easing = LinearEasing))
+        progress.animateTo(1f, tween(Tok.motion_toastRise.toInt(), easing = LinearEasing))
         if (held != null) return@LaunchedEffect
         delay(Tok.motion_toastHold.toLong())
         leaving = true
@@ -560,7 +560,7 @@ fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolea
     val e = when {
         leaving -> 1f - ExpOut6.transform(1f - progress.value)
         risen -> 1f
-        else -> ExpOut6.transform(progress.value)
+        else -> progress.value
     }
     val travel = ui.px(Tok.motion_toastTravel)
     val edge = ui.px(Tok.edge)
