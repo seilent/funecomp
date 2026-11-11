@@ -37,6 +37,7 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.Roles
 import net.seilent.funecomp.ui.Shell
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -105,10 +106,7 @@ class EqStageTest {
 
     private fun tags(n: Node) = n.entries.map { it.tag }.toSet()
 
-    private fun barOn(tag: String): Boolean {
-        val bar = rule.onAllNodes(hasTestTag("bar") and hasAnyAncestor(hasTestTag("hub.eq"))).fetchSemanticsNodes().single().boundsInRoot.top
-        return abs(bar - rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top) < 1f
-    }
+    private fun focusedOn(tag: String) = abs(rule.titleAlpha(tag) - Roles.pageRowTitle.alpha) < 0.005f
 
     private fun noStageBody(n: Node) {
         assertNull(n.str(Tags.EqPreset.slot))
@@ -360,7 +358,7 @@ class EqStageTest {
         assertNull(save.node(Tags.EqPreset.ints))
         assertTrue(shows("eq.preset", "Preset 1"))
         assertTrue(exists("eq.delete"))
-        assertTrue(barOn("eq.delete"))
+        assertTrue(focusedOn("eq.delete"))
         tap("eq.rename")
         enter("Warm")
         val rename = c.presets.last()
@@ -378,7 +376,7 @@ class EqStageTest {
         assertEquals(Enums.EqMode.graphic, remove.int(Tags.EqPreset.mode))
         noStageBody(remove)
         assertTrue(shows("eq.preset", "off"))
-        assertTrue(barOn("eq.preset"))
+        assertTrue(focusedOn("eq.preset"))
     }
 
     @Test

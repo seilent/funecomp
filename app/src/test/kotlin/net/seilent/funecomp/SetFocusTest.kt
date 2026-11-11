@@ -6,9 +6,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.getOrNull
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.click
-import androidx.compose.ui.test.hasAnyAncestor
-import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
@@ -25,6 +26,7 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.Roles
 import net.seilent.funecomp.ui.Shell
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -64,11 +66,6 @@ class SetFocusTest {
         rule.waitForIdle()
     }
 
-    private fun frames(n: Int): List<Float> = (1..n).map {
-        frame()
-        barTop()
-    }
-
     private fun frame() {
         rule.mainClock.advanceTimeByFrame()
         rule.waitForIdle()
@@ -101,36 +98,42 @@ class SetFocusTest {
 
     private fun bounds(tag: String): Rect = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
 
-    private fun barTop(): Float = rule.onAllNodes(hasTestTag("bar") and hasAnyAncestor(hasTestTag("hub.settings"))).fetchSemanticsNodes().single().boundsInRoot.top
-
     private fun exists(tag: String) = rule.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty()
 
-    private fun barOn(key: String) = abs(barTop() - bounds("set.$key").top) < 1f
+    private fun titled() = rule.onAllNodes(SemanticsMatcher("set row") { n -> n.config.getOrNull(SemanticsProperties.TestTag).let { it != null && it.startsWith("set.") && it != "set.confirm" } }, useUnmergedTree = true)
+        .fetchSemanticsNodes().map { it.config[SemanticsProperties.TestTag] }
+
+    private fun focused(key: String): Boolean {
+        val tags = titled()
+        return "set.$key" in tags && tags.all { abs(rule.titleAlpha(it) - if (it == "set.$key") Roles.pageRowTitle.alpha else Roles.pageRowTitle.dim) < 0.005f }
+    }
 
     @Test
-    fun aRowInsertedAboveKeepsFocusAndTheBarJumps() {
+    fun aRowInsertedAboveKeepsFocusWithNoFade() {
         val c = start()
         walk("display")
         focusOn("batteryPercent")
-        assertTrue(barOn("batteryPercent"))
+        assertTrue(focused("batteryPercent"))
         val before = bounds("set.batteryPercent").top
         insertBefore(c, "clock", row("navOrder", "display"), row("navButton", "display"))
-        val from = barTop()
-        val seen = frames(8)
-        val to = bounds("set.batteryPercent").top
-        assertTrue(to > before)
-        assertTrue(seen.all { abs(it - from) < 1f || abs(it - to) < 1f })
-        assertTrue(barOn("batteryPercent"))
+        repeat(8) {
+            frame()
+            assertEquals(Roles.pageRowTitle.alpha, rule.titleAlpha("set.batteryPercent"), 0.005f)
+        }
+        assertTrue(bounds("set.batteryPercent").top > before)
+        assertTrue(focused("batteryPercent"))
         settle(600)
-        assertTrue(barOn("batteryPercent"))
-        val start = barTop()
+        assertTrue(focused("batteryPercent"))
         rule.onNodeWithTag("set.clock").performClick()
-        val clock = bounds("set.clock").top
-        assertTrue(frames(4).any { abs(it - start) > 1f && abs(it - clock) > 1f })
+        val seen = (1..4).map {
+            frame()
+            rule.titleAlpha("set.clock")
+        }
+        assertTrue(seen.any { it > Roles.pageRowTitle.dim + 0.01f && it < Roles.pageRowTitle.alpha - 0.01f })
         settle(600)
         if (shell.sheet.shown) shell.sheet.close()
         settle(600)
-        assertTrue(barOn("clock"))
+        assertTrue(focused("clock"))
     }
 
     @Test
@@ -140,10 +143,10 @@ class SetFocusTest {
         focusOn("batteryPercent")
         insertBefore(c, "clock", row("navOrder", "display"), row("navButton", "display"))
         settle(600)
-        assertTrue(barOn("batteryPercent"))
+        assertTrue(focused("batteryPercent"))
         drop(c, "navOrder", "navButton")
         settle(600)
-        assertTrue(barOn("batteryPercent"))
+        assertTrue(focused("batteryPercent"))
     }
 
     @Test
@@ -153,10 +156,10 @@ class SetFocusTest {
         focusOn("clock")
         drop(c, "clock")
         settle(600)
-        assertTrue(barOn("batteryPercent"))
+        assertTrue(focused("batteryPercent"))
         insertBefore(c, "brightness", row("navOrder", "display"))
         settle(600)
-        assertTrue(barOn("batteryPercent"))
+        assertTrue(focused("batteryPercent"))
     }
 
     @Test
@@ -166,7 +169,7 @@ class SetFocusTest {
         focusOn("inlineRemote")
         drop(c, "inlineRemote")
         settle(600)
-        assertTrue(barOn("screenOffKeys"))
+        assertTrue(focused("screenOffKeys"))
     }
 
     @Test
@@ -206,15 +209,15 @@ class SetFocusTest {
         focusOn("powerOnScale")
         walk("display")
         focusOn("scale")
-        assertTrue(barOn("scale"))
+        assertTrue(focused("scale"))
         repeat(3) {
             rule.onNodeWithTag("hub.settings").performTouchInput { swipeRight() }
             settle(1000)
         }
-        assertTrue(barOn("powerOnScale"))
+        assertTrue(focused("powerOnScale"))
         assertEquals(top, bounds("set.outputPriority").top, 0.5f)
         walk("display")
-        assertTrue(barOn("scale"))
+        assertTrue(focused("scale"))
     }
 
     @Test
@@ -249,7 +252,7 @@ class SetFocusTest {
         assertTrue(exists("set.artistPhoto"))
         insertBefore(c, "saverMode", row("navOrder", "screens"))
         settle(600)
-        assertTrue(barOn("artistPhoto"))
+        assertTrue(focused("artistPhoto"))
     }
 
     @Test
@@ -291,18 +294,13 @@ class SetFocusTest {
     }
 
     @Test
-    fun aFallbackAfterARebuildJumps() {
+    fun twoLastRowsRemovedMoveTheFocusToTheNewLast() {
         val c = start()
         walk("power")
         focusOn("inlineRemote")
-        val from = barTop()
         drop(c, "inlineRemote", "screenOffKeys")
-        val seen = frames(8)
         settle(600)
-        assertTrue(barOn("lockKnob"))
-        val to = barTop()
-        assertTrue(abs(to - from) > 1f)
-        assertTrue(seen.all { abs(it - from) < 1f || abs(it - to) < 1f })
+        assertTrue(focused("lockKnob"))
     }
 
     @Test

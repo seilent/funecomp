@@ -3,10 +3,8 @@ package net.seilent.funecomp.ui
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Easing
 import net.seilent.funecomp.proto.gen.Tok
-import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.pow
-import kotlin.math.sin
 
 private const val BACK_OVERSHOOT = 1.70158f
 private const val EXP_SIX = 6f
@@ -29,5 +27,3 @@ val Pop = Easing { t -> if (t >= 1f) 1f else 1f - 2f.pow(-10f * t) }
 val EaseIn = Easing { t -> t * t }
 
 val EaseOut = Easing { t -> t * (2f - t) }
-
-val Sine = Easing { t -> sin(t * PI.toFloat() / 2f) }

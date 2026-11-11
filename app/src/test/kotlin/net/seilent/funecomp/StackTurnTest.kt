@@ -24,6 +24,7 @@ import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Decel
 import net.seilent.funecomp.ui.Held
+import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.LocalTurnProbe
 import net.seilent.funecomp.ui.LocalUptime
@@ -107,7 +108,7 @@ class StackTurnTest {
     private fun text(tag: String): Rect {
         val home = bounds("home")!!
         val r = bounds(tag)!!
-        return r.copy(left = r.left + Tok.focus_barOffset * Ui.of(home.width, home.height).u)
+        return r.copy(left = r.left + (LayoutTok.homeTextX - LayoutTok.homeBarX) * Ui.of(home.width, home.height).u)
     }
 
     private fun crop(img: BufferedImage, r: Rect): List<Int> {

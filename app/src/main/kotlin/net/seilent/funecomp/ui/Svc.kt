@@ -277,7 +277,7 @@ fun StreamingRows(ctx: Ctx, flow: KeysFlow, held: Set<String> = emptySet()) {
     val all = services(ctx.device)
     var focus by rememberSaveable { mutableStateOf(all.firstOrNull()?.id.orEmpty()) }
     val at = all.indexOfFirst { it.id == focus }.coerceAtLeast(0)
-    Rows(ui.contentTop, list, focus = at) {
+    Rows(ui.contentTop, list) {
         itemsIndexed(all, key = { _, s -> "svc ${s.id}" }) { i, s ->
             val name = s.name?.takeIf { it.isNotBlank() } ?: s.id.orEmpty()
             SettingsRow(name, accountValue(ctx.device, s.id.orEmpty()), Modifier.enter { i }.testTag("svc.${s.id}"), focused = at == i) {

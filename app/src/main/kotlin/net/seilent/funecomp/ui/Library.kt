@@ -122,7 +122,7 @@ fun Pane(
     val ui = LocalUi.current
     val list = libList(ctx.device, ctx.control, view, parent)
     var focus by rememberSaveable(view, parent) { mutableIntStateOf(0) }
-    Rows(top ?: ui.contentTop, state, x, focus = focus, show = view to parent, head = head, lead = lead) {
+    Rows(top ?: ui.contentTop, state, x, show = view to parent, head = head, lead = lead) {
         repeat(head) { item { Spacer(Modifier.size((ui.px(ui.w) - ui.px(x)).dp(), ui.px(lead).dp())) } }
         val n = (list?.total ?: 0L).toInt()
         items(n) { i ->
@@ -282,7 +282,7 @@ fun PlaylistRows(ctx: Ctx, top: Float? = null) {
     var focus by rememberSaveable { mutableIntStateOf(0) }
     val state = rememberLazyListState()
     val slots = ctx.device.playback.state.slots ?: 0L
-    Rows(top ?: ui.contentTop, state, focus = focus) {
+    Rows(top ?: ui.contentTop, state) {
         item {
             ListRow("now playing", Modifier.enter { 0 }.testTag("row.nowplaying"), songs(slots), bold = true, focused = focus == 0) {
                 focus = 0
@@ -399,7 +399,7 @@ fun Queue(ctx: Ctx) {
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (current - visible + 1).coerceAtLeast(0))
     val count = "${if (total > 0 && current >= 0) current + 1 else 0} of $total"
     HubPage("queue", { ctx.nav.pop() }, count = count) {
-        Rows(ui.contentTop, state, focus = focus) {
+        Rows(ui.contentTop, state) {
             items(total) { i ->
                 val item = q.items[i.toLong()]
                 LaunchedEffect(item == null, i, epoch) {

@@ -38,7 +38,7 @@ fun AppsPage(ctx: Ctx, view: AppsView) {
     }
     val at = items.indexOfFirst { it.tag == focus }.coerceAtLeast(0)
     HubPage("apps", { ctx.nav.pop() }) {
-        Rows(ui.contentTop, list, focus = at) {
+        Rows(ui.contentTop, list) {
             itemsIndexed(items, key = { _, l -> l.tag }) { i, l ->
                 SettingsRow(l.title, l.value, Modifier.enter { i }.testTag("apps.${l.tag}"), focused = at == i, info = l.info) {
                     focus = l.tag

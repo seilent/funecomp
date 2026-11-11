@@ -19,6 +19,7 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.Roles
 import net.seilent.funecomp.ui.Shell
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -47,7 +48,7 @@ class MinuteSchemaTest {
 
     private fun top(tag: String) = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top
 
-    private fun barTop() = rule.onAllNodes(hasTestTag("bar") and hasAnyAncestor(hasTestTag("hub.settings"))).fetchSemanticsNodes().single().boundsInRoot.top
+    private fun scrobbleFocused() = assertEquals(Roles.pageRowTitle.alpha, rule.titleAlpha("set.scrobble"), 0.005f)
 
     private fun minutes(c: SimControl, start: () -> Unit, check: (Int) -> Unit) {
         c.draft(Enums.DraftKind.clock, unixS = 1767225600, zoneS = 0) { _, _ -> }
@@ -67,8 +68,7 @@ class MinuteSchemaTest {
         val title = shell.sheet.title
         val focus = shell.sheet.focus
         val row = top("set.scrobble")
-        val bar = barTop()
-        assertEquals(row, bar, 1f)
+        scrobbleFocused()
         val scrolled = top("set.dateTime")
         val strip = rule.onNodeWithTag("pivot.system").fetchSemanticsNode().boundsInRoot
         start()
@@ -78,7 +78,7 @@ class MinuteSchemaTest {
             repeat(8) {
                 rule.mainClock.advanceTimeByFrame()
                 rule.waitForIdle()
-                assertEquals(bar, barTop(), 0.5f)
+                scrobbleFocused()
             }
             settle(600)
             check(m)
@@ -86,7 +86,7 @@ class MinuteSchemaTest {
             assertTrue(shell.sheet.shown)
             assertEquals(title, shell.sheet.title)
             assertEquals(row, top("set.scrobble"), 0.5f)
-            assertEquals(bar, barTop(), 0.5f)
+            scrobbleFocused()
             assertEquals(scrolled, top("set.dateTime"), 0.5f)
             assertEquals(strip, rule.onNodeWithTag("pivot.system").fetchSemanticsNode().boundsInRoot)
             assertEquals(focus, shell.sheet.focus)

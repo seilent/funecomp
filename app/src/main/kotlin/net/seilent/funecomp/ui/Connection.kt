@@ -142,7 +142,7 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
     }
     val at = lines.indexOfFirst { it.tag == focus }.coerceAtLeast(0)
     HubPage("connection", { ctx.nav.pop() }) {
-        Rows(ui.contentTop, scroll, focus = at) {
+        Rows(ui.contentTop, scroll) {
             itemsIndexed(lines, key = { _, l -> l.tag }) { i, l ->
                 SettingsRow(l.title, l.value, Modifier.enter { i }.testTag("conn.${l.tag}"), focused = at == i, info = l.info) {
                     focus = l.tag
@@ -187,7 +187,7 @@ private fun ArtList(ctx: Ctx, title: String, keys: List<String>, empty: String, 
         if (keys.isEmpty()) {
             StateLine(empty, "art.$title.empty")
         } else {
-            Rows(ui.contentTop, focus = at) {
+            Rows(ui.contentTop) {
                 itemsIndexed(keys, key = { _, k -> k }) { i, k ->
                     row(i, Modifier.enter { i }, at == i) { focus = k }
                 }

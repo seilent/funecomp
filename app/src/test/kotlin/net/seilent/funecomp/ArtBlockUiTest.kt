@@ -1,7 +1,5 @@
 package net.seilent.funecomp
 
-import android.graphics.BitmapFactory
-import android.graphics.Color
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.getValue
@@ -18,9 +16,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.unit.dp
-import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.artist.ArtBlocks
 import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.artist.Credit
@@ -36,9 +32,9 @@ import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
-import net.seilent.funecomp.ui.Ui
-import net.seilent.funecomp.proto.gen.Tok
-import kotlin.math.roundToInt
+import net.seilent.funecomp.ui.Role
+import net.seilent.funecomp.ui.Roles
+import kotlin.math.abs
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -236,8 +232,8 @@ class ArtBlockUiTest {
         tap("sheet.item.0")
         assertEquals(listOf("unblock Muto"), calls)
         assertEquals(Page.ArtBlocked, shell.nav.top)
-        assertTrue(barOn("art.blocked.1"))
-        assertFalse(barOn("art.blocked.0"))
+        assertTrue(focusedOn("art.blocked.1", Roles.listPrimary))
+        assertFalse(focusedOn("art.blocked.0", Roles.listPrimary))
     }
 
     @Test
@@ -250,8 +246,8 @@ class ArtBlockUiTest {
         shownBlocked = shownBlocked.drop(1)
         settle(1000)
         rule.onNode(hasText("Radiohead") and hasAnyAncestor(hasTestTag("art.blocked.1"))).assertExists()
-        assertTrue(barOn("art.blocked.1"))
-        assertFalse(barOn("art.blocked.2"))
+        assertTrue(focusedOn("art.blocked.1", Roles.listPrimary))
+        assertFalse(focusedOn("art.blocked.2", Roles.listPrimary))
     }
 
     @Test
@@ -268,20 +264,11 @@ class ArtBlockUiTest {
         assertEquals(Page.ArtBlocked, shell.nav.top)
         shell.nav.pop()
         settle(1000)
-        assertTrue(barOn("art.blocked"))
-        assertFalse(barOn("art.credits"))
+        assertTrue(focusedOn("art.blocked"))
+        assertFalse(focusedOn("art.credits"))
     }
 
-    private fun barOn(tag: String): Boolean {
-        val file = File.createTempFile("bar", ".png")
-        rule.onRoot().captureRoboImage(file.path)
-        val img = BitmapFactory.decodeFile(file.path)
-        file.delete()
-        val ui = Ui.of(img.width.toFloat(), img.height.toFloat())
-        val b = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
-        val x = ui.px(Tok.hubEdge - Tok.focus_barOffset + Tok.focus_barWidth / 2).roundToInt()
-        return Color.red(img.getPixel(x, b.center.y.roundToInt())) > 128
-    }
+    private fun focusedOn(tag: String, role: Role = Roles.pageRowTitle) = abs(rule.titleAlpha(tag) - role.alpha) < 0.005f
 
     @Test
     fun theSourceSheetMovesASource() {
@@ -296,7 +283,7 @@ class ArtBlockUiTest {
         assertEquals(1, shell.sheet.focus)
         tap("sheet.item.2")
         assertEquals(listOf("theaudiodb", "commons", "fanarttv", "discogs", "deezer", "youtube"), sources.order)
-        assertTrue(barOn("art.src.deezer"))
-        assertFalse(barOn("art.src.youtube"))
+        assertTrue(focusedOn("art.src.deezer"))
+        assertFalse(focusedOn("art.src.youtube"))
     }
 }

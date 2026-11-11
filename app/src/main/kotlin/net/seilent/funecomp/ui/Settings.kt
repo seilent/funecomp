@@ -384,7 +384,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
         }
         val list = rememberLazyListState()
         Box(Modifier.fillMaxSize()) {
-            Rows(ui.contentTop, list, scroll = edit == null, focus = focus, focusKey = shownRows.getOrNull(focus)?.key, rebuild = shownRows.map { it.key }, show = name, tail = if (edit != null) 1 else 0) {
+            Rows(ui.contentTop, list, scroll = edit == null, show = name, tail = if (edit != null) 1 else 0) {
                 itemsIndexed(shownRows, key = { i, r -> r.key ?: "row$i" }) { i, r ->
                     val key = r.key ?: ""
                     val editing = edit?.key == key
@@ -663,7 +663,7 @@ private fun EqRows(ctx: Ctx, slot: String) {
         }
     }
     val fieldTags = listOf("type", "frequency", "gain", "q")
-    Rows(ui.contentTop, state, focus = lines.indexOfFirst { it.id == focus }, show = slot) {
+    Rows(ui.contentTop, state, show = slot) {
         itemsIndexed(lines, key = { _, l -> l.id }) { i, l ->
             val tag = when {
                 l.id in setOf("enable", "mode", "profile", "preset", "save", "delete", "rename", "import", "preamp", "gpreamp", "add", "remove") -> "eq.${l.id}"

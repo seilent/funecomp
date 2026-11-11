@@ -109,7 +109,7 @@ fun ScrobbleRows(ctx: Ctx, view: ScrobbleView, labels: Boolean = true) {
         add(Item("queued", view.queued.toString(), "queued", info = true))
     }
     val at = items.indexOfFirst { it.tag == focus }.coerceAtLeast(0)
-    Rows(ui.contentTop, list, focus = at) {
+    Rows(ui.contentTop, list) {
         itemsIndexed(items, key = { _, l -> l.tag }) { i, l ->
             if (l.label) {
                 SectionLabel(l.title, i)

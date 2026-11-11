@@ -150,7 +150,7 @@ private fun ArtRows(ctx: Ctx, sources: Sources, onSources: (Sources) -> Unit, cr
         focus = tags[at]
     }
     val list = rememberLazyListState()
-    Rows(ui.contentTop, list, focus = at) {
+    Rows(ui.contentTop, list) {
         itemsIndexed(sources.order, key = { _, id -> "src $id" }) { i, id ->
             val keep = Keep(list, i, ui.px(ui.contentTop))
             SettingsRow(Sources.label(id), sourceValue(sources, id), Modifier.enter { i }.testTag("art.src.$id"), focused = at == i, onLong = {
@@ -206,7 +206,7 @@ fun LyricsRows(ctx: Ctx, sources: LyricSources) {
     var focus by rememberSaveable { mutableStateOf(ids.first()) }
     val at = ids.indexOf(focus).coerceAtLeast(0)
     val list = rememberLazyListState()
-    Rows(ui.contentTop, list, focus = at) {
+    Rows(ui.contentTop, list) {
         itemsIndexed(ids, key = { _, id -> "lyr $id" }) { i, id ->
             val on = sources.on(id)
             SettingsRow(id, if (on) ON else OFF, Modifier.enter { i }.testTag("lyr.src.$id"), focused = at == i) {

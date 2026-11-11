@@ -37,12 +37,12 @@ import net.seilent.funecomp.ui.ONLINE_LYRICS
 import net.seilent.funecomp.ui.ONLINE_SCROBBLING
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.Roles
 import net.seilent.funecomp.ui.ScrobbleView
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.TextEntry
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.proto.gen.Tok
-import android.graphics.BitmapFactory
 import android.content.Context
 import android.provider.Settings
 import androidx.test.core.app.ApplicationProvider
@@ -52,10 +52,7 @@ import android.view.View
 import android.view.inputmethod.InputMethodManager
 import android.view.inputmethod.EditorInfo
 import android.widget.EditText
-import android.graphics.Color
-import androidx.compose.ui.test.onRoot
-import com.github.takahirom.roborazzi.captureRoboImage
-import java.io.File
+import kotlin.math.abs
 import kotlin.math.roundToInt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -590,17 +587,7 @@ class OnlineTest {
         assertEquals("typed1", sources.fanartTvKey)
     }
 
-    private fun barOn(tag: String): Boolean {
-        val file = File.createTempFile("bar", ".png")
-        rule.onRoot().captureRoboImage(file.path)
-        val img = BitmapFactory.decodeFile(file.path)
-        file.delete()
-        val frame = bounds("frame")
-        val ui = Ui.of(frame.width, frame.height)
-        val b = bounds(tag)
-        val x = (frame.left + ui.px(Tok.hubEdge - Tok.focus_barOffset + Tok.focus_barWidth / 2)).roundToInt()
-        return Color.red(img.getPixel(x, b.center.y.roundToInt())) > 128
-    }
+    private fun focusedOn(tag: String) = abs(rule.titleAlpha(tag) - Roles.pageRowTitle.alpha) < 0.005f
 
     @Test
     fun eachPivotKeepsItsFocusAndScroll() {
@@ -609,15 +596,15 @@ class OnlineTest {
         shell.sheet.close()
         settle(600)
         val top = bounds("art.src.${Sources.DEEZER}").top
-        assertTrue(barOn("art.src.${Sources.DEEZER}"))
+        assertTrue(focusedOn("art.src.${Sources.DEEZER}"))
         rule.onNodeWithTag("hub.online").performTouchInput { swipeLeft() }
         settle(1000)
         rule.onNodeWithTag("lyr.src.lrclib").assertExists()
         rule.onNodeWithTag("hub.online").performTouchInput { swipeRight() }
         settle(1000)
         assertEquals(top, bounds("art.src.${Sources.DEEZER}").top, 1.5f)
-        assertTrue(barOn("art.src.${Sources.DEEZER}"))
-        assertFalse(barOn("art.src.${Sources.YOUTUBE}"))
+        assertTrue(focusedOn("art.src.${Sources.DEEZER}"))
+        assertFalse(focusedOn("art.src.${Sources.YOUTUBE}"))
     }
 
     @Test

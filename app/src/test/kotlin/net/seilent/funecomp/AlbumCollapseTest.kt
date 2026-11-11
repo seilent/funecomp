@@ -21,6 +21,7 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funecomp.ui.Roles
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.ThumbMath
 import net.seilent.funecomp.ui.ThumbSpan
@@ -154,7 +155,7 @@ class AlbumCollapseTest {
     }
 
     @Test
-    fun theFocusBarSitsOnTheTappedRowAtRestAndDocked() {
+    fun theTappedRowTakesTheFocusAtRestAndDocked() {
         start()
         for (o in listOf(0f, 140f)) {
             rest()
@@ -162,8 +163,10 @@ class AlbumCollapseTest {
             scrollBy(o * ui.u)
             rule.onNodeWithTag("row.1").performClick()
             settle(1000)
-            assertEquals("$o", bounds("row.1").top, bounds("bar").top, 1.5f)
-            assertEquals("$o", 1, rule.onAllNodesWithTag("bar").fetchSemanticsNodes().size)
+            assertEquals("$o", Roles.listPrimary.alpha, rule.titleAlpha("row.1"), 0.005f)
+            for (i in (2 until 12).filter { rule.onAllNodesWithTag("row.$it").fetchSemanticsNodes().isNotEmpty() }) {
+                assertEquals("$o row $i", Roles.listPrimary.dim, rule.titleAlpha("row.$i"), 0.005f)
+            }
         }
     }
 
