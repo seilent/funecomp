@@ -260,6 +260,48 @@ class PressSlots {
     }
 }
 
+class PressedStep internal constructor(private val scope: CoroutineScope?) {
+    var on by mutableStateOf(false)
+        private set
+
+    private var at = 0L
+    private var end = 0L
+    private var job: Job? = null
+
+    fun down(now: Long) {
+        job?.cancel()
+        at = now
+        end = now
+        on = true
+    }
+
+    fun fade(ms: Long) {
+        end = at + ms
+    }
+
+    fun up(now: Long) {
+        if (!on) return
+        job?.cancel()
+        if (end <= now) on = false else job = scope?.launch { delay(end - now); on = false }
+    }
+
+    fun hold(ms: Long) {
+        job?.cancel()
+        on = true
+        job = scope?.launch { delay(ms); on = false }
+    }
+
+    fun keep() {
+        job?.cancel()
+        on = true
+    }
+
+    fun reset() {
+        job?.cancel()
+        on = false
+    }
+}
+
 fun Modifier.pressScale(p: PressState?, origin: TransformOrigin = TransformOrigin.Center): Modifier = if (p == null || !p.scaled) this else graphicsLayer {
     scaleX = p.scale
     scaleY = p.scale
@@ -271,6 +313,12 @@ val LocalPressSlots = staticCompositionLocalOf<PressSlots?> { null }
 val LocalPressProbe = staticCompositionLocalOf<(() -> Unit)?> { null }
 
 val LocalScrolling = staticCompositionLocalOf<() -> Boolean> { { false } }
+
+@Composable
+fun rememberStep(): PressedStep {
+    val scope = rememberCoroutineScope()
+    return remember { PressedStep(scope) }
+}
 
 @Composable
 fun rememberPress(): PressState {

@@ -122,11 +122,14 @@ class HomeLayoutTest {
         val shell = show(411, 960)
         marked("now playing")
         rule.onNodeWithTag("home.settings").performTouchInput { down(center) }
-        rule.mainClock.advanceTimeBy(100)
-        val mid = alpha("settings")
-        assertEquals(0.8f, mid, 0.05f)
+        rule.mainClock.advanceTimeByFrame()
+        assertEquals("the touched word at the next frame", 1f, alpha("settings"), 0.005f)
+        rule.mainClock.advanceTimeBy(100 - 16)
+        val mid = alpha("now playing")
+        assertEquals("the others on the fade", 0.8f, mid, 0.05f)
+        assertEquals("the touched word held", 1f, alpha("settings"), 0.005f)
         rule.mainClock.advanceTimeBy(48)
-        assertEquals(0.4f * 48 / Tok.motion_focusAlpha, alpha("settings") - mid, 0.01f)
+        assertEquals(-0.4f * 48 / Tok.motion_focusAlpha, alpha("now playing") - mid, 0.01f)
         rule.mainClock.advanceTimeBy(100)
         marked("settings")
         rule.onNodeWithTag("home.settings").performTouchInput { up() }

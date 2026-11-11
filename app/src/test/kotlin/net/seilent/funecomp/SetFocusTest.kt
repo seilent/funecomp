@@ -130,7 +130,7 @@ class SetFocusTest {
             frame()
             rule.titleAlpha("set.clock")
         }
-        assertTrue(seen.any { it > Roles.pageRowTitle.dim + 0.01f && it < Roles.pageRowTitle.alpha - 0.01f })
+        assertTrue("the tapped title steps and holds through its fade: $seen", seen.all { abs(it - Roles.pageRowTitle.alpha) < 0.005f })
         settle(600)
         if (shell.sheet.shown) shell.sheet.close()
         settle(600)

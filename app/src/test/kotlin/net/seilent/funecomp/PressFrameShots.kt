@@ -8,6 +8,7 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -213,6 +214,14 @@ class PressFrameShots {
         Case("fling-catch", listOf(Page.Home, Page.Music), "row.3", prep = { artists() }, act = fling("row.3", CATCH_AT)),
         Case("scroll-start", listOf(Page.Home, Page.Music), "${TEXT}Utada Hikaru", prep = { artists() }, act = drag("${TEXT}Utada Hikaru", RISING, Offset(0f, -slop() * 2))),
         Case("swipe-cut", listOf(Page.Home, Page.Music), "${TEXT}Utada Hikaru", prep = { artists() }, act = drag("${TEXT}Utada Hikaru", 150, Offset(-slop() * 2, 0f))),
+        Case("header-tap", listOf(Page.Home, Page.Music), "header", act = tap("header", 50)),
+        Case("pivot-tap", listOf(Page.Home, Page.Music), "pivot.songs", act = tap("pivot.songs", 50)),
+        Case("sheet-tap", listOf(Page.Home, Page.Music), "sheet.item.1", prep = {
+            artists()
+            node("row.0").performTouchInput { longClick() }
+            settle(600)
+        }, act = tap("sheet.item.1", 50)),
+        Case("settings-tap", listOf(Page.Home, Page.Settings), "set.volumeStep", act = tap("set.volumeStep", 50)),
     )
 
     private fun frames(name: String) {
@@ -260,6 +269,18 @@ class PressFrameShots {
 
     @Test
     fun swipeCut() = frames("swipe-cut")
+
+    @Test
+    fun headerTap() = frames("header-tap")
+
+    @Test
+    fun pivotTap() = frames("pivot-tap")
+
+    @Test
+    fun sheetTap() = frames("sheet-tap")
+
+    @Test
+    fun settingsTap() = frames("settings-tap")
 
     private companion object {
         const val TEXT = "text:"

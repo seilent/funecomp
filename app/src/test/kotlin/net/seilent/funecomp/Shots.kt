@@ -904,6 +904,17 @@ val SHOTS = listOf(
         pivotTo("artists")
         rule.onNodeWithTag("row.1").performTouchInput { down(center) }
     },
+    Shot("header-held", pages = HOME + Page.Music, held = true, after = HELD_AT) { rule.onNodeWithTag("header").performTouchInput { down(center) } },
+    Shot("pivot-held", pages = HOME + Page.Music, held = true, after = HELD_AT) {
+        val ns = rule.pivotNodes().map { it.config[SemanticsProperties.TestTag] }
+        val next = ns[ns.indexOf("pivot." + rule.activePivot("music")) + 1]
+        rule.onNodeWithTag(next, useUnmergedTree = true).performTouchInput { down(center) }
+    },
+    Shot("sheet-item-held", pages = HOME + Page.Music, held = true, after = HELD_AT) {
+        holdRow("artists", "row.0")
+        rule.onNodeWithTag("sheet.item.1", useUnmergedTree = true).performTouchInput { down(center) }
+    },
+    Shot("settings-row-held", pages = HOME + Page.Settings, held = true, after = HELD_AT) { rule.onNodeWithTag("set.volumeStep").performTouchInput { down(center) } },
     Shot("music-albums", pages = HOME + Page.Music),
     Shot("music-songs", pages = HOME + Page.Music, prep = ::playing) { pivotTo("songs") },
     Shot("cardtoast-list", pages = HOME + Page.Music, prep = cardBusy(), after = 300) {

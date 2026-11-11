@@ -93,12 +93,12 @@ private const val NS_PER_S = 1_000_000_000L
 @Composable
 fun Float.dp() = with(LocalDensity.current) { this@dp.toDp() }
 
-fun Modifier.press(onTap: (Offset) -> Unit, onLong: (() -> Unit)? = null, press: PressState? = null, onDown: () -> Unit = {}) = composed {
+fun Modifier.press(onTap: (Offset) -> Unit, onLong: (() -> Unit)? = null, press: PressState? = null, onDown: () -> Unit = {}, step: PressedStep? = null) = composed {
     val tap by rememberUpdatedState(onTap)
     val long by rememberUpdatedState(onLong)
     val down by rememberUpdatedState(onDown)
     val hasLong = onLong != null
-    if (press == null) {
+    if (press == null && step == null) {
         pointerInput(hasLong) {
             detectTapGestures(
                 onPress = {
@@ -111,7 +111,8 @@ fun Modifier.press(onTap: (Offset) -> Unit, onLong: (() -> Unit)? = null, press:
         }
     } else {
         val scrolling = LocalScrolling.current
-        pointerInput(hasLong, press, scrolling) { pressGesture(press, hasLong, scrolling, { long?.invoke() }, { down() }) { tap(it) } }.pressGlow(LocalUi.current, press.word) { press }
+        val gesture = pointerInput(hasLong, press, step, scrolling) { pressGesture(press, step, hasLong, scrolling, { long?.invoke() }, { down() }) { tap(it) } }
+        if (press == null) gesture else gesture.pressGlow(LocalUi.current, press.word) { press }
     }
 }
 
@@ -141,7 +142,7 @@ private suspend fun AwaitPointerEventScope.untilUp(first: PointerInputChange, co
     }
 }
 
-private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: Boolean, scrolling: () -> Boolean, long: () -> Unit, down: () -> Unit, tap: (Offset) -> Unit) = awaitEachGesture {
+private suspend fun PointerInputScope.pressGesture(press: PressState?, step: PressedStep?, hasLong: Boolean, scrolling: () -> Boolean, long: () -> Unit, down: () -> Unit, tap: (Offset) -> Unit) = awaitEachGesture {
     val early = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
     val caught = scrolling()
     val first = awaitPointerEvent().changes.firstOrNull { it.id == early.id } ?: return@awaitEachGesture
@@ -151,32 +152,39 @@ private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: B
         untilUp(first, false)
         return@awaitEachGesture
     }
-    press.down(first.uptimeMillis)
+    press?.down(first.uptimeMillis)
+    step?.down(first.uptimeMillis)
     down()
     val slop = viewConfiguration.touchSlop
     val outcome = if (hasLong) withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) { track(first, slop) } else track(first, slop)
     when (outcome) {
         null -> {
-            press.reset()
+            press?.reset()
+            step?.reset()
             long()
             untilUp(first, true)
         }
         is Outcome.Up -> {
-            press.tap(outcome.change.uptimeMillis)
+            press?.tap(outcome.change.uptimeMillis)
+            step?.up(outcome.change.uptimeMillis)
             outcome.change.consume()
             tap(outcome.change.position)
         }
         is Outcome.Slop -> {
-            press.cancel(outcome.at)
+            press?.cancel(outcome.at)
+            step?.up(outcome.at)
             untilUp(first, false)
         }
-        Outcome.Gone -> press.reset()
+        Outcome.Gone -> {
+            press?.reset()
+            step?.reset()
+        }
     }
 }
 
 @Composable
-fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, onDown: () -> Unit = {}, press: PressState = rememberPress(), content: @Composable () -> Unit) {
-    Box(modifier.press(onTap, onLong, press, onDown)) { content() }
+fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, onDown: () -> Unit = {}, press: PressState = rememberPress(), step: PressedStep? = null, content: @Composable () -> Unit) {
+    Box(modifier.press(onTap, onLong, press, onDown, step)) { content() }
 }
 
 @Composable
@@ -196,10 +204,18 @@ fun HeaderWord(text: String, role: Role, x: Float, tracking: Float, tag: String 
     val advance = rememberTextMeasurer().measure(shown(text, role.case), textStyle(scaled, white(role.alpha), tracking * s)).size.width.toFloat()
     val left = max(0f, x)
     val right = min(ui.px(ui.w), x + advance)
+    val step = rememberStep()
     Box(Modifier.fillMaxWidth().height(ui.px(ui.pivotTop).dp()).clipToBounds().testTag("$tag.clip")) {
-        RoleText(text, scaled, Modifier.atBaseline(x, ui.px(ui.headerBaseline)).testTag("$tag.word"), tracking = tracking * s)
+        RoleText(text, scaled, Modifier.atBaseline(x, ui.px(ui.headerBaseline)).testTag("$tag.word"), color = white(if (step.on) Tok.alpha_full else role.alpha), tracking = tracking * s)
     }
-    val tap = if (onBack == null) Modifier else Modifier.press({ onBack() })
+    val tap = if (onBack == null) {
+        Modifier
+    } else {
+        Modifier.press({
+            step.hold(Held.Nav.motion_turnstileOut.toLong())
+            onBack()
+        }, step = step)
+    }
     Box(Modifier.at(left, 0f).size(max(0f, right - left).dp(), ui.px(Tok.headerBand).dp()).then(tap).testTag(tag))
 }
 
@@ -242,7 +258,12 @@ fun PivotStrip(labels: List<String>, active: Int, onPick: (Int) -> Unit) {
             val role = if (on) Roles.pivotActive else Roles.pivotInactive
             val c by animateColorAsState(white(role.alpha), tween(Held.Pivot.motion_pivotLabel.toInt()), label = "pivot")
             val px by animateFloatAsState(positions[i], tween(Held.Pivot.motion_pivotStrip.toInt(), easing = Strip), label = "label")
-            RoleText(l, role, Modifier.atBaseline(row + px, ui.px(ui.pivotBaseline)).press({ onPick(i) }).testTag("pivot.$l"), color = c)
+            val step = rememberStep()
+            val pick = Modifier.press({
+                step.hold(Held.Pivot.motion_pivotStrip.toLong())
+                onPick(i)
+            }, step = step)
+            RoleText(l, role, Modifier.atBaseline(row + px, ui.px(ui.pivotBaseline)).then(pick).testTag("pivot.$l"), color = if (step.on) white(Tok.alpha_full) else c)
         }
     }
 }
@@ -353,9 +374,10 @@ fun StateLine(text: String, tag: String, onTap: (() -> Unit)? = null) {
 fun StateRow(text: String, tag: String, onTap: (() -> Unit)? = null) {
     val ui = LocalUi.current
     val h = ui.px(Tok.rowHeight)
-    val tap = if (onTap == null) Modifier else Modifier.press({ onTap() })
+    val step = rememberStep()
+    val tap = if (onTap == null) Modifier else Modifier.press({ onTap() }, step = step)
     Box(Modifier.size(ui.px(ui.w).dp(), h.dp()).then(tap).testTag(tag)) {
-        RoleText(text, Roles.listPrimary, Modifier.at(ui.px(Tok.hubEdge), h / 2, ay = 0.5f), alpha = Tok.alpha_low)
+        RoleText(text, Roles.listPrimary, Modifier.at(ui.px(Tok.hubEdge), h / 2, ay = 0.5f), alpha = if (step.on) Tok.alpha_full else Tok.alpha_low)
     }
 }
 
@@ -483,10 +505,15 @@ fun SettingsRow(
     val sw = ui.px(Tok.settingsSwatch)
     val press = rememberPress()
     val glow = if (info) null else press.word
-    Pressable({ onTap(it.x / rowW) }, modifier.size(rowW.dp(), rowH.dp()), onLong, press = press) {
+    val step = rememberStep()
+    val titleColor = if (step.on) white(Tok.alpha_full) else tc
+    Pressable({
+        if (!focused && !info) step.hold(Tok.motion_focusAlpha.toLong())
+        onTap(it.x / rowW)
+    }, modifier.size(rowW.dp(), rowH.dp()), onLong, press = press, step = if (info) null else step) {
         val valueColor = vc
         if (eqSlot) {
-            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline).testTag("settings.title"), color = tc, glow = glow)
+            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline).testTag("settings.title"), color = titleColor, glow = glow)
             val slotX = edgeX + t.size.width + ui.px(Tok.eqValueGap)
             val slotW = (right - slotX).coerceAtLeast(0f)
             Box(Modifier.at(slotX, 0f).size(slotW.dp(), rowH.dp()).clipToBounds()) {
@@ -498,7 +525,7 @@ fun SettingsRow(
                 shownValue.isNotEmpty() -> right - room.size.width - ui.px(Tok.gutter) - edgeX
                 else -> right - edgeX
             }
-            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline, limit).testTag("settings.title"), color = tc, glow = glow)
+            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline, limit).testTag("settings.title"), color = titleColor, glow = glow)
             if (swatch != null) {
                 Box(Modifier.at(right - sw, (rowH - sw) / 2).size(sw.dp()).background(swatch.copy(alpha = (if (focused) Tok.settingsValueFocused else Tok.settingsValueDim) / Tok.settingsValueFocused)))
             } else if (shownValue.isNotEmpty()) {

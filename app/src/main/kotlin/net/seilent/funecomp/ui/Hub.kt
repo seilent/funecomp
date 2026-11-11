@@ -232,13 +232,26 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                             val subStyle = textStyle(Roles.homeSubtitle, white(Roles.homeSubtitle.alpha))
                             val sub = if (item.names.isEmpty()) item.subtitle else remember(item.names, subW, subStyle) { wholeNames(item.names) { measurer.measure(shown(it, Roles.homeSubtitle.case), subStyle, softWrap = false, maxLines = 1).size.width <= subW.roundToInt() } }
                             val press = rememberPress()
+                            val step = rememberStep()
                             Pressable(
-                                { onOpen(item.page) },
+                                {
+                                    step.hold(Held.Nav.motion_turnstileOut.toLong())
+                                    onOpen(item.page)
+                                },
                                 Modifier.at(ui.px(barX), top).size((ui.px(ui.w) - ui.px(barX)).dp(), ui.px(pitch).dp()).testTag("home.${item.name}"),
-                                onDown = { focus = i },
+                                onDown = {
+                                    if (focus != i) step.fade(Tok.motion_focusAlpha.toLong())
+                                    focus = i
+                                },
                                 press = press,
+                                step = step,
                             ) {
-                                RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = if (i == music && ring.held) white(Tok.homeRingPressDim) else c, glow = press.word)
+                                val word = when {
+                                    i == music && ring.held -> white(Tok.homeRingPressDim)
+                                    step.on -> white(Tok.alpha_full)
+                                    else -> c
+                                }
+                                RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = word, glow = press.word)
                                 RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(LayoutTok.homeSubtitleX), subBaseline - top, subW))
                             }
                         }
