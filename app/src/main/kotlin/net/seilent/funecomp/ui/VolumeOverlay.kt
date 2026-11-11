@@ -1,7 +1,5 @@
 package net.seilent.funecomp.ui
 
-import android.graphics.Bitmap
-import android.graphics.Paint
 import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -28,8 +26,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asAndroidPath
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.FirstBaseline
 import androidx.compose.ui.layout.Layout
@@ -201,49 +197,6 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
         Box(target(cx + skip, ringY, "overlay.next", p = nextPress) { actions.transport(Enums.TransportCmd.next) })
         Box(Modifier.at(exitCaps.x, exitCaps.y, 0.5f, 0.5f).size(exitHit).testTag("overlay.exit.hit").clickable(touch, null) { close() })
     }
-}
-
-internal var glowsBuilt = 0
-    private set
-
-internal fun glyphGlow(name: GlyphName, side: Int, reach: Float): ImageBitmap {
-    val paint = Paint().apply {
-        color = android.graphics.Color.WHITE
-        isAntiAlias = true
-    }
-    return glow(side, (reach / 3).roundToInt().coerceAtLeast(1), 0f) { it.drawPath(path(name, side / Tok.glyphBox).asAndroidPath(), paint) }
-}
-
-internal fun ringGlow(side: Int, stroke: Float, reach: Float): ImageBitmap {
-    val paint = Paint().apply {
-        color = android.graphics.Color.WHITE
-        isAntiAlias = true
-        style = Paint.Style.STROKE
-        strokeWidth = stroke
-    }
-    return glow(side, (reach / 3).roundToInt().coerceAtLeast(1), side / 2f) { it.drawCircle(side / 2f, side / 2f, (side - stroke) / 2, paint) }
-}
-
-private fun glow(side: Int, r: Int, inside: Float, cover: (android.graphics.Canvas) -> Unit): ImageBitmap {
-    val pad = 3 * r
-    val b = Bitmap.createBitmap(side + 2 * pad, side + 2 * pad, Bitmap.Config.ARGB_8888)
-    val canvas = android.graphics.Canvas(b)
-    canvas.drawColor(android.graphics.Color.BLACK)
-    canvas.translate(pad.toFloat(), pad.toFloat())
-    cover(canvas)
-    val px = IntArray(b.width * b.height)
-    b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
-    CoverBlur.blur(px, b.width, b.height, r)
-    val c = b.width / 2f
-    for (y in 0 until b.height) for (x in 0 until b.width) {
-        val dx = x + 0.5f - c
-        val dy = y + 0.5f - c
-        val a = if (dx * dx + dy * dy < inside * inside) 0 else px[y * b.width + x] shr 16 and 0xFF
-        px[y * b.width + x] = a shl 24 or 0xFFFFFF
-    }
-    b.setPixels(px, 0, b.width, 0, 0, b.width, b.height)
-    glowsBuilt++
-    return b.asImageBitmap()
 }
 
 @Composable

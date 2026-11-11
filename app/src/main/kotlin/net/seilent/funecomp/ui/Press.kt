@@ -33,6 +33,10 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
     var held by mutableStateOf(false)
         private set
 
+    val word = GlowWord()
+
+    internal var mask: GlowMask? = null
+
     internal var probe: (() -> Unit)? = null
 
     private var from = 1f
@@ -166,6 +170,7 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
         scale = 1f
         lit = 0f
         held = false
+        releaseGlow(this)
     }
 
     fun drop() {
@@ -173,6 +178,8 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
     }
 
     internal fun rest(now: Long) = !moving(now) && value(now) == 1f
+
+    private fun framed(now: Long) = to != 1f && (releaseAt < 0 || now < releaseAt)
 
     private fun kick() {
         val s = scope ?: return
@@ -200,7 +207,10 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
                     delay(releaseAt - now)
                     frame()
                 }
-                else -> return
+                else -> {
+                    if (!framed(now) && look(now) == 0f) releaseGlow(this)
+                    return
+                }
             }
         }
     }

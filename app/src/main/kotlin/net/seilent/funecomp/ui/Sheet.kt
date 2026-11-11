@@ -475,8 +475,9 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
                         itemsIndexed(state.items) { i, item ->
                             val on = i == state.focus
                             val value = itemValues.getOrElse(i) { "" }
+                            val press = rememberPress()
                             Box(
-                                Modifier.size(w.dp(), pitch.dp()).press({ o -> state.press(i, o.x / w) }, if (state.holds) ({ state.hold(i) }) else null).semantics { onClick { state.click(i) } }.testTag("sheet.item.$i"),
+                                Modifier.size(w.dp(), pitch.dp()).press({ o -> state.press(i, o.x / w) }, if (state.holds) ({ state.hold(i) }) else null, press).semantics { onClick { state.click(i) } }.testTag("sheet.item.$i"),
                             ) {
                                 val entry = state.entry
                                 if (entry != null) {
@@ -484,7 +485,7 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
                                 } else {
                                     val c by animateColorAsState(white(if (on) Roles.dialogItem.alpha else Roles.dialogItem.dim), tween(Tok.motion_focusAlpha.toInt()), label = "item")
                                     val role = if (itemMixed.getOrElse(i) { false }) Roles.dialogItem.copy(case = Case.MIXED) else Roles.dialogItem
-                                    RoleText(item, role, Modifier.at(edge, pitch / 2, ay = 0.5f).width(slot(value).dp()).clipToBounds(), color = c)
+                                    RoleText(item, role, Modifier.at(edge, pitch / 2, ay = 0.5f).width(slot(value).dp()).clipToBounds(), color = c, glow = press.word)
                                     if (value.isNotEmpty()) {
                                         val t = measurer.measure(shown(item, role.case), itemStyle)
                                         SheetValue(value, (pitch - t.size.height) / 2 + t.firstBaseline, if (on) Tok.settingsValueFocused else Tok.settingsValueDim, i == state.accentItem)

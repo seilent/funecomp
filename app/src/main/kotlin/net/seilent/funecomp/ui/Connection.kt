@@ -251,10 +251,11 @@ fun CreditRow(primary: String, lines: List<String>, modifier: Modifier = Modifie
     val inset = ui.px(Tok.rowTextInset).roundToInt()
     val c by animateColorAsState(white(if (focused) Roles.listPrimary.alpha else Roles.listPrimary.dim), tween(Tok.motion_focusAlpha.toInt()), label = "credit")
     val secondary = textStyle(Roles.listSecondary, white(Roles.listSecondary.alpha))
-    Pressable({ onTap() }, modifier) {
+    val press = rememberPress()
+    Pressable({ onTap() }, modifier, press = press) {
         Layout(
             content = {
-                RoleText(primary, Roles.listPrimary, Modifier, color = c)
+                RoleText(primary, Roles.listPrimary, Modifier, color = c, glow = press.word)
                 lines.forEach { BasicText(shown(it, Roles.listSecondary.case), style = secondary) }
             },
         ) { m, _ ->

@@ -205,13 +205,7 @@ class HomeLayoutTest {
             val widest = names.maxBy { layout(word(it)).size.width }
             rule.onNodeWithTag("home.$widest").performTouchInput { down(center) }
             rule.mainClock.advanceTimeBy(200)
-            val wn = word(widest)
-            val held = wn.boundsInRoot
-            val img = rule.onRoot().pixels().also { System.gc() }
-            val rows = held.top.roundToInt() until (held.top + layout(wn).firstBaseline * Tok.motion_pressScale).roundToInt()
-            val cols = held.left.roundToInt() until (o.x + home.size.width).roundToInt()
-            val ink = cols.lastOrNull { x -> rows.any { y -> img.getRGB(x, y).let { p -> minOf(p shr 16 and 0xff, p shr 8 and 0xff, p and 0xff) > 40 } } }
-            val right = (checkNotNull(ink) { "$n $widest has no ink" } + 1 - o.x) / u
+            val right = (word(widest).positionInRoot.x + inkRight(widest) - o.x) / u
             val limit = if (h > w) ui.w else ui.w - Tok.edge
             assertTrue("$n pressed $widest ink ends at $right past $limit", right <= limit)
             rule.onNodeWithTag("home.$widest").performTouchInput { cancel() }

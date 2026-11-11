@@ -238,7 +238,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                                 onDown = { focus = i },
                                 press = press,
                             ) {
-                                RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c)
+                                RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c, glow = press.word)
                                 RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(LayoutTok.homeSubtitleX), subBaseline - top, subW))
                             }
                         }

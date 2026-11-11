@@ -2,12 +2,14 @@ package net.seilent.funecomp.ui
 
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.FirstBaseline
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
@@ -213,6 +215,22 @@ fun textStyle(role: Role, color: Color, tracking: Float = Tok.tracking): TextSty
 }
 
 @Composable
-fun RoleText(text: String, role: Role, modifier: Modifier, alpha: Float = role.alpha, color: Color = white(alpha), tracking: Float = Tok.tracking) {
-    BasicText(shown(text, role.case), modifier, style = textStyle(role, color, tracking), overflow = TextOverflow.Clip, softWrap = false, maxLines = 1)
+fun RoleText(text: String, role: Role, modifier: Modifier, alpha: Float = role.alpha, color: Color = white(alpha), tracking: Float = Tok.tracking, glow: GlowWord? = null) {
+    if (glow != null) {
+        DisposableEffect(glow) {
+            onDispose {
+                glow.layout = null
+                glow.at = null
+            }
+        }
+    }
+    BasicText(
+        shown(text, role.case),
+        if (glow == null) modifier else modifier.onGloballyPositioned { glow.at = it },
+        style = textStyle(role, color, tracking),
+        onTextLayout = if (glow == null) null else { t -> glow.layout = t },
+        overflow = TextOverflow.Clip,
+        softWrap = false,
+        maxLines = 1,
+    )
 }

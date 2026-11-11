@@ -179,6 +179,9 @@ fun PickPreviewPage(ctx: Ctx, page: Page.PickPreview) {
             shown.image?.let { Image(it, null, Modifier.size(frameW.dp(), photoH.dp()).testTag("pick.preview"), contentScale = ContentScale.Fit) }
         }
         BackRing { ctx.nav.pop() }
+        val pickPress = rememberPress()
+        val nextPress = rememberPress()
+        val resetPress = rememberPress()
         RoleText(
             PICK,
             Roles.dialogItem,
@@ -189,15 +192,16 @@ fun PickPreviewPage(ctx: Ctx, page: Page.PickPreview) {
                 ctx.control.pick(page.target, shown.offer, point)
                 ctx.nav.pop()
                 if (page.fromBrowse && ctx.nav.top == Page.Browse(page.target)) ctx.nav.pop()
-            }).testTag("pick.label"),
+            }, press = pickPress).testTag("pick.label"),
+            glow = pickPress.word,
         )
         if (two) {
             RoleText(shown.offer.label, Roles.dialogItem, Modifier.atBaseline(x, top).testTag("pick.source"), alpha = Roles.dialogItem.dim)
-            RoleText(NEXT_IMAGE, Roles.dialogItem, Modifier.atBaseline(x + pick.size.width + ui.px(PICK_GAP), baseline).press({ at = (at + 1) % page.previews.size }).testTag("pick.next"))
+            RoleText(NEXT_IMAGE, Roles.dialogItem, Modifier.atBaseline(x + pick.size.width + ui.px(PICK_GAP), baseline).press({ at = (at + 1) % page.previews.size }, press = nextPress).testTag("pick.next"), glow = nextPress.word)
         }
         if (moved) {
             val rx = x + pick.size.width + ui.px(PICK_GAP) + if (two) next.size.width + ui.px(PICK_GAP) else 0f
-            RoleText(RESET, Roles.dialogItem, Modifier.atBaseline(rx, baseline).press({ windows.remove(at) }).testTag("pick.reset"))
+            RoleText(RESET, Roles.dialogItem, Modifier.atBaseline(rx, baseline).press({ windows.remove(at) }, press = resetPress).testTag("pick.reset"), glow = resetPress.word)
         }
     }
 }

@@ -185,6 +185,7 @@ private val NP_SIZES = listOf(
 private val NP_SET = setOf("nowplaying", "nowplaying-v1", "nowplaying-playing", "nowplaying-long", "nowplaying-longtrack", "nowplaying-repeat-one", "nowplaying-art", "nowplaying-overlay", "nowplaying-last-all", "rxnp-phone", "rxnp-phone-cover", "lyrmark-mode")
 
 private val HOME = listOf(Page.Home)
+private const val HELD_AT = 100L
 private const val CLOCK_S = 1792584000L
 private val NP = HOME + Page.NowPlaying
 private val DETECTED_R1 = Detected("fune r1", "00:00:00:00:00:04")
@@ -899,6 +900,10 @@ val SHOTS = listOf(
     Shot("queue", pages = NP + Page.Queue, prep = ::playing),
     Shot("queue-sheet", pages = NP + Page.Queue, prep = ::playing) { rule.onNodeWithTag("queue.2").performTouchInput { longClick() } },
     Shot("music-artists", pages = HOME + Page.Music) { pivotTo("artists") },
+    Shot("row-held", pages = HOME + Page.Music, held = true, after = HELD_AT) {
+        pivotTo("artists")
+        rule.onNodeWithTag("row.1").performTouchInput { down(center) }
+    },
     Shot("music-albums", pages = HOME + Page.Music),
     Shot("music-songs", pages = HOME + Page.Music, prep = ::playing) { pivotTo("songs") },
     Shot("cardtoast-list", pages = HOME + Page.Music, prep = cardBusy(), after = 300) {

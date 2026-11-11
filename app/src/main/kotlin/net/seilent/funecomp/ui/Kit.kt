@@ -111,7 +111,7 @@ fun Modifier.press(onTap: (Offset) -> Unit, onLong: (() -> Unit)? = null, press:
         }
     } else {
         val scrolling = LocalScrolling.current
-        pointerInput(hasLong, press, scrolling) { pressGesture(press, hasLong, scrolling, { long?.invoke() }, { down() }) { tap(it) } }
+        pointerInput(hasLong, press, scrolling) { pressGesture(press, hasLong, scrolling, { long?.invoke() }, { down() }) { tap(it) } }.pressGlow(LocalUi.current, press.word) { press }
     }
 }
 
@@ -410,11 +410,12 @@ fun ListRow(
         tween(Tok.motion_focusAlpha.toInt()),
         label = "row",
     )
-    Pressable({ onTap() }, modifier.size(rowW.dp(), rowH.dp()), onLong) {
+    val press = rememberPress()
+    Pressable({ onTap() }, modifier.size(rowW.dp(), rowH.dp()), onLong, press = press) {
         if (ring) Ring(Tok.rowRing, GlyphName.PLAY, Look.Focus(focused), Modifier.at(ui.px(Tok.hubEdge), rowH / 2, ay = 0.5f))
         Layout(
             content = {
-                RoleText(primary, primaryRole, Modifier.layoutId(ROW_PRIMARY).testTag(ROW_PRIMARY), color = c)
+                RoleText(primary, primaryRole, Modifier.layoutId(ROW_PRIMARY).testTag(ROW_PRIMARY), color = c, glow = if (playing && !AccentOff) null else press.word)
                 if (secondary.isNotEmpty()) RoleText(secondary, secondaryRole, Modifier.layoutId(ROW_SECONDARY))
                 if (number.isNotEmpty()) RoleText(number, Roles.listCount, Modifier.layoutId(ROW_NUMBER))
                 if (trailing.isNotEmpty()) RoleText(trailing, Roles.listCount, Modifier.layoutId(ROW_TRAILING))
@@ -480,10 +481,12 @@ fun SettingsRow(
     val right = rowW - edgeX
     val baseline = (rowH - t.size.height) / 2 + t.firstBaseline
     val sw = ui.px(Tok.settingsSwatch)
-    Pressable({ onTap(it.x / rowW) }, modifier.size(rowW.dp(), rowH.dp()), onLong) {
+    val press = rememberPress()
+    val glow = if (info) null else press.word
+    Pressable({ onTap(it.x / rowW) }, modifier.size(rowW.dp(), rowH.dp()), onLong, press = press) {
         val valueColor = vc
         if (eqSlot) {
-            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline).testTag("settings.title"), color = tc)
+            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline).testTag("settings.title"), color = tc, glow = glow)
             val slotX = edgeX + t.size.width + ui.px(Tok.eqValueGap)
             val slotW = (right - slotX).coerceAtLeast(0f)
             Box(Modifier.at(slotX, 0f).size(slotW.dp(), rowH.dp()).clipToBounds()) {
@@ -495,7 +498,7 @@ fun SettingsRow(
                 shownValue.isNotEmpty() -> right - room.size.width - ui.px(Tok.gutter) - edgeX
                 else -> right - edgeX
             }
-            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline, limit).testTag("settings.title"), color = tc)
+            RoleText(title, titleRole, Modifier.atBaseline(edgeX, baseline, limit).testTag("settings.title"), color = tc, glow = glow)
             if (swatch != null) {
                 Box(Modifier.at(right - sw, (rowH - sw) / 2).size(sw.dp()).background(swatch.copy(alpha = (if (focused) Tok.settingsValueFocused else Tok.settingsValueDim) / Tok.settingsValueFocused)))
             } else if (shownValue.isNotEmpty()) {

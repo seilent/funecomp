@@ -117,6 +117,12 @@ private class JumpPress(private val a: PressState, private val b: PressState) {
         cur.down(now)
     }
 
+    fun of(i: Int) = when (i) {
+        itemA -> a
+        itemB -> b
+        else -> null
+    }
+
     fun tap(now: Long) = cur.tap(now)
 
     fun release(now: Long) = cur.cancel(now)
@@ -247,8 +253,9 @@ private fun JumpSearch(x: Float, y: Float, tile: Float, press: JumpPress, act: S
 private fun JumpLetter(i: Int, x: Float, y: Float, tile: Float, on: Boolean, has: Boolean, press: JumpPress, act: State<(Int) -> Unit>, shown: State<Boolean>) {
     val ui = LocalUi.current
     val letter = Section.letter(i)
+    val word = remember { GlowWord() }
     Box(
-        Modifier.at(x, y).size(tile.dp())
+        Modifier.at(x, y).size(tile.dp()).pressGlow(ui, word) { press.of(i) }
             .then(if (has) Modifier.border(ui.px(if (on) Tok.letterTileBorderFocused else Tok.letterTileBorder).dp(), white(if (on) Tok.alpha_full else Tok.alpha_low)) else Modifier)
             .clipToBounds().semanticsWhile(shown) {
                 selected = on
@@ -261,6 +268,7 @@ private fun JumpLetter(i: Int, x: Float, y: Float, tile: Float, on: Boolean, has
             Roles.letterGlyph,
             Modifier.atBaseline(tile - ui.px(Tok.letterInsetX), tile - ui.px(Tok.letterInsetBaseline), ax = 1f),
             alpha = if (has) Roles.letterGlyph.alpha else Tok.jump_emptyAlpha,
+            glow = if (has) word else null,
         )
     }
 }

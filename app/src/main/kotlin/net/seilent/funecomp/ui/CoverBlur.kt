@@ -140,9 +140,12 @@ object CoverBlur {
         }
     }
 
-    fun blur(px: IntArray, w: Int, h: Int, r: Int) {
+    fun blur(px: IntArray, w: Int, h: Int, r: Int) = blur(px, w, h, intArrayOf(r, r, r))
+
+    fun blur(px: IntArray, w: Int, h: Int, radii: IntArray) {
         val tmp = IntArray(max(w, h))
-        repeat(3) {
+        for (r in radii) {
+            if (r <= 0) continue
             for (y in 0 until h) boxPass(px, y * w, w, 1, r, tmp)
             for (x in 0 until w) boxPass(px, x, h, w, r, tmp)
         }

@@ -710,8 +710,9 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                                 },
                         )
                     }
-                    Box(Modifier.at(textX, titleTop).size(textW.dp(), (titleBottom - titleTop).coerceAtLeast(0f).dp()).press({ onQueue() }).testTag("np.titleBlock"))
-                    RoleText(s.title ?: "", Roles.npViewTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"))
+                    val titlePress = rememberPress()
+                    Box(Modifier.at(textX, titleTop).size(textW.dp(), (titleBottom - titleTop).coerceAtLeast(0f).dp()).press({ onQueue() }, press = titlePress).testTag("np.titleBlock"))
+                    RoleText(s.title ?: "", Roles.npViewTitle, Modifier.atBaseline(textX, titleBaseline, textW).testTag("np.title"), glow = titlePress.word)
                     upcoming.forEachIndexed { i, t ->
                         val x = textX + ui.px(LayoutTok.npNextIndent)
                         RoleText(t, Roles.npViewNext, Modifier.atBaseline(x, nextBaseline + ui.px(LayoutTok.npNextLinePitch) * i, ui.px(ui.w - Tok.edge) - x).testTag("np.next.$i"))

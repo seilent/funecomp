@@ -98,7 +98,7 @@ class ShortLayoutTest {
         val t = out.firstOrNull() ?: return node.boundsInRoot
         val o = node.positionInRoot
         val px = with(rule.density) { t.layoutInput.style.fontSize.toPx() }
-        return Rect(o.x + t.getLineLeft(0), o.y + t.firstBaseline - Tok.capHeight * px, o.x + t.getLineRight(0), o.y + t.size.height)
+        return Rect(o.x + t.getLineLeft(0), o.y + t.firstBaseline - Tok.capHeight * px, o.x + minOf(t.getLineRight(0), t.size.width.toFloat()), o.y + t.size.height)
     }
 
     private fun need(boxes: List<Pair<String, Rect?>>, tags: List<String>) {
