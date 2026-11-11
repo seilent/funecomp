@@ -500,7 +500,7 @@ fun EqPage(ctx: Ctx, page: Page.Eq) {
         }
     }
     var pivot by rememberSaveable { mutableIntStateOf(slots.indexOf(EqSlots.of(page.stage, page.output)).coerceAtLeast(0)) }
-    HubPage(if (page.stage == EqStage.CORRECTION) "correction eq" else "eq", { ctx.nav.pop() }, pivots, pivot, { pivot = it }, headerAlpha = Tok.page_settingsHeaderAlpha) { shown ->
+    HubPage(if (page.stage == EqStage.CORRECTION) "correction eq" else "eq", { ctx.nav.pop() }, pivots, pivot, { pivot = it }, headerAlpha = Tok.page_settingsHeaderAlpha, headerCase = Roles.settingsItem.case) { shown ->
         slots.getOrNull(shown)?.let { EqRows(ctx, it) }
     }
 }

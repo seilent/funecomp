@@ -256,6 +256,27 @@ class HubChromeTest {
         assertPenX("correction eq", "correction eq", "411x960")
     }
 
+    private fun word() = layout("header.word").layoutInput.text.text
+
+    @Test
+    fun theEqHeaderKeepsTheSettingsRowCase() {
+        start(Page.Eq(Enums.EqOutput.wired), under = listOf(Page.Settings))
+        assertEquals("EQ", word())
+    }
+
+    @Test
+    fun theCorrectionEqHeaderKeepsTheSettingsRowCase() {
+        start(Page.Eq(Enums.EqOutput.wired, EqStage.CORRECTION), under = listOf(Page.Settings))
+        assertEquals("CORRECTION EQ", word())
+    }
+
+    @Test
+    fun theArtistHeaderIsTheArtistsPivotWordInItsCase() {
+        start(Page.Artist("Utada Hikaru"), under = listOf(Page.Music))
+        assertEquals("ARTISTS", word())
+        assertPenX("ARTISTS", "artists", "411x960")
+    }
+
     @Test
     fun everyHubPageDrawsThePageHeader() {
         val pages = listOf(

@@ -316,7 +316,7 @@ fun Playlists(ctx: Ctx) {
 @Composable
 fun ArtistDetail(ctx: Ctx, page: Page.Artist) {
     val ui = LocalUi.current
-    HubPage("artist", { ctx.nav.pop() }, listOf("albums"), 0, {}) {
+    HubPage("artists", { ctx.nav.pop() }, listOf("albums"), 0, {}, headerCase = Roles.pivotActive.case) {
         val nameW = ui.px(ui.detailNameRight - Tok.hubEdge)
         RoleText(page.name, Roles.detailName, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(ui.detailNameBaseline), nameW).testTag("artist.name"))
         val rings = listOf(GlyphName.PLAY to false, GlyphName.SHUFFLE to true)
