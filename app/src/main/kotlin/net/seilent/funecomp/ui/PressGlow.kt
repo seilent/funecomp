@@ -110,26 +110,41 @@ fun Modifier.pressGlow(ui: Ui, word: GlowWord, press: () -> PressState?): Modifi
     drawContent()
 }
 
-internal fun glyphGlow(name: GlyphName, side: Int, reach: Float): ImageBitmap {
+internal fun glyphGlow(name: GlyphName, side: Int, reach: Float) = glyphMask(name, side, (reach / 3).roundToInt().coerceAtLeast(1), 0)
+
+internal fun pressGlyphGlow(name: GlyphName, side: Int, spread: Int, grow: Int) = glyphMask(name, side, maxOf(1, grow / 3), spread)
+
+private fun glyphMask(name: GlyphName, side: Int, r: Int, spread: Int): ImageBitmap {
+    val k = side / Tok.glyphBox
     val paint = Paint().apply {
         color = android.graphics.Color.WHITE
         isAntiAlias = true
+        if (!name.fill) {
+            style = Paint.Style.STROKE
+            strokeWidth = Tok.glyphStroke * k
+            strokeCap = Paint.Cap.BUTT
+            strokeJoin = Paint.Join.MITER
+        }
     }
-    return glow(side, (reach / 3).roundToInt().coerceAtLeast(1), 0f) { it.drawPath(path(name, side / Tok.glyphBox).asAndroidPath(), paint) }
+    return glow(side, r, 0f, spread) { it.drawPath(path(name, k).asAndroidPath(), paint) }
 }
 
-internal fun ringGlow(side: Int, stroke: Float, reach: Float): ImageBitmap {
+internal fun ringGlow(side: Int, stroke: Float, reach: Float) = ringMask(side, stroke, (reach / 3).roundToInt().coerceAtLeast(1))
+
+internal fun ringHalo(side: Int, stroke: Float, grow: Int) = ringMask(side, stroke, maxOf(1, grow / 3))
+
+private fun ringMask(side: Int, stroke: Float, r: Int): ImageBitmap {
     val paint = Paint().apply {
         color = android.graphics.Color.WHITE
         isAntiAlias = true
         style = Paint.Style.STROKE
         strokeWidth = stroke
     }
-    return glow(side, (reach / 3).roundToInt().coerceAtLeast(1), side / 2f) { it.drawCircle(side / 2f, side / 2f, (side - stroke) / 2, paint) }
+    return glow(side, r, side / 2f, 0) { it.drawCircle(side / 2f, side / 2f, (side - stroke) / 2, paint) }
 }
 
-private fun glow(side: Int, r: Int, inside: Float, cover: (android.graphics.Canvas) -> Unit): ImageBitmap {
-    val pad = 3 * r
+private fun glow(side: Int, r: Int, inside: Float, spread: Int, cover: (android.graphics.Canvas) -> Unit): ImageBitmap {
+    val pad = spread + 3 * r
     val b = Bitmap.createBitmap(side + 2 * pad, side + 2 * pad, Bitmap.Config.ARGB_8888)
     val canvas = android.graphics.Canvas(b)
     canvas.drawColor(android.graphics.Color.BLACK)
@@ -137,6 +152,10 @@ private fun glow(side: Int, r: Int, inside: Float, cover: (android.graphics.Canv
     cover(canvas)
     val px = IntArray(b.width * b.height)
     b.getPixels(px, 0, b.width, 0, 0, b.width, b.height)
+    if (spread > 0) {
+        val wide = dilate(IntArray(px.size) { px[it] shr 16 and 0xFF }, b.width, b.height, spread)
+        for (i in px.indices) px[i] = wide[i] shl 16 or (wide[i] shl 8) or wide[i]
+    }
     CoverBlur.blur(px, b.width, b.height, r)
     val c = b.width / 2f
     for (y in 0 until b.height) for (x in 0 until b.width) {

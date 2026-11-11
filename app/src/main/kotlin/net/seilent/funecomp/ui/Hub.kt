@@ -200,18 +200,18 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
             CompositionLocalProvider(LocalScrolling provides scrolling) {
                 Box(Modifier.size(ui.px(ui.w).dp(), ui.px(height).dp())) {
                     val barX = ui.homeMenuX + LayoutTok.homeBarX + fit
+                    val ring = rememberPress()
                     if (music >= 0) {
-                        val press = rememberPress()
                         val left = ui.px(ui.homeMenuX + fit)
                         val top = ui.px(ui.homeSlotTop(music))
                         Box(
                             Modifier.at(left, top)
                                 .size((ui.px(ui.homeRingHitRight + fit) - left).dp(), (ui.px(ui.homeRingHitBottom(music)) - top).dp())
                                 .graphicsLayer { alpha = homeRingEnter(ringMs()) }
-                                .press({ onShuffle() }, press = press)
+                                .press({ onShuffle() }, press = ring)
                                 .testTag("home.ring"),
                         ) {
-                            Box(Modifier.at(ui.px(ui.homeRingX + fit) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(LayoutTok.homeRingSize, GlyphName.PLAY, if (press.held) Look.Touch else Look.Focus(false), press = press, tag = "home.ring", stroke = LayoutTok.homeRingStroke) }
+                            Box(Modifier.at(ui.px(ui.homeRingX + fit) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(LayoutTok.homeRingSize, GlyphName.PLAY, if (ring.held) Look.Touch else Look.Focus(false), press = ring, tag = "home.ring", stroke = LayoutTok.homeRingStroke) }
                         }
                     }
                     items.forEachIndexed { i, item ->
@@ -238,7 +238,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                                 onDown = { focus = i },
                                 press = press,
                             ) {
-                                RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c, glow = press.word)
+                                RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = if (i == music && ring.held) white(Tok.homeRingPressDim) else c, glow = press.word)
                                 RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(LayoutTok.homeSubtitleX), subBaseline - top, subW))
                             }
                         }

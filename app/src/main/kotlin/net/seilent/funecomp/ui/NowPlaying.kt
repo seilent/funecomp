@@ -52,10 +52,12 @@ import net.seilent.funecomp.artist.Crop
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.runtime.key
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
@@ -255,7 +257,7 @@ fun BackRing(ring: Float = Tok.backRing, stroke: Float? = null, x: Float = Tok.b
     val ui = LocalUi.current
     val press = rememberPress()
     Box(
-        Modifier.size(ui.px(x + ring).dp(), ui.px(y + ring).dp()).clipToBounds()
+        Modifier.size(ui.px(x + ring).dp(), ui.px(y + ring).dp()).drawWithContent { clipRect(0f, 0f, ui.px(ui.w), ui.px(ui.h)) { this@drawWithContent.drawContent() } }
             .press({ onBack() }, press = press).testTag("back"),
     ) {
         Box(Modifier.at(ui.px(x), ui.px(y), unbounded = true)) { Ring(ring, GlyphName.BACK, Look.Focus(true), press = press, tag = "back", stroke = stroke, glyphSize = glyph) }
@@ -757,7 +759,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                     val hit = Modifier.at(left.toFloat(), ringY, 0f, 0.5f).size((ui.px(edges[i + 1]).roundToInt() - left).toFloat().dp(), hitH.dp()).testTag(tag)
                     if (kind == PREV || kind == NEXT) {
                         val press = rememberPress()
-                        Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha).testTag("$tag.glyph"))
+                        Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha).testTag("$tag.glyph"), glow = { press })
                         Box(
                             hit.press({
                                 control.transport(if (kind == PREV) Enums.TransportCmd.prev else Enums.TransportCmd.next)

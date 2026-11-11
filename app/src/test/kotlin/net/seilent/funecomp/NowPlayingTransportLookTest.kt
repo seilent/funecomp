@@ -26,6 +26,7 @@ import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -186,17 +187,25 @@ class NowPlayingTransportLookTest {
         assertEquals("heart after a tap", side, stroke(heart()).toFloat(), STROKE_TOLERANCE)
     }
 
+    private fun red(img: BufferedImage, at: Offset) = img.getRGB(at.x.roundToInt(), at.y.roundToInt()) shr 16 and 0xff
+
     @Test
-    fun aPressKeepsThePrevAndNextGlyphsAtRestSize() {
+    fun aPressGlowsThePrevAndNextGlyphsAtRestSize() {
         start()
+        wake()
+        val u = ui().u
         for (tag in listOf("np.prev", "np.nextTrack")) {
-            val rest = rule.onNodeWithTag("$tag.glyph").fetchSemanticsNode().boundsInRoot.width
+            val box = rule.onNodeWithTag("$tag.glyph").fetchSemanticsNode().boundsInRoot
+            val past = Offset(box.left + box.width * INK_LEFT / Tok.glyphBox - u, box.center.y)
+            val before = rule.onRoot().pixels().also { System.gc() }
             rule.onNodeWithTag(tag).performTouchInput { down(center) }
             settle(Tok.motion_press.toLong() + 50)
             val held = rule.onNodeWithTag("$tag.glyph").fetchSemanticsNode().boundsInRoot.width
+            val lit = rule.onRoot().pixels().also { System.gc() }
             rule.onNodeWithTag(tag).performTouchInput { cancel() }
             settle(600)
-            assertEquals(tag, 1f, held / rest, 0.002f)
+            assertEquals(tag, 1f, held / box.width, 0.002f)
+            assertTrue("$tag glows past its ink", red(lit, past) > red(before, past) + GLOW_LIFT)
         }
     }
 
@@ -232,6 +241,8 @@ class NowPlayingTransportLookTest {
         const val MID = 153
         const val DIM = 102
         const val TOLERANCE = 3
+        const val INK_LEFT = 5f
+        const val GLOW_LIFT = 60
         const val BRIGHT = 128
         const val STROKE_TOLERANCE = 1.5f
         const val EMPTY_X = 2f

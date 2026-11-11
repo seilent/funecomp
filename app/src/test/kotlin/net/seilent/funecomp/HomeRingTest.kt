@@ -25,6 +25,7 @@ import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -164,23 +165,36 @@ class HomeRingTest {
         assertEquals(146.6f, ((ys.first() + ys.last() + 1) / 2f - o.top) / u, 0.5f)
     }
 
+    private fun red(at: Offset) = frame().getPixel(at.x.roundToInt(), at.y.roundToInt()) shr 16 and 0xff
+
     @Test
     fun aHeldRingDrawsLit() {
         start()
+        val u = ui().u
         val rest = alphas()
         val width = ringWidth()
+        val box = rule.onNodeWithTag("home.ring.ring").fetchSemanticsNode().boundsInWindow
+        val inside = Offset(box.center.x, box.center.y - (box.height / 2 - LayoutTok.homeRingStroke * u) + DISC_IN * u)
+        val outside = Offset(box.center.x, box.top - HALO_OUT * u)
+        val inBase = red(inside)
+        val outBase = red(outside)
         val ring = rule.onNodeWithTag("home.ring")
         ring.performTouchInput { down(center) }
         rule.mainClock.advanceTimeByFrame()
         assertEquals(255f, ringBrightness().toFloat(), 3f)
         assertEquals(255f, glyphBrightness().toFloat(), 3f)
-        assertEquals(rest, alphas())
+        val dimmed = rest + ("music" to Tok.homeRingPressDim)
+        assertEquals(dimmed.keys, alphas().keys)
+        alphas().forEach { (k, v) -> assertEquals(k, dimmed.getValue(k), v, 0.005f) }
         rule.mainClock.advanceTimeBy(150)
-        assertEquals(rest, alphas())
+        alphas().forEach { (k, v) -> assertEquals("$k at +150", dimmed.getValue(k), v, 0.005f) }
+        assertEquals("the disc inside the ring", Tok.vol_discAlpha, (red(inside) - inBase).toFloat() / (255 - inBase), 0.06f)
+        assertTrue("the halo outside the ring: $outBase", red(outside) > outBase + 10)
         ring.performTouchInput { up() }
         rule.mainClock.advanceTimeByFrame()
         assertEquals(Tok.alpha_mid * 255, ringBrightness().toFloat(), 3f)
         assertEquals(rest.getValue("music"), alphas().getValue("music"))
+        assertEquals("no disc after the up", inBase.toFloat(), red(inside).toFloat(), 3f)
         assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
         assertEquals(1f, ringWidth() / width, 0.002f)
         settle(1000)
@@ -190,7 +204,9 @@ class HomeRingTest {
         assertEquals(255f, ringBrightness().toFloat(), 3f)
         ring.performTouchInput { moveBy(Offset(slop * 2, 0f)) }
         rule.mainClock.advanceTimeByFrame()
-        assertEquals(Tok.alpha_mid * 255, ringBrightness().toFloat(), 3f)
+        assertEquals("music back at the slop", rest.getValue("music"), alphas().getValue("music"))
+        rule.mainClock.advanceTimeBy(Tok.motion_press.toLong())
+        assertEquals("the ring at its idle look once the halo is back", Tok.alpha_mid * 255, ringBrightness().toFloat(), 3f)
         ring.performTouchInput { up() }
         settle(1000)
         assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
@@ -256,5 +272,10 @@ class HomeRingTest {
         assertEquals(shows, shell.toast.shows)
         assertEquals(rev, sim.device.playback.state.queueRev)
         assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+    }
+
+    private companion object {
+        const val DISC_IN = 1.5f
+        const val HALO_OUT = 0.5f
     }
 }

@@ -121,26 +121,33 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     val prevPress = rememberPress()
     val ringPress = rememberPress()
     val nextPress = rememberPress()
+    val plusPress = rememberPress()
+    val minusPress = rememberPress()
     fun pressLit(p: PressState) = if (p.held) 1f else p.lit
     val skipSide = ui.px(Tok.vol_skip).roundToInt()
+    val plusSide = ui.px(Tok.vol_plus).roundToInt()
     val ringSide = ui.px(Tok.vol_ring).roundToInt()
     val stroke = ui.px(Tok.vol_ringStroke)
     val skipReach = ui.px(Tok.vol_glowSkip)
     val ringReach = ui.px(Tok.vol_glowRing)
-    val masks = remember(skipSide, ringSide, stroke, skipReach, ringReach, d.density) { arrayOfNulls<ImageBitmap>(3) }
+    val masks = remember(skipSide, plusSide, ringSide, stroke, skipReach, ringReach, d.density) { arrayOfNulls<ImageBitmap>(5) }
     if (prevPress.held && masks[0] == null) masks[0] = glyphGlow(GlyphName.SKIP_PREVIOUS, skipSide, skipReach)
     if (ringPress.held && masks[1] == null) masks[1] = ringGlow(ringSide, stroke, ringReach)
     if (nextPress.held && masks[2] == null) masks[2] = glyphGlow(GlyphName.SKIP_NEXT, skipSide, skipReach)
+    if (plusPress.held && masks[3] == null) masks[3] = glyphGlow(GlyphName.PLUS, plusSide, skipReach)
+    if (minusPress.held && masks[4] == null) masks[4] = glyphGlow(GlyphName.MINUS, plusSide, skipReach)
 
     Box(Modifier.fillMaxSize().alpha(alpha.value).testTag("overlay")) {
         Box(Modifier.fillMaxSize().bleed(LocalBleed.current).background(Black.copy(alpha = Tok.scrim_overlay_alpha)))
         Canvas(Modifier.fillMaxSize().testTag("overlay.press")) {
-            fun glow(m: ImageBitmap?, x: Float, a: Float) {
-                if (m != null && a > 0f) drawImage(m, Offset(x - m.width / 2f, ringY - m.height / 2f), alpha = a)
+            fun glow(m: ImageBitmap?, x: Float, a: Float, y: Float = ringY) {
+                if (m != null && a > 0f) drawImage(m, Offset(x - m.width / 2f, y - m.height / 2f), alpha = a)
             }
             val ringAlpha = pressLit(ringPress)
             glow(masks[0], cx - skip, pressLit(prevPress))
             glow(masks[2], cx + skip, pressLit(nextPress))
+            glow(masks[3], cx, pressLit(plusPress), plusY)
+            glow(masks[4], cx, pressLit(minusPress), minusY)
             glow(masks[1], cx, ringAlpha)
             if (ringAlpha > 0f) drawCircle(lit, (ringSide - 2 * stroke) / 2, Offset(cx, ringY), alpha = Tok.vol_discAlpha * ringAlpha)
         }
@@ -190,8 +197,8 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
             }
             return if (p == null) at.clickable(touch, null, onClick = go) else at.press({ go() }, press = p)
         }
-        Box(target(cx, plusY, "overlay.plus") { actions.volume(1) })
-        Box(target(cx, minusY, "overlay.minus") { actions.volume(-1) })
+        Box(target(cx, plusY, "overlay.plus", p = plusPress) { actions.volume(1) })
+        Box(target(cx, minusY, "overlay.minus", p = minusPress) { actions.volume(-1) })
         Box(target(cx - skip, ringY, "overlay.prev", p = prevPress) { actions.transport(Enums.TransportCmd.prev) })
         Box(target(cx, ringY, "overlay.ring", ringHit, ringPress) { actions.transport(Enums.TransportCmd.toggle) })
         Box(target(cx + skip, ringY, "overlay.next", p = nextPress) { actions.transport(Enums.TransportCmd.next) })

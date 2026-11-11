@@ -244,8 +244,8 @@ private fun JumpSearch(x: Float, y: Float, tile: Float, press: JumpPress, act: S
             .clipToBounds().semanticsWhile(shown) { onClick("search") { act.value(JUMP_SEARCH); true }; testTag = "jump.search" },
     ) {
         val at = Modifier.at(tile / 2, tile / 2, 0.5f, 0.5f)
-        Glyph(GlyphName.SEARCH_RING, Tok.jumpSearchGlyph, white(Roles.letterGlyph.alpha), at)
-        Glyph(GlyphName.SEARCH_HANDLE, Tok.jumpSearchGlyph, white(Roles.letterGlyph.alpha), at)
+        Glyph(GlyphName.SEARCH_RING, Tok.jumpSearchGlyph, white(Roles.letterGlyph.alpha), at, glow = { press.of(JUMP_SEARCH) })
+        Glyph(GlyphName.SEARCH_HANDLE, Tok.jumpSearchGlyph, white(Roles.letterGlyph.alpha), at, glow = { press.of(JUMP_SEARCH) })
     }
 }
 

@@ -143,6 +143,24 @@ class VolumePressLookTest {
     }
 
     @Test
+    fun aHeldPlusOrMinusGlowsPastItsInkAndCutsAtTheUp() {
+        start()
+        val u = u()
+        for (tag in listOf("overlay.plus", "overlay.minus")) {
+            val g = bounds("$tag.glyph")
+            val past = Offset(g.left + g.width * BAR_LEFT / Tok.glyphBox - u, g.center.y)
+            val base = red4(past)
+            hold(tag)
+            assertTrue("$tag glows past its ink: $base", red4(past) > base + 20)
+            up(tag)
+            rule.mainClock.advanceTimeByFrame()
+            rule.waitForIdle()
+            assertEquals("$tag cut at the up", base, red4(past), 3f)
+            settle(100)
+        }
+    }
+
+    @Test
     fun theGlowIsLitInTheFirstFrameOfAPress() {
         start()
         val (past, a) = barSide()
@@ -223,5 +241,9 @@ class VolumePressLookTest {
         up("overlay.prev")
         settle(100)
         assertEquals(1, glowsBuilt - third)
+    }
+
+    private companion object {
+        const val BAR_LEFT = 4f
     }
 }

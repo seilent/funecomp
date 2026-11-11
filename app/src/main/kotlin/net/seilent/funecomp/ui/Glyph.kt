@@ -15,6 +15,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -26,6 +27,7 @@ import androidx.compose.ui.platform.testTag
 import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 enum class GlyphName(val fill: Boolean, val d: List<Any>) {
@@ -57,13 +59,19 @@ internal fun path(g: GlyphName, k: Float): Path {
 }
 
 @Composable
-fun Glyph(name: GlyphName, size: Float, color: Color, modifier: Modifier = Modifier, level: Float = 1f) {
+fun Glyph(name: GlyphName, size: Float, color: Color, modifier: Modifier = Modifier, level: Float = 1f, glow: (() -> PressState?)? = null) {
     val ui = LocalUi.current
     val side = ui.px(size)
     val dp = with(LocalDensity.current) { side.toDp() }
     val k = side / Tok.glyphBox
     val p = remember(name, k) { path(name, k) }
+    val mask = remember(name, side, ui) { arrayOfNulls<ImageBitmap>(1) }
     Canvas(modifier.requiredSize(dp)) {
+        val lit = glow?.invoke()?.lit ?: 0f
+        if (lit > 0f) {
+            val m = mask[0] ?: pressGlyphGlow(name, side.roundToInt(), ui.px(Tok.pressGlowDilate).roundToInt(), ui.px(Tok.pressGlow).roundToInt()).also { mask[0] = it }
+            drawImage(m, Offset((this.size.width - m.width) / 2f, (this.size.height - m.height) / 2f), alpha = Tok.pressGlowAlpha * lit)
+        }
         if (name.fill) {
             drawPath(p, color, style = Fill)
         } else {
@@ -118,7 +126,19 @@ fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifie
         alpha.snapTo(0f)
         alpha.animateTo(1f, tween(Tok.motion_toggleSwap.toInt(), easing = LinearEasing))
     }
+    val halo = remember(side, width) { arrayOfNulls<ImageBitmap>(1) }
     Box(modifier.requiredSize(dp).pressScale(press)) {
+        if (press != null && !press.scaled) {
+            Canvas(Modifier.requiredSize(dp)) {
+                val lit = press.lit
+                if (lit > 0f) {
+                    val d = side.roundToInt()
+                    val m = halo[0] ?: ringHalo(d, width, maxOf(1, (Tok.vol_glowRing * d / Tok.vol_ring).roundToInt())).also { halo[0] = it }
+                    drawImage(m, Offset((this.size.width - m.width) / 2f, (this.size.height - m.height) / 2f), alpha = lit)
+                    drawCircle(Color.White, (side - 2 * width) / 2, center, alpha = Tok.vol_discAlpha * lit)
+                }
+            }
+        }
         Canvas(Modifier.requiredSize(dp).then(if (tag != null) Modifier.testTag("$tag.ring") else Modifier)) {
             if (one) {
                 drawArc(color, Tok.ringArcStart, Tok.npRepeatOneSweep, false, Offset(width / 2, width / 2), Size(side - width, side - width), style = Stroke(width))
