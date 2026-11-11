@@ -119,7 +119,8 @@ fun App(
         val base = LocalViewConfiguration.current
         val touch = remember(base, ui.u) { Touch(base, ui.px(Tok.touchSlop)) }
         val accent = AccentState(accentFor(device.settings.values[ACCENT_KEY]?.toIntOrNull()), device.settings.values[ACCENT_OFF_KEY] == "on")
-        val slots = remember { PressSlots() }
+        val outer = LocalPressSlots.current
+        val slots = remember(outer) { outer ?: PressSlots() }
         CompositionLocalProvider(
             LocalPressSlots provides slots,
             LocalUi provides ui,

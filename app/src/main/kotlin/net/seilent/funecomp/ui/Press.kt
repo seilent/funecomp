@@ -7,7 +7,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
@@ -17,23 +16,22 @@ import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.roundToLong
 
 class PressState internal constructor(private val scope: CoroutineScope?, private val slots: PressSlots?) {
+    var scaled = false
+
     var scale by mutableFloatStateOf(1f)
         private set
 
-    var lit by mutableStateOf(false)
+    var lit by mutableFloatStateOf(0f)
         private set
 
     var held by mutableStateOf(false)
         private set
-
-    internal var frozen: () -> Boolean = { false }
 
     internal var probe: (() -> Unit)? = null
 
@@ -41,12 +39,18 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
     private var to = 1f
     private var start = 0L
     private var span = 0L
+    private var lookFrom = 0f
+    private var lookTo = 0f
+    private var lookStart = 0L
+    private var lookSpan = 0L
+    private var rise = false
     private var releaseAt = -1L
+    private var cutAt = -1L
     private var job: Job? = null
 
-    private fun legMs(): Long {
+    private fun ms(token: Float): Long {
         val k = scope?.coroutineContext?.get(MotionDurationScale)?.scaleFactor ?: 1f
-        return (Tok.motion_press * k).roundToLong()
+        return (token * k).roundToLong()
     }
 
     private fun tween(now: Long): Float {
@@ -58,22 +62,28 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
     private fun value(now: Long): Float {
         if (releaseAt < 0 || now < releaseAt) return tween(now)
         val e = now - releaseAt
-        val back = legMs()
+        val back = ms(Tok.motion_press)
         if (e >= back) return 1f
         val v = tween(releaseAt)
         return v + (1f - v) * e / back
     }
 
+    private fun glow(now: Long): Float {
+        if (lookSpan <= 0L || now >= lookStart + lookSpan) return lookTo
+        if (now <= lookStart) return lookFrom
+        val t = (now - lookStart).toFloat() / lookSpan
+        return lookFrom + (lookTo - lookFrom) * if (rise) CubicOut.transform(t) else t
+    }
+
+    fun look(now: Long): Float = if (cutAt in 0L..now) 0f else glow(now)
+
+    fun scaleAt(now: Long): Float = if (scaled) value(now) else 1f
+
     private fun run(now: Long, a: Float, b: Float) {
         from = a
         to = b
         start = now
-        span = legMs()
-    }
-
-    private fun show(v: Float, now: Long) {
-        scale = v
-        lit = v != 1f || moving(now)
+        span = ms(Tok.motion_press)
     }
 
     private fun set(v: Float) {
@@ -82,7 +92,25 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
         span = 0L
     }
 
-    private fun moving(now: Long) = (span > 0L && now < start + span) || (releaseAt >= 0 && now >= releaseAt && now < releaseAt + legMs())
+    private fun lookRun(now: Long, a: Float, b: Float, length: Long, cubic: Boolean) {
+        lookFrom = a
+        lookTo = b
+        lookStart = now
+        lookSpan = length
+        rise = cubic
+    }
+
+    private fun lookSet(v: Float) {
+        lookFrom = v
+        lookTo = v
+        lookSpan = 0L
+    }
+
+    private fun moving(now: Long): Boolean {
+        val glowing = lookSpan > 0L && now < lookStart + lookSpan
+        if (!scaled) return glowing
+        return glowing || (span > 0L && now < start + span) || (releaseAt >= 0 && now >= releaseAt && now < releaseAt + ms(Tok.motion_press))
+    }
 
     fun down(now: Long) {
         if (slots != null) slots.down(this, now) else press(now)
@@ -90,15 +118,21 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
 
     internal fun press(now: Long) {
         val v = value(now)
+        val l = look(now)
         releaseAt = -1L
+        cutAt = -1L
         run(now, v, Tok.motion_pressScale)
-        lit = true
+        lookRun(now, l, 1f, ms(Tok.motion_pressGlow), true)
         held = true
         kick()
     }
 
     fun tap(now: Long) {
-        if (held) releaseAt = now + Tok.motion_touchReturnDelay.toLong()
+        if (to != 1f && releaseAt < 0) {
+            releaseAt = now + Tok.motion_touchReturnDelay.toLong()
+            cutAt = now
+            lit = 0f
+        }
         held = false
         kick()
     }
@@ -107,18 +141,30 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
         if (!held) return
         held = false
         val v = value(now)
+        val l = look(now)
         releaseAt = -1L
+        cutAt = -1L
         if (v == 1f) set(1f) else run(now, v, 1f)
+        if (l == 0f) lookSet(0f) else lookRun(now, l, 0f, ms(Tok.motion_press), false)
+        kick()
+    }
+
+    fun cut() {
+        lookSet(0f)
+        cutAt = -1L
+        lit = 0f
         kick()
     }
 
     fun reset() {
         set(1f)
+        lookSet(0f)
         releaseAt = -1L
+        cutAt = -1L
         job?.cancel()
         job = null
         scale = 1f
-        lit = false
+        lit = 0f
         held = false
     }
 
@@ -139,20 +185,19 @@ class PressState internal constructor(private val scope: CoroutineScope?, privat
         return withFrameMillis { it }
     }
 
+    private fun show(now: Long) {
+        scale = scaleAt(now)
+        lit = look(now)
+    }
+
     private suspend fun drive() {
         var now = frame()
         while (true) {
-            val stop = frozen()
-            if (stop && to != 1f && (releaseAt < 0 || now < releaseAt)) set(Tok.motion_pressScale)
-            show(value(now), now)
+            show(now)
             now = when {
-                stop -> {
-                    snapshotFlow { frozen() }.first { !it }
-                    frame()
-                }
                 moving(now) -> frame()
                 releaseAt > now -> {
-                    withTimeoutOrNull(releaseAt - now) { snapshotFlow { frozen() }.first { it } }
+                    delay(releaseAt - now)
                     frame()
                 }
                 else -> return
@@ -183,6 +228,15 @@ class PressSlots {
         back = o
     }
 
+    internal fun look(now: Long) = maxOf(on?.look(now) ?: 0f, back?.look(now) ?: 0f)
+
+    internal fun lit() = maxOf(on?.lit ?: 0f, back?.lit ?: 0f)
+
+    fun cut() {
+        on?.cut()
+        back?.cut()
+    }
+
     fun drop() {
         on?.drop()
         back?.drop()
@@ -196,7 +250,7 @@ class PressSlots {
     }
 }
 
-fun Modifier.pressScale(p: PressState?, origin: TransformOrigin = TransformOrigin.Center): Modifier = if (p == null || !p.lit) this else graphicsLayer {
+fun Modifier.pressScale(p: PressState?, origin: TransformOrigin = TransformOrigin.Center): Modifier = if (p == null || !p.scaled) this else graphicsLayer {
     scaleX = p.scale
     scaleY = p.scale
     transformOrigin = origin
@@ -204,18 +258,14 @@ fun Modifier.pressScale(p: PressState?, origin: TransformOrigin = TransformOrigi
 
 val LocalPressSlots = staticCompositionLocalOf<PressSlots?> { null }
 
-val LocalPressFrozen = staticCompositionLocalOf<() -> Boolean> { { false } }
-
 val LocalPressProbe = staticCompositionLocalOf<(() -> Unit)?> { null }
+
+val LocalScrolling = staticCompositionLocalOf<() -> Boolean> { { false } }
 
 @Composable
 fun rememberPress(): PressState {
     val scope = rememberCoroutineScope()
     val slots = LocalPressSlots.current
-    val frozen = LocalPressFrozen.current
     val probe = LocalPressProbe.current
-    return remember(slots) { PressState(scope, slots) }.also {
-        it.frozen = frozen
-        it.probe = probe
-    }
+    return remember(slots) { PressState(scope, slots) }.also { it.probe = probe }
 }

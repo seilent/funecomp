@@ -28,7 +28,6 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -70,7 +69,7 @@ fun Modifier.enter(): Modifier {
     }
 }
 
-fun Modifier.pivotSwipe(slop: Float, count: Int, active: () -> Int, onPivot: (Int) -> Unit) = pointerInput(count) {
+fun Modifier.pivotSwipe(slop: Float, count: Int, active: () -> Int, slots: PressSlots?, onPivot: (Int) -> Unit) = pointerInput(count, slots) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         var dx = 0f
@@ -85,6 +84,7 @@ fun Modifier.pivotSwipe(slop: Float, count: Int, active: () -> Int, onPivot: (In
             dy += d.y
             if (!decided && abs(dx) > slop && abs(dx) > abs(dy)) {
                 decided = true
+                slots?.cut()
                 val next = active() + if (dx < 0) 1 else -1
                 if (next in 0 until count) onPivot(next)
             }
@@ -132,7 +132,8 @@ fun HubPage(
     }
     val ui = LocalUi.current
     val current by rememberUpdatedState(active)
-    val swipe = if (pivots.size > 1) Modifier.pivotSwipe(ui.px(Tok.touchSlop), pivots.size, { current }, onPivot) else Modifier
+    val slots = LocalPressSlots.current
+    val swipe = if (pivots.size > 1) Modifier.pivotSwipe(ui.px(Tok.touchSlop), pivots.size, { current }, slots, onPivot) else Modifier
     Box(Modifier.fillMaxSize().then(swipe).testTag("hub.$header")) {
         PageSurface()
         Box(
@@ -191,60 +192,59 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     val pitch = ui.homePitch
     val x = ui.px(ui.homeTextX + fit)
     val margin = LayoutTok.homeFirstBaseline - LayoutTok.homeBarTop
+    val column = rememberScrollState()
+    val scrolling = remember(column) { { column.isScrollInProgress } }
     Box(Modifier.fillMaxSize().testTag("home")) {
-        Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState(), flingBehavior = rememberFling(Tok.motion_listFlingRetention)).testTag("home.column")) {
+        Box(Modifier.fillMaxSize().verticalScroll(column, flingBehavior = rememberFling(Tok.motion_listFlingRetention)).testTag("home.column")) {
             val height = maxOf(ui.h, 2 * margin + items.size * pitch)
-            Box(Modifier.size(ui.px(ui.w).dp(), ui.px(height).dp())) {
-                val barX = ui.homeMenuX + LayoutTok.homeBarX + fit
-                if (music >= 0) {
-                    val press = rememberPress()
-                    val left = ui.px(ui.homeMenuX + fit)
-                    val top = ui.px(ui.homeSlotTop(music))
-                    Box(
-                        Modifier.at(left, top)
-                            .size((ui.px(ui.homeRingHitRight + fit) - left).dp(), (ui.px(ui.homeRingHitBottom(music)) - top).dp())
-                            .graphicsLayer { alpha = homeRingEnter(ringMs()) }
-                            .press({ onShuffle() }, press = press)
-                            .testTag("home.ring"),
-                    ) {
-                        Box(Modifier.at(ui.px(ui.homeRingX + fit) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(LayoutTok.homeRingSize, GlyphName.PLAY, if (press.held) Look.Touch else Look.Focus(false), press = press, tag = "home.ring", stroke = LayoutTok.homeRingStroke) }
-                    }
-                }
-                items.forEachIndexed { i, item ->
-                    val baseline = ui.px(LayoutTok.homeFirstBaseline + i * pitch)
-                    val on = focus == i
-                    val c by animateColorAsState(white(if (on) Roles.homeItem.alpha else Roles.homeItem.dim), tween(Tok.motion_focusAlpha.toInt(), easing = LinearEasing), label = "home")
-                    val subBaseline = baseline + ui.px(LayoutTok.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size)
-                    val top = baseline - ui.px(LayoutTok.homeBarTop)
-                    val shiftPx = ui.px(Tok.motion_homeEnterShift)
-                    Box(
-                        Modifier.fillMaxSize().graphicsLayer {
-                            val p = Decel.transform(((enterMs() - stagger * i) / Tok.motion_homeEnter).coerceIn(0f, 1f))
-                            translationX = shiftPx * (1f - p)
-                            alpha = p
-                        },
-                    ) {
-                        val subW = ui.px(ui.w - Tok.edge) - x - ui.px(LayoutTok.homeSubtitleX)
-                        val subStyle = textStyle(Roles.homeSubtitle, white(Roles.homeSubtitle.alpha))
-                        val sub = if (item.names.isEmpty()) item.subtitle else remember(item.names, subW, subStyle) { wholeNames(item.names) { measurer.measure(shown(it, Roles.homeSubtitle.case), subStyle, softWrap = false, maxLines = 1).size.width <= subW.roundToInt() } }
-                        val word = remember(item.name, wordStyle, ui) { measurer.measure(shown(item.name, Roles.homeItem.case), wordStyle) }
-                        val line = remember(sub, subStyle, ui) { measurer.measure(shown(sub, Roles.homeSubtitle.case), subStyle, softWrap = false, maxLines = 1) }
-                        val blockX = x - ui.px(barX) + maxOf(word.size.width.toFloat(), ui.px(LayoutTok.homeSubtitleX) + minOf(line.size.width.toFloat(), subW)) / 2
-                        val blockY = (baseline - top - word.firstBaseline + subBaseline - top + line.size.height - line.firstBaseline) / 2
+            CompositionLocalProvider(LocalScrolling provides scrolling) {
+                Box(Modifier.size(ui.px(ui.w).dp(), ui.px(height).dp())) {
+                    val barX = ui.homeMenuX + LayoutTok.homeBarX + fit
+                    if (music >= 0) {
                         val press = rememberPress()
-                        Pressable(
-                            { onOpen(item.page) },
-                            Modifier.at(ui.px(barX), top).size((ui.px(ui.w) - ui.px(barX)).dp(), ui.px(pitch).dp()).testTag("home.${item.name}"),
-                            onDown = { focus = i },
-                            origin = TransformOrigin(blockX / (ui.px(ui.w) - ui.px(barX)), blockY / ui.px(pitch)),
-                            press = press,
+                        val left = ui.px(ui.homeMenuX + fit)
+                        val top = ui.px(ui.homeSlotTop(music))
+                        Box(
+                            Modifier.at(left, top)
+                                .size((ui.px(ui.homeRingHitRight + fit) - left).dp(), (ui.px(ui.homeRingHitBottom(music)) - top).dp())
+                                .graphicsLayer { alpha = homeRingEnter(ringMs()) }
+                                .press({ onShuffle() }, press = press)
+                                .testTag("home.ring"),
                         ) {
-                            RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c)
-                            RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(LayoutTok.homeSubtitleX), subBaseline - top, subW))
+                            Box(Modifier.at(ui.px(ui.homeRingX + fit) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(LayoutTok.homeRingSize, GlyphName.PLAY, if (press.held) Look.Touch else Look.Focus(false), press = press, tag = "home.ring", stroke = LayoutTok.homeRingStroke) }
                         }
                     }
+                    items.forEachIndexed { i, item ->
+                        val baseline = ui.px(LayoutTok.homeFirstBaseline + i * pitch)
+                        val on = focus == i
+                        val c by animateColorAsState(white(if (on) Roles.homeItem.alpha else Roles.homeItem.dim), tween(Tok.motion_focusAlpha.toInt(), easing = LinearEasing), label = "home")
+                        val subBaseline = baseline + ui.px(LayoutTok.homeSubtitleDrop + Tok.capHeight * Roles.homeSubtitle.size)
+                        val top = baseline - ui.px(LayoutTok.homeBarTop)
+                        val shiftPx = ui.px(Tok.motion_homeEnterShift)
+                        Box(
+                            Modifier.fillMaxSize().graphicsLayer {
+                                val p = Decel.transform(((enterMs() - stagger * i) / Tok.motion_homeEnter).coerceIn(0f, 1f))
+                                translationX = shiftPx * (1f - p)
+                                alpha = p
+                            },
+                        ) {
+                            val subW = ui.px(ui.w - Tok.edge) - x - ui.px(LayoutTok.homeSubtitleX)
+                            val subStyle = textStyle(Roles.homeSubtitle, white(Roles.homeSubtitle.alpha))
+                            val sub = if (item.names.isEmpty()) item.subtitle else remember(item.names, subW, subStyle) { wholeNames(item.names) { measurer.measure(shown(it, Roles.homeSubtitle.case), subStyle, softWrap = false, maxLines = 1).size.width <= subW.roundToInt() } }
+                            val press = rememberPress()
+                            Pressable(
+                                { onOpen(item.page) },
+                                Modifier.at(ui.px(barX), top).size((ui.px(ui.w) - ui.px(barX)).dp(), ui.px(pitch).dp()).testTag("home.${item.name}"),
+                                onDown = { focus = i },
+                                press = press,
+                            ) {
+                                RoleText(item.name, Roles.homeItem, Modifier.atBaseline(x - ui.px(barX), baseline - top), color = c)
+                                RoleText(sub, Roles.homeSubtitle, Modifier.atBaseline(x - ui.px(barX) + ui.px(LayoutTok.homeSubtitleX), subBaseline - top, subW))
+                            }
+                        }
+                    }
+                    RoleText("funecomp", Roles.watermark, Modifier.atBaseline(x, ui.px(height - Tok.edge)).testTag("home.watermark"))
                 }
-                RoleText("funecomp", Roles.watermark, Modifier.atBaseline(x, ui.px(height - Tok.edge)).testTag("home.watermark"))
             }
         }
     }

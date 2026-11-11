@@ -81,6 +81,29 @@ class PressFrameShots {
         }
     }
 
+    private fun fling(tag: String, catchAt: Long): PressFrameShots.(Long) -> Unit = { t0 ->
+        val now = rule.mainClock.currentTime
+        if (now == t0) {
+            spot = bounds(tag).center
+            val step = slop() / 2
+            rule.onRoot().performTouchInput {
+                down(spot)
+                repeat(FLING_MOVES) { moveBy(Offset(0f, -step), FLING_MS) }
+                up()
+            }
+        }
+        if (now >= t0 + catchAt && !moved) {
+            rule.onRoot().performTouchInput { down(spot) }
+            moved = true
+        }
+        if (now >= t0 + catchAt + DRAG_UP && !upDone) {
+            rule.onRoot().performTouchInput { up() }
+            upDone = true
+        }
+    }
+
+    private var spot = Offset.Zero
+
     private fun two(): PressFrameShots.(Long) -> Unit = { t0 ->
         val now = rule.mainClock.currentTime
         val a = bounds("np.prev").center
@@ -187,6 +210,9 @@ class PressFrameShots {
         Case("ring-drag", NP, "np.toggle.play", act = drag("np.toggle", 150, Offset(0f, slop() + 10f))),
         Case("back-ring", NP, "back", act = tap("back", 50)),
         Case("q2", NP, "np.prev", area = "np.nextTrack", act = two()),
+        Case("fling-catch", listOf(Page.Home, Page.Music), "row.3", prep = { artists() }, act = fling("row.3", CATCH_AT)),
+        Case("scroll-start", listOf(Page.Home, Page.Music), "${TEXT}Utada Hikaru", prep = { artists() }, act = drag("${TEXT}Utada Hikaru", RISING, Offset(0f, -slop() * 2))),
+        Case("swipe-cut", listOf(Page.Home, Page.Music), "${TEXT}Utada Hikaru", prep = { artists() }, act = drag("${TEXT}Utada Hikaru", 150, Offset(-slop() * 2, 0f))),
     )
 
     private fun frames(name: String) {
@@ -226,6 +252,15 @@ class PressFrameShots {
     @Test
     fun twoItems() = frames("q2")
 
+    @Test
+    fun flingCatch() = frames("fling-catch")
+
+    @Test
+    fun scrollStart() = frames("scroll-start")
+
+    @Test
+    fun swipeCut() = frames("swipe-cut")
+
     private companion object {
         const val TEXT = "text:"
         const val STEP = 25L
@@ -235,6 +270,10 @@ class PressFrameShots {
         const val DRAG_UP = 200L
         const val PAD = 0.06f
         const val BRIGHT = 120
+        const val FLING_MOVES = 12
+        const val FLING_MS = 4L
+        const val CATCH_AT = 50L
+        const val RISING = 25L
         val NP = listOf(Page.Home, Page.NowPlaying)
         val EQ = listOf(Page.Home, Page.Settings, Page.Eq(Enums.EqOutput.wired))
     }

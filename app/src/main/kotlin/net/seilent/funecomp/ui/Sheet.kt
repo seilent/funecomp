@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -460,31 +461,34 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
                 y += heights[i]
             }
             Box(Modifier.offset { IntOffset(0, (edge + titleH + fixedH - shift).roundToInt()) }.size(w.dp(), listH.dp())) {
-                LazyColumn(
-                    Modifier.fillMaxSize().testTag("sheet.list"),
-                    state = list,
-                    flingBehavior = rememberFling(Tok.motion_listFlingRetention),
-                ) {
-                    items(scrolled, key = { "info${fixed + it}" }) { j ->
-                        val i = fixed + j
-                        SheetLine(texts[i], lineValues.getOrElse(i) { "" }, layouts[i], heights[i], if (i == 0) "sheet.info" else "sheet.info.$i")
-                    }
-                    itemsIndexed(state.items) { i, item ->
-                        val on = i == state.focus
-                        val value = itemValues.getOrElse(i) { "" }
-                        Box(
-                            Modifier.size(w.dp(), pitch.dp()).press({ o -> state.press(i, o.x / w) }, if (state.holds) ({ state.hold(i) }) else null).semantics { onClick { state.click(i) } }.testTag("sheet.item.$i"),
-                        ) {
-                            val entry = state.entry
-                            if (entry != null) {
-                                Box(Modifier.at(edge, pitch / 2, ay = 0.5f).width((w - 2 * edge).dp())) { entry() }
-                            } else {
-                                val c by animateColorAsState(white(if (on) Roles.dialogItem.alpha else Roles.dialogItem.dim), tween(Tok.motion_focusAlpha.toInt()), label = "item")
-                                val role = if (itemMixed.getOrElse(i) { false }) Roles.dialogItem.copy(case = Case.MIXED) else Roles.dialogItem
-                                RoleText(item, role, Modifier.at(edge, pitch / 2, ay = 0.5f).width(slot(value).dp()).clipToBounds(), color = c)
-                                if (value.isNotEmpty()) {
-                                    val t = measurer.measure(shown(item, role.case), itemStyle)
-                                    SheetValue(value, (pitch - t.size.height) / 2 + t.firstBaseline, if (on) Tok.settingsValueFocused else Tok.settingsValueDim, i == state.accentItem)
+                val scrolling = remember(list) { { list.isScrollInProgress } }
+                CompositionLocalProvider(LocalScrolling provides scrolling) {
+                    LazyColumn(
+                        Modifier.fillMaxSize().testTag("sheet.list"),
+                        state = list,
+                        flingBehavior = rememberFling(Tok.motion_listFlingRetention),
+                    ) {
+                        items(scrolled, key = { "info${fixed + it}" }) { j ->
+                            val i = fixed + j
+                            SheetLine(texts[i], lineValues.getOrElse(i) { "" }, layouts[i], heights[i], if (i == 0) "sheet.info" else "sheet.info.$i")
+                        }
+                        itemsIndexed(state.items) { i, item ->
+                            val on = i == state.focus
+                            val value = itemValues.getOrElse(i) { "" }
+                            Box(
+                                Modifier.size(w.dp(), pitch.dp()).press({ o -> state.press(i, o.x / w) }, if (state.holds) ({ state.hold(i) }) else null).semantics { onClick { state.click(i) } }.testTag("sheet.item.$i"),
+                            ) {
+                                val entry = state.entry
+                                if (entry != null) {
+                                    Box(Modifier.at(edge, pitch / 2, ay = 0.5f).width((w - 2 * edge).dp())) { entry() }
+                                } else {
+                                    val c by animateColorAsState(white(if (on) Roles.dialogItem.alpha else Roles.dialogItem.dim), tween(Tok.motion_focusAlpha.toInt()), label = "item")
+                                    val role = if (itemMixed.getOrElse(i) { false }) Roles.dialogItem.copy(case = Case.MIXED) else Roles.dialogItem
+                                    RoleText(item, role, Modifier.at(edge, pitch / 2, ay = 0.5f).width(slot(value).dp()).clipToBounds(), color = c)
+                                    if (value.isNotEmpty()) {
+                                        val t = measurer.measure(shown(item, role.case), itemStyle)
+                                        SheetValue(value, (pitch - t.size.height) / 2 + t.firstBaseline, if (on) Tok.settingsValueFocused else Tok.settingsValueDim, i == state.accentItem)
+                                    }
                                 }
                             }
                         }

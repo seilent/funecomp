@@ -182,7 +182,7 @@ class HomeRingTest {
         assertEquals(Tok.alpha_mid * 255, ringBrightness().toFloat(), 3f)
         assertEquals(rest.getValue("music"), alphas().getValue("music"))
         assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
-        assertEquals(Tok.motion_pressScale, ringWidth() / width, 0.005f)
+        assertEquals(1f, ringWidth() / width, 0.002f)
         settle(1000)
         val slop = ui().px(Tok.touchSlop)
         ring.performTouchInput { down(center) }

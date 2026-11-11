@@ -30,19 +30,13 @@ class HeldTest {
         )
         assertEquals(
             listOf(
-                listOf("motion_volumePressOff", "motion_volumePressOff", 33f, "V4", "zvol", "frames ff3b9095"),
-            ),
-            rows(Held.Vol.entries),
-        )
-        assertEquals(
-            listOf(
                 listOf("motion_trackHide", "motion_trackHide", 500f, "T9", "zt9", "2cc18f094"),
                 listOf("motion_trackShow", "motion_trackShow", 400f, "T9", "zt9", "2cc18f094"),
             ),
             rows(Held.Track.entries),
         )
-        assertEquals(9, Held.entries.size)
-        assertEquals(setOf("Entry", "Nav", "Pivot", "Vol", "Track"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
+        assertEquals(8, Held.entries.size)
+        assertEquals(setOf("Entry", "Nav", "Pivot", "Track"), Held::class.java.declaredClasses.map { it.simpleName }.toSet())
         assertEquals(Held.entries.size, Held.entries.map { "${it.branch} ${it.name}" }.toSet().size)
     }
 

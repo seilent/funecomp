@@ -727,7 +727,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                         val ring = ui.px(LayoutTok.npRing)
                         val cx = if (corner) artX + artSide - ui.px(Tok.detailRingInset) - ring / 2 else artX + artSide + ui.px(Tok.tileLGutter) + ring / 2
                         val cy = artY + artSide - (if (corner) ui.px(Tok.detailRingInset) else 0f) - ring / 2
-                        val press = rememberPress()
+                        val press = rememberPress().also { it.scaled = true }
                         Box(Modifier.at(cx, cy, 0.5f, 0.5f).testTag("np.mark")) {
                             Ring(LayoutTok.npRing, GlyphName.MIC, Look.Focus(false), press = press, tag = "np.mark", stroke = LayoutTok.npRingStroke)
                         }
@@ -756,7 +756,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                     val hit = Modifier.at(left.toFloat(), ringY, 0f, 0.5f).size((ui.px(edges[i + 1]).roundToInt() - left).toFloat().dp(), hitH.dp()).testTag(tag)
                     if (kind == PREV || kind == NEXT) {
                         val press = rememberPress()
-                        Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx, ringY, 0.5f, 0.5f).pressScale(press).alpha(alpha).testTag("$tag.glyph"))
+                        Glyph(if (kind == PREV) GlyphName.PREVIOUS else GlyphName.NEXT, Tok.overlayGlyph, white(Tok.alpha_full), Modifier.at(cx, ringY, 0.5f, 0.5f).alpha(alpha).testTag("$tag.glyph"))
                         Box(
                             hit.press({
                                 control.transport(if (kind == PREV) Enums.TransportCmd.prev else Enums.TransportCmd.next)

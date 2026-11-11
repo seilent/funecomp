@@ -147,22 +147,21 @@ class HomeLayoutTest {
     }
 
     @Test
-    fun aHeldPressScalesTheItemAboutItsLabelAndSubtitleBlock() {
+    fun aHeldItemKeepsItsLabelAndSubtitleAtRest() {
         show(411, 960)
         val u = ui().u
-        val wn = word("playlists")
-        val sub = layout(texts("playlists").single { it.id != wn.id })
-        assertTrue("the word is the block's width", layout(wn).size.width > 11.1f * u + sub.size.width)
-        val rest = wn.boundsInRoot
-        val ox = rest.left + maxOf(rest.width, 11.1f * u + sub.size.width) / 2
+        val rest = word("playlists").boundsInRoot
+        val subRest = sub("playlists").boundsInRoot
         rule.onNodeWithTag("home.playlists").performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(200)
         val semi = layout(word("playlists"))
         val held = word("playlists").boundsInRoot
         assertEquals(FontWeight(350), semi.layoutInput.style.fontWeight)
-        assertEquals(Tok.motion_pressScale, held.width / semi.size.width, 0.005f)
-        assertEquals(ox + (rest.left - ox) * Tok.motion_pressScale, held.left, 0.5f * u)
-        assertEquals(rest.center.y, held.center.y, 0.5f * u)
+        assertEquals(rest.width, held.width, 0.01f)
+        assertEquals(rest.left, held.left, 0.01f * u)
+        assertEquals(rest.center.y, held.center.y, 0.01f * u)
+        assertEquals(subRest.width, sub("playlists").boundsInRoot.width, 0.01f)
+        assertEquals(subRest.left, sub("playlists").boundsInRoot.left, 0.01f * u)
         rule.onNodeWithTag("home.playlists").performTouchInput { cancel() }
         settle(1000)
     }
@@ -249,7 +248,7 @@ class HomeLayoutTest {
         item.performTouchInput { up() }
         rule.mainClock.advanceTimeByFrame()
         semilight(null)
-        assertEquals(Tok.motion_pressScale, sub("settings").boundsInRoot.width / rest, 0.005f)
+        assertEquals(1f, sub("settings").boundsInRoot.width / rest, 0.002f)
         settle(1000)
         assertEquals(listOf(Page.Home, Page.Settings), shell.nav.stack.toList())
     }

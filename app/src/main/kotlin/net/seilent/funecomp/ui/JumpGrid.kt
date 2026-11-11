@@ -20,7 +20,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.layout
@@ -118,12 +117,6 @@ private class JumpPress(private val a: PressState, private val b: PressState) {
         cur.down(now)
     }
 
-    fun scale(i: Int) = when (i) {
-        itemA -> a.scale
-        itemB -> b.scale
-        else -> 1f
-    }
-
     fun tap(now: Long) = cur.tap(now)
 
     fun release(now: Long) = cur.cancel(now)
@@ -161,28 +154,18 @@ private data class WhileElement(val shown: State<Boolean>, val props: SemanticsP
 
 private fun Modifier.semanticsWhile(shown: State<Boolean>, props: SemanticsPropertyReceiver.() -> Unit) = this then WhileElement(shown, props)
 
-private fun Modifier.pressed(press: JumpPress, i: Int) = graphicsLayer {
-    val s = press.scale(i)
-    scaleX = s
-    scaleY = s
-}
-
 @Composable
 fun JumpGrid(avail: Set<Int>, focus: Int, open: Boolean, scroll: ScrollState, onJump: (Int) -> Unit, onSearch: () -> Unit, onClose: () -> Unit) {
     val ui = LocalUi.current
     val g = JumpLayout.of(ui)
     val tile = ui.px(g.tile)
     val shown = rememberUpdatedState(open)
-    val stackFrozen = LocalPressFrozen.current
     val a = rememberPress()
     val b = rememberPress()
-    val frozen = { !shown.value || stackFrozen() }
-    a.frozen = frozen
-    b.frozen = frozen
     val press = remember(a, b) { JumpPress(a, b) }
     val wasOpen = remember { booleanArrayOf(open) }
     SideEffect {
-        if (open && !wasOpen[0]) press.reset()
+        if (open != wasOpen[0]) press.reset()
         wasOpen[0] = open
     }
     val act = rememberUpdatedState { i: Int ->
@@ -250,7 +233,7 @@ fun JumpGrid(avail: Set<Int>, focus: Int, open: Boolean, scroll: ScrollState, on
 private fun JumpSearch(x: Float, y: Float, tile: Float, press: JumpPress, act: State<(Int) -> Unit>, shown: State<Boolean>) {
     val ui = LocalUi.current
     Box(
-        Modifier.at(x, y).size(tile.dp()).pressed(press, JUMP_SEARCH)
+        Modifier.at(x, y).size(tile.dp())
             .border(ui.px(Tok.letterTileBorder).dp(), white(Tok.alpha_low))
             .clipToBounds().semanticsWhile(shown) { onClick("search") { act.value(JUMP_SEARCH); true }; testTag = "jump.search" },
     ) {
@@ -265,7 +248,7 @@ private fun JumpLetter(i: Int, x: Float, y: Float, tile: Float, on: Boolean, has
     val ui = LocalUi.current
     val letter = Section.letter(i)
     Box(
-        Modifier.at(x, y).size(tile.dp()).pressed(press, i)
+        Modifier.at(x, y).size(tile.dp())
             .then(if (has) Modifier.border(ui.px(if (on) Tok.letterTileBorderFocused else Tok.letterTileBorder).dp(), white(if (on) Tok.alpha_full else Tok.alpha_low)) else Modifier)
             .clipToBounds().semanticsWhile(shown) {
                 selected = on

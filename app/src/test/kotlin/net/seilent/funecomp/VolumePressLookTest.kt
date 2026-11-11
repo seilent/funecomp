@@ -18,7 +18,6 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.CoverBlur
 import net.seilent.funecomp.ui.GlyphName
-import net.seilent.funecomp.ui.Held
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -49,7 +48,7 @@ class VolumePressLookTest {
 
     private lateinit var shell: Shell
 
-    private fun start() {
+    private fun start(): SimControl {
         val c = SimControl("v1")
         c.transport(Enums.TransportCmd.next)
         shell = Shell(Nav(listOf(Page.Home, Page.NowPlaying)))
@@ -59,6 +58,7 @@ class VolumePressLookTest {
         }
         settle(1000)
         open()
+        return c
     }
 
     private fun open() {
@@ -105,7 +105,7 @@ class VolumePressLookTest {
     }
 
     @Test
-    fun aHeldPrevGlowsPastItsInkAndGoesOffIn33() {
+    fun aHeldPrevGlowsPastItsInkAndCutsAtTheUp() {
         start()
         val (past, a) = barSide()
         val base = red4(past)
@@ -116,9 +116,30 @@ class VolumePressLookTest {
         assertEquals(want, red4(past), 8f)
         assertEquals(size, bounds("overlay.prev.glyph").width, 0.5f)
         up("overlay.prev")
-        rule.mainClock.advanceTimeBy(Held.Vol.motion_volumePressOff.toLong() + 17)
+        rule.mainClock.advanceTimeByFrame()
         rule.waitForIdle()
         assertEquals(base, red4(past), 3f)
+    }
+
+    @Test
+    fun aDragPastTheSlopReturnsThePrevGlowLinearAndDoesNotAct() {
+        val c = start()
+        val (past, a) = barSide()
+        val base = red4(past)
+        val want = base + (255 - base) * a
+        val slop = Tok.touchSlop * u()
+        val transports = c.transports.size
+        hold("overlay.prev")
+        rule.onNodeWithTag("overlay.prev").performTouchInput { moveBy(Offset(0f, slop + 4f)) }
+        rule.mainClock.advanceTimeBy(Tok.motion_press.toLong() / 2)
+        rule.waitForIdle()
+        assertEquals(base + (want - base) / 2, red4(past), 12f)
+        rule.mainClock.advanceTimeBy(Tok.motion_press.toLong() / 2 + 17)
+        rule.waitForIdle()
+        assertEquals(base, red4(past), 3f)
+        up("overlay.prev")
+        rule.waitForIdle()
+        assertEquals(transports, c.transports.size)
     }
 
     @Test

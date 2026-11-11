@@ -5,14 +5,11 @@ import android.graphics.Paint
 import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -125,27 +122,19 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     val exitLine = rememberTextMeasurer().measure(shown("exit", Roles.volExit.case), exitStyle)
     val exitCaps = with(d) { Offset(exitX + (exitLine.getLineLeft(0) + exitLine.getLineRight(0)) / 2, exitY + exitLine.firstBaseline - Tok.capHeight * exitStyle.fontSize.toPx() / 2) }
 
-    val prevTouch = remember { MutableInteractionSource() }
-    val ringTouch = remember { MutableInteractionSource() }
-    val nextTouch = remember { MutableInteractionSource() }
-    val prevHeld by prevTouch.collectIsPressedAsState()
-    val ringHeld by ringTouch.collectIsPressedAsState()
-    val nextHeld by nextTouch.collectIsPressedAsState()
-    val pressOff = tween<Float>(Held.Vol.motion_volumePressOff.toInt(), easing = LinearEasing)
-    val prevOff by animateFloatAsState(if (prevHeld) 1f else 0f, if (prevHeld) snap() else pressOff, label = "prev")
-    val prevAlpha = if (prevHeld) 1f else prevOff
-    val ringAlpha = if (ringHeld) 1f else 0f
-    val nextOff by animateFloatAsState(if (nextHeld) 1f else 0f, if (nextHeld) snap() else pressOff, label = "next")
-    val nextAlpha = if (nextHeld) 1f else nextOff
+    val prevPress = rememberPress()
+    val ringPress = rememberPress()
+    val nextPress = rememberPress()
+    fun pressLit(p: PressState) = if (p.held) 1f else p.lit
     val skipSide = ui.px(Tok.vol_skip).roundToInt()
     val ringSide = ui.px(Tok.vol_ring).roundToInt()
     val stroke = ui.px(Tok.vol_ringStroke)
     val skipReach = ui.px(Tok.vol_glowSkip)
     val ringReach = ui.px(Tok.vol_glowRing)
     val masks = remember(skipSide, ringSide, stroke, skipReach, ringReach, d.density) { arrayOfNulls<ImageBitmap>(3) }
-    if (prevHeld && masks[0] == null) masks[0] = glyphGlow(GlyphName.SKIP_PREVIOUS, skipSide, skipReach)
-    if (ringHeld && masks[1] == null) masks[1] = ringGlow(ringSide, stroke, ringReach)
-    if (nextHeld && masks[2] == null) masks[2] = glyphGlow(GlyphName.SKIP_NEXT, skipSide, skipReach)
+    if (prevPress.held && masks[0] == null) masks[0] = glyphGlow(GlyphName.SKIP_PREVIOUS, skipSide, skipReach)
+    if (ringPress.held && masks[1] == null) masks[1] = ringGlow(ringSide, stroke, ringReach)
+    if (nextPress.held && masks[2] == null) masks[2] = glyphGlow(GlyphName.SKIP_NEXT, skipSide, skipReach)
 
     Box(Modifier.fillMaxSize().alpha(alpha.value).testTag("overlay")) {
         Box(Modifier.fillMaxSize().bleed(LocalBleed.current).background(Black.copy(alpha = Tok.scrim_overlay_alpha)))
@@ -153,8 +142,9 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
             fun glow(m: ImageBitmap?, x: Float, a: Float) {
                 if (m != null && a > 0f) drawImage(m, Offset(x - m.width / 2f, ringY - m.height / 2f), alpha = a)
             }
-            glow(masks[0], cx - skip, prevAlpha)
-            glow(masks[2], cx + skip, nextAlpha)
+            val ringAlpha = pressLit(ringPress)
+            glow(masks[0], cx - skip, pressLit(prevPress))
+            glow(masks[2], cx + skip, pressLit(nextPress))
             glow(masks[1], cx, ringAlpha)
             if (ringAlpha > 0f) drawCircle(lit, (ringSide - 2 * stroke) / 2, Offset(cx, ringY), alpha = Tok.vol_discAlpha * ringAlpha)
         }
@@ -196,16 +186,19 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
             },
         )
         val touch = remember { MutableInteractionSource() }
-        fun target(x: Float, y: Float, tag: String, box: Dp = hit, source: MutableInteractionSource = touch, act: () -> Unit) = Modifier.at(x, y, 0.5f, 0.5f).size(box).testTag(tag)
-            .clickable(source, null) {
+        fun target(x: Float, y: Float, tag: String, box: Dp = hit, p: PressState? = null, act: () -> Unit): Modifier {
+            val at = Modifier.at(x, y, 0.5f, 0.5f).size(box).testTag(tag)
+            val go = {
                 act()
                 overlay.show()
             }
+            return if (p == null) at.clickable(touch, null, onClick = go) else at.press({ go() }, press = p)
+        }
         Box(target(cx, plusY, "overlay.plus") { actions.volume(1) })
         Box(target(cx, minusY, "overlay.minus") { actions.volume(-1) })
-        Box(target(cx - skip, ringY, "overlay.prev", source = prevTouch) { actions.transport(Enums.TransportCmd.prev) })
-        Box(target(cx, ringY, "overlay.ring", ringHit, ringTouch) { actions.transport(Enums.TransportCmd.toggle) })
-        Box(target(cx + skip, ringY, "overlay.next", source = nextTouch) { actions.transport(Enums.TransportCmd.next) })
+        Box(target(cx - skip, ringY, "overlay.prev", p = prevPress) { actions.transport(Enums.TransportCmd.prev) })
+        Box(target(cx, ringY, "overlay.ring", ringHit, ringPress) { actions.transport(Enums.TransportCmd.toggle) })
+        Box(target(cx + skip, ringY, "overlay.next", p = nextPress) { actions.transport(Enums.TransportCmd.next) })
         Box(Modifier.at(exitCaps.x, exitCaps.y, 0.5f, 0.5f).size(exitHit).testTag("overlay.exit.hit").clickable(touch, null) { close() })
     }
 }

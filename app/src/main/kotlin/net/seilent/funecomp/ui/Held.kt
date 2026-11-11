@@ -27,14 +27,6 @@ object Held {
         )
     }
 
-    object Vol {
-        const val motion_volumePressOff = 33f
-
-        val entries = listOf(
-            Entry("motion_volumePressOff", "motion_volumePressOff", motion_volumePressOff, "V4", "zvol", "frames ff3b9095"),
-        )
-    }
-
     object Track {
         const val motion_trackHide = 500f
         const val motion_trackShow = 400f
@@ -45,5 +37,5 @@ object Held {
         )
     }
 
-    val entries get() = Nav.entries + Pivot.entries + Vol.entries + Track.entries
+    val entries get() = Nav.entries + Pivot.entries + Track.entries
 }

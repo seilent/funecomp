@@ -940,7 +940,7 @@ class BehaviorTest {
         val slop = Tok.touchSlop * Ui.of(411f * rule.density.density, 960f * rule.density.density).u
         rule.onNodeWithTag("jump.19").performTouchInput { down(center) }
         settle(150)
-        assertEquals(tile * Tok.motion_pressScale, width("jump.19"), 1f)
+        assertEquals(tile, width("jump.19"), 0.5f)
         rule.onNodeWithTag("jump.19").performTouchInput { moveBy(Offset(slop * 3, 0f)) }
         settle(150)
         assertEquals(tile, width("jump.19"), 0.5f)
@@ -951,7 +951,7 @@ class BehaviorTest {
     }
 
     @Test
-    fun autoEqGridLetterReturningFromADragKeepsItsValueAndAThirdLetterSnapsIt() {
+    fun autoEqGridLettersKeepTheTileSizeThroughTwoDragsAndAThirdLetter() {
         openAutoEq()
         openGrid()
         val tile = width("jump.19")
@@ -963,14 +963,13 @@ class BehaviorTest {
         settle(20)
         rule.onNodeWithTag("jump.20").performTouchInput { down(center) }
         rule.mainClock.advanceTimeByFrame()
-        val back = width("jump.19") / tile
-        assertTrue("a returning letter keeps its value: $back", back > Tok.motion_pressScale + 0.005f && back < 0.995f)
+        assertEquals("a dragged letter", tile, width("jump.19"), 0.5f)
         rule.onNodeWithTag("jump.20").performTouchInput { moveBy(Offset(slop * 3, 0f)) }
         rule.onNodeWithTag("jump.20").performTouchInput { up() }
         rule.onNodeWithTag("jump.21").performTouchInput { down(center) }
         rule.mainClock.advanceTimeByFrame()
-        assertEquals("a third letter snaps the returning one", tile, width("jump.19"), 0.5f)
-        assertTrue("the third letter starts from rest", width("jump.21") / tile > 0.99f)
+        assertEquals("the first letter", tile, width("jump.19"), 0.5f)
+        assertEquals("the third letter", tile, width("jump.21"), 0.5f)
         rule.onNodeWithTag("jump.21").performTouchInput { up() }
         settle(500)
     }
@@ -994,7 +993,7 @@ class BehaviorTest {
         val tile = width("jump.19")
         rule.onNodeWithTag("jump.19").performTouchInput { down(center) }
         settle(150)
-        assertEquals(tile * Tok.motion_pressScale, width("jump.19"), 1f)
+        assertEquals(tile, width("jump.19"), 0.5f)
         rule.onNodeWithTag("jump.19").performTouchInput { cancel() }
         rule.mainClock.advanceTimeByFrame()
         rule.mainClock.advanceTimeByFrame()
@@ -1048,7 +1047,7 @@ class BehaviorTest {
         val tile = width("jump.19")
         rule.onNodeWithTag("jump.19").performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(Tok.motion_press.toLong() + 32)
-        assertEquals(tile * Tok.motion_pressScale, width("jump.19"), 1f)
+        assertEquals(tile, width("jump.19"), 0.5f)
         rule.onNodeWithTag("jump.19").performTouchInput { up() }
         settle(100)
         assertFalse(gridOpen())

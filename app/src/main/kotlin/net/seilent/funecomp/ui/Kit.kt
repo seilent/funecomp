@@ -37,6 +37,7 @@ import androidx.compose.foundation.text.KeyboardActionScope
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,7 +53,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -110,7 +110,8 @@ fun Modifier.press(onTap: (Offset) -> Unit, onLong: (() -> Unit)? = null, press:
             )
         }
     } else {
-        pointerInput(hasLong, press) { pressGesture(press, hasLong, { long?.invoke() }, { down() }) { tap(it) } }
+        val scrolling = LocalScrolling.current
+        pointerInput(hasLong, press, scrolling) { pressGesture(press, hasLong, scrolling, { long?.invoke() }, { down() }) { tap(it) } }
     }
 }
 
@@ -140,9 +141,16 @@ private suspend fun AwaitPointerEventScope.untilUp(first: PointerInputChange, co
     }
 }
 
-private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: Boolean, long: () -> Unit, down: () -> Unit, tap: (Offset) -> Unit) = awaitEachGesture {
-    val first = awaitFirstDown()
+private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: Boolean, scrolling: () -> Boolean, long: () -> Unit, down: () -> Unit, tap: (Offset) -> Unit) = awaitEachGesture {
+    val early = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+    val caught = scrolling()
+    val first = awaitPointerEvent().changes.firstOrNull { it.id == early.id } ?: return@awaitEachGesture
+    if (first.isConsumed || !first.pressed) return@awaitEachGesture
     first.consume()
+    if (caught) {
+        untilUp(first, false)
+        return@awaitEachGesture
+    }
     press.down(first.uptimeMillis)
     down()
     val slop = viewConfiguration.touchSlop
@@ -167,8 +175,8 @@ private suspend fun PointerInputScope.pressGesture(press: PressState, hasLong: B
 }
 
 @Composable
-fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, onDown: () -> Unit = {}, origin: TransformOrigin = TransformOrigin.Center, press: PressState = rememberPress(), content: @Composable () -> Unit) {
-    Box(modifier.press(onTap, onLong, press, onDown).pressScale(press, origin)) { content() }
+fun Pressable(onTap: (Offset) -> Unit, modifier: Modifier = Modifier, onLong: (() -> Unit)? = null, onDown: () -> Unit = {}, press: PressState = rememberPress(), content: @Composable () -> Unit) {
+    Box(modifier.press(onTap, onLong, press, onDown)) { content() }
 }
 
 @Composable
@@ -317,14 +325,17 @@ fun Rows(
     ) {
         val sheet = LocalSheet.current
         val past = if (sheet != null && sheet.pastList === state) sheet.past else 0f
-        LazyColumn(
-            Modifier.fillMaxSize().testTag("rows"),
-            state = state,
-            contentPadding = PaddingValues(bottom = past.dp()),
-            flingBehavior = rememberFling(Tok.motion_listFlingRetention),
-            userScrollEnabled = scroll,
-            content = content,
-        )
+        val scrolling = remember(state) { { state.isScrollInProgress } }
+        CompositionLocalProvider(LocalScrolling provides scrolling) {
+            LazyColumn(
+                Modifier.fillMaxSize().testTag("rows"),
+                state = state,
+                contentPadding = PaddingValues(bottom = past.dp()),
+                flingBehavior = rememberFling(Tok.motion_listFlingRetention),
+                userScrollEnabled = scroll,
+                content = content,
+            )
+        }
         val span = remember(state, show) { ListSpan() }
         val density = LocalDensity.current
         val leadPx = ui.px(lead).roundToInt()

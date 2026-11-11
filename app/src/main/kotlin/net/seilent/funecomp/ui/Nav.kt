@@ -154,7 +154,7 @@ fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Uni
     var pinned by remember { mutableStateOf<Float?>(null) }
     var homeReturn by remember { mutableStateOf<HomeReturn?>(null) }
     val holder = rememberSaveableStateHolder()
-    val leaving = remember(nav) { { nav.top != shown } }
+    val slots = LocalPressSlots.current
     val kept = remember { HashSet<String>() }
     val keys = nav.stack.mapIndexed { i, p -> "$i/$p" }.toSet()
     SideEffect {
@@ -166,6 +166,7 @@ fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Uni
     }
     DisposableEffect(nav, sessions) { onDispose { sessions.stopAll() } }
     LaunchedEffect(top) {
+        slots?.reset()
         if (pinned != null) {
             angle.snapTo(0f)
             pinned = null
@@ -219,6 +220,6 @@ fun Stack(nav: Nav, sessions: BrowseSessions, content: @Composable (Page) -> Uni
             probe?.invoke(drawnKey, rotationY)
         },
     ) {
-        key(shownKey) { holder.SaveableStateProvider(shownKey) { CompositionLocalProvider(LocalEntry provides shownKey, LocalHomeReturn provides homeReturn, LocalPressFrozen provides leaving) { content(shown) } } }
+        key(shownKey) { holder.SaveableStateProvider(shownKey) { CompositionLocalProvider(LocalEntry provides shownKey, LocalHomeReturn provides homeReturn) { content(shown) } } }
     }
 }

@@ -187,7 +187,7 @@ class NowPlayingTransportLookTest {
     }
 
     @Test
-    fun aPressScalesThePrevAndNextGlyphs() {
+    fun aPressKeepsThePrevAndNextGlyphsAtRestSize() {
         start()
         for (tag in listOf("np.prev", "np.nextTrack")) {
             val rest = rule.onNodeWithTag("$tag.glyph").fetchSemanticsNode().boundsInRoot.width
@@ -196,7 +196,7 @@ class NowPlayingTransportLookTest {
             val held = rule.onNodeWithTag("$tag.glyph").fetchSemanticsNode().boundsInRoot.width
             rule.onNodeWithTag(tag).performTouchInput { cancel() }
             settle(600)
-            assertEquals(tag, Tok.motion_pressScale, held / rest, 0.01f)
+            assertEquals(tag, 1f, held / rest, 0.002f)
         }
     }
 
