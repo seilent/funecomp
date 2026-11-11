@@ -16,17 +16,24 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.Matrix
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFontFamilyResolver
@@ -38,9 +45,11 @@ import kotlinx.coroutines.launch
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 private const val CONTROL_MAX = 255f
 private const val EXIT = "exit"
@@ -148,28 +157,62 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
     if (plusPress.held && masks[3] == null) masks[3] = glyphGlow(GlyphName.PLUS, plusSide, skipReach)
     if (minusPress.held && masks[4] == null) masks[4] = glyphGlow(GlyphName.MINUS, plusSide, skipReach)
 
+    val tilt = remember { VolumeTilt() }
+    LaunchedEffect(tilt.downs) {
+        if (tilt.downs == 0) return@LaunchedEffect
+        var moving = true
+        while (moving) {
+            withFrameMillis { t ->
+                tilt.drawn = tilt.k(t)
+                moving = tilt.moving(t)
+            }
+        }
+    }
+    val eye = ui.px(ui.w) * Tok.motion_volumeTiltEye
+    val plate = Modifier.drawWithContent {
+        val k = tilt.drawn
+        if (k <= 0f) {
+            drawContent()
+        } else {
+            val h = tiltMatrix(tilt.pose, k, size.width / 2, size.height / 2, eye)
+            val m = Matrix()
+            m[0, 0] = h[0]
+            m[1, 0] = h[1]
+            m[3, 0] = h[2]
+            m[0, 1] = h[3]
+            m[1, 1] = h[4]
+            m[3, 1] = h[5]
+            m[0, 3] = h[6]
+            m[1, 3] = h[7]
+            m[3, 3] = h[8]
+            withTransform({ transform(m) }) { this@drawWithContent.drawContent() }
+        }
+    }
+
     Box(Modifier.fillMaxSize().alpha(alpha.value).testTag("overlay")) {
         Box(Modifier.fillMaxSize().bleed(LocalBleed.current).background(Black.copy(alpha = Tok.scrim_overlay_alpha)))
-        Canvas(Modifier.fillMaxSize().testTag("overlay.press")) {
-            fun glow(m: ImageBitmap?, x: Float, a: Float, y: Float = ringY) {
-                if (m != null && a > 0f) drawImage(m, Offset(x - m.width / 2f, y - m.height / 2f), alpha = a)
+        Box(Modifier.fillMaxSize().then(plate).testTag("overlay.plate.parts")) {
+            Canvas(Modifier.fillMaxSize().testTag("overlay.press")) {
+                fun glow(m: ImageBitmap?, x: Float, a: Float, y: Float = ringY) {
+                    if (m != null && a > 0f) drawImage(m, Offset(x - m.width / 2f, y - m.height / 2f), alpha = a)
+                }
+                val ringAlpha = pressLit(ringPress)
+                glow(masks[0], cx - skip, pressLit(prevPress))
+                glow(masks[2], cx + skip, pressLit(nextPress))
+                glow(masks[3], cx, pressLit(plusPress), plusY)
+                glow(masks[4], cx, pressLit(minusPress), minusY)
+                glow(masks[1], cx, ringAlpha)
+                if (ringAlpha > 0f) drawCircle(lit, (ringSide - 2 * stroke) / 2, Offset(cx, ringY), alpha = Tok.vol_discAlpha * ringAlpha)
             }
-            val ringAlpha = pressLit(ringPress)
-            glow(masks[0], cx - skip, pressLit(prevPress))
-            glow(masks[2], cx + skip, pressLit(nextPress))
-            glow(masks[3], cx, pressLit(plusPress), plusY)
-            glow(masks[4], cx, pressLit(minusPress), minusY)
-            glow(masks[1], cx, ringAlpha)
-            if (ringAlpha > 0f) drawCircle(lit, (ringSide - 2 * stroke) / 2, Offset(cx, ringY), alpha = Tok.vol_discAlpha * ringAlpha)
+            Glyph(GlyphName.PLUS, Tok.vol_plus, lit, Modifier.at(cx, plusY, 0.5f, 0.5f).testTag("overlay.plus.glyph"))
+            RoleText(numText, numRole, Modifier.atBaseline(numLeft, numBase).testTag("overlay.number"), color = lit)
+            Glyph(GlyphName.SKIP_PREVIOUS, Tok.vol_skip, white(Tok.alpha_full), Modifier.at(cx - skip, ringY, 0.5f, 0.5f).testTag("overlay.prev.glyph"))
+            Ring(Tok.vol_ring, if (s.playing == true) GlyphName.PAUSE_WIDE else GlyphName.PLAY, Look.Touch, Modifier.at(cx, ringY, 0.5f, 0.5f), tag = "overlay.ring", stroke = Tok.vol_ringStroke, glyphSize = Tok.vol_pause)
+            Glyph(GlyphName.SKIP_NEXT, Tok.vol_skip, white(Tok.alpha_full), Modifier.at(cx + skip, ringY, 0.5f, 0.5f).testTag("overlay.next.glyph"))
+            RoleText(VOLUME, Roles.volLabel, Modifier.atBaseline(cx, labelBase, ax = 0.5f).testTag("overlay.volume"), color = lit)
+            Glyph(GlyphName.MINUS, Tok.vol_plus, lit, Modifier.at(cx, minusY, 0.5f, 0.5f).testTag("overlay.minus.glyph"))
         }
-        Glyph(GlyphName.PLUS, Tok.vol_plus, lit, Modifier.at(cx, plusY, 0.5f, 0.5f).testTag("overlay.plus.glyph"))
-        RoleText(numText, numRole, Modifier.atBaseline(numLeft, numBase).testTag("overlay.number"), color = lit)
-        Glyph(GlyphName.SKIP_PREVIOUS, Tok.vol_skip, white(Tok.alpha_full), Modifier.at(cx - skip, ringY, 0.5f, 0.5f).testTag("overlay.prev.glyph"))
-        Ring(Tok.vol_ring, if (s.playing == true) GlyphName.PAUSE_WIDE else GlyphName.PLAY, Look.Touch, Modifier.at(cx, ringY, 0.5f, 0.5f), tag = "overlay.ring", stroke = Tok.vol_ringStroke, glyphSize = Tok.vol_pause)
-        Glyph(GlyphName.SKIP_NEXT, Tok.vol_skip, white(Tok.alpha_full), Modifier.at(cx + skip, ringY, 0.5f, 0.5f).testTag("overlay.next.glyph"))
-        RoleText(VOLUME, Roles.volLabel, Modifier.atBaseline(cx, labelBase, ax = 0.5f).testTag("overlay.volume"), color = lit)
         Lines(artist, title, lines)
-        Glyph(GlyphName.MINUS, Tok.vol_plus, lit, Modifier.at(cx, minusY, 0.5f, 0.5f).testTag("overlay.minus.glyph"))
 
         if (live && overlay.until - Tok.motion_volumeFade.toLong() > SystemClock.uptimeMillis()) Box(
             Modifier.fillMaxSize().testTag("overlay.plate").pointerInput(overlay) {
@@ -195,7 +238,8 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
         RoleText(EXIT, Roles.volExit, Modifier.atBaseline(exitLeft, exitBase).testTag("overlay.exit"), color = lit, glow = exitPress.word)
         val touch = remember { MutableInteractionSource() }
         fun target(x: Float, y: Float, tag: String, box: Dp = hit, p: PressState? = null, act: () -> Unit): Modifier {
-            val at = Modifier.at(x, y, 0.5f, 0.5f).size(box).testTag(tag)
+            val side = with(d) { box.toPx() }
+            val at = Modifier.at(x, y, 0.5f, 0.5f).size(box).testTag(tag).tiltOn(tilt, Offset(x - side / 2, y - side / 2), ui.px(ui.w), ui.px(ui.h))
             val go = {
                 act()
                 overlay.show()
@@ -207,6 +251,84 @@ fun VolumeOverlay(overlay: Overlay, device: DeviceState, actions: Control) {
         Box(target(cx - skip, ringY, "overlay.prev", p = prevPress) { actions.transport(Enums.TransportCmd.prev) })
         Box(target(cx, ringY, "overlay.ring", ringHit, ringPress) { actions.transport(Enums.TransportCmd.toggle) })
         Box(target(cx + skip, ringY, "overlay.next", p = nextPress) { actions.transport(Enums.TransportCmd.next) })
+    }
+}
+
+internal class TiltPose(val rx: Float, val ry: Float)
+
+private fun Modifier.tiltOn(tilt: VolumeTilt, at: Offset, w: Float, h: Float) = pointerInput(tilt, at, w, h) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        tilt.down((at.x + down.position.x) / w, (at.y + down.position.y) / h)
+        var last = down.uptimeMillis
+        while (true) {
+            val c = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+            last = c.uptimeMillis
+            if (!c.pressed) break
+            tilt.move((at.x + c.position.x) / w, (at.y + c.position.y) / h)
+        }
+        tilt.up(last)
+    }
+}
+
+internal fun platePose(nx: Float, ny: Float, rateDeg: Float = Tok.motion_volumeTiltRate): TiltPose {
+    val r = Math.toRadians(rateDeg.toDouble()).toFloat()
+    return TiltPose(r * (ny.coerceIn(0f, 1f) - 0.5f), -r * (nx.coerceIn(0f, 1f) - 0.5f))
+}
+
+private fun mul3(a: FloatArray, b: FloatArray) = FloatArray(9) { i -> (0 until 3).sumOf { j -> (a[i / 3 * 3 + j] * b[j * 3 + i % 3]).toDouble() }.toFloat() }
+
+internal fun tiltMatrix(p: TiltPose, q: Float, cx: Float, cy: Float, d: Float): FloatArray {
+    val ax = p.rx * q
+    val ay = p.ry * q
+    val ca = cos(ax)
+    val sa = sin(ax)
+    val cb = cos(ay)
+    val sb = sin(ay)
+    val to = floatArrayOf(1f, 0f, -cx, 0f, 1f, -cy, 0f, 0f, 1f)
+    val back = floatArrayOf(1f, 0f, cx, 0f, 1f, cy, 0f, 0f, 1f)
+    val turn = floatArrayOf(d * cb, d * sa * sb, 0f, 0f, d * ca, 0f, -sb, sa * cb, d)
+    return mul3(back, mul3(turn, to))
+}
+
+@Stable
+internal class VolumeTilt {
+    var pose by mutableStateOf(TiltPose(0f, 0f))
+        private set
+
+    var downs by mutableIntStateOf(0)
+        private set
+
+    var drawn by mutableFloatStateOf(0f)
+
+    private var on = false
+    private var upAt = -1L
+
+    fun down(nx: Float, ny: Float) {
+        on = true
+        upAt = -1L
+        pose = platePose(nx, ny)
+        drawn = 1f
+        downs++
+    }
+
+    fun move(nx: Float, ny: Float) {
+        if (on && upAt < 0) pose = platePose(nx, ny)
+    }
+
+    fun up(now: Long) {
+        if (on && upAt < 0) upAt = now
+    }
+
+    fun k(now: Long): Float {
+        if (!on) return 0f
+        if (upAt < 0) return 1f
+        return 1f - ((now - upAt - Tok.motion_volumeTiltHold) / Tok.motion_volumeTiltReturn).coerceIn(0f, 1f)
+    }
+
+    fun moving(now: Long): Boolean {
+        if (on && upAt >= 0 && now >= upAt + Tok.motion_volumeTiltHold + Tok.motion_volumeTiltReturn) on = false
+        return on
     }
 }
 

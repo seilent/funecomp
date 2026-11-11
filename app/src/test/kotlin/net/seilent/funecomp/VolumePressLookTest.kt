@@ -37,6 +37,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlin.math.floor
 import kotlin.math.roundToInt
 
 @RunWith(RobolectricTestRunner::class)
@@ -85,19 +86,40 @@ class VolumePressLookTest {
         return square(at).map { (x, y) -> img.getRGB(x, y) shr 16 and 0xff }.average().toFloat()
     }
 
-    private fun barSide(): Pair<Offset, Float> {
+    private fun barSide(): Offset {
+        val g = bounds("overlay.prev.glyph")
+        return Offset(g.left + 1.7f * g.width / Tok.glyphBox - u(), g.center.y)
+    }
+
+    private fun alphaAt(m: Bitmap, x: Float, y: Float): Float {
+        val fx = x - 0.5f
+        val fy = y - 0.5f
+        val x0 = floor(fx).toInt()
+        val y0 = floor(fy).toInt()
+        val tx = fx - x0
+        val ty = fy - y0
+        fun a(i: Int, j: Int) = (m.getPixel(i.coerceIn(0, m.width - 1), j.coerceIn(0, m.height - 1)) ushr 24) / 255f
+        return (a(x0, y0) * (1 - tx) + a(x0 + 1, y0) * tx) * (1 - ty) + (a(x0, y0 + 1) * (1 - tx) + a(x0 + 1, y0 + 1) * tx) * ty
+    }
+
+    private fun maskAlpha(past: Offset, tag: String, moved: Offset = Offset.Zero): Float {
         val u = u()
         val g = bounds("overlay.prev.glyph")
-        val at = Offset(g.left + 1.7f * g.width / Tok.glyphBox - u, g.center.y)
         val m = glyphGlow(GlyphName.SKIP_PREVIOUS, (Tok.vol_skip * u).roundToInt(), Tok.vol_glowSkip * u).asAndroidBitmap()
-        val a = square(at).map { (x, y) -> m.getPixel((x - g.center.x + m.width / 2f).toInt(), (y - g.center.y + m.height / 2f).toInt()) ushr 24 }.average().toFloat() / 255f
-        return at to a
+        val touch = bounds(tag).center + moved
+        val plate = bounds("overlay")
+        return square(past).map { (x, y) ->
+            val p = flatPoint(Offset(x + 0.5f, y + 0.5f), touch, plate)
+            alphaAt(m, p.x - g.center.x + m.width / 2f, p.y - g.center.y + m.height / 2f)
+        }.average().toFloat()
     }
 
     private fun hold(tag: String) {
         rule.onNodeWithTag(tag).performTouchInput { down(center) }
         settle(150)
     }
+
+    private fun tilted(at: Offset, tag: String, moved: Offset = Offset.Zero) = tiltedPoint(at, bounds(tag).center + moved, bounds("overlay"))
 
     private fun up(tag: String) {
         rule.onNodeWithTag(tag).performTouchInput { up() }
@@ -107,36 +129,38 @@ class VolumePressLookTest {
     @Test
     fun aHeldPrevGlowsPastItsInkAndCutsAtTheUp() {
         start()
-        val (past, a) = barSide()
-        val base = red4(past)
-        val want = base + (255 - base) * a
-        assertTrue("$a", want > base + 30)
+        val past = tilted(barSide(), "overlay.prev")
+        val a = maskAlpha(past, "overlay.prev")
         val size = bounds("overlay.prev.glyph").width
         hold("overlay.prev")
-        assertEquals(want, red4(past), 8f)
+        val held = red4(past)
         assertEquals(size, bounds("overlay.prev.glyph").width, 0.5f)
         up("overlay.prev")
         rule.mainClock.advanceTimeByFrame()
         rule.waitForIdle()
-        assertEquals(base, red4(past), 3f)
+        val cut = red4(past)
+        val want = cut + (255 - cut) * a
+        assertTrue("$a", want > cut + 30)
+        assertEquals(want, held, 8f)
     }
 
     @Test
     fun aDragPastTheSlopReturnsThePrevGlowLinearAndDoesNotAct() {
         val c = start()
-        val (past, a) = barSide()
-        val base = red4(past)
-        val want = base + (255 - base) * a
         val slop = Tok.touchSlop * u()
+        val past = tilted(barSide(), "overlay.prev", Offset(0f, slop + 4f))
+        val a = maskAlpha(past, "overlay.prev", Offset(0f, slop + 4f))
         val transports = c.transports.size
         hold("overlay.prev")
         rule.onNodeWithTag("overlay.prev").performTouchInput { moveBy(Offset(0f, slop + 4f)) }
         rule.mainClock.advanceTimeBy(Tok.motion_press.toLong() / 2)
         rule.waitForIdle()
-        assertEquals(base + (want - base) / 2, red4(past), 12f)
+        val half = red4(past)
         rule.mainClock.advanceTimeBy(Tok.motion_press.toLong() / 2 + 17)
         rule.waitForIdle()
-        assertEquals(base, red4(past), 3f)
+        val gone = red4(past)
+        val want = gone + (255 - gone) * a
+        assertEquals(gone + (want - gone) / 2, half, 12f)
         up("overlay.prev")
         rule.waitForIdle()
         assertEquals(transports, c.transports.size)
@@ -148,27 +172,34 @@ class VolumePressLookTest {
         val u = u()
         for (tag in listOf("overlay.plus", "overlay.minus")) {
             val g = bounds("$tag.glyph")
-            val past = Offset(g.left + g.width * BAR_LEFT / Tok.glyphBox - u, g.center.y)
-            val base = red4(past)
+            val flat = Offset(g.left + g.width * BAR_LEFT / Tok.glyphBox - u, g.center.y)
+            val base = red4(flat)
+            val past = tilted(flat, tag)
             hold(tag)
-            assertTrue("$tag glows past its ink: $base", red4(past) > base + 20)
+            val held = red4(past)
             up(tag)
             rule.mainClock.advanceTimeByFrame()
             rule.waitForIdle()
-            assertEquals("$tag cut at the up", base, red4(past), 3f)
-            settle(100)
+            val cut = red4(past)
+            assertTrue("$tag glows past its ink: $held, cut at the up: $cut", held > cut + 20)
+            settle(400)
+            assertEquals("$tag flat and dark again", base, red4(flat), 3f)
         }
     }
 
     @Test
     fun theGlowIsLitInTheFirstFrameOfAPress() {
         start()
-        val (past, a) = barSide()
-        val base = red4(past)
-        val want = base + (255 - base) * a
+        val past = tilted(barSide(), "overlay.prev")
+        val a = maskAlpha(past, "overlay.prev")
         rule.onNodeWithTag("overlay.prev").performTouchInput { down(center) }
         rule.mainClock.advanceTimeByFrame()
-        assertEquals(want, red4(past), 8f)
+        val first = red4(past)
+        rule.onNodeWithTag("overlay.prev").performTouchInput { up() }
+        rule.mainClock.advanceTimeByFrame()
+        rule.waitForIdle()
+        val cut = red4(past)
+        assertEquals(cut + (255 - cut) * a, first, 8f)
     }
 
     @Test
@@ -176,10 +207,12 @@ class VolumePressLookTest {
         start()
         val ring = bounds("overlay.ring.ring")
         val glyph = bounds("overlay.ring.glyph")
-        val inside = Offset(ring.center.x, (glyph.top + ring.top + Tok.vol_ringStroke * u()) / 2)
-        val outside = Offset(ring.center.x, ring.top - 1.5f * u())
-        val inBase = red(inside)
-        val outBase = red(outside)
+        val flatIn = Offset(ring.center.x, (glyph.top + ring.top + Tok.vol_ringStroke * u()) / 2)
+        val flatOut = Offset(ring.center.x, ring.top - 1.5f * u())
+        val inBase = red(flatIn)
+        val outBase = red(flatOut)
+        val inside = tilted(flatIn, "overlay.ring")
+        val outside = tilted(flatOut, "overlay.ring")
         val size = ring.width
         hold("overlay.ring")
         val disc = (red(inside) - inBase).toFloat() / (255 - inBase)
