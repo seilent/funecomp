@@ -159,8 +159,9 @@ class AppStage(
     }
 
     private fun abort(out: Out, code: Int) {
-        if (faults.appAbortLate) late = out to AppAbort(partSize, code)
-        else send(out, Msg.APP_ABORT, AppAbort(partSize, code).encode())
+        val at = if (faults.appAbortZero) 0L else partSize
+        if (faults.appAbortLate) late = out to AppAbort(at, code)
+        else send(out, Msg.APP_ABORT, AppAbort(at, code).encode())
         close(faults.appDropMs)
     }
 

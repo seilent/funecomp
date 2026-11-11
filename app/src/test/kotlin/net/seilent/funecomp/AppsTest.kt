@@ -784,6 +784,14 @@ class AppsTest {
     }
 
     @Test
+    fun aRestartAfterAZeroAbortResumesAgain() {
+        live("app-begins=step/step/zero+stop", "app-abort-zero")
+        send()
+        info(Apps.INSTALLED)
+        assertEquals(4, begins())
+    }
+
+    @Test
     fun aStateWhileTheEndSitsInRetryEndsThePush() {
         fresh(retryMs = 60_000)
         live("app-end-busy")

@@ -136,6 +136,7 @@ class Faults(specs: List<String>) {
     var appBegins: List<Set<String>> = emptyList()
     var appEndBusy = false
     var appAbortLate = false
+    var appAbortZero = false
     val enums = ArrayList<EnumFault>()
     var features = Groups.all
     var askBlock: Pair<Int, Long>? = null
@@ -271,6 +272,7 @@ class Faults(specs: List<String>) {
                 "app-begins" -> appBegins = v.split('/').map { b -> b.split('+').filter { it.isNotEmpty() && it != "ok" }.toSet().also { a -> require(a.all { it.substringBefore('@') in APP_STEPS && ('@' !in it || it.substringBefore('@') in APP_CUTS && appCutCode(it) != null) }) { "app-begins: $v" } } }
                 "app-end-busy" -> appEndBusy = true
                 "app-abort-late" -> appAbortLate = true
+                "app-abort-zero" -> appAbortZero = true
                 "features" -> features = v.toLong()
                 "favs-busy" -> {
                     favsBusy = v.substringBefore(':').toIntOrNull() ?: throw IllegalArgumentException("favs-busy: count missing in $v")

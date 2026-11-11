@@ -236,6 +236,34 @@ class AppSimTest {
     }
 
     @Test
+    fun aZeroAbortCarriesOffsetZero() {
+        val chunk = Proto.updChunk.toLong()
+        for ((faults, offset) in listOf(listOf("app-begins=step", "app-abort-zero") to 0L, listOf("app-begins=step") to chunk)) {
+            val d = device(*faults.toTypedArray())
+            val p = link(d, Peer())
+            reply(begin(d, p))
+            send(d, p, 0)
+            assertEquals("$faults", listOf(offset), p.aborts().map { it.offset })
+            assertEquals("$faults", chunk, d.apps.partSize)
+        }
+    }
+
+    @Test
+    fun aLateZeroAbortCarriesOffsetZero() {
+        val chunk = Proto.updChunk.toLong()
+        for ((faults, offset) in listOf(listOf("app-begins=step", "app-abort-late", "app-abort-zero") to 0L, listOf("app-begins=step", "app-abort-late") to chunk)) {
+            val d = device(*faults.toTypedArray())
+            val p = link(d, Peer())
+            reply(begin(d, p))
+            send(d, p, 0)
+            assertTrue("$faults", p.aborts().isEmpty())
+            assertEquals("$faults", Err.badValue to "no stage", fail(end(d, p)))
+            assertEquals("$faults", listOf(offset), p.aborts().map { it.offset })
+            assertEquals("$faults", chunk, d.apps.partSize)
+        }
+    }
+
+    @Test
     fun anEndBusyAnswersBusyOnceAndKeepsTheWholePart() {
         val d = device("app-end-busy")
         val p = link(d, Peer())
