@@ -51,6 +51,7 @@ class Apps(
         var held: String? = null
         var line = ""
         var cardHeld = false
+        var gen = 0
         @Volatile var cancelled = false
     }
 
@@ -183,10 +184,12 @@ class Apps(
         p.busySince = null
         p.held = null
         p.cardWait = null
+        p.gen++
         if (p.ended) {
             p.liveAt = now()
             if (p.replied) set { it.copy(info = p.line) }
-            schedule(liveMs) { afterLive(p) }
+            val g = p.gen
+            schedule(liveMs) { if (p.gen == g) afterLive(p) }
         } else attempt()
     }
 
@@ -375,7 +378,7 @@ class Apps(
     private fun cardWait(p: Push) {
         p.cardWait = Remote.device.card.epoch
         p.cardHeld = true
-        p.waitFrom = null
+        if (!p.replied) p.waitFrom = null
         set { it.copy(info = CardView.REFUSED) }
     }
 
@@ -384,7 +387,8 @@ class Apps(
         val since = p.busySince ?: t.also { p.busySince = it }
         if (t - since >= busyBoundMs) return end(p, BUSY_STOP)
         set { it.copy(info = DAP_BUSY) }
-        schedule(retryMs) { if (push === p) attempt() }
+        val g = p.gen
+        schedule(retryMs) { if (push === p && p.gen == g) attempt() }
     }
 
     private fun wait(p: Push, line: String) {

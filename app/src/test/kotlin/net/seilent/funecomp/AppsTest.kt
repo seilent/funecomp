@@ -1015,7 +1015,7 @@ class AppsTest {
 
     @Test
     fun aRestartedUploadAfterADroppedEndRetryNeverEndsOnTheOldBound() =
-        restartedUploadEndsOnItsOwnResult("app-end-busy", "step@busy/ok/zero+step@busy/busy/busy/busy/busy", 8)
+        restartedUploadEndsOnItsOwnResult("app-end-busy", "step@busy/ok/zero+step@busy/busy", 8)
 
     @Test
     fun aRestartedUploadAfterALostEndNeverEndsOnTheOldBound() =
@@ -1023,11 +1023,77 @@ class AppsTest {
 
     @Test
     fun aRestartedPlainUploadAfterADroppedEndRetryNeverEndsOnTheOldBound() =
-        restartedUploadEndsOnItsOwnResult("app-end-busy", "ok/zero+step@busy/busy/busy/busy", 8, resume = false)
+        restartedUploadEndsOnItsOwnResult("app-end-busy", "ok/zero+step@busy/busy", 8, resume = false)
 
     @Test
     fun aRestartedPlainUploadAfterALostEndNeverEndsOnTheOldBound() =
         restartedUploadEndsOnItsOwnResult("app-end-lost", "ok/zero+step@busy/busy", 8, resume = false)
+
+    private fun relinkInTheRetryWait(vararg faults: String) {
+        apps.sync()
+        val lives = apps.lives
+        sim.stop()
+        info(byeText(null))
+        swap(*faults)
+        waitFor(20_000) { apps.lives > lives }
+        apps.sync()
+    }
+
+    private fun beginsEveryTenSeconds(steps: Int) = (1..steps).map {
+        tick(10_000)
+        apps.sync()
+        begins()
+    }
+
+    @Test
+    fun aBusyRetryFromBeforeARelinkDoesNotDoubleTheChain() {
+        fresh(retryMs = 20_000)
+        live("app-begins=busy")
+        send()
+        info(Apps.DAP_BUSY)
+        relinkInTheRetryWait("app-begins=busy/busy/busy/busy/busy")
+        assertEquals(2, begins())
+        assertEquals(listOf(2, 3, 3, 4), beginsEveryTenSeconds(4))
+    }
+
+    @Test
+    fun aRetryDueAtTheAskKeepsTheConfirmLine() {
+        fresh(retryMs = 20_000)
+        live("app-begins=busy")
+        send()
+        info(Apps.DAP_BUSY)
+        relinkInTheRetryWait("app-ask-ms=600000")
+        info(Apps.CONFIRM)
+        assertEquals(2, begins())
+        tick(20_000)
+        apps.sync()
+        assertEquals(Apps.CONFIRM, apps.view.info)
+        assertEquals(2, begins())
+    }
+
+    @Test
+    fun aBusyEndRetryFromBeforeARelinkWaitsForTheLive() {
+        fresh(retryMs = 20_000)
+        live("app-end-busy")
+        send()
+        info(Apps.DAP_BUSY)
+        relinkInTheRetryWait("app-begins=busy/busy/busy")
+        assertEquals(1, begins())
+        assertEquals(listOf(1, 1, 2, 2, 3), beginsEveryTenSeconds(5))
+    }
+
+    @Test
+    fun aSecondRelinkInsideTheLiveKeepsOneChain() {
+        fresh(retryMs = 20_000, resultMs = 600_000)
+        live("app-end-busy")
+        send()
+        info(Apps.DAP_BUSY)
+        relinkInTheRetryWait("app-begins=busy/busy/busy/busy/busy")
+        tick(10_000)
+        relinkInTheRetryWait("app-begins=busy/busy/busy/busy/busy")
+        assertEquals(1, begins())
+        assertEquals(listOf(1, 1, 2, 2, 3, 3, 4), beginsEveryTenSeconds(7))
+    }
 
     @Test
     fun anEndCardErrorThenADropWaitsForTheCardPastTheBound() {
