@@ -208,7 +208,7 @@ fun App(
             Stack(nav, browse) { page ->
                 when (page) {
                     Page.NowPlaying -> NowPlaying(device, control, shell.toast, shell.overlay, { nav.pop() }, { nav.push(Page.Queue) }, nav.top == Page.NowPlaying, art, lyrics, liveDevice, shell) { held -> artSheet(ctx, held, picks) }
-                    Page.Home -> Home(homeItems(device, link), { if (!playRefused(device, shell.toast)) control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
+                    Page.Home -> Home(homeItems(device, link), device.loaded, { if (!playRefused(device, shell.toast)) control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)
                     Page.Playlists -> Playlists(ctx)

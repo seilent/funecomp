@@ -147,6 +147,8 @@ class HomeRingTest {
     @Test
     fun theRingIsTheDeviceRing() {
         start(off = true)
+        sim.queueOp(Enums.QueueCmd.clear)
+        settle(1000)
         val ui = ui()
         val u = ui.u
         val o = rule.onNodeWithTag("home").fetchSemanticsNode().boundsInWindow
@@ -170,6 +172,9 @@ class HomeRingTest {
     @Test
     fun aHeldRingDrawsLit() {
         start()
+        sim.queueOp(Enums.QueueCmd.clear)
+        settle(1000)
+        assertEquals(Tok.alpha_mid * 255, ringBrightness().toFloat(), 3f)
         val u = ui().u
         val rest = alphas()
         val width = ringWidth()
@@ -192,11 +197,13 @@ class HomeRingTest {
         assertTrue("the halo outside the ring: $outBase", red(outside) > outBase + 10)
         ring.performTouchInput { up() }
         rule.mainClock.advanceTimeByFrame()
-        assertEquals(Tok.alpha_mid * 255, ringBrightness().toFloat(), 3f)
+        assertEquals(255f, ringBrightness().toFloat(), 3f)
         assertEquals(rest.getValue("music"), alphas().getValue("music"))
         assertEquals("no disc after the up", inBase.toFloat(), red(inside).toFloat(), 3f)
         assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
         assertEquals(1f, ringWidth() / width, 0.002f)
+        settle(1000)
+        sim.queueOp(Enums.QueueCmd.clear)
         settle(1000)
         val slop = ui().px(Tok.touchSlop)
         ring.performTouchInput { down(center) }
@@ -250,13 +257,28 @@ class HomeRingTest {
     }
 
     @Test
-    fun theRingFadesInOverThePeekToTheIdleAlpha() {
+    fun theRingFadesInToFullWhileATrackIsLoaded() {
         start(ms = 210)
         val half = ringBrightness()
         settle(790)
         val full = ringBrightness()
-        assertEquals((Tok.alpha_mid * 255).toInt().toFloat(), full.toFloat(), 3f)
+        assertEquals((Tok.alpha_full * 255).toInt().toFloat(), full.toFloat(), 3f)
         assertTrue(half < full)
+    }
+
+    @Test
+    fun anEmptyQueueRestsAtTheIdleAlpha() {
+        start(Library(emptyList()))
+        assertEquals((Tok.alpha_mid * 255).toInt().toFloat(), ringBrightness().toFloat(), 3f)
+    }
+
+    @Test
+    fun aPhoneTrackLightsTheRing() {
+        start()
+        val p = sim.device.playback
+        sim.device = sim.device.copy(playback = p.copy(state = p.state.copy(source = Enums.Source.phone, track = 0, title = null, artist = null, slots = 0)))
+        settle(1000)
+        assertEquals((Tok.alpha_full * 255).toInt().toFloat(), ringBrightness().toFloat(), 3f)
     }
 
     @Test

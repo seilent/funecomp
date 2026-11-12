@@ -46,6 +46,14 @@ class PlayingTest {
     }
 
     @Test
+    fun loadedIsALocalQueueOrAPhoneTrack() {
+        assertTrue(device(State(source = Enums.Source.local, track = 9)).loaded)
+        assertTrue(device(State(source = Enums.Source.local, slots = 3)).loaded)
+        assertTrue(device(State(source = Enums.Source.phone, track = 0, slots = 0)).loaded)
+        assertFalse(device(State(source = Enums.Source.local, slots = 0)).loaded)
+    }
+
+    @Test
     fun theMediaSessionTakesAServiceRowAndNotATrackZero() {
         assertTrue(MediaGate.wanted(svc(), setting = true, sinkToDap = false))
         assertFalse(MediaGate.wanted(State(source = Enums.Source.local, track = 0, title = "x"), setting = true, sinkToDap = false))

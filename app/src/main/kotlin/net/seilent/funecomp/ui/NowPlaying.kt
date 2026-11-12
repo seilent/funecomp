@@ -737,7 +737,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                 }
             }
             val repeat = s.repeat ?: Enums.Repeat.off
-            val queued = device.playing != Playing.None || (s.slots ?: 0L) > 0L
+            val queued = device.loaded
             val hitH = ui.px(ui.npRowHit)
             val row = listOf(ui.npRingCenter(0), ui.npTransportX(0), ui.npRingCenter(1), ui.npTransportX(1), ui.npRingCenter(2))
             val edges = listOf(row[0] - (row[1] - row[0]) / 2) + row.zipWithNext { a, b -> (a + b) / 2 } + (row[4] + (row[4] - row[3]) / 2)

@@ -238,7 +238,7 @@ fun HubPage(
 }
 
 @Composable
-fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
+fun Home(items: List<HomeItem>, loaded: Boolean, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
     val ui = LocalUi.current
     var focus by rememberSaveable { mutableIntStateOf(0) }
     val now = LocalHomeReturn.current
@@ -286,7 +286,7 @@ fun Home(items: List<HomeItem>, onShuffle: () -> Unit, onOpen: (Page) -> Unit) {
                                 .press({ onShuffle() }, press = ring)
                                 .testTag("home.ring"),
                         ) {
-                            Box(Modifier.at(ui.px(ui.homeRingX + fit) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(LayoutTok.homeRingSize, GlyphName.PLAY, if (ring.held) Look.Touch else Look.Focus(false), press = ring, tag = "home.ring", stroke = LayoutTok.homeRingStroke) }
+                            Box(Modifier.at(ui.px(ui.homeRingX + fit) - left, ui.px(ui.homeRingY(music)) - top, 0.5f, 0.5f)) { Ring(LayoutTok.homeRingSize, GlyphName.PLAY, Look.Toggle(ring.held || loaded), press = ring, tag = "home.ring", stroke = LayoutTok.homeRingStroke) }
                         }
                     }
                     items.forEachIndexed { i, item ->
