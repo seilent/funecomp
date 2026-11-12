@@ -116,7 +116,7 @@ class PressHoldTest {
 
     @Test
     fun homeItemsAndTheRingKeepTheirBoundsWhileHeld() {
-        start(HOME)
+        start(HOME) { it.holdReply = true }
         held(Item("home item", "home.music", "${TEXT}music"))
         held(Item("home ring", "home.ring", "home.ring.ring"))
         tapped(Item("home ring", "home.ring", "home.ring.ring"))

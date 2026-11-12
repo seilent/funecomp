@@ -17,6 +17,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -25,6 +27,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.changedToDown
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalViewConfiguration
@@ -39,6 +44,7 @@ import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.HomeShuffle
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.LyricsFetch
 
@@ -69,6 +75,7 @@ class Shell(
     var pick by mutableStateOf<PickFor?>(null)
     val keys = KeysFlow()
     var offset by mutableStateOf<OffsetEdit?>(null)
+    val shuffle = HomeShuffle()
 }
 
 fun homeItems(device: DeviceState, link: LinkView): List<HomeItem> {
@@ -114,7 +121,14 @@ fun App(
     val density = LocalDensity.current
     val dir = LocalLayoutDirection.current
     val bleed = Bleed(insets.getLeft(density, dir), insets.getTop(density), insets.getRight(density, dir), insets.getBottom(density))
-    BoxWithConstraints(Modifier.fillMaxSize().background(Black).windowInsetsPadding(insets)) {
+    val root = Modifier.pointerInput(shell) {
+        awaitPointerEventScope {
+            while (true) {
+                if (awaitPointerEvent(PointerEventPass.Initial).changes.any { it.changedToDown() }) shell.shuffle.end()
+            }
+        }
+    }
+    BoxWithConstraints(Modifier.fillMaxSize().then(root).background(Black).windowInsetsPadding(insets)) {
         val ui = rememberUi(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())
         val base = LocalViewConfiguration.current
         val touch = remember(base, ui.u) { Touch(base, ui.px(Tok.touchSlop)) }
@@ -136,7 +150,18 @@ fun App(
             val current by rememberUpdatedState(device)
             val ctx = Ctx(device, control, nav, shell.sheet, shell.toast, browse) { current }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
-            LaunchedEffect(shell.overlay.shows) { slots.drop() }
+            val main = remember { Handler(Looper.getMainLooper()) }
+            fun openNowPlaying() {
+                if (nav.top == Page.Home && !shell.sheet.shown && !(shell.overlay.visible || shell.overlay.drawn)) nav.push(Page.NowPlaying)
+            }
+            LaunchedEffect(shell.overlay.shows) {
+                slots.drop()
+                shell.shuffle.end()
+            }
+            LaunchedEffect(nav.top, shell.sheet.shown, link.phase) {
+                if (nav.top != Page.Home || shell.sheet.shown || link.phase != Phase.LIVE) shell.shuffle.end()
+            }
+            LaunchedEffect(device.playback.state) { if (shell.shuffle.state(device.playback.state)) openNowPlaying() }
             LaunchedEffect(shell.sheet.shown) { if (shell.sheet.shown) slots.drop() }
             DisposableEffect(control, shell.toast, lifecycle) {
                 val sink: (String, String) -> Unit = { line, title -> shell.toast.show(line, title) }
@@ -145,6 +170,7 @@ fun App(
                     if (e == Lifecycle.Event.ON_STOP) {
                         control.refusals(null, sink)
                         slots.reset()
+                        shell.shuffle.end()
                     }
                 }
                 lifecycle.addObserver(started)
@@ -208,7 +234,12 @@ fun App(
             Stack(nav, browse) { page ->
                 when (page) {
                     Page.NowPlaying -> NowPlaying(device, control, shell.toast, shell.overlay, { nav.pop() }, { nav.push(Page.Queue) }, nav.top == Page.NowPlaying, art, lyrics, liveDevice, shell) { held -> artSheet(ctx, held, picks) }
-                    Page.Home -> Home(homeItems(device, link), device.loaded, { if (!playRefused(device, shell.toast)) control.action(Enums.ActionCmd.shuffleLibrary) }) { nav.push(it) }
+                    Page.Home -> Home(homeItems(device, link), device.loaded, {
+                        if (!playRefused(device, shell.toast)) {
+                            val t = shell.shuffle.tap(liveDevice().playback.state.queueRev)
+                            control.action(Enums.ActionCmd.shuffleLibrary) { code, _ -> main.post { if (shell.shuffle.replied(t, code)) openNowPlaying() } }
+                        }
+                    }) { nav.push(it) }
                     Page.Music -> Music(ctx)
                     Page.Queue -> Queue(ctx)
                     Page.Playlists -> Playlists(ctx)

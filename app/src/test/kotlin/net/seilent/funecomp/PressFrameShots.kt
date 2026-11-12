@@ -229,7 +229,7 @@ class PressFrameShots {
         Case("glyph-tap", NP, "np.nextTrack.glyph", act = tap("np.nextTrack", 50)),
         Case("row-push", listOf(Page.Home, Page.Music), "${TEXT}Utada Hikaru", prep = { artists() }, act = tap("${TEXT}Utada Hikaru", 50)),
         Case("home-push", listOf(Page.Home), "${TEXT}artists albums songs", act = tap("home.music", 50)),
-        Case("home-ring", listOf(Page.Home), "home.ring.ring", act = tap("home.ring", 150)),
+        Case("home-ring", listOf(Page.Home), "home.ring.ring", prep = { c.holdReply = true }, act = tap("home.ring", 150)),
         Case("jump-tap", EQ + Page.AutoEq(EqSlots.HEADPHONES), "jump.19", prep = {
             node("aeq.div.#").performClick()
             settle(300)

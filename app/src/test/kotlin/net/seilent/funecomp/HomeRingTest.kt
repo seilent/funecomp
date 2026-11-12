@@ -120,6 +120,7 @@ class HomeRingTest {
     fun homeDrawsNoBar() {
         val shell = start()
         assertEquals(0, bars())
+        sim.holdReply = true
         rule.onNodeWithTag("home.ring").performClick()
         settle(1000)
         assertEquals(0, bars())
@@ -131,15 +132,16 @@ class HomeRingTest {
     }
 
     @Test
-    fun aRingTapShufflesTheLibraryAndStaysHome() {
+    fun aRingTapShufflesTheLibraryAndOpensNowPlaying() {
         val shell = start()
         rule.onNodeWithTag("home.ring").performClick()
         settle(1000)
         assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
-        assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
         val s = sim.device.playback.state
         assertEquals(sim.sim.lib.tracks.size.toLong(), s.slots)
         assertEquals(true, s.shuffle)
+        assertEquals(true, s.playing)
     }
 
     private fun lit(p: Int) = (p shr 16 and 0xff) > (Tok.alpha_mid * 255 / 2).toInt()
@@ -171,7 +173,7 @@ class HomeRingTest {
 
     @Test
     fun aHeldRingDrawsLit() {
-        start()
+        val shell = start()
         sim.queueOp(Enums.QueueCmd.clear)
         settle(1000)
         assertEquals(Tok.alpha_mid * 255, ringBrightness().toFloat(), 3f)
@@ -202,6 +204,9 @@ class HomeRingTest {
         assertEquals("no disc after the up", inBase.toFloat(), red(inside).toFloat(), 3f)
         assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
         assertEquals(1f, ringWidth() / width, 0.002f)
+        settle(1000)
+        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
+        shell.nav.pop()
         settle(1000)
         sim.queueOp(Enums.QueueCmd.clear)
         settle(1000)
@@ -253,6 +258,9 @@ class HomeRingTest {
         settle(1000)
         tapHome(43.5f, slotCenter(1))
         assertEquals(listOf(Enums.ActionCmd.shuffleLibrary to null), sim.actions)
+        assertEquals(listOf(Page.Home, Page.NowPlaying), shell.nav.stack.toList())
+        shell.nav.pop()
+        settle(1000)
         assertEquals(listOf(Page.Home), shell.nav.stack.toList())
     }
 
