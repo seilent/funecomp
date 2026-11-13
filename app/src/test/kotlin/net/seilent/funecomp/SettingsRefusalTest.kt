@@ -183,14 +183,14 @@ class SettingsRefusalTest {
         rule.onNodeWithTag("scrobble.dap").performClick()
         settle(600)
         assertEquals("scrobble", shell.sheet.title)
-        pick(1)
+        pick(0)
         assertEquals(listOf(Err.refused), c.failed)
         assertEquals("scrobble" to "refused on the dap", toast())
-        assertEquals("phone", c.device.settings.values["scrobble"])
+        assertEquals("card", c.device.settings.values["scrobble"])
         rule.onNodeWithTag("scrobble.dap").performClick()
         settle(600)
-        pick(1)
-        assertEquals("card", c.device.settings.values["scrobble"])
+        pick(0)
+        assertEquals("phone", c.device.settings.values["scrobble"])
         assertEquals(1, shell.toast.shows)
     }
 }

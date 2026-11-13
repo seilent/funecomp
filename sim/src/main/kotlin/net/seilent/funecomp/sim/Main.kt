@@ -10,7 +10,7 @@ private const val USAGE = "usage: sim --board ap80|v1|r1 (--listen <port> | --co
     "[--fault <spec>]... [--idle-ms <n>] [--busy-ms <n>] [--img-dir <dir>] [--minor <n>] [--img-cap <bytes>] " +
     "[--art-dir <dir>] [--lrc-dir <dir>] [--upd-dir <dir>] [--upd-keys <hex>,...] [--upd-seq <n>] [--battery <from>:<to>@<ms>] [--card <freeMiB>:<totalMiB>] " +
     "[--curve v1|linear] [--max-pct <n>] [--card-eq <name>,...] [--through <name>] [--source local|phone] [--eq-headset <name>] [--rescan-lib <file>] [--version <s>] [--backdrop <w>x<h>] [--lyr-offset <id>:<ms>]... " +
-    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--receiver] [--phone <file>] [--headset] [--bt-role receiver|headphones] [--companion] [--svc <id>:<name>:<secret>+...[:pkce]]... [--svc-state <id>:<in|out|unknown>[:<account>[:<downloads>]]]... [--quiet]"
+    "[--playlog <file>] [--playlog-id <hex>] [--playlog-cap <n>] [--cardlog <file>] [--card-key <key>] [--no-bind] [--receiver] [--phone <file>] [--headset] [--bt-role receiver|headphones] [--companion] [--svc <id>:<name>:<secret>+...[:pkce]]... [--svc-state <id>:<in|out|unknown>[:<account>[:<downloads>]]]... [--quiet]"
 
 fun main(args: Array<String>) {
     var board = "ap80"
@@ -43,6 +43,9 @@ fun main(args: Array<String>) {
     var playLog: String? = null
     var playLogId: String? = null
     var playLogCap: Int? = null
+    var cardLog: String? = null
+    var cardKey: String? = null
+    var bind = true
     var receiver = false
     var phone: String? = null
     var eqHeadset: String? = null
@@ -88,6 +91,9 @@ fun main(args: Array<String>) {
             "--playlog" -> playLog = value()
             "--playlog-id" -> playLogId = value()
             "--playlog-cap" -> playLogCap = value().toInt()
+            "--cardlog" -> cardLog = value()
+            "--card-key" -> cardKey = value()
+            "--no-bind" -> bind = false
             "--receiver" -> receiver = true
             "--phone" -> phone = value()
             "--quiet" -> quiet = true
@@ -143,6 +149,9 @@ fun main(args: Array<String>) {
         playLog?.let { PlayLog.parse(File(it)) } ?: base.playLog,
         playLogId?.let { java.lang.Long.parseUnsignedLong(it.removePrefix("0x"), 16) } ?: base.playLogId,
         playLogCap ?: base.playLogCap,
+        cardLog = cardLog?.let { PlayLog.parse(File(it)) } ?: base.cardLog,
+        cardKey = cardKey ?: base.cardKey,
+        bind = bind,
         phone = phone?.let { PhoneLine.load(File(it)) }.orEmpty(),
         receiver = receiver,
         headset = headset,

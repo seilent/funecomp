@@ -206,7 +206,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         "outputPriority" to "headphones", "outputGain" to "high", "dsdOutput" to "dop", "tube" to "off", "stereoWidth" to "off",
         "led" to "high", "screenLock" to "off", "saverBlur" to "off", "statusVolume" to "off", "navBar" to "off", "navOrder" to "backLeft",
         "navButton" to "play", "whenIdle" to "powerOff", "chargeLimit" to "off", "chargeSpeed" to "normal", "swapTrackKeys" to "off", "usbFeedback" to "on", "usbOutput" to "headphones",
-        "companion" to if (opts.companion) "on" else "off", "scrobble" to "phone", "size" to "standard",
+        "companion" to if (opts.companion) "on" else "off", "scrobble" to if (devBit(Feature.cardLog)) "card" else "phone", "size" to "standard",
         "bootLogo" to "fune", "streaming" to if (opts.services.isNotEmpty()) "on" else "off", "btAudio" to "on",
     ).apply {
         if (board.name == "r1") put("outputGain", "low")
@@ -274,6 +274,16 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private var played = 0L
     private var playAt = 0L
     private var playLogged = false
+    private val cardLog = CardLog(opts.playLogId, opts.cardKey, opts.cardLog, faults.cardLost)
+    private var firstPeer: String? = null
+    private var firstSessions = 0
+    private var bound = false
+    private var comp = 0
+    private val bitPeers = HashSet<Out>()
+    private val cardPeers = HashSet<Out>()
+    private val cardTop = HashMap<Out, HashMap<Long, Long>>()
+    private val peerApp = HashMap<Out, String>()
+    private var cardFindAt: Long? = null
 
     data class Meta(val wrong: Boolean?, val source: String?, val credit: String?)
     class Stored(val name: String, val mbid: String?, val crc: Long, val bytes: ByteArray, var at: Long, var meta: Meta, var origins: Int = 0, val shownS: Long = 0)
@@ -461,6 +471,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val was = cardGate
         cardGate = v
         opts.log("card gate ${Enums.Card.names[v]}")
+        if (v == Enums.Card.ready) faults.cardSwap?.let {
+            faults.cardSwap = null
+            cardLog.key = it
+            opts.log("cardlog card $it")
+        }
         if (was != Enums.Card.ready || v == Enums.Card.ready) return
         if (faults.cardOld && edgeAt(now())?.mounted == true) return
         val p = push
@@ -560,6 +575,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     fun restart() = synchronized(lock) {
+        cardLog.restart()
+        comp = 0
         partials.clear()
         push = null
         apps.restart()
@@ -567,7 +584,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun helloReply(out: Out? = null) = HelloReply(
         faults.major, opts.minor, board.name, opts.version ?: "sim.${board.name}", board.screenW, board.screenH,
-        board.backdropW, board.backdropH, Proto.maxPayload, opts.idleMs, opts.busyMs, faults.features, lib.rev, settingsRev,
+        board.backdropW, board.backdropH, Proto.maxPayload, opts.idleMs, opts.busyMs,
+        if (out == null || out in bitPeers) faults.features else faults.features and Groups.mask("cardLog").inv(), lib.rev, settingsRev,
         if (v13) lib.snapRev else null,
         services = if (svcBoth(out?.let { linked[it] } ?: 0L)) opts.services else emptyList(),
         eqSlots = if (devBit(Feature.eqSlots)) EAR_LABELS.entries.take(if (devBit(Feature.eqStages) && appBit(out, Feature.eqStages)) 4 else 2).map { EqSlot(it.key, it.value) } else emptyList(),
@@ -685,6 +703,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             eqEarSlot = if (stagesFor(out)) playingEar() else null,
             service = svc,
             serviceKey = row?.serviceKey?.takeIf { svc != null },
+            cardLogSeq = if (out != null && out in cardPeers) cardLog.newest().takeIf { it > 0 } else null,
         )).encode()
     }
 
@@ -703,6 +722,14 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 lib.rev++
                 lib.snapRev++
                 opts.log("snap late rev=${lib.rev} snapRev=${lib.snapRev}")
+                send(out, Msg.STATE, state(out = out))
+            }
+        }
+        cardFindAt?.let { at ->
+            if (now() >= at) {
+                cardFindAt = null
+                cardLog.verify()
+                opts.log("cardlog find done on card ${cardLog.key}")
                 send(out, Msg.STATE, state(out = out))
             }
         }
@@ -729,19 +756,35 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         follow()
     }
 
-    fun linked(out: Out, features: Long) = synchronized(lock) {
+    fun linked(out: Out, features: Long, app: String? = null) = synchronized(lock) {
         if (faults.cardRun?.start == CardRun.Start.Hello) cardStart(now())
         linked[out] = features
         if (++connects == 2 && faults.newlog) {
             playLog.renew(playLog.id + 1)
             opts.log("playlog new log ${java.lang.Long.toHexString(playLog.id)}")
         }
+        if (faults.cardExpose) cardLog.expose()
+        val peer = app.orEmpty()
+        peerApp[out] = peer
+        if (opts.bind && firstPeer == null) firstPeer = peer
+        if (peer == firstPeer) firstSessions++
+        if (peer != firstPeer || (faults.bindLate && firstSessions < 2)) return@synchronized
+        bound = true
+        val card = (features ushr Feature.cardLog) and 1L == 1L
+        comp = if (!Groups.allowed(Msg.PLAYLOG_GET, features)) 3 else if (card) 2 else 1
+        if (!devBit(Feature.cardLog)) return@synchronized
+        bitPeers += out
+        if (card) cardPeers += out
     }
 
     fun unlinked(out: Out) = synchronized(lock) {
         linked.remove(out)
         svc.forget(out)
         cardSent.remove(out)
+        bitPeers.remove(out)
+        cardPeers.remove(out)
+        cardTop.remove(out)
+        peerApp.remove(out)
         if (pushOut === out) pushOut = null
         if (updOut === out) updOut = null
         apps.unlinked(out)
@@ -759,9 +802,16 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val pt = lib.byId[playTrack]
         if (pt != null && !playLogged && pt.durationMs > CROSS_MIN_MS && played >= minOf(pt.durationMs / 2, CROSS_CAP_MS)) {
             playLogged = true
-            if (prefs["scrobble"] == "phone") {
-                val e = playLog.append(entry(pt))
-                opts.log("playlog append seq ${e.seq} ${pt.title}${if (e.liveSeen == true) " liveSeen" else ""}")
+            when (route()) {
+                "phone" -> {
+                    val e = playLog.append(entry(pt))
+                    opts.log("playlog append seq ${e.seq} ${pt.title}${if (e.liveSeen == true) " liveSeen" else ""}")
+                }
+                "card" -> {
+                    val queued = cardPeers.isNotEmpty()
+                    val e = cardLog.append(entry(pt), queued)
+                    opts.log("cardlog append seq ${e.seq} ${pt.title} on card ${cardLog.key}${if (queued) " queued" else ""}")
+                }
             }
         }
         if (t?.id != playTrack || playFresh) {
@@ -771,6 +821,17 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             playLogged = false
             playStart = opts.wall() - position()
         }
+    }
+
+    private fun route(): String? = when (prefs["scrobble"]) {
+        "phone" -> "phone"
+        "card" -> when {
+            !devBit(Feature.cardLog) -> null
+            linked.values.any { !Groups.allowed(Msg.PLAYLOG_GET, it) } -> "phone"
+            comp == 1 || (comp == 0 && bound && prefs["companion"] == "on") -> "phone"
+            else -> "card"
+        }
+        else -> null
     }
 
     private fun entry(t: Track): PlayEntry {
@@ -1069,8 +1130,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Msg.UPD_END -> updEnd(body)
             Msg.APP_BEGIN -> apps.begin(body, out)
             Msg.APP_END -> apps.end(body, out)
-            Msg.PLAYLOG_GET -> playLogGet(body)
-            Msg.PLAYLOG_ACK -> playLogAck(body)
+            Msg.PLAYLOG_GET -> if (cardPeer(out) && body.bool(Tags.PlaylogGet.card) == true) cardLogGet(body, out) else playLogGet(body)
+            Msg.PLAYLOG_ACK -> if (cardPeer(out) && body.bool(Tags.PlaylogAck.card) == true) cardLogAck(body, out) else playLogAck(body)
             Msg.SVC_KEYS -> svcKeys(body)
             Msg.SVC_LOGIN_START -> svcGate(body, out, Tags.SvcLoginStart.service) ?: svc.start(body, out, cardOk(), faults.svcOff || streamingOff()) { o -> state(out = o) }
             Msg.SVC_LOGOUT -> svcGate(body, out, Tags.SvcLogout.service) ?: svc.logout(body, out, cardOk(), faults.svcOff || streamingOff())
@@ -1132,6 +1193,44 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         opts.log("playlog ack up to $upTo, ${code?.let { Err.names[it] } ?: "ok"}")
         return if (code == null) Answer.Ok(state = true) else Answer.Fail(code, Err.names.getValue(code))
     }
+
+    private fun cardLogGet(b: Node, out: Out): Answer {
+        if (!cardOk()) {
+            opts.log("cardlog get, no card")
+            return noCard()
+        }
+        val after = b.long(Tags.PlaylogGet.after) ?: 0
+        val r = cardLog.page(after, b.long(Tags.PlaylogGet.count))
+        if (cardFindAt == null && cardLog.stops()) faults.cardVerifyMs?.let { cardFindAt = now() + it }
+        val top = cardTop.getOrPut(out) { HashMap() }
+        top[r.log!!] = maxOf(top[r.log] ?: 0L, r.newest ?: 0L)
+        opts.log("cardlog get after $after on card ${cardLog.key}: ${r.entries.size} entries to ${r.entries.lastOrNull()?.seq ?: after} of ${r.newest}, held ${r.held ?: 0}")
+        return Answer.Ok(r.encode())
+    }
+
+    private fun cardLogAck(b: Node, out: Out): Answer {
+        val id = b.long(Tags.PlaylogAck.log)
+        val upTo = b.long(Tags.PlaylogAck.upTo)
+        val card = id?.let { cardLog.keyOf(it) }
+        val code = when {
+            id == null || upTo == null -> Err.badValue
+            card == null -> Err.staleRev
+            upTo > (cardTop[out]?.get(id) ?: 0L) -> Err.badValue
+            else -> null
+        }
+        if (code == null) cardLog.ack(card!!, upTo!!)
+        opts.log("cardlog ack up to $upTo, ${code?.let { Err.names[it] } ?: "ok"}")
+        return if (code == null) Answer.Ok(state = true) else Answer.Fail(code, Err.names.getValue(code))
+    }
+
+    val cardPlays: List<PlayEntry> get() = synchronized(lock) { cardLog.held }
+
+    fun rebind(app: String?) = synchronized(lock) {
+        firstPeer = app.orEmpty()
+        opts.log("cardlog bound ${app.orEmpty()}")
+    }
+
+    private fun cardPeer(out: Out) = out in cardPeers && peerApp[out] == firstPeer
 
     private fun viewServed(view: Int?) = view != Enums.View.genres || genres
 

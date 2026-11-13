@@ -129,7 +129,7 @@ class ServiceRowSimTest {
             wall += 1000
             d.tick(Sink())
         }
-        val e = d.plays.single()
+        val e = d.cardPlays.single()
         assertNull(e.track)
         assertEquals("tidal" to 167L, e.service to e.serviceKey)
         assertEquals("Song", e.title)

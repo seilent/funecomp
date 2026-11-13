@@ -159,6 +159,11 @@ class Faults(specs: List<String>) {
     var newlog = false
     var svcRowZero = false
     val dropAck = java.util.concurrent.atomic.AtomicBoolean(false)
+    var bindLate = false
+    var cardExpose = false
+    var cardVerifyMs: Long? = null
+    val cardLost = HashSet<Long>()
+    var cardSwap: String? = null
     var cardRun: CardRun? = null
     var cardSeq: List<Pair<Int, Long>> = emptyList()
     var cardOld = false
@@ -307,6 +312,11 @@ class Faults(specs: List<String>) {
                 "newlog" -> newlog = true
                 "svc-row-zero" -> svcRowZero = true
                 "drop-ack" -> dropAck.set(true)
+                "bind-late" -> bindLate = true
+                "card-expose" -> cardExpose = true
+                "card-verify" -> cardVerifyMs = v.toLongOrNull() ?: throw IllegalArgumentException("card-verify: delay missing in $v")
+                "card-lost" -> cardLost += v.split('+').map { it.toLongOrNull() ?: throw IllegalArgumentException("card-lost: bad seq in $v") }
+                "card-swap" -> cardSwap = v.ifEmpty { throw IllegalArgumentException("card-swap: key missing") }
                 "card-run" -> cardRun = CardRun.parse(v)
                 "card-seq" -> cardSeq = CardRun.seq(v)
                 "card-device" -> cardOld = when (v) {
@@ -447,6 +457,9 @@ class Options(
     val eqHeadset: String? = null,
     val through: String? = null,
     val appReplyMs: Long = Proto.svcReplyMs.toLong(),
+    val cardLog: List<PlayEntry> = emptyList(),
+    val cardKey: String = CardLog.KEY,
+    val bind: Boolean = true,
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
@@ -460,6 +473,7 @@ class Options(
         if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig", "liveRows", "eqStages").inv()
         if (minor < 16) faults.features = faults.features and Groups.mask("svcLogin").inv()
         if (minor < 17) faults.features = faults.features and Groups.mask("imgFocusX", "svcAccount", "appPkg").inv()
+        if (minor < 18) faults.features = faults.features and Groups.mask("cardLog").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }

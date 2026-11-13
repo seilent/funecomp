@@ -43,8 +43,26 @@ class PlayLogSimTest {
 
     private fun seed(n: Int) = (1..n).map { PlayEntry(0, 1_799_990_000L + it * 300, 120_000, 240_000, it.toLong(), "Track $it", "Radiohead", listOf("Radiohead")) }
 
-    private fun device(seed: List<PlayEntry> = emptyList(), minor: Int = Proto.minor, faults: List<String> = emptyList(), cap: Int = PlayLog.CAP) =
-        Device(Options(Board.of("v1"), Faults(faults), minor = minor, playLog = seed, playLogCap = cap, wall = { wall }, log = { logs += it }), lib) { t }
+    private fun device(seed: List<PlayEntry> = emptyList(), minor: Int = Proto.minor, faults: List<String> = emptyList(), cap: Int = PlayLog.CAP, card: List<PlayEntry> = emptyList(), companion: Boolean = false, bind: Boolean = true) =
+        Device(Options(Board.of("v1"), Faults(faults), minor = minor, playLog = seed, playLogCap = cap, wall = { wall }, log = { logs += it }, companion = companion, cardLog = card, bind = bind), lib) { t }
+
+    private val noCardBit = Groups.all and Groups.mask("cardLog").inv()
+
+    private fun link(d: Device, features: Long = Groups.all, app: String? = "phone") = Sink().also { d.linked(it, features, app) }
+
+    private fun cardGet(d: Device, out: Out, after: Long, count: Long = 50) = PlayLogReply.from(Node.decode("PLAYLOG_GET.reply", ok(d.request(Msg.PLAYLOG_GET, Node.decode("PLAYLOG_GET", Req.playLogGet(after, count, card = true)), out))))
+
+    private fun cardAck(d: Device, out: Out, log: Long, upTo: Long) = d.request(Msg.PLAYLOG_ACK, Node.decode("PLAYLOG_ACK", Req.playLogAck(log, upTo, card = true)), out)
+
+    private fun cardBit(d: Device, out: Out) = d.helloReply(out).features and Groups.mask("cardLog")
+
+    private fun state(d: Device, out: Out) = State.from(Node.decode("STATE", d.state(out = out)))
+
+    private fun cross(d: Device, start: Long = 0) {
+        play(d, start)
+        val track = lib.byId.getValue(state(d).track!!)
+        run(d, minOf(track.durationMs / 2, 240_000) + 1000)
+    }
 
     private fun ok(a: Answer) = (a as? Answer.Ok ?: throw AssertionError("failed: ${(a as Answer.Fail).code} ${a.text}")).payload
 
@@ -110,7 +128,7 @@ class PlayLogSimTest {
 
     @Test
     fun aPlayPastTheRuleAppendsOneEntryAndASkipAt20SecondsNone() {
-        val d = device()
+        val d = device(minor = 17)
         play(d)
         run(d, 20_000)
         ok(d.request(Msg.TRANSPORT, Node.decode("TRANSPORT", Req.transport(Enums.TransportCmd.next)), Sink()))
@@ -131,7 +149,7 @@ class PlayLogSimTest {
 
     @Test
     fun theStartIsLocalWithTheZoneOfTheLastAutomaticClock() {
-        val d = device()
+        val d = device(minor = 17)
         ok(d.request(Msg.DRAFT, Node.decode("DRAFT", Req.draft(Enums.DraftKind.clock, unixS = wall / 1000, zoneS = 32400, automatic = true)), Sink()))
         val at = wall / 1000
         play(d)
@@ -153,7 +171,7 @@ class PlayLogSimTest {
     @Test
     fun aLinkedAppWithBit23GivesNoLiveSeen() {
         val d = device()
-        d.linked(Sink(), Groups.all)
+        d.linked(Sink(), noCardBit)
         play(d)
         run(d, 240_000)
         assertNull(d.plays.single().liveSeen)
@@ -193,7 +211,7 @@ class PlayLogSimTest {
     @Test
     fun getAndAckAreServedInCardAndOffAndOnlyPhoneAppends() {
         for (mode in listOf("card", "off")) {
-            val d = device(seed(2))
+            val d = device(seed(2), minor = 17)
             ok(set(d, "scrobble=$mode\n"))
             assertEquals(2, get(d, 0).entries.size)
             ok(ack(d, PlayLog.ID, 2))
@@ -204,7 +222,7 @@ class PlayLogSimTest {
     }
 
     @Test
-    fun theScrobbleRowFollowsPhoneAppOnBothBoardsAndStartsAtPhone() {
+    fun theScrobbleRowFollowsPhoneAppOnBothBoardsAndStartsAtCard() {
         for (b in listOf("v1", "ap80")) {
             val d = Device(Options(Board.of(b)), lib) { t }
             val keys = d.rows.map { it.key }
@@ -218,8 +236,215 @@ class PlayLogSimTest {
             val out = Sink()
             d.greet(out)
             val text = out.frames.filter { it.first == Msg.SETTINGS }.map { Settings.from(Node.decode("SETTINGS", it.second)).text }.single()
-            assertTrue("scrobble=phone" in text.lines())
+            assertTrue("scrobble=card" in text.lines())
         }
+        val out = Sink()
+        Device(Options(Board.of("v1"), minor = 17), lib) { t }.greet(out)
+        assertTrue("scrobble=phone" in out.frames.filter { it.first == Msg.SETTINGS }.map { Settings.from(Node.decode("SETTINGS", it.second)).text }.single().lines())
+    }
+
+    @Test
+    fun cardLogIsServedFromMinor18AndOnlyToTheBoundPeer() {
+        assertEquals(Groups.mask("cardLog"), device().helloReply().features and Groups.mask("cardLog"))
+        assertEquals(0L, device(minor = 17).helloReply().features and Groups.mask("cardLog"))
+        val d = device()
+        val bound = link(d)
+        assertEquals(Groups.mask("cardLog"), cardBit(d, bound))
+        val other = link(d, app = "other")
+        assertEquals(0L, cardBit(d, other))
+        d.unlinked(bound)
+        assertEquals(Groups.mask("cardLog"), cardBit(d, link(d)))
+        val none = device(bind = false)
+        assertEquals(0L, cardBit(none, link(none)))
+        val late = device(faults = listOf("bind-late"))
+        assertEquals(0L, cardBit(late, link(late)))
+        assertEquals(0L, cardBit(late, link(late, app = "other")))
+        assertEquals(Groups.mask("cardLog"), cardBit(late, link(late)))
+    }
+
+    @Test
+    fun aCrossingWhileUnlinkedIsPlacedOneWhileLinkedIsQueuedAndTheFlagIsComputedAtEveryAnswer() {
+        val d = device()
+        cross(d)
+        assertTrue(d.plays.isEmpty())
+        assertEquals(1, d.cardPlays.size)
+        val out = link(d)
+        val a = cardGet(d, out, 0)
+        assertEquals(listOf(1L), a.entries.map { it.seq })
+        assertNull(a.entries.single().exposed)
+        assertEquals(1L to 1L, a.newest to a.held)
+        assertNull(a.first)
+        cross(d, 1)
+        assertTrue(logs.any { it.startsWith("cardlog append seq 2 ") && it.endsWith(" queued") })
+        assertNull(cardGet(d, out, 1).entries.single().exposed)
+        d.unlinked(out)
+        cross(d, 2)
+        d.restart()
+        val b = cardGet(d, link(d), 0)
+        assertEquals(listOf(1L, 2L, 3L), b.entries.map { it.seq })
+        assertEquals(listOf(true, null, true), b.entries.map { it.exposed })
+        assertTrue(d.plays.isEmpty())
+    }
+
+    @Test
+    fun cardPlaysGoToThePhoneLogBesideAnOldAppABit23OnlyPhoneOrACompanionAfterARestart() {
+        val old = device()
+        old.linked(Sink(), Groups.all and Groups.mask("playLog").inv(), "old")
+        cross(old)
+        assertEquals(true, old.plays.single().liveSeen)
+        assertTrue(old.cardPlays.isEmpty())
+
+        val plain = device()
+        link(plain, noCardBit)
+        cross(plain)
+        assertNull(plain.plays.single().liveSeen)
+        assertTrue(plain.cardPlays.isEmpty())
+
+        val comp = device(companion = true)
+        comp.unlinked(link(comp))
+        cross(comp)
+        assertEquals(1, comp.cardPlays.size)
+        comp.restart()
+        cross(comp, 1)
+        assertEquals(1, comp.plays.size)
+        assertEquals(1, comp.cardPlays.size)
+
+        val phone = device()
+        link(phone)
+        ok(set(phone, "scrobble=phone\n"))
+        cross(phone)
+        assertEquals(1, phone.plays.size)
+        assertTrue(phone.cardPlays.isEmpty())
+
+        val below = device(minor = 17)
+        ok(set(below, "scrobble=card\n"))
+        cross(below)
+        assertTrue(below.plays.isEmpty())
+        assertTrue(below.cardPlays.isEmpty())
+    }
+
+    @Test
+    fun aCardGetIsNoCardWhileTheCardIsNotReadyAndTag3IsIgnoredWithoutBit42() {
+        val d = device(seed(2), faults = listOf("card-seq=busy:5000,ready"), card = seed(3))
+        d.startCard()
+        val out = link(d)
+        assertEquals(Err.noCard, code(d.request(Msg.PLAYLOG_GET, Node.decode("PLAYLOG_GET", Req.playLogGet(0, 50, card = true)), out)))
+        run(d, 6000)
+        assertEquals(3, cardGet(d, out, 0).entries.size)
+        val other = link(d, app = "other")
+        val r = cardGet(d, other, 0)
+        assertEquals(PlayLog.ID, r.log)
+        assertEquals(2, r.entries.size)
+        assertEquals(Err.badValue, code(cardAck(d, other, PlayLog.ID, 3)))
+        ok(cardAck(d, other, PlayLog.ID, 2))
+        assertTrue(d.plays.isEmpty())
+        assertEquals(3, d.cardPlays.size)
+    }
+
+    @Test
+    fun aGetStopsAtAnUnverifiedPlacedEntryUntilItsFindEndsAndALostEntryIsServed() {
+        val d = device(faults = listOf("card-expose", "card-verify=2000"), card = seed(3))
+        val out = link(d)
+        val a = cardGet(d, out, 0)
+        assertTrue(a.entries.isEmpty())
+        assertEquals(0L to 1L, a.newest to a.held)
+        assertNull(state(d, out).cardLogSeq)
+        run(d, 3000)
+        assertEquals(3L, state(d, out).cardLogSeq)
+        assertTrue(logs.any { it.startsWith("cardlog find done") })
+        val b = cardGet(d, out, 0)
+        assertEquals(listOf(1L, 2L, 3L), b.entries.map { it.seq })
+        assertTrue(b.entries.all { it.exposed == true })
+
+        val never = device(faults = listOf("card-expose", "card-lost=1"), card = seed(3))
+        val o = link(never)
+        val c = cardGet(never, o, 0)
+        assertEquals(listOf(1L), c.entries.map { it.seq })
+        assertEquals(true, c.entries.single().exposed)
+        assertEquals(1L, c.newest)
+        run(never, 10_000)
+        assertEquals(listOf(1L), cardGet(never, o, 0).entries.map { it.seq })
+    }
+
+    @Test
+    fun newestIsAlwaysSentHeldIsTheLowestHeldSeqAndThereIsNoFirst() {
+        val d = device(card = seed(3))
+        val out = link(d)
+        val a = cardGet(d, out, 3)
+        assertTrue(a.entries.isEmpty())
+        assertEquals(3L to 1L, a.newest to a.held)
+        assertNull(a.first)
+        assertEquals(true, cardGet(d, out, 0, count = 2).more)
+        ok(cardAck(d, out, a.log!!, 2))
+        assertEquals(3L to 3L, cardGet(d, out, 3).let { it.newest to it.held })
+        ok(cardAck(d, out, a.log!!, 3))
+        val b = cardGet(d, out, 0)
+        assertEquals(0L, b.newest)
+        assertNull(b.held)
+        assertTrue(b.entries.isEmpty())
+        assertNull(state(d, out).cardLogSeq)
+    }
+
+    @Test
+    fun aCardAckIsSevenForAnUnknownSubLogAndTwoAboveTheSessionsNewest() {
+        val d = device(card = seed(3))
+        val out = link(d)
+        val log = cardGet(d, out, 0).log!!
+        assertEquals(Err.staleRev, code(cardAck(d, out, log + 1, 1)))
+        assertEquals(Err.badValue, code(cardAck(d, out, log, 4)))
+        d.unlinked(out)
+        val next = link(d)
+        assertEquals(Err.badValue, code(cardAck(d, next, log, 1)))
+        cardGet(d, next, 0)
+        ok(cardAck(d, next, log, 1))
+        assertEquals(listOf(2L, 3L), d.cardPlays.map { it.seq })
+    }
+
+    @Test
+    fun aCardRequestFromAPeerNoLongerBoundGetsTheLinkLogAnswer() {
+        val d = device(seed(2), card = seed(3))
+        val out = link(d)
+        assertEquals(3, cardGet(d, out, 0).entries.size)
+        d.rebind("other")
+        val r = cardGet(d, out, 0)
+        assertEquals(PlayLog.ID, r.log)
+        assertEquals(2, r.entries.size)
+        ok(cardAck(d, out, PlayLog.ID, 2))
+        assertTrue(d.plays.isEmpty())
+        assertEquals(3, d.cardPlays.size)
+        assertEquals(3L, state(d, out).cardLogSeq)
+    }
+
+    @Test
+    fun stateCarriesTheCardLogSeqForTheCardPeerOnly() {
+        val d = device(card = seed(3))
+        val out = link(d)
+        assertEquals(3L, state(d, out).cardLogSeq)
+        assertNull(state(d, link(d, app = "other")).cardLogSeq)
+        assertNull(state(d, link(d, noCardBit)).cardLogSeq)
+        assertNull(state(d).cardLogSeq)
+    }
+
+    @Test
+    fun aCardSwapAtTheNextReadyEdgeServesTheNewCardsSubLogAndTheOldOneStillAcks() {
+        val d = device(faults = listOf("card-run=1000+500@manual", "card-swap=b"), card = seed(2))
+        val out = link(d)
+        val a = cardGet(d, out, 0)
+        assertEquals(2, a.entries.size)
+        d.startCard()
+        run(d, 2000)
+        assertTrue(logs.contains("cardlog card b"))
+        val b = cardGet(d, out, 0)
+        assertFalse(a.log == b.log)
+        assertTrue(b.entries.isEmpty())
+        assertEquals(0L, b.newest)
+        ok(cardAck(d, out, a.log!!, 2))
+        assertTrue(d.cardPlays.isEmpty())
+        d.unlinked(out)
+        cross(d)
+        val c = cardGet(d, link(d), 0)
+        assertEquals(b.log, c.log)
+        assertEquals(listOf(3L), c.entries.map { it.seq })
     }
 
     @Test

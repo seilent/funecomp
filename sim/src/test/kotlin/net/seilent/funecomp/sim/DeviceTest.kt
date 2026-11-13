@@ -394,7 +394,7 @@ class DeviceTest {
             val out = Sink()
             d.greet(out)
             val text = Settings.from(out.of(Msg.SETTINGS).single()).text.lines()
-            assertTrue("saverBlur=off" in text && "screenLock=off" in text && "tube=off" in text && "stereoWidth=off" in text && "scrobble=phone" in text)
+            assertTrue("saverBlur=off" in text && "screenLock=off" in text && "tube=off" in text && "stereoWidth=off" in text && "scrobble=card" in text)
             assertTrue(text.none { it.startsWith("saverDelay=") || it.startsWith("saverLyrics=") || it.startsWith("saverDrift=") || it.startsWith("saverLyricsScene=") })
             val set = Sink()
             val r = SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("saverBlur=on\nstereoWidth=150\n"), set))))

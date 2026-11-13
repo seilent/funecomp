@@ -327,7 +327,7 @@ class Conn(
         if (closed != null) return
         if (h.major != faults.major) return bye(Enums.ByeReason.version, faults.major, Proto.minor)
         if (faults.bye == Enums.ByeReason.refused) return bye(Enums.ByeReason.refused)
-        device.linked(this, appFeatures)
+        device.linked(this, appFeatures, h.appVersion)
         reply(f, device.helloReply(this).encode())
         helloDone = true
         device.greet(this, at)
