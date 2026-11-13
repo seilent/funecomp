@@ -36,6 +36,8 @@ import java.io.IOException
 import java.time.ZoneId
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 class Capture(val base: String, val wrap: (Http) -> Http)
 
@@ -69,6 +71,8 @@ object Scrobbles {
     private var sync = playLogSync()
     @Volatile private var link: Session? = null
     private var card = CardView()
+    private val waiting = AtomicInteger()
+    private val again = AtomicBoolean()
 
     @Volatile var opener: ((String) -> Boolean)? = null
 
@@ -92,6 +96,7 @@ object Scrobbles {
             val s = Scrobbler(
                 d, net, { accounts(app) }, pair, version, reauth = ::expired, dirSync = sync,
                 lastFmBase = cap?.let { "${it.base}/2.0/" } ?: LastFm.BASE, listenBrainzBase = cap?.base ?: ListenBrainz.BASE,
+                zone = { zone() }, stop = { waiting.get() > 0 },
             ) { Log.i(Remote.TAG, it) }
             scrobbler = s
             plays = Plays(File(d, OPEN).takeIf { it.isFile }?.readText()?.let { Play.parse(it) })
@@ -125,6 +130,8 @@ object Scrobbles {
         zone = { ZoneId.systemDefault() }
         link = null
         sync = playLogSync()
+        waiting.set(0)
+        again.set(false)
         view = ScrobbleView()
     }
 
@@ -136,13 +143,20 @@ object Scrobbles {
 
     fun session(clocked: Boolean) = exec.execute { plays?.session(clocked) }
 
-    fun linked(s: Session, playLog: Boolean) {
+    private fun post(block: () -> Unit) {
+        waiting.incrementAndGet()
         exec.execute {
-            link = s
-            card = CardView()
-            val c = context ?: return@execute
-            perform(sync.hello(playLog, accounts(c).enabled.isNotEmpty()))
+            waiting.decrementAndGet()
+            block()
         }
+    }
+
+    fun linked(s: Session, playLog: Boolean) = post {
+        link = s
+        card = CardView()
+        scrobbler?.session()
+        val c = context ?: return@post
+        perform(sync.hello(playLog, accounts(c).enabled.isNotEmpty()))
     }
 
     fun unlinked() = exec.execute {
@@ -157,7 +171,7 @@ object Scrobbles {
             is PlayLogSync.Get -> {
                 val epoch = card.epoch
                 s.request(Msg.PLAYLOG_GET, Req.playLogGet(d.after, d.count)) { r ->
-                    exec.execute {
+                    post {
                         when (r) {
                             is Session.Result.Ok -> {
                                 val reply = try {
@@ -190,15 +204,15 @@ object Scrobbles {
             }
             is PlayLogSync.Ack -> s.request(Msg.PLAYLOG_ACK, Req.playLogAck(d.log, d.upTo)) { r ->
                 Log.i(Remote.TAG, "playlog ack ${java.lang.Long.toHexString(d.log)} up to ${d.upTo} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
-                exec.execute { perform(sync.acked(d.gen, d, (r as? Session.Result.Failed)?.error?.code, r is Session.Result.Ok || r is Session.Result.Failed)) }
+                post { perform(sync.acked(d.gen, d, (r as? Session.Result.Failed)?.error?.code, r is Session.Result.Ok || r is Session.Result.Failed)) }
             }
         }
     }
 
-    fun state(s: State, wallMs: Long, card: CardView = CardView()) = exec.execute {
+    fun state(s: State, wallMs: Long, card: CardView = CardView()) = post {
         this.card = card
         perform(sync.state(s.playLogSeq, card))
-        val p = plays ?: return@execute
+        val p = plays ?: return@post
         val before = p.open
         val events = p.frame(s, wallMs)
         if (p.open != before) p.open?.let { save(it) }
@@ -398,9 +412,15 @@ object Scrobbles {
     }
 
     private fun note(r: Map<String, Sent>?) {
-        for ((service, sent) in r ?: return) {
+        if (r == null) return
+        for ((service, sent) in r) {
             if (sent == Sent.KEY) keyRefused += service
             if (sent == Sent.OK) keyRefused -= service
+        }
+        if (Sent.YIELD in r.values && !again.getAndSet(true)) exec.execute {
+            again.set(false)
+            attempt { note(scrobbler?.flush()) }
+            refresh()
         }
     }
 

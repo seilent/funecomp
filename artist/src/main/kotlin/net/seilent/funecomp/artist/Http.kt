@@ -3,10 +3,13 @@ package net.seilent.funecomp.artist
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
+import java.net.SocketTimeoutException
 import java.net.URI
 import java.net.URLEncoder
 
 class HttpDenied(val code: Int, url: String) : IOException("http $code: $url")
+
+class HttpTimeout : SocketTimeoutException("read timed out")
 
 class Response(val code: Int, val body: ByteArray, val headers: Map<String, String> = emptyMap()) {
     val text: String get() = String(body, Charsets.UTF_8)
@@ -100,6 +103,7 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
         val run = HttpRun.current.get()
         val c = open(URI(url))
         run?.add(c)
+        var connected = false
         try {
             c.connectTimeout = timeoutMs
             c.readTimeout = timeoutMs
@@ -109,8 +113,10 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
                 c.requestMethod = "POST"
                 c.doOutput = true
                 c.setFixedLengthStreamingMode(body.size)
-                c.outputStream.use { it.write(body) }
             }
+            c.connect()
+            connected = true
+            if (body != null) c.outputStream.use { it.write(body) }
             val code = c.responseCode
             val out = ByteArrayOutputStream()
             (if (code >= 400) c.errorStream else c.inputStream)?.use { input ->
@@ -129,6 +135,8 @@ class UrlHttp(private val maxBytes: Int = 16 shl 20, private val timeoutMs: Int 
             }
             val h = c.headerFields.filterKeys { it != null }.mapKeys { it.key.lowercase() }.mapValues { it.value.firstOrNull() ?: "" }
             return Response(code, out.toByteArray(), h)
+        } catch (e: SocketTimeoutException) {
+            throw if (connected) HttpTimeout() else e
         } finally {
             run?.remove(c)
             c.disconnect()

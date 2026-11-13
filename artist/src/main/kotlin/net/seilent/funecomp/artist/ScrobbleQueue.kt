@@ -34,7 +34,7 @@ data class Listen(
         private val UUID = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
         const val FUTURE_S = 600L
 
-        private fun clean(s: String) = s.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
+        internal fun clean(s: String) = s.replace('\t', ' ').replace('\n', ' ').replace('\r', ' ')
 
         fun parse(line: String): Listen? {
             val f = line.split('\t')
@@ -89,6 +89,16 @@ data class Listen(
             )
         }
     }
+}
+
+internal fun syncedWrite(f: File, text: String, dir: File, dirSync: (File) -> Unit) {
+    val tmp = File(f.path + ".tmp")
+    FileOutputStream(tmp).use { o ->
+        o.write(text.toByteArray())
+        o.fd.sync()
+    }
+    if (!tmp.renameTo(f)) throw IOException("rename ${tmp.name}")
+    dirSync(dir)
 }
 
 class ScrobbleQueue(private val dir: File, private val dirSync: (File) -> Unit = {}) {
@@ -245,15 +255,7 @@ class ScrobbleQueue(private val dir: File, private val dirSync: (File) -> Unit =
         }
     })
 
-    private fun save(f: File, text: String) {
-        val tmp = File(f.path + ".tmp")
-        FileOutputStream(tmp).use { o ->
-            o.write(text.toByteArray())
-            o.fd.sync()
-        }
-        if (!tmp.renameTo(f)) throw IOException("rename ${tmp.name}")
-        dirSync(dir)
-    }
+    private fun save(f: File, text: String) = syncedWrite(f, text, dir, dirSync)
 
     companion object {
         const val QUEUE = "queue.tsv"

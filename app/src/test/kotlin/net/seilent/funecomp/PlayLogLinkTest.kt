@@ -49,9 +49,13 @@ class PlayLogLinkTest {
     private val skew = AtomicLong()
     private val logs = CopyOnWriteArrayList<String>()
     private val bodies = CopyOnWriteArrayList<String>()
+    private val gets = CopyOnWriteArrayList<String>()
 
     private val net = object : Http {
-        override fun get(url: String, headers: Map<String, String>) = Response(200, "{\"valid\":true,\"user_name\":\"fake\"}".toByteArray())
+        override fun get(url: String, headers: Map<String, String>): Response {
+            gets += url
+            return Response(200, "{\"valid\":true,\"user_name\":\"fake\"}".toByteArray())
+        }
 
         override fun post(url: String, headers: Map<String, String>, body: ByteArray): Response {
             check(url.startsWith("https://api.listenbrainz.org/")) { "sent to $url" }
@@ -306,6 +310,16 @@ class PlayLogLinkTest {
         Scrobbles.idle()
         assertEquals(emptyList<String>(), listens())
         assertTrue(logs.any { it.startsWith("playlog append seq 1 Lucky liveSeen") })
+    }
+
+    @Test
+    fun aPhoneLogEntryCarriesNoExposedFlagAndIsSentWithNoRead() {
+        app.getSharedPreferences("scrobble", Context.MODE_PRIVATE).edit().putString("listenbrainzUser", "fake").commit()
+        val s = start(seed = seed(2), live = false)
+        waitFor(20_000) { s.device.plays.isEmpty() && listens().size == 2 }
+        Scrobbles.idle()
+        assertEquals(listOf("Seed 1", "Seed 2"), listens())
+        assertTrue(gets.isEmpty())
     }
 
     companion object {
