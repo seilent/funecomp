@@ -3,6 +3,7 @@ package net.seilent.funecomp.artist
 import net.seilent.funecomp.proto.PlayEntry
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
@@ -22,8 +23,20 @@ class ScrobbleQueueTest {
     private val utc: ZoneId = ZoneOffset.UTC
     private val now = 1_800_000_000L
 
-    private fun entry(seq: Long, title: String = "Track $seq", startLocalS: Long? = now - 86400 + seq * 60, zoneS: Int? = 0, artist: String? = "Radiohead", liveSeen: Boolean? = null) =
-        PlayEntry(seq, startLocalS, 200_000, 240_000, 7, title, artist, listOfNotNull(artist), emptyList(), "OK Computer", zoneS = zoneS, liveSeen = liveSeen)
+    private fun entry(seq: Long, title: String = "Track $seq", startLocalS: Long? = now - 86400 + seq * 60, zoneS: Int? = 0, artist: String? = "Radiohead", liveSeen: Boolean? = null, exposed: Boolean? = null) =
+        PlayEntry(seq, startLocalS, 200_000, 240_000, 7, title, artist, listOfNotNull(artist), emptyList(), "OK Computer", zoneS = zoneS, liveSeen = liveSeen, exposed = exposed)
+
+    private fun oldParse(line: String): Listen? {
+        val f = line.split('\t')
+        if (f.size == 6) return Listen(f[1].toLongOrNull() ?: return null, f[3], f[4], f[5].ifEmpty { null }, f[2].toLongOrNull(), f[0].toLongOrNull() ?: return null)
+        if (f.size != 10 || f[0] != "v2") return null
+        return Listen(
+            f[2].toLongOrNull() ?: return null, f[4], f[5], f[6].ifEmpty { null }, f[3].toLongOrNull(), f[1].toLongOrNull() ?: return null,
+            f[7].ifEmpty { null }, f[8].toIntOrNull(), f[9].split(';').filter { it.isNotEmpty() },
+        )
+    }
+
+    private fun oldLoad(dir: File) = File(dir, ScrobbleQueue.QUEUE).readLines().drop(1).filter { !it.startsWith("dap\t") }.mapNotNull { oldParse(it) }
 
     private fun queue(dir: File = tmp.root, sync: (File) -> Unit = {}) = ScrobbleQueue(dir, sync)
 
@@ -55,15 +68,103 @@ class ScrobbleQueueTest {
     }
 
     @Test
-    fun cursorHeadersRoundTripAndKeepEightLogs() {
+    fun cursorHeadersRoundTripAndKeepSixteenLogs() {
         val dir = tmp.newFolder("logs")
         val q = queue(dir)
-        for (log in 1L..9L) q.addLog(log or Long.MIN_VALUE, listOf(entry(log * 10)), lastFm, utc, now)
+        for (log in 1L..17L) q.addLog(log or Long.MIN_VALUE, listOf(entry(log * 10)), lastFm, utc, now)
+        q.addLog(2L or Long.MIN_VALUE, listOf(entry(21)), lastFm, utc, now)
+        q.addLog(18L or Long.MIN_VALUE, listOf(entry(180)), lastFm, utc, now)
         val again = queue(dir)
         assertNull(again.dap(1L or Long.MIN_VALUE))
-        for (log in 2L..9L) assertEquals(log * 10, again.dap(log or Long.MIN_VALUE))
-        assertEquals(9, again.size)
-        assertTrue(File(dir, ScrobbleQueue.QUEUE).readLines().any { it == "dap\t8000000000000009\t90" })
+        assertNull(again.dap(3L or Long.MIN_VALUE))
+        assertEquals(21L, again.dap(2L or Long.MIN_VALUE))
+        for (log in 4L..18L) assertEquals(log * 10, again.dap(log or Long.MIN_VALUE))
+        assertEquals(19, again.size)
+        assertTrue(File(dir, ScrobbleQueue.QUEUE).readLines().any { it == "dap\t8000000000000011\t170" })
+    }
+
+    @Test
+    fun exposedEntriesWriteAMarkerWithTheirLineOffsetAndReloadExposed() {
+        val dir = tmp.newFolder("marks")
+        val tokyo = ZoneId.of("Asia/Tokyo")
+        val berlin = ZoneId.of("Europe/Berlin")
+        val q = queue(dir)
+        q.addLog(0xA1, listOf(entry(1, zoneS = 32400, exposed = true), entry(2, zoneS = null, exposed = true), entry(3, zoneS = null, exposed = false), entry(4, zoneS = null)), lastFm, berlin, now)
+        q.addLog(0xB2, listOf(entry(1, zoneS = null, exposed = true)), lastFm, utc, now)
+        val local = (1L..4L).map { now - 86400 + it * 60 }
+        val want = listOf(
+            Listen(local[0] - 32400, "Radiohead", "Track 1", "OK Computer", 240, 1, exposed = true, z = 32400),
+            Listen(local[1] - 3600, "Radiohead", "Track 2", "OK Computer", 240, 2, exposed = true, z = 3600),
+            Listen(local[2] - 3600, "Radiohead", "Track 3", "OK Computer", 240, 3),
+            Listen(local[3] - 3600, "Radiohead", "Track 4", "OK Computer", 240, 4),
+            Listen(local[0], "Radiohead", "Track 1", "OK Computer", 240, 5, exposed = true, z = 0),
+        )
+        assertEquals(want, q.after(Accounts.LAST_FM))
+        val lines = File(dir, ScrobbleQueue.QUEUE).readLines().filter { !it.startsWith("next\t") && !it.startsWith("dap\t") }
+        assertEquals(listOf(want[0].line(), "x\t1\t32400", want[1].line(), "x\t2\t3600", want[2].line(), want[3].line(), want[4].line(), "x\t5\t0"), lines)
+        assertTrue(lines.filter { it.startsWith("v2\t") }.all { it.split('\t').size == 10 })
+        assertEquals(want, queue(dir).after(Accounts.LAST_FM))
+        assertEquals(Listen(local[0] - 32400, "Radiohead", "Track 1", "OK Computer", 240), Listen.of(entry(1, zoneS = 32400), tokyo))
+    }
+
+    @Test
+    fun aStoredEntryServedAgainExposedGainsItsMarkerBeforeItIsSent() {
+        val dir = tmp.newFolder("rise")
+        val q = queue(dir)
+        q.addLog(0xA1, listOf(entry(1, zoneS = 32400), entry(2, zoneS = 32400)), lastFm, utc, now)
+        assertEquals(2L, q.addLog(0xA1, listOf(entry(1, zoneS = 32400, exposed = true), entry(2, zoneS = 32400)), lastFm, utc, now))
+        assertEquals(listOf(true to 32400, false to null), q.after(Accounts.LAST_FM).map { it.exposed to it.z })
+        assertEquals(listOf(true to 32400, false to null), queue(dir).after(Accounts.LAST_FM).map { it.exposed to it.z })
+        assertEquals(2, q.size)
+    }
+
+    @Test
+    fun aStoredEntryServedAgainNotExposedLosesItsMarker() {
+        val dir = tmp.newFolder("fall")
+        val q = queue(dir)
+        q.addLog(0xA1, listOf(entry(1, zoneS = 32400, exposed = true)), lastFm, utc, now)
+        q.addLog(0xA1, listOf(entry(1, zoneS = 32400)), lastFm, utc, now)
+        assertEquals(listOf(false to null), q.after(Accounts.LAST_FM).map { it.exposed to it.z })
+        assertFalse(File(dir, ScrobbleQueue.QUEUE).readLines().any { it.startsWith("x\t") })
+        assertEquals(listOf(false to null), queue(dir).after(Accounts.LAST_FM).map { it.exposed to it.z })
+    }
+
+    @Test
+    fun aMarkerWithNoListenDropsAndOneWithoutAnOffsetReloadsExposedWithNoShift() {
+        val dir = tmp.newFolder("bare")
+        val a = Listen(now, "A", "T1", id = 1)
+        val b = Listen(now + 300, "A", "T2", id = 2)
+        File(dir, ScrobbleQueue.QUEUE).writeText("next\t3\n${a.line()}\nx\t1\t\n${b.line()}\nx\t2\nx\t9\t3600\n")
+        File(dir, "sent.lastfm").writeText("0")
+        val q = queue(dir)
+        assertEquals(listOf(a.copy(exposed = true), b.copy(exposed = true)), q.after(Accounts.LAST_FM))
+        q.add(Listen(now + 600, "A", "T3"), lastFm)
+        val lines = File(dir, ScrobbleQueue.QUEUE).readLines()
+        assertTrue("x\t1\t" in lines)
+        assertTrue("x\t2\t" in lines)
+        assertFalse(lines.any { it.startsWith("x\t9") })
+        assertFalse(lines.any { it.startsWith("x\t3") })
+    }
+
+    @Test
+    fun compactionDropsTheMarkersOfTheLinesItDrops() {
+        val dir = tmp.newFolder("compact")
+        val q = queue(dir)
+        q.sent(Accounts.LAST_FM, 0)
+        q.addLog(0xA1, (1L..3L).map { entry(it, exposed = true) }, lastFm, utc, now)
+        q.sent(Accounts.LAST_FM, 2)
+        q.compact(lastFm)
+        assertEquals(listOf("x\t3\t0"), File(dir, ScrobbleQueue.QUEUE).readLines().filter { it.startsWith("x\t") })
+        assertEquals(listOf(3L), queue(dir).after(Accounts.LAST_FM).map { it.id })
+    }
+
+    @Test
+    fun aQueueWithMarkersReadByTheOlderRulesKeepsEveryListen() {
+        val dir = tmp.newFolder("older")
+        val q = queue(dir)
+        q.addLog(0xA1, listOf(entry(1, exposed = true), entry(2), entry(3, zoneS = null, exposed = true)), lastFm, utc, now)
+        q.add(Listen(now, "Radiohead", "Let Down"), lastFm)
+        assertEquals(oldLoad(dir), q.after(Accounts.LAST_FM).map { it.copy(exposed = false, z = null) })
     }
 
     @Test

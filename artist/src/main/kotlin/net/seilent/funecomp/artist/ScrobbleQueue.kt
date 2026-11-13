@@ -18,14 +18,19 @@ data class Listen(
     val albumArtist: String? = null,
     val trackNo: Int? = null,
     val mbids: List<String> = emptyList(),
+    val exposed: Boolean = false,
+    val z: Int? = null,
 ) {
     fun line() = listOf(
         V2, id.toString(), startS.toString(), durationS?.toString() ?: "", clean(artist), clean(title), clean(album ?: ""),
         clean(albumArtist ?: ""), trackNo?.toString() ?: "", mbids.joinToString(";") { clean(it) },
     ).joinToString("\t")
 
+    fun marker() = "$MARK\t$id\t${z ?: ""}"
+
     companion object {
         private const val V2 = "v2"
+        const val MARK = "x"
         private val UUID = Regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
         const val FUTURE_S = 600L
 
@@ -68,8 +73,10 @@ data class Listen(
             val artist = (e.artist ?: e.artists.joinToString(", ")).trim()
             val title = e.title?.trim().orEmpty()
             if (artist.isEmpty() || title.isEmpty()) return null
+            val start = startS(local, e.zoneS, zone)
+            val exposed = e.exposed == true
             return Listen(
-                startS(local, e.zoneS, zone),
+                start,
                 artist,
                 title,
                 e.album?.trim()?.ifEmpty { null },
@@ -77,6 +84,8 @@ data class Listen(
                 albumArtist = e.albumArtist?.trim()?.ifEmpty { null },
                 trackNo = e.trackNo?.takeIf { it > 0 },
                 mbids = mbids(e.mbids),
+                exposed = exposed,
+                z = if (exposed) (local - start).toInt() else null,
             )
         }
     }
@@ -99,6 +108,13 @@ class ScrobbleQueue(private val dir: File, private val dirSync: (File) -> Unit =
                     val log = p.getOrNull(1)?.let { runCatching { java.lang.Long.parseUnsignedLong(it, 16) }.getOrNull() }
                     val seq = p.getOrNull(2)?.toLongOrNull()
                     if (p.size == 3 && log != null && seq != null) dap[log] = seq
+                    continue
+                }
+                if (l.startsWith("${Listen.MARK}\t")) {
+                    val p = l.split('\t')
+                    val id = p.getOrNull(1)?.toLongOrNull()
+                    val at = lines.indexOfLast { it.id == id }
+                    if (p.size <= 3 && at >= 0) lines[at] = lines[at].copy(exposed = true, z = p.getOrNull(2)?.toIntOrNull())
                     continue
                 }
                 Listen.parse(l)?.let { lines += it }
@@ -131,7 +147,10 @@ class ScrobbleQueue(private val dir: File, private val dirSync: (File) -> Unit =
         val at = dap[log] ?: 0L
         val fresh = entries.filter { it.seq > at }
         val upTo = entries.maxOf { it.seq }
-        if (fresh.isEmpty()) return upTo
+        val key = { l: Listen -> l.copy(id = 0, exposed = false, z = null) }
+        val again = entries.filter { it.seq <= at }.mapNotNull { Listen.of(it, zone) }.associateBy { key(it) }
+        val turned = lines.withIndex().mapNotNull { (i, l) -> again[key(l)]?.takeIf { it.exposed != l.exposed || it.z != l.z }?.let { i to it } }
+        if (fresh.isEmpty() && turned.isEmpty()) return upTo
         val add = ArrayList<Listen>()
         var id = next
         for (e in fresh.sortedBy { it.seq }) {
@@ -143,11 +162,14 @@ class ScrobbleQueue(private val dir: File, private val dirSync: (File) -> Unit =
             add += l.copy(id = id++)
         }
         commit {
-            next = id
-            lines += add
-            dap.remove(log)
-            dap[log] = maxOf(at, fresh.maxOf { it.seq })
-            while (dap.size > DAP_KEEP) dap.remove(dap.keys.first())
+            turned.forEach { (i, l) -> lines[i] = lines[i].copy(exposed = l.exposed, z = l.z) }
+            if (fresh.isNotEmpty()) {
+                next = id
+                lines += add
+                dap.remove(log)
+                dap[log] = maxOf(at, fresh.maxOf { it.seq })
+                while (dap.size > DAP_KEEP) dap.remove(dap.keys.first())
+            }
         }
         return upTo
     }
@@ -217,7 +239,10 @@ class ScrobbleQueue(private val dir: File, private val dirSync: (File) -> Unit =
     private fun write() = save(File(dir, QUEUE), buildString {
         append("next\t").append(next).append('\n')
         dap.forEach { (log, seq) -> append(DAP).append('\t').append(java.lang.Long.toHexString(log)).append('\t').append(seq).append('\n') }
-        lines.forEach { append(it.line()).append('\n') }
+        lines.forEach {
+            append(it.line()).append('\n')
+            if (it.exposed) append(it.marker()).append('\n')
+        }
     })
 
     private fun save(f: File, text: String) {
@@ -234,6 +259,6 @@ class ScrobbleQueue(private val dir: File, private val dirSync: (File) -> Unit =
         const val QUEUE = "queue.tsv"
         const val SENT = "sent"
         const val DAP = "dap"
-        const val DAP_KEEP = 8
+        const val DAP_KEEP = 16
     }
 }
