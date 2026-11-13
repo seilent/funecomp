@@ -71,6 +71,8 @@ object Scrobbles {
     internal var now: () -> Long = { System.currentTimeMillis() }
     internal var zone: () -> ZoneId = { ZoneId.systemDefault() }
     private var sync = playLogSync()
+    private var cardSync = playLogSync(true)
+    private var ready = false
     @Volatile private var link: Session? = null
     private var card = CardView()
     private var hosted = false
@@ -134,12 +136,14 @@ object Scrobbles {
         link = null
         hosted = false
         sync = playLogSync()
+        cardSync = playLogSync(true)
+        ready = false
         waiting.set(0)
         again.set(false)
         view = ScrobbleView()
     }
 
-    private fun playLogSync() = PlayLogSync({ scrobbler?.queue?.dap(it) }) { Log.i(Remote.TAG, it) }
+    private fun playLogSync(card: Boolean = false) = PlayLogSync({ scrobbler?.queue?.dap(it) }, card) { Log.i(Remote.TAG, it) }
 
     internal fun idle() {
         exec.submit {}.get(DRAIN_S, TimeUnit.SECONDS)
@@ -155,27 +159,43 @@ object Scrobbles {
         }
     }
 
-    fun linked(s: Session, playLog: Boolean, board: String? = null) = post {
+    fun linked(s: Session, playLog: Boolean, board: String? = null, cardLog: Boolean = false) = post {
         link = s
         card = CardView()
         hosted = board == POCKET_BLOCK
         scrobbler?.session()
         val c = context ?: return@post
-        perform(sync.hello(playLog, accounts(c).enabled.isNotEmpty()))
+        perform(sync, sync.hello(playLog, accounts(c).enabled.isNotEmpty()))
+        ready = canSend(c)
+        perform(cardSync, cardSync.hello(cardLog, ready))
     }
 
     fun unlinked() = exec.execute {
         link = null
         sync.closed()
+        cardSync.closed()
     }
 
-    private fun perform(d: PlayLogSync.Do?) {
+    private fun canSend(c: Context): Boolean {
+        val a = accounts(c)
+        return a.enabled.any { a.ready(it, pair) && it !in keyRefused }
+    }
+
+    private fun readiness() {
+        val c = context ?: return
+        val now = canSend(c)
+        val rose = now && !ready
+        ready = now
+        perform(cardSync, cardSync.services(now, rose))
+    }
+
+    private fun perform(p: PlayLogSync, d: PlayLogSync.Do?) {
         val s = link ?: return
         when (d) {
             null -> {}
             is PlayLogSync.Get -> {
                 val epoch = card.epoch
-                s.request(Msg.PLAYLOG_GET, Req.playLogGet(d.after, d.count)) { r ->
+                s.request(Msg.PLAYLOG_GET, Req.playLogGet(d.after, d.count, true.takeIf { p.card })) { r ->
                     post {
                         when (r) {
                             is Session.Result.Ok -> {
@@ -185,10 +205,10 @@ object Scrobbles {
                                     Log.w(Remote.TAG, "playlog reply: $e")
                                     null
                                 }
-                                if (reply == null) sync.getFailed(d.gen, null, epoch) else perform(sync.reply(d.gen, reply))
+                                perform(p, if (reply == null) p.getFailed(d.gen, null, epoch) else p.reply(d.gen, reply))
                             }
-                            is Session.Result.Failed -> sync.getFailed(d.gen, r.error.code, epoch)
-                            else -> sync.getFailed(d.gen, null, epoch)
+                            is Session.Result.Failed -> perform(p, p.getFailed(d.gen, r.error.code, epoch))
+                            else -> perform(p, p.getFailed(d.gen, null, epoch))
                         }
                     }
                 }
@@ -203,20 +223,21 @@ object Scrobbles {
                     Log.w(Remote.TAG, "playlog store: $e")
                     null
                 }
-                perform(sync.stored(d.gen, d.log, upTo, d.more))
+                perform(p, p.stored(d.gen, d.log, upTo, d.more))
                 if (!d.more) attempt { note(scrobbler?.flush()) }
                 refresh()
             }
-            is PlayLogSync.Ack -> s.request(Msg.PLAYLOG_ACK, Req.playLogAck(d.log, d.upTo)) { r ->
-                Log.i(Remote.TAG, "playlog ack ${java.lang.Long.toHexString(d.log)} up to ${d.upTo} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
-                post { perform(sync.acked(d.gen, d, (r as? Session.Result.Failed)?.error?.code, r is Session.Result.Ok || r is Session.Result.Failed)) }
+            is PlayLogSync.Ack -> s.request(Msg.PLAYLOG_ACK, Req.playLogAck(d.log, d.upTo, true.takeIf { p.card })) { r ->
+                Log.i(Remote.TAG, "${if (p.card) "cardlog" else "playlog"} ack ${java.lang.Long.toHexString(d.log)} up to ${d.upTo} -> ${if (r is Session.Result.Failed) "error ${r.error.code}" else r.javaClass.simpleName.lowercase()}")
+                post { perform(p, p.acked(d.gen, d, (r as? Session.Result.Failed)?.error?.code, r is Session.Result.Ok || r is Session.Result.Failed)) }
             }
         }
     }
 
     fun state(s: State, wallMs: Long, card: CardView = CardView()) = post {
         this.card = card
-        perform(sync.state(s.playLogSeq, card))
+        perform(sync, sync.state(s.playLogSeq, card))
+        perform(cardSync, cardSync.state(s.cardLogSeq, card))
         val p = plays ?: return@post
         val before = p.open
         val events = p.frame(s, wallMs)
@@ -246,7 +267,8 @@ object Scrobbles {
             if (a.listenBrainz && !old.listenBrainz) attempt { scrobbler?.enable(Accounts.LISTEN_BRAINZ) }
             attempt { note(scrobbler?.flush()) }
             refresh()
-            perform(sync.services(a.enabled.isNotEmpty(), (a.lastFm && !old.lastFm) || (a.listenBrainz && !old.listenBrainz)))
+            perform(sync, sync.services(a.enabled.isNotEmpty(), (a.lastFm && !old.lastFm) || (a.listenBrainz && !old.listenBrainz)))
+            readiness()
         }
     }
 
@@ -349,6 +371,7 @@ object Scrobbles {
             dropPending(c)
             keyRefused -= Accounts.LAST_FM
             lastFmError = ""
+            readiness()
             attempt { note(scrobbler?.flush()) }
         } finally {
             val again = synchronized(lock) {
@@ -373,6 +396,7 @@ object Scrobbles {
             }
             e.commit()
             keyRefused -= service
+            readiness()
             refresh(listenBrainz = if (service == Accounts.LISTEN_BRAINZ) "" else null)
         }
     }
@@ -393,6 +417,7 @@ object Scrobbles {
                     "invalid"
                 } else {
                     store(c, accounts(c).copy(token = token.trim(), listenBrainzUser = user))
+                    readiness()
                     attempt { note(scrobbler?.flush()) }
                     ""
                 }
@@ -413,6 +438,7 @@ object Scrobbles {
         } else {
             store(c, a.copy(token = ""))
         }
+        readiness()
         Log.w(Remote.TAG, "scrobble $service credentials refused")
     }
 
@@ -422,6 +448,7 @@ object Scrobbles {
             if (sent == Sent.KEY) keyRefused += service
             if (sent == Sent.OK) keyRefused -= service
         }
+        readiness()
         if (Sent.YIELD in r.values && !again.getAndSet(true)) exec.execute {
             again.set(false)
             attempt { note(scrobbler?.flush()) }

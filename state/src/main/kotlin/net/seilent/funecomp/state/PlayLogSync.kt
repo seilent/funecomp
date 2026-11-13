@@ -4,7 +4,7 @@ import net.seilent.funecomp.proto.PlayEntry
 import net.seilent.funecomp.proto.PlayLogReply
 import net.seilent.funecomp.proto.gen.Err
 
-class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String) -> Unit = {}) {
+class PlayLogSync(private val cursor: (Long) -> Long?, val card: Boolean = false, private val log: (String) -> Unit = {}) {
     sealed class Do {
         abstract val gen: Int
     }
@@ -28,6 +28,10 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
     private val gaps = HashSet<Pair<Long, Long>>()
     private var retryAfter: Int? = null
     private var retryNext = false
+    private var refused: Long? = null
+    private var asked: Long? = null
+    private var epoch = 0
+    private var lastEpoch: Int? = null
 
     val logged: Boolean @Synchronized get() = helloBit
 
@@ -45,6 +49,9 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
         answered = null
         retryAfter = null
         retryNext = false
+        refused = null
+        asked = null
+        lastEpoch = null
         return next()
     }
 
@@ -66,8 +73,14 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
 
     @Synchronized
     fun state(playLogSeq: Long?, card: CardView = CardView()): Do? {
-        seq = playLogSeq
+        seq = if (this.card) playLogSeq ?: 0 else playLogSeq
+        epoch = card.epoch
         if (card.down) return null
+        if (this.card) {
+            refused?.let { if (it == seq) return null }
+            if (refused != null || retryNext) return next()
+            return if (changed()) next() else null
+        }
         retryAfter?.let { after ->
             if (card.epoch <= after) return null
             return next()
@@ -90,22 +103,38 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
         sessionLog = l
         val c = cursor(l)
         val first = r.first
-        if (c != null && first != null && first > c + 1 && gaps.add(l to first)) log("playlog: ${first - c - 1} plays dropped on the DAP")
+        if (card) answered = asked ?: (r.newest ?: 0)
+        if (!card && c != null && first != null && first > c + 1 && gaps.add(l to first)) log("playlog: ${first - c - 1} plays dropped on the DAP")
         if (r.entries.isEmpty()) {
             if (r.more == true) return get()
-            answered = seq
-            return null
+            if (!card) {
+                answered = seq
+                return null
+            }
+            val held = r.held ?: return settle()
+            val up = minOf(c ?: 0, r.newest ?: 0)
+            if (held > (c ?: 0) || up <= 0 || up < held) return settle()
+            busy = true
+            return Ack(gen, l, up, false)
         }
         busy = true
         return Store(gen, l, r.entries, r.more == true)
     }
 
     @Synchronized
-    fun getFailed(gen: Int, code: Int?, epoch: Int = 0) {
-        if (gen != this.gen) return
+    fun getFailed(gen: Int, code: Int?, epoch: Int = 0): Do? {
+        if (gen != this.gen) return null
         busy = false
         log("playlog: get ${code?.let { "error $it" } ?: "no answer"}")
+        if (card) {
+            if (code == Err.noCard) {
+                refused = seq ?: 0
+                return null
+            }
+            if (seq != asked && changed()) return get()
+        }
         if (code == Err.noCard) retryAfter = epoch else retryNext = true
+        return null
     }
 
     @Synchronized
@@ -113,7 +142,7 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
         if (gen != this.gen) return null
         if (upTo == null) {
             busy = false
-            return null
+            return if (card) settle() else null
         }
         return Ack(gen, log, upTo, more)
     }
@@ -130,12 +159,17 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
         }
         if (code != null) {
             log("playlog: ack error $code")
-            return null
+            return if (card) settle() else null
         }
         return if (ack.more) get() else settle()
     }
 
-    private fun settle(): Do? = if (above()) get() else null
+    private fun settle(): Do? = if (if (card) changed() else above()) get() else null
+
+    private fun changed(): Boolean {
+        val s = seq ?: 0
+        return s != 0L && s != answered
+    }
 
     private fun above(): Boolean {
         val l = sessionLog ?: return false
@@ -148,12 +182,16 @@ class PlayLogSync(private val cursor: (Long) -> Long?, private val log: (String)
 
     private fun get(): Do? {
         if (!active) return null
-        val l = sessionLog
+        val moved = card && lastEpoch != null && lastEpoch != epoch
+        val l = sessionLog.takeIf { !moved }
         val after = l?.let { cursor(it) } ?: 0
         afterLog = if (l != null && after > 0) l else null
         busy = true
         retryAfter = null
         retryNext = false
+        refused = null
+        asked = seq
+        lastEpoch = epoch
         return Get(gen, after)
     }
 

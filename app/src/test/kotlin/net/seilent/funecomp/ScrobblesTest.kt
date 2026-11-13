@@ -169,7 +169,7 @@ class ScrobblesTest {
         }
     }
 
-    private fun linkedTo(dap: Dap, playLog: Boolean = true, pushed: CountDownLatch? = null): Session {
+    private fun linkedTo(dap: Dap, playLog: Boolean = true, pushed: CountDownLatch? = null, cardLog: Boolean = false): Session {
         val ready = CountDownLatch(1)
         val s = Session(dap, object : Session.Listener {
             override fun onHello(hello: HelloReply) = ready.countDown()
@@ -181,7 +181,7 @@ class ScrobblesTest {
         sessions += s
         Thread { s.run() }.apply { isDaemon = true }.start()
         assertTrue(ready.await(5, TimeUnit.SECONDS))
-        Scrobbles.linked(s, playLog, dap.board)
+        Scrobbles.linked(s, playLog, dap.board, cardLog)
         return s
     }
 
@@ -327,6 +327,86 @@ class ScrobblesTest {
     @Test
     fun anotherBoardsEntryWithNoZoneIsReadInThePhoneZone() {
         assertEquals(listOf(at - 32400 to 32400), stored("v1", exposed(1, at, null)))
+    }
+
+    private var answer = "{\"status\":\"ok\"}"
+    private var code = 200
+
+    private val service = object : Http {
+        override fun get(url: String, headers: Map<String, String>) = Response(200, "{\"valid\":true,\"user_name\":\"fake\"}".toByteArray())
+
+        override fun post(url: String, headers: Map<String, String>, body: ByteArray) = Response(code, answer.toByteArray())
+    }
+
+    private fun cardGets(dap: Dap) = dap.asked.count { it.scope == "PLAYLOG_GET" && it.bool(3) == true }
+
+    private fun settle(s: Session, dap: Dap) {
+        var rounds = 0
+        do {
+            check(++rounds <= 8)
+            val seen = dap.asked.size
+            Scrobbles.idle()
+            assertTrue(s.call(Msg.PING, ByteArray(0)) is Session.Result.Failed)
+        } while (rounds < 2 || dap.asked.size != seen)
+    }
+
+    private fun cardDap(entries: (Int) -> List<PlayEntry>): Dap {
+        val n = AtomicInteger()
+        return Dap("v1") { q ->
+            when {
+                q.scope == "PLAYLOG_ACK" -> ByteArray(0)
+                q.bool(3) == true -> entries(n.incrementAndGet()).let { PlayLogReply(0xC1, it.lastOrNull()?.seq ?: 0, false, it, null).encode() }
+                else -> PlayLogReply(0xA1, null, false, emptyList(), null).encode()
+            }
+        }
+    }
+
+    private fun plain(seq: Long) = PlayEntry(seq, at + seq * 300, 200_000, 240_000, 7, "Track $seq", "Radiohead", listOf("Radiohead"), zoneS = 0)
+
+    @Test
+    fun theCardLogIsReadFromASignInUntilASignOutOrAnExpiredToken() {
+        Scrobbles.reset()
+        app.getSharedPreferences("scrobble", Context.MODE_PRIVATE).edit().putString("token", "").commit()
+        Scrobbles.init(app, AppPair.EMPTY, service) {}
+        val dap = cardDap { n -> if (n == 2) listOf(plain(1)) else emptyList() }
+        val s = linkedTo(dap, cardLog = true)
+        settle(s, dap)
+        assertEquals(0, cardGets(dap))
+        Scrobbles.listenBrainzToken("tok")
+        waitFor { cardGets(dap) == 1 }
+        Scrobbles.signOut(Accounts.LISTEN_BRAINZ)
+        Scrobbles.idle()
+        Scrobbles.state(State(cardLogSeq = 4), 0)
+        settle(s, dap)
+        assertEquals(1, cardGets(dap))
+        code = 401
+        answer = "{\"code\":401}"
+        Scrobbles.listenBrainzToken("tok")
+        waitFor { cardGets(dap) == 2 && app.getSharedPreferences("scrobble", Context.MODE_PRIVATE).getString("token", "") == "" }
+        Scrobbles.idle()
+        Scrobbles.state(State(cardLogSeq = 9), 0)
+        settle(s, dap)
+        assertEquals(2, cardGets(dap))
+    }
+
+    @Test
+    fun aKeyRefusalStopsTheCardLogAndALaterSendStartsIt() {
+        Scrobbles.reset()
+        app.getSharedPreferences("scrobble", Context.MODE_PRIVATE).edit().putBoolean("listenbrainz", false).putBoolean("lastfm", true)
+            .putString("apiKey", "k".repeat(32)).putString("secret", "s".repeat(32)).putString("lastfmSession", "sk").commit()
+        code = 403
+        answer = "{\"error\":10,\"message\":\"Invalid API key\"}"
+        Scrobbles.init(app, AppPair.EMPTY, service) {}
+        val dap = cardDap { n -> if (n == 1) listOf(plain(1)) else emptyList() }
+        val s = linkedTo(dap, cardLog = true)
+        waitFor { Scrobbles.view.keyRefused.isNotEmpty() }
+        Scrobbles.state(State(cardLogSeq = 5), 0)
+        settle(s, dap)
+        assertEquals(1, cardGets(dap))
+        code = 200
+        answer = "{\"scrobbles\":{\"@attr\":{\"accepted\":1,\"ignored\":0}}}"
+        Scrobbles.flush()
+        waitFor { cardGets(dap) == 2 }
     }
 
     @Test

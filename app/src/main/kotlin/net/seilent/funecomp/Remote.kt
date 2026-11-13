@@ -117,7 +117,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin", "svcAccount", "eqSlots", "eqStages", "appPkg")
+val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin", "svcAccount", "eqSlots", "eqStages", "appPkg", "cardLog")
 
 object Remote : Control {
     const val TAG = "Funecomp"
@@ -1586,7 +1586,7 @@ object Remote : Control {
             everLive = true
             board = hello.board
             Scrobbles.session(hello.has("stateClock"))
-            link?.session?.let { Scrobbles.linked(it, hello.has("playLog"), hello.board) }
+            link?.session?.let { Scrobbles.linked(it, hello.has("playLog"), hello.board, hello.has("cardLog")) }
             Firmwares.hello(hello.board, hello.version, hello.has("updSig"), hello.has("update"))
             Lyrics.session()
             dapLyrics.session()

@@ -11,6 +11,7 @@ import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
+import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.PlayEntry
 import net.seilent.funecomp.proto.Req
@@ -35,6 +36,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -50,11 +52,14 @@ class PlayLogLinkTest {
     private val logs = CopyOnWriteArrayList<String>()
     private val bodies = CopyOnWriteArrayList<String>()
     private val gets = CopyOnWriteArrayList<String>()
+    @Volatile private var account = emptyList<PlayEntry>()
 
     private val net = object : Http {
         override fun get(url: String, headers: Map<String, String>): Response {
             gets += url
-            return Response(200, "{\"valid\":true,\"user_name\":\"fake\"}".toByteArray())
+            if ("/listens" !in url) return Response(200, "{\"valid\":true,\"user_name\":\"fake\"}".toByteArray())
+            val page = account.sortedByDescending { it.startLocalS }.joinToString(",") { "{\"listened_at\":${it.startLocalS},\"track_metadata\":{\"artist_name\":\"${it.artist}\",\"track_name\":\"${it.title}\"}}" }
+            return Response(200, "{\"payload\":{\"count\":${account.size},\"listens\":[$page]}}".toByteArray())
         }
 
         override fun post(url: String, headers: Map<String, String>, body: ByteArray): Response {
@@ -94,9 +99,9 @@ class PlayLogLinkTest {
 
     private var fx = Faults(emptyList())
 
-    private fun sim(minor: Int = 15, faults: List<String> = emptyList(), seed: List<PlayEntry> = emptyList()): Pair<Sim, Int> {
+    private fun sim(minor: Int = 15, faults: List<String> = emptyList(), seed: List<PlayEntry> = emptyList(), card: List<PlayEntry> = emptyList()): Pair<Sim, Int> {
         fx = Faults(faults)
-        val opts = Options(Board.of("v1"), fx, minor = minor, playLog = seed, log = { logs += it }, deviceClock = { System.nanoTime() / 1_000_000 + skew.get() })
+        val opts = Options(Board.of("v1"), fx, minor = minor, playLog = seed, log = { logs += it }, deviceClock = { System.nanoTime() / 1_000_000 + skew.get() }, cardLog = card)
         val s = Sim(opts, Library(listOf(short, other)))
         sims += s
         return s to s.listen(0)
@@ -107,17 +112,20 @@ class PlayLogLinkTest {
         if (live) waitFor { Remote.phase == Phase.LIVE && Remote.device.playback.state.track != null }
     }
 
-    private fun start(minor: Int = 15, faults: List<String> = emptyList(), seed: List<PlayEntry> = emptyList(), live: Boolean = true): Sim {
-        val (s, port) = sim(minor, faults, seed)
+    private fun start(minor: Int = 15, faults: List<String> = emptyList(), seed: List<PlayEntry> = emptyList(), live: Boolean = true, card: List<PlayEntry> = emptyList()): Sim {
+        val (s, port) = sim(minor, faults, seed, card)
         link(port, live)
         return s
     }
 
-    private fun oldPeer(port: Int): Session {
+    private fun oldPeer(port: Int, features: Long = 0, hello: (HelloReply) -> Unit = {}): Session {
         val ready = CountDownLatch(1)
         val p = Session(TcpTransport("127.0.0.1", port), object : Session.Listener {
-            override fun onHello(hello: HelloReply) = ready.countDown()
-        }, Session.Config("test"))
+            override fun onHello(hello: HelloReply) {
+                hello(hello)
+                ready.countDown()
+            }
+        }, Session.Config("test", features = features))
         peers += p
         Thread { p.run() }.apply { isDaemon = true }.start()
         assertTrue(ready.await(5, TimeUnit.SECONDS))
@@ -320,6 +328,112 @@ class PlayLogLinkTest {
         Scrobbles.idle()
         assertEquals(listOf("Seed 1", "Seed 2"), listens())
         assertTrue(gets.isEmpty())
+    }
+
+    private fun cardGets() = logs.count { it.startsWith("cardlog get after") }
+
+    private fun roundTrip() {
+        Scrobbles.idle()
+        Remote.set("scrobble", "phone") {}
+        waitFor { Remote.device.settings.values["scrobble"] == "phone" }
+        Scrobbles.idle()
+    }
+
+    @Test
+    fun aCrossingAtMinor18GivesOneListenFromTheCardLogAndTheAckEmptiesTheRecord() {
+        val s = start(minor = 18)
+        playShort()
+        cross()
+        waitFor(20_000) { listens().isNotEmpty() && logs.any { it.startsWith("cardlog append seq 1 Lucky") } && s.device.cardPlays.isEmpty() }
+        seenPastTheCrossing()
+        assertEquals(listOf("Lucky"), listens())
+        assertTrue(s.device.plays.isEmpty())
+        assertTrue(logs.any { it.startsWith("cardlog ack up to 1, ok") })
+    }
+
+    @Test
+    fun aMinor17DeviceGetsNoCardGetAndThePlayComesFromThePhoneLog() {
+        val s = start(minor = 17)
+        playShort()
+        cross()
+        waitFor(20_000) { listens().isNotEmpty() && s.device.plays.isEmpty() }
+        seenPastTheCrossing()
+        assertEquals(listOf("Lucky"), listens())
+        assertEquals(0, cardGets())
+        assertTrue(logs.any { it.startsWith("playlog append seq 1 Lucky") })
+    }
+
+    @Test
+    fun aCardSwapStoresTheEntriesOfBothCards() {
+        val s = start(minor = 18, faults = listOf("card-run=1000+500@manual", "card-swap=b"), card = seed(1))
+        waitFor(20_000) { s.device.cardPlays.isEmpty() && listens() == listOf("Seed 1") }
+        s.device.startCard()
+        waitFor(20_000) { logs.contains("cardlog card b") && Remote.device.card.value == Enums.Card.ready }
+        playShort()
+        cross()
+        waitFor(20_000) { listens().size == 2 && s.device.cardPlays.isEmpty() }
+        seenPastTheCrossing()
+        assertEquals(listOf("Seed 1", "Lucky"), listens())
+        assertTrue(logs.any { it.startsWith("cardlog get after 0 on card b") })
+    }
+
+    @Test
+    fun aDroppedCardAckIsReadAgainInTheNextSessionAndTheRecordEmpties() {
+        val s = start(minor = 18, faults = listOf("drop-ack"), card = seed(1), live = false)
+        waitFor(20_000) { logs.any { it.endsWith("closed drop-ack") } }
+        reconnect(1)
+        waitFor(20_000) { s.device.cardPlays.isEmpty() }
+        Scrobbles.idle()
+        assertEquals(listOf("Seed 1"), listens())
+        assertEquals(2, logs.count { it.startsWith("cardlog get after 0") })
+    }
+
+    @Test
+    fun anExposedEntryOnTheAccountIsNotSubmittedAndAnotherOneIs() {
+        app.getSharedPreferences("scrobble", Context.MODE_PRIVATE).edit().putString("listenbrainzUser", "fake").commit()
+        val card = seed(2)
+        account = listOf(card[0])
+        val s = start(minor = 18, card = card, live = false)
+        waitFor(20_000) { s.device.cardPlays.isEmpty() && listens().isNotEmpty() }
+        Scrobbles.idle()
+        assertEquals(listOf("Seed 2"), listens())
+        assertTrue(gets.any { "/1/user/fake/listens?" in it })
+    }
+
+    @Test
+    fun noServiceThatCanSendReadsNoCardLog() {
+        app.getSharedPreferences("scrobble", Context.MODE_PRIVATE).edit().putBoolean("listenbrainz", false).putBoolean("lastfm", true).commit()
+        val s = start(minor = 18, card = seed(1))
+        waitFor(20_000) { logs.any { it.startsWith("playlog get after 0") } }
+        roundTrip()
+        assertEquals(0, cardGets())
+        assertEquals(1, s.device.cardPlays.size)
+    }
+
+    @Test
+    fun bothLogsAreReadWithARequestOfEachInFlight() {
+        val s = start(minor = 18, seed = seed(1), card = seed(1, from = 2), live = false)
+        waitFor(20_000) { s.device.plays.isEmpty() && s.device.cardPlays.isEmpty() && listens().size == 2 }
+        Scrobbles.idle()
+        assertEquals(setOf("Seed 1", "Seed 2"), listens().toSet())
+        assertTrue(logs.any { it.startsWith("playlog ack up to 1, ok") })
+        assertTrue(logs.any { it.startsWith("cardlog ack up to 1, ok") })
+    }
+
+    @Test
+    fun anotherPhoneBoundFirstLeavesTheAppWithNoCardLog() {
+        ShadowLog.clear()
+        val (s, port) = sim(minor = 18, card = seed(1))
+        var bit = 0L
+        val raw = oldPeer(port, Groups.mask("playLog", "cardLog")) { bit = it.features and Groups.mask("cardLog") }
+        assertEquals(Groups.mask("cardLog"), bit)
+        raw.close("test")
+        link(port)
+        roundTrip()
+        assertTrue(!Remote.device.has("cardLog"))
+        assertEquals(0, cardGets())
+        assertEquals(1, s.device.cardPlays.size)
+        assertEquals(1, ShadowLog.getLogsForTag(Remote.TAG).count { it.msg.startsWith("card ready edge") })
     }
 
     companion object {

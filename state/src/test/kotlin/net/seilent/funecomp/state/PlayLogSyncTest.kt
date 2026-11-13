@@ -27,9 +27,9 @@ class PlayLogSyncTest {
 
     private fun ack(d: PlayLogSync.Do?) = d as? PlayLogSync.Ack ?: throw AssertionError("not an ack: $d")
 
-    private fun stored(s: PlayLogSync.Store, upTo: Long? = s.entries.maxOfOrNull { it.seq }): PlayLogSync.Do? {
+    private fun stored(s: PlayLogSync.Store, upTo: Long? = s.entries.maxOfOrNull { it.seq }, p: PlayLogSync = sync): PlayLogSync.Do? {
         if (upTo != null) cursors[s.log] = maxOf(cursors[s.log] ?: 0, upTo)
-        return sync.stored(s.gen, s.log, upTo, s.more)
+        return p.stored(s.gen, s.log, upTo, s.more)
     }
 
     private fun cycle(r: PlayLogReply, from: PlayLogSync.Get): PlayLogSync.Do? {
@@ -287,5 +287,125 @@ class PlayLogSyncTest {
         val k = get(m.state(5, ready1))
         m.getFailed(k.gen, Err.busy, 1)
         assertEquals(3L, get(m.state(5, ready1)).after)
+    }
+
+    private val cards = PlayLogSync({ cursors[it] }, true) { logs += it }
+
+    private fun cardPage(l: Long, seqs: LongRange, newest: Long? = seqs.lastOrNull() ?: 0, held: Long? = seqs.firstOrNull(), first: Long? = null) =
+        PlayLogReply(l, newest, false, seqs.map { PlayEntry(it, 1_800_000_000L + it) }, first, held)
+
+    private fun cardCycle(r: PlayLogReply, from: PlayLogSync.Get): PlayLogSync.Do? {
+        val s = store(cards.reply(from.gen, r))
+        val k = ack(stored(s, p = cards))
+        return cards.acked(k.gen, k, null, true)
+    }
+
+    @Test
+    fun theCardLogIsReadFromZeroAtHelloAndNotWithoutTheDeviceBit() {
+        cursors[a] = 5
+        assertEquals(0L, get(cards.hello(true, true)).after)
+        assertTrue(cards.card)
+        assertNull(cards.hello(false, true))
+        assertNull(cards.state(9, ready1))
+        assertNull(cards.hello(true, false))
+        assertNull(cards.state(9, ready1))
+    }
+
+    @Test
+    fun aNewCardLogSeqGetsEvenBelowTheCursorAndAnEqualZeroOrAbsentValueDoesNot() {
+        val g = get(cards.hello(true, true))
+        assertNull(cardCycle(cardPage(a, 1L..5L), g))
+        assertNull(cards.state(5, ready1))
+        assertNull(cards.state(null, ready1))
+        assertNull(cards.state(0, ready1))
+        get(cards.state(3, ready1))
+        assertNull(cards.state(4, ready1))
+    }
+
+    @Test
+    fun aChangeWhileBusyIsAskedAtTheCycleEnd() {
+        val ok = PlayLogSync({ cursors[it] }, true) { logs += it }
+        val g = get(ok.hello(true, true))
+        assertNull(ok.state(7, ready1))
+        val s = store(ok.reply(g.gen, cardPage(a, 1L..5L)))
+        val k = ack(stored(s, p = ok))
+        get(ok.acked(k.gen, k, null, true))
+
+        val failed = PlayLogSync({ cursors[it] }, true) { logs += it }
+        val f = get(failed.hello(true, true))
+        assertNull(failed.state(7, ready1))
+        get(failed.getFailed(f.gen, Err.busy, 1))
+
+        val acked = PlayLogSync({ cursors[it] }, true) { logs += it }
+        val h = get(acked.hello(true, true))
+        val k2 = ack(stored(store(acked.reply(h.gen, cardPage(b, 1L..5L))), p = acked))
+        assertNull(acked.state(7, ready1))
+        get(acked.acked(k2.gen, k2, Err.badValue, true))
+
+        val lost = PlayLogSync({ cursors[it] }, true) { logs += it }
+        val m = get(lost.hello(true, true))
+        val s3 = store(lost.reply(m.gen, cardPage(a, 1L..5L)))
+        assertNull(lost.state(7, ready1))
+        get(lost.stored(s3.gen, s3.log, null, false))
+    }
+
+    @Test
+    fun anEpochMoveSetsAfterToZeroAndGetsNothingAlone() {
+        val g = get(cards.hello(true, true))
+        assertNull(cardCycle(cardPage(a, 1L..5L), g))
+        assertNull(cards.state(5, ready1))
+        assertNull(cards.state(5, ready2))
+        val n = get(cards.state(6, ready2))
+        assertEquals(0L, n.after)
+        assertNull(cardCycle(cardPage(a, 1L..6L), n))
+        assertEquals(6L, get(cards.state(7, ready2)).after)
+    }
+
+    @Test
+    fun aNoCardWaitsForANewCardLogSeqAndNotForTheRefusalEpoch() {
+        val g = get(cards.hello(true, true))
+        assertNull(cards.state(4, ready1))
+        assertNull(cards.getFailed(g.gen, Err.noCard, 1))
+        assertNull(cards.state(4, ready1))
+        assertNull(cards.state(4, ready2))
+        get(cards.state(5, ready2))
+    }
+
+    @Test
+    fun aCardReplyGivesNoDroppedNote() {
+        cursors[a] = 2
+        val g = get(cards.hello(true, true))
+        assertNull(cardCycle(cardPage(a, 9L..9L, first = 5), g))
+        assertTrue(logs.none { "dropped" in it })
+    }
+
+    @Test
+    fun anEmptyReplyAcksUpToTheCursorWhenHeldIsAtOrBelowItAndNewestIsSent() {
+        cursors[a] = 5
+        val g = get(cards.hello(true, true))
+        val k = ack(cards.reply(g.gen, PlayLogReply(a, 7, false, emptyList(), null, 3)))
+        assertEquals(a to 5L, k.log to k.upTo)
+        assertNull(cards.acked(k.gen, k, null, true))
+        val above = PlayLogSync({ cursors[it] }, true) { logs += it }
+        val h = get(above.hello(true, true))
+        assertNull(above.reply(h.gen, PlayLogReply(a, 7, false, emptyList(), null, 6)))
+        val none = PlayLogSync({ cursors[it] }, true) { logs += it }
+        val n = get(none.hello(true, true))
+        assertNull(none.reply(n.gen, PlayLogReply(a, null, false, emptyList(), null, 3)))
+        val low = PlayLogSync({ cursors[it] }, true) { logs += it }
+        val m = get(low.hello(true, true))
+        assertEquals(2L, ack(low.reply(m.gen, PlayLogReply(a, 2, false, emptyList(), null, 1))).upTo)
+    }
+
+    @Test
+    fun twoSubLogsKeepTwoCursors() {
+        val g = get(cards.hello(true, true))
+        assertNull(cardCycle(cardPage(a, 1L..3L), g))
+        val n = get(cards.state(9, ready2))
+        assertEquals(0L, n.after)
+        assertNull(cardCycle(cardPage(b, 1L..2L), n))
+        assertEquals(3L, cursors[a])
+        assertEquals(2L, cursors[b])
+        assertEquals(2L, get(cards.state(10, ready2)).after)
     }
 }
