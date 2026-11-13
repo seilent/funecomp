@@ -127,7 +127,9 @@ object Gen {
                 if (!ok) throw GenException("proto.txt: $scope ${t[1]} has unknown type $type")
             }
         }
-        val objects = scopes.keys.map { camel(it) }
+        val records = scopes.keys.filter { isRecord(it) }.map { camel(it) }.toSet()
+        fun objectName(scope: String) = camel(scope).let { if (scope in msgNames && it in records) it + "Msg" else it }
+        val objects = scopes.keys.map { objectName(it) }
         if (objects.toSet().size != objects.size) throw GenException("proto.txt: scope names collide in Kotlin")
 
         val o = StringBuilder()
@@ -178,7 +180,7 @@ object Gen {
         o.append("}\n\n")
         o.append("object Tags {\n")
         for ((scope, tags) in scopes) {
-            o.append("    object ${camel(scope)} {\n")
+            o.append("    object ${objectName(scope)} {\n")
             for (t in tags) o.append("        const val ${ident(t[1])} = ${t[0]}\n")
             o.append("    }\n")
         }

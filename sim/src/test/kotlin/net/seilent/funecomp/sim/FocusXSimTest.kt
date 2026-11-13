@@ -10,7 +10,6 @@ class FocusXSimTest {
 
     @Test
     fun theFocusXBitIsServedFromMinor17() {
-        assertEquals(17, Proto.minor)
         assertEquals(Groups.mask("imgFocusX"), device().helloReply().features and Groups.mask("imgFocusX"))
         assertEquals(0L, device(16).helloReply().features and Groups.mask("imgFocusX"))
     }

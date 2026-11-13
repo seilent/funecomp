@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 17
+const minor 18
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -45,6 +45,8 @@ const phoneItemMaxBytes 1024
 const phoneListMs 30000
 const svcReplyMs 90000
 const svcPkceMs 600000
+const libDeleteMs 90000
+const bindTokenBytes 16
 err unknown 1
 err badValue 2
 err busy 3
@@ -96,6 +98,11 @@ feature svcLogin 32
 feature svcAccount 35
 feature imgFocusX 36
 feature appPkg 37
+feature trackArtist 39
+feature libNext 40
+feature libDelete 41
+feature cardLog 42
+feature scrobWifi 43
 enum SOURCE 0 local
 enum SOURCE 1 phone
 enum SOURCE 2 phoneFile
@@ -203,6 +210,8 @@ enum APP_RESULT 0 installed
 enum APP_RESULT 1 declined
 enum APP_RESULT 2 refused
 enum APP_RESULT 3 updatePending
+enum SCROB_SERVICE 1 lastfm
+enum SCROB_SERVICE 2 listenbrainz
 msg HELLO 0x01 app req
 tag HELLO 1 magic u32 one
 tag HELLO 2 major u16 one
@@ -231,6 +240,8 @@ tag HELLO.reply 19 phoneMime str list
 tag HELLO.reply 20 phoneMaxRate u32 one
 tag HELLO.reply 21 phoneMaxBits u8 one
 tag HELLO.reply 22 service SvcInfo list
+tag HELLO.reply 23 bindToken bytes one
+tag HELLO.reply 24 bootId u64 one
 msg PING 0x02 both req
 msg BYE 0x03 dev push
 tag BYE 1 reason BYE_REASON one
@@ -289,6 +300,9 @@ tag STATE 49 updHold bool one
 tag STATE 50 eqEarSlot str one
 tag STATE 51 service str one
 tag STATE 52 serviceKey u64 one
+tag STATE 53 cardLogSeq u32 one
+tag STATE 54 scrobAuthRev u32 one
+tag STATE 55 scrobRefused u8 one
 msg SCHEMA 0x11 dev push
 tag SCHEMA 1 pivot str one
 tag SCHEMA 2 offset u32 one
@@ -401,6 +415,7 @@ tag LIB_GET 3 offset u32 one
 tag LIB_GET 4 count u32 one
 tag LIB_GET 5 libRev u32 one
 tag LIB_GET 6 snapRev u32 one
+tag LIB_GET.reply 1 next u32 one
 msg ACTION 0x28 app req
 tag ACTION 1 cmd ACTION_CMD one
 tag ACTION 2 track u64 one
@@ -524,14 +539,20 @@ tag LYR_OFFSET.reply 1 ms i32 one
 msg PLAYLOG_GET 0x3d app req
 tag PLAYLOG_GET 1 after u32 one
 tag PLAYLOG_GET 2 count u32 one
+tag PLAYLOG_GET 3 card bool one
 tag PLAYLOG_GET.reply 1 log u64 one
 tag PLAYLOG_GET.reply 2 newest u32 one
 tag PLAYLOG_GET.reply 3 more bool one
 tag PLAYLOG_GET.reply 4 entry PlayEntry list
 tag PLAYLOG_GET.reply 5 first u32 one
+tag PLAYLOG_GET.reply 6 held u32 one
+tag PLAYLOG_GET.reply 7 done ScrobDone list
+tag PLAYLOG_GET.reply 8 doneLost bool one
 msg PLAYLOG_ACK 0x3e app req
 tag PLAYLOG_ACK 1 log u64 one
 tag PLAYLOG_ACK 2 upTo u32 one
+tag PLAYLOG_ACK 3 card bool one
+tag PLAYLOG_ACK 4 doneUpTo u32 one
 msg STREAM_READ 0x3f dev req
 tag STREAM_READ 1 file u64 one
 tag STREAM_READ 2 rev u64 one
@@ -610,6 +631,22 @@ tag APP_STATE 2 version u32 one
 tag APP_STATE 3 state APP_RESULT one
 tag APP_STATE 4 text str one
 tag APP_STATE 5 stage u32 one
+msg LIB_DELETE 0x50 app req
+tag LIB_DELETE 1 track u64 one
+tag LIB_DELETE 2 album u64 one
+tag LIB_DELETE 3 count u32 one
+tag LIB_DELETE 4 snapRev u32 one
+tag LIB_DELETE 5 bindToken bytes one
+tag LIB_DELETE 6 bootId u64 one
+tag LIB_DELETE.reply 1 deleted u32 one
+tag LIB_DELETE.reply 2 failed u32 one
+msg BIND_ASK 0x51 app req
+tag BIND_ASK.reply 1 bindToken bytes one
+msg SCROB_AUTH 0x52 app req
+tag SCROB_AUTH 1 rev u32 one
+tag SCROB_AUTH 2 enabled u8 one
+tag SCROB_AUTH 3 auth ScrobAuth list
+tag SCROB_AUTH 4 bindToken bytes one
 tag error 1 code u8 one
 tag error 2 text str one
 tag error 3 refused str list
@@ -650,6 +687,7 @@ tag LibRow 3 first u64 one
 tag LibRow 4 key str one
 tag LibRow 5 mbid str one
 tag LibRow 6 artist str one
+tag LibRow 9 noDelete bool one
 tag ImgEntry 1 name str one
 tag ImgEntry 2 mbid str one
 tag ImgEntry 3 origin IMG_ORIGIN list
@@ -682,6 +720,8 @@ tag PlayEntry 14 liveSeen bool one
 tag PlayEntry 15 phoneFile u64 one
 tag PlayEntry 16 service str one
 tag PlayEntry 17 serviceKey u64 one
+tag PlayEntry 18 exposed bool one
+tag PlayEntry 19 sentTo u8 one
 tag PhoneItem 1 file u64 one
 tag PhoneItem 2 rev u64 one
 tag PhoneItem 3 size u64 one
@@ -705,3 +745,13 @@ tag SvcInfo 4 pkce bool one
 tag SvcInfo 5 signedIn bool one
 tag SvcInfo 6 account str one
 tag SvcInfo 7 downloads u32 one
+tag ScrobAuth 1 service SCROB_SERVICE one
+tag ScrobAuth 2 user str one
+tag ScrobAuth 3 secret str one
+tag ScrobAuth 4 apiKey str one
+tag ScrobAuth 5 apiSecret str one
+tag ScrobDone 1 seq u32 one
+tag ScrobDone 2 startS i64 one
+tag ScrobDone 3 artist str one
+tag ScrobDone 4 title str one
+tag ScrobDone 5 sentTo u8 one

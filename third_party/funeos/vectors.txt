@@ -10,7 +10,7 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply bc000101010001040046444350020200010003020011000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply bc000101010001040046444350020200010003020012000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
 hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ffff0000000000000e0400070000000f04000300000010040004000000111a00010a00
 hex hello_reply 6865616470686f6e6573020a004845414450484f4e4553111800010900626c7565746f6f7468020900424c5545544f4f54481201000012010001120100021201
 hex hello_reply 0003
@@ -21,7 +21,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 17
+dec hello_reply 0.body.minor 18
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -6266,3 +6266,435 @@ dec app_state 0.body.state installed
 dec app_state 0.body.text installed
 dec app_state 0.body.stage 7
 act app_state accept
+vec lib_get_reply_next dev
+hex lib_get_reply_next 070027010d0001040002000000
+re lib_get_reply_next lib_get
+dec lib_get_reply_next 0.len 7
+dec lib_get_reply_next 0.type LIB_GET
+dec lib_get_reply_next 0.flags 0x01
+dec lib_get_reply_next 0.seq 13
+dec lib_get_reply_next 0.body.next 2
+act lib_get_reply_next accept
+vec lib_page_songs dev
+hex lib_page_songs 5d0015000b000104000700000002010002030000080400040000000404000000000005040001000000060100000733000109004175746f6d6174696302040001
+hex lib_page_songs 000000030800c900000000000000040300323031060c0055746164612048696b617275
+dec lib_page_songs 0.len 93
+dec lib_page_songs 0.type LIB
+dec lib_page_songs 0.flags 0x00
+dec lib_page_songs 0.seq 11
+dec lib_page_songs 0.body.libRev 7
+dec lib_page_songs 0.body.view songs
+dec lib_page_songs 0.body.parent
+dec lib_page_songs 0.body.snapRev 4
+dec lib_page_songs 0.body.offset 0
+dec lib_page_songs 0.body.total 1
+dec lib_page_songs 0.body.more false
+dec lib_page_songs 0.body.row[0].name Automatic
+dec lib_page_songs 0.body.row[0].count 1
+dec lib_page_songs 0.body.row[0].first 201
+dec lib_page_songs 0.body.row[0].key 201
+dec lib_page_songs 0.body.row[0].artist Utada Hikaru
+act lib_page_songs accept
+vec hello_reply_bit40 dev
+hex hello_reply_bit40 3e00010101000104004644435002020001000302001200040200723105060076302e332e32060200e0010702002003080200000209020020030d0800ffffff7f
+hex hello_reply_bit40 b9010000
+re hello_reply_bit40 hello
+dec hello_reply_bit40 0.len 62
+dec hello_reply_bit40 0.type HELLO
+dec hello_reply_bit40 0.flags 0x01
+dec hello_reply_bit40 0.seq 1
+dec hello_reply_bit40 0.body.magic 1346585670
+dec hello_reply_bit40 0.body.major 1
+dec hello_reply_bit40 0.body.minor 18
+dec hello_reply_bit40 0.body.board r1
+dec hello_reply_bit40 0.body.version v0.3.2
+dec hello_reply_bit40 0.body.screenW 480
+dec hello_reply_bit40 0.body.screenH 800
+dec hello_reply_bit40 0.body.backdropW 512
+dec hello_reply_bit40 0.body.backdropH 800
+dec hello_reply_bit40 0.body.features 1896228061183
+act hello_reply_bit40 accept
+vec lib_delete_album app
+hex lib_delete_album 370050044600020800c9000000000000000304000c00000004040004000000051000a0a1a2a3a4a5a6a7a8a9aaabacadaeaf06080007b0ed5e07b0ed5e
+dec lib_delete_album 0.len 55
+dec lib_delete_album 0.type LIB_DELETE
+dec lib_delete_album 0.flags 0x04
+dec lib_delete_album 0.seq 70
+dec lib_delete_album 0.body.album 201
+dec lib_delete_album 0.body.count 12
+dec lib_delete_album 0.body.snapRev 4
+dec lib_delete_album 0.body.bindToken a0a1a2a3a4a5a6a7a8a9aaabacadaeaf
+dec lib_delete_album 0.body.bootId 6840316954749546503
+act lib_delete_album accept
+vec lib_delete_reply dev
+hex lib_delete_reply 0e00500146000104000c00000002040000000000
+re lib_delete_reply lib_delete_album
+dec lib_delete_reply 0.len 14
+dec lib_delete_reply 0.type LIB_DELETE
+dec lib_delete_reply 0.flags 0x01
+dec lib_delete_reply 0.seq 70
+dec lib_delete_reply 0.body.deleted 12
+dec lib_delete_reply 0.body.failed 0
+act lib_delete_reply accept
+vec lib_delete_partial dev
+hex lib_delete_partial 0e00500146000104000900000002040003000000
+re lib_delete_partial lib_delete_album
+dec lib_delete_partial 0.len 14
+dec lib_delete_partial 0.type LIB_DELETE
+dec lib_delete_partial 0.flags 0x01
+dec lib_delete_partial 0.seq 70
+dec lib_delete_partial 0.body.deleted 9
+dec lib_delete_partial 0.body.failed 3
+act lib_delete_partial accept
+vec lib_delete_stale dev
+hex lib_delete_stale 16005003460001010007020f006c696272617279206368616e676564
+re lib_delete_stale lib_delete_album
+dec lib_delete_stale 0.len 22
+dec lib_delete_stale 0.type LIB_DELETE
+dec lib_delete_stale 0.flags 0x03
+dec lib_delete_stale 0.seq 70
+dec lib_delete_stale 0.body.code 7
+dec lib_delete_stale 0.body.text library changed
+act lib_delete_stale accept
+vec lib_delete_count dev
+hex lib_delete_count 14005003460001010007020d00636f756e74206368616e676564
+re lib_delete_count lib_delete_album
+dec lib_delete_count 0.len 20
+dec lib_delete_count 0.type LIB_DELETE
+dec lib_delete_count 0.flags 0x03
+dec lib_delete_count 0.seq 70
+dec lib_delete_count 0.body.code 7
+dec lib_delete_count 0.body.text count changed
+act lib_delete_count accept
+vec lib_delete_readonly dev
+hex lib_delete_readonly 1800500346000101000b021100636172642069732072656164206f6e6c79
+re lib_delete_readonly lib_delete_album
+dec lib_delete_readonly 0.len 24
+dec lib_delete_readonly 0.type LIB_DELETE
+dec lib_delete_readonly 0.flags 0x03
+dec lib_delete_readonly 0.seq 70
+dec lib_delete_readonly 0.body.code 11
+dec lib_delete_readonly 0.body.text card is read only
+act lib_delete_readonly accept
+vec lib_delete_cue dev
+hex lib_delete_cue 1a00500346000101000402130070617274206f6620612063756520696d616765
+re lib_delete_cue lib_delete_album
+dec lib_delete_cue 0.len 26
+dec lib_delete_cue 0.type LIB_DELETE
+dec lib_delete_cue 0.flags 0x03
+dec lib_delete_cue 0.seq 70
+dec lib_delete_cue 0.body.code 4
+dec lib_delete_cue 0.body.text part of a cue image
+act lib_delete_cue accept
+vec lib_delete_refused dev
+hex lib_delete_refused 0e00500346000101000402070072656675736564
+re lib_delete_refused lib_delete_album
+dec lib_delete_refused 0.len 14
+dec lib_delete_refused 0.type LIB_DELETE
+dec lib_delete_refused 0.flags 0x03
+dec lib_delete_refused 0.seq 70
+dec lib_delete_refused 0.body.code 4
+dec lib_delete_refused 0.body.text refused
+act lib_delete_refused accept
+vec lib_delete_waiting dev
+hex lib_delete_waiting 15005003460001010003020e0064656c6574652077616974696e67
+re lib_delete_waiting lib_delete_album
+dec lib_delete_waiting 0.len 21
+dec lib_delete_waiting 0.type LIB_DELETE
+dec lib_delete_waiting 0.flags 0x03
+dec lib_delete_waiting 0.seq 70
+dec lib_delete_waiting 0.body.code 3
+dec lib_delete_waiting 0.body.text delete waiting
+act lib_delete_waiting accept
+vec lib_delete_token dev
+hex lib_delete_token 12005003460001010004020b006e6f7420616c6c6f776564
+re lib_delete_token lib_delete_album
+dec lib_delete_token 0.len 18
+dec lib_delete_token 0.type LIB_DELETE
+dec lib_delete_token 0.flags 0x03
+dec lib_delete_token 0.seq 70
+dec lib_delete_token 0.body.code 4
+dec lib_delete_token 0.body.text not allowed
+act lib_delete_token accept
+vec lib_delete_boot dev
+hex lib_delete_boot 16005003460001010007020f006c696272617279206368616e676564
+re lib_delete_boot lib_delete_album
+dec lib_delete_boot 0.len 22
+dec lib_delete_boot 0.type LIB_DELETE
+dec lib_delete_boot 0.flags 0x03
+dec lib_delete_boot 0.seq 70
+dec lib_delete_boot 0.body.code 7
+dec lib_delete_boot 0.body.text library changed
+act lib_delete_boot accept
+vec lib_delete_song app
+hex lib_delete_song 300050044700010800c90000000000000004040004000000051000a0a1a2a3a4a5a6a7a8a9aaabacadaeaf06080007b0ed5e07b0ed5e
+dec lib_delete_song 0.len 48
+dec lib_delete_song 0.type LIB_DELETE
+dec lib_delete_song 0.flags 0x04
+dec lib_delete_song 0.seq 71
+dec lib_delete_song 0.body.track 201
+dec lib_delete_song 0.body.snapRev 4
+dec lib_delete_song 0.body.bindToken a0a1a2a3a4a5a6a7a8a9aaabacadaeaf
+dec lib_delete_song 0.body.bootId 6840316954749546503
+act lib_delete_song accept
+vec lib_delete_song_reply dev
+hex lib_delete_song_reply 0e00500147000104000100000002040000000000
+re lib_delete_song_reply lib_delete_song
+dec lib_delete_song_reply 0.len 14
+dec lib_delete_song_reply 0.type LIB_DELETE
+dec lib_delete_song_reply 0.flags 0x01
+dec lib_delete_song_reply 0.seq 71
+dec lib_delete_song_reply 0.body.deleted 1
+dec lib_delete_song_reply 0.body.failed 0
+act lib_delete_song_reply accept
+vec lib_row_nodelete dev
+hex lib_row_nodelete 5c0015000b000104000700000002010001030000080400040000000404000000000005040001000000060100000732000104004c697665020400020000000308
+hex lib_row_nodelete 005902000000000000040300363031060c0055746164612048696b61727509010001
+dec lib_row_nodelete 0.len 92
+dec lib_row_nodelete 0.type LIB
+dec lib_row_nodelete 0.flags 0x00
+dec lib_row_nodelete 0.seq 11
+dec lib_row_nodelete 0.body.libRev 7
+dec lib_row_nodelete 0.body.view albums
+dec lib_row_nodelete 0.body.parent
+dec lib_row_nodelete 0.body.snapRev 4
+dec lib_row_nodelete 0.body.offset 0
+dec lib_row_nodelete 0.body.total 1
+dec lib_row_nodelete 0.body.more false
+dec lib_row_nodelete 0.body.row[0].name Live
+dec lib_row_nodelete 0.body.row[0].count 2
+dec lib_row_nodelete 0.body.row[0].first 601
+dec lib_row_nodelete 0.body.row[0].key 601
+dec lib_row_nodelete 0.body.row[0].artist Utada Hikaru
+dec lib_row_nodelete 0.body.row[0].noDelete true
+act lib_row_nodelete accept
+vec hello_reply_bit41 dev
+hex hello_reply_bit41 4900010101000104004644435002020001000302001200040200723105060076302e332e32060200e0010702002003080200000209020020030d0800ffffff7f
+hex hello_reply_bit41 b903000018080007b0ed5e07b0ed5e
+re hello_reply_bit41 hello
+dec hello_reply_bit41 0.len 73
+dec hello_reply_bit41 0.type HELLO
+dec hello_reply_bit41 0.flags 0x01
+dec hello_reply_bit41 0.seq 1
+dec hello_reply_bit41 0.body.magic 1346585670
+dec hello_reply_bit41 0.body.major 1
+dec hello_reply_bit41 0.body.minor 18
+dec hello_reply_bit41 0.body.board r1
+dec hello_reply_bit41 0.body.version v0.3.2
+dec hello_reply_bit41 0.body.screenW 480
+dec hello_reply_bit41 0.body.screenH 800
+dec hello_reply_bit41 0.body.backdropW 512
+dec hello_reply_bit41 0.body.backdropH 800
+dec hello_reply_bit41 0.body.features 4095251316735
+dec hello_reply_bit41 0.body.bootId 6840316954749546503
+act hello_reply_bit41 accept
+vec hello_reply_token dev
+hex hello_reply_token 5c00010101000104004644435002020001000302001200040200723105060076302e332e32060200e0010702002003080200000209020020030d0800ffffff7f
+hex hello_reply_token b9030000171000a0a1a2a3a4a5a6a7a8a9aaabacadaeaf18080007b0ed5e07b0ed5e
+re hello_reply_token hello
+dec hello_reply_token 0.len 92
+dec hello_reply_token 0.type HELLO
+dec hello_reply_token 0.flags 0x01
+dec hello_reply_token 0.seq 1
+dec hello_reply_token 0.body.magic 1346585670
+dec hello_reply_token 0.body.major 1
+dec hello_reply_token 0.body.minor 18
+dec hello_reply_token 0.body.board r1
+dec hello_reply_token 0.body.version v0.3.2
+dec hello_reply_token 0.body.screenW 480
+dec hello_reply_token 0.body.screenH 800
+dec hello_reply_token 0.body.backdropW 512
+dec hello_reply_token 0.body.backdropH 800
+dec hello_reply_token 0.body.features 4095251316735
+dec hello_reply_token 0.body.bindToken a0a1a2a3a4a5a6a7a8a9aaabacadaeaf
+dec hello_reply_token 0.body.bootId 6840316954749546503
+act hello_reply_token accept
+vec bind_ask app
+hex bind_ask 000051044800
+dec bind_ask 0.len 0
+dec bind_ask 0.type BIND_ASK
+dec bind_ask 0.flags 0x04
+dec bind_ask 0.seq 72
+act bind_ask accept
+vec bind_ask_reply dev
+hex bind_ask_reply 130051014800011000a0a1a2a3a4a5a6a7a8a9aaabacadaeaf
+re bind_ask_reply bind_ask
+dec bind_ask_reply 0.len 19
+dec bind_ask_reply 0.type BIND_ASK
+dec bind_ask_reply 0.flags 0x01
+dec bind_ask_reply 0.seq 72
+dec bind_ask_reply 0.body.bindToken a0a1a2a3a4a5a6a7a8a9aaabacadaeaf
+act bind_ask_reply accept
+vec bind_ask_declined dev
+hex bind_ask_declined 0f0051034800010100040208006465636c696e6564
+re bind_ask_declined bind_ask
+dec bind_ask_declined 0.len 15
+dec bind_ask_declined 0.type BIND_ASK
+dec bind_ask_declined 0.flags 0x03
+dec bind_ask_declined 0.seq 72
+dec bind_ask_declined 0.body.code 4
+dec bind_ask_declined 0.body.text declined
+act bind_ask_declined accept
+vec bind_ask_screen_off dev
+hex bind_ask_screen_off 11005103480001010003020a0073637265656e206f6666
+re bind_ask_screen_off bind_ask
+dec bind_ask_screen_off 0.len 17
+dec bind_ask_screen_off 0.type BIND_ASK
+dec bind_ask_screen_off 0.flags 0x03
+dec bind_ask_screen_off 0.seq 72
+dec bind_ask_screen_off 0.body.code 3
+dec bind_ask_screen_off 0.body.text screen off
+act bind_ask_screen_off accept
+vec playlog_get_card app
+hex playlog_get_card 12003d045800010400290000000204003200000003010001
+dec playlog_get_card 0.len 18
+dec playlog_get_card 0.type PLAYLOG_GET
+dec playlog_get_card 0.flags 0x04
+dec playlog_get_card 0.seq 88
+dec playlog_get_card 0.body.after 41
+dec playlog_get_card 0.body.count 50
+dec playlog_get_card 0.body.card true
+act playlog_get_card accept
+vec playlog_card_reply dev
+hex playlog_card_reply 60003d015800010800f9d5420eedc0155b0204002c0000000604002a0000000440000104002c000000030400c0d4010004040068ad03000508002d0100000000
+hex playlog_card_reply 0000061100426f68656d69616e2052686170736f6479070500517565656e1201000103010000
+re playlog_card_reply playlog_get_card
+dec playlog_card_reply 0.len 96
+dec playlog_card_reply 0.type PLAYLOG_GET
+dec playlog_card_reply 0.flags 0x01
+dec playlog_card_reply 0.seq 88
+dec playlog_card_reply 0.body.log 6563364156341409273
+dec playlog_card_reply 0.body.newest 44
+dec playlog_card_reply 0.body.held 42
+dec playlog_card_reply 0.body.entry[0].seq 44
+dec playlog_card_reply 0.body.entry[0].playedMs 120000
+dec playlog_card_reply 0.body.entry[0].durationMs 241000
+dec playlog_card_reply 0.body.entry[0].track 301
+dec playlog_card_reply 0.body.entry[0].title Bohemian Rhapsody
+dec playlog_card_reply 0.body.entry[0].artist Queen
+dec playlog_card_reply 0.body.entry[0].exposed true
+dec playlog_card_reply 0.body.more false
+act playlog_card_reply accept
+vec playlog_ack_card app
+hex playlog_ack_card 16003e045900010800f9d5420eedc0155b0204002c00000003010001
+dec playlog_ack_card 0.len 22
+dec playlog_ack_card 0.type PLAYLOG_ACK
+dec playlog_ack_card 0.flags 0x04
+dec playlog_ack_card 0.seq 89
+dec playlog_ack_card 0.body.log 6563364156341409273
+dec playlog_ack_card 0.body.upTo 44
+dec playlog_ack_card 0.body.card true
+act playlog_ack_card accept
+vec state_card_log_seq dev
+hex state_card_log_seq 2c001000090001010000020100000308006700000000000000090400dc0500000c0100012804002b0000003504002c000000
+dec state_card_log_seq 0.len 44
+dec state_card_log_seq 0.type STATE
+dec state_card_log_seq 0.flags 0x00
+dec state_card_log_seq 0.seq 9
+dec state_card_log_seq 0.body.source local
+dec state_card_log_seq 0.body.output wired
+dec state_card_log_seq 0.body.track 103
+dec state_card_log_seq 0.body.positionMs 1500
+dec state_card_log_seq 0.body.playing true
+dec state_card_log_seq 0.body.playLogSeq 43
+dec state_card_log_seq 0.body.cardLogSeq 44
+act state_card_log_seq accept
+vec scrob_auth app
+hex scrob_auth 450052045a0001040005000000020100030315000101000102010075030200736b0401006b05010073030c00010100020201007603010074041000a0a1a2a3a4
+hex scrob_auth a5a6a7a8a9aaabacadaeaf
+dec scrob_auth 0.len 69
+dec scrob_auth 0.type SCROB_AUTH
+dec scrob_auth 0.flags 0x04
+dec scrob_auth 0.seq 90
+dec scrob_auth 0.body.rev 5
+dec scrob_auth 0.body.enabled 3
+dec scrob_auth 0.body.auth[0].service lastfm
+dec scrob_auth 0.body.auth[0].user u
+dec scrob_auth 0.body.auth[0].secret sk
+dec scrob_auth 0.body.auth[0].apiKey k
+dec scrob_auth 0.body.auth[0].apiSecret s
+dec scrob_auth 0.body.auth[1].service listenbrainz
+dec scrob_auth 0.body.auth[1].user v
+dec scrob_auth 0.body.auth[1].secret t
+dec scrob_auth 0.body.bindToken a0a1a2a3a4a5a6a7a8a9aaabacadaeaf
+act scrob_auth accept
+vec scrob_auth_reply dev
+hex scrob_auth_reply 000052015a00
+re scrob_auth_reply scrob_auth
+dec scrob_auth_reply 0.len 0
+dec scrob_auth_reply 0.type SCROB_AUTH
+dec scrob_auth_reply 0.flags 0x01
+dec scrob_auth_reply 0.seq 90
+act scrob_auth_reply accept
+vec scrob_auth_confirm app
+hex scrob_auth_confirm 1a0052045b0001040005000000041000a0a1a2a3a4a5a6a7a8a9aaabacadaeaf
+dec scrob_auth_confirm 0.len 26
+dec scrob_auth_confirm 0.type SCROB_AUTH
+dec scrob_auth_confirm 0.flags 0x04
+dec scrob_auth_confirm 0.seq 91
+dec scrob_auth_confirm 0.body.rev 5
+dec scrob_auth_confirm 0.body.bindToken a0a1a2a3a4a5a6a7a8a9aaabacadaeaf
+act scrob_auth_confirm accept
+vec scrob_auth_stale dev
+hex scrob_auth_stale 100052035b00010100070209007374616c6520726576
+re scrob_auth_stale scrob_auth_confirm
+dec scrob_auth_stale 0.len 16
+dec scrob_auth_stale 0.type SCROB_AUTH
+dec scrob_auth_stale 0.flags 0x03
+dec scrob_auth_stale 0.seq 91
+dec scrob_auth_stale 0.body.code 7
+dec scrob_auth_stale 0.body.text stale rev
+act scrob_auth_stale accept
+vec state_scrob_auth dev
+hex state_scrob_auth 300010000a0001010000020100000308006700000000000000090400dc0500000c0100013504002c0000003604000900000037010002
+dec state_scrob_auth 0.len 48
+dec state_scrob_auth 0.type STATE
+dec state_scrob_auth 0.flags 0x00
+dec state_scrob_auth 0.seq 10
+dec state_scrob_auth 0.body.source local
+dec state_scrob_auth 0.body.output wired
+dec state_scrob_auth 0.body.track 103
+dec state_scrob_auth 0.body.positionMs 1500
+dec state_scrob_auth 0.body.playing true
+dec state_scrob_auth 0.body.cardLogSeq 44
+dec state_scrob_auth 0.body.scrobAuthRev 9
+dec state_scrob_auth 0.body.scrobRefused 2
+act state_scrob_auth accept
+vec playlog_done_reply dev
+hex playlog_done_reply 90003d015800010800f9d5420eedc0155b0204002c0000000604002a0000000444000104002c000000030400c0d4010004040068ad03000508002d0100000000
+hex playlog_done_reply 0000061100426f68656d69616e2052686170736f6479070500517565656e12010001130100010725000104002800000002080010abd96a000000000305005175
+hex playlog_done_reply 65656e040400536f6e67050100030801000103010000
+re playlog_done_reply playlog_get_card
+dec playlog_done_reply 0.len 144
+dec playlog_done_reply 0.type PLAYLOG_GET
+dec playlog_done_reply 0.flags 0x01
+dec playlog_done_reply 0.seq 88
+dec playlog_done_reply 0.body.log 6563364156341409273
+dec playlog_done_reply 0.body.newest 44
+dec playlog_done_reply 0.body.held 42
+dec playlog_done_reply 0.body.entry[0].seq 44
+dec playlog_done_reply 0.body.entry[0].playedMs 120000
+dec playlog_done_reply 0.body.entry[0].durationMs 241000
+dec playlog_done_reply 0.body.entry[0].track 301
+dec playlog_done_reply 0.body.entry[0].title Bohemian Rhapsody
+dec playlog_done_reply 0.body.entry[0].artist Queen
+dec playlog_done_reply 0.body.entry[0].exposed true
+dec playlog_done_reply 0.body.entry[0].sentTo 1
+dec playlog_done_reply 0.body.done[0].seq 40
+dec playlog_done_reply 0.body.done[0].startS 1792650000
+dec playlog_done_reply 0.body.done[0].artist Queen
+dec playlog_done_reply 0.body.done[0].title Song
+dec playlog_done_reply 0.body.done[0].sentTo 3
+dec playlog_done_reply 0.body.doneLost true
+dec playlog_done_reply 0.body.more false
+act playlog_done_reply accept
+vec playlog_ack_done app
+hex playlog_ack_done 16003e045c00010800f9d5420eedc0155b0404002800000003010001
+dec playlog_ack_done 0.len 22
+dec playlog_ack_done 0.type PLAYLOG_ACK
+dec playlog_ack_done 0.flags 0x04
+dec playlog_ack_done 0.seq 92
+dec playlog_ack_done 0.body.log 6563364156341409273
+dec playlog_ack_done 0.body.doneUpTo 40
+dec playlog_ack_done 0.body.card true
+act playlog_ack_done accept

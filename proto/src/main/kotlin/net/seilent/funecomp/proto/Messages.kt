@@ -46,6 +46,11 @@ object Groups {
         "svcAccount" to setOf(Msg.SVC_LOGIN_START, Msg.SVC_LOGOUT, Msg.SVC_STATE),
         "imgFocusX" to emptySet(),
         "appPkg" to setOf(Msg.APP_BEGIN, Msg.APP_DATA, Msg.APP_END, Msg.APP_ABORT, Msg.APP_STATE),
+        "trackArtist" to emptySet(),
+        "libNext" to emptySet(),
+        "libDelete" to setOf(Msg.LIB_DELETE, Msg.BIND_ASK),
+        "cardLog" to emptySet(),
+        "scrobWifi" to setOf(Msg.SCROB_AUTH),
     )
     val unserved: Set<String> = setOf(
         "eqPass",
@@ -55,6 +60,11 @@ object Groups {
         "receiver",
         "phoneFiles",
         "imgSource",
+        "trackArtist",
+        "libNext",
+        "libDelete",
+        "cardLog",
+        "scrobWifi",
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -109,6 +119,8 @@ data class HelloReply(
     val phoneMaxRate: Long? = null,
     val phoneMaxBits: Int? = null,
     val services: List<SvcInfo> = emptyList(),
+    val bindToken: ByteArray? = null,
+    val bootId: Long? = null,
 ) {
     fun has(group: String) = Groups.bit(group)?.let { (features ushr it) and 1L == 1L } ?: false
 
@@ -135,6 +147,8 @@ data class HelloReply(
         u32(Tags.HelloReply.phoneMaxRate, phoneMaxRate)
         u8(Tags.HelloReply.phoneMaxBits, phoneMaxBits)
         services.forEach { e -> rec(Tags.HelloReply.service) { e.write(this) } }
+        bytes(Tags.HelloReply.bindToken, bindToken)
+        u64(Tags.HelloReply.bootId, bootId)
     }
 
     companion object {
@@ -160,6 +174,8 @@ data class HelloReply(
             n.long(Tags.HelloReply.phoneMaxRate),
             n.int(Tags.HelloReply.phoneMaxBits),
             n.nodes(Tags.HelloReply.service).map { SvcInfo.from(it) },
+            n.bytes(Tags.HelloReply.bindToken),
+            n.long(Tags.HelloReply.bootId),
         )
     }
 }
@@ -296,6 +312,9 @@ data class State(
     val eqEarSlot: String? = null,
     val service: String? = null,
     val serviceKey: Long? = null,
+    val cardLogSeq: Long? = null,
+    val scrobAuthRev: Long? = null,
+    val scrobRefused: Int? = null,
 ) {
     val library: Long? get() = track?.takeIf { it != 0L && service == null }
 
@@ -352,6 +371,9 @@ data class State(
         str(Tags.State.eqEarSlot, eqEarSlot)
         str(Tags.State.service, service)
         u64(Tags.State.serviceKey, serviceKey)
+        u32(Tags.State.cardLogSeq, cardLogSeq)
+        u32(Tags.State.scrobAuthRev, scrobAuthRev)
+        u8(Tags.State.scrobRefused, scrobRefused)
     }
 
     companion object {
@@ -408,6 +430,9 @@ data class State(
             n.str(Tags.State.eqEarSlot),
             n.str(Tags.State.service),
             n.long(Tags.State.serviceKey),
+            n.long(Tags.State.cardLogSeq),
+            n.long(Tags.State.scrobAuthRev),
+            n.int(Tags.State.scrobRefused),
         )
     }
 }
@@ -700,7 +725,7 @@ data class Queue(val rev: Long, val page: PageInfo, val items: List<QueueItem>) 
     }
 }
 
-data class LibRow(val name: String?, val count: Long?, val first: Long?, val key: String?, val mbid: String? = null, val artist: String? = null) {
+data class LibRow(val name: String?, val count: Long?, val first: Long?, val key: String?, val mbid: String? = null, val artist: String? = null, val noDelete: Boolean? = null) {
     fun write(o: TlvWriter) = o.apply {
         str(Tags.LibRow.name, name)
         u32(Tags.LibRow.count, count)
@@ -708,6 +733,7 @@ data class LibRow(val name: String?, val count: Long?, val first: Long?, val key
         str(Tags.LibRow.key, key)
         str(Tags.LibRow.mbid, mbid)
         str(Tags.LibRow.artist, artist)
+        bool(Tags.LibRow.noDelete, noDelete)
     }
 
     val size: Int get() = TlvWriter().rec(Tags.Lib.row) { write(this) }.size
@@ -734,7 +760,7 @@ data class Lib(val libRev: Long, val view: Int, val parent: String?, val page: P
             n.str(Tags.Lib.parent),
             PageInfo.read(n, Tags.Lib.offset, Tags.Lib.total, Tags.Lib.more),
             n.nodes(Tags.Lib.row).map {
-                LibRow(it.str(Tags.LibRow.name), it.long(Tags.LibRow.count), it.long(Tags.LibRow.first), it.str(Tags.LibRow.key), it.str(Tags.LibRow.mbid), it.str(Tags.LibRow.artist))
+                LibRow(it.str(Tags.LibRow.name), it.long(Tags.LibRow.count), it.long(Tags.LibRow.first), it.str(Tags.LibRow.key), it.str(Tags.LibRow.mbid), it.str(Tags.LibRow.artist), it.bool(Tags.LibRow.noDelete))
             },
             n.long(Tags.Lib.snapRev),
         )
@@ -969,6 +995,8 @@ data class PlayEntry(
     val phoneFile: Long? = null,
     val service: String? = null,
     val serviceKey: Long? = null,
+    val exposed: Boolean? = null,
+    val sentTo: Int? = null,
 ) {
     val library: Long? get() = track?.takeIf { it != 0L && service == null }
 
@@ -990,6 +1018,8 @@ data class PlayEntry(
         u64(Tags.PlayEntry.phoneFile, phoneFile)
         str(Tags.PlayEntry.service, service)
         u64(Tags.PlayEntry.serviceKey, serviceKey)
+        bool(Tags.PlayEntry.exposed, exposed)
+        u8(Tags.PlayEntry.sentTo, sentTo)
     }
 
     val size: Int get() = TlvWriter().rec(Tags.PlaylogGetReply.entry) { write(this) }.size
@@ -1013,17 +1043,45 @@ data class PlayEntry(
             n.long(Tags.PlayEntry.phoneFile),
             n.str(Tags.PlayEntry.service),
             n.long(Tags.PlayEntry.serviceKey),
+            n.bool(Tags.PlayEntry.exposed),
+            n.int(Tags.PlayEntry.sentTo),
         )
     }
 }
 
-data class PlayLogReply(val log: Long?, val newest: Long?, val more: Boolean?, val entries: List<PlayEntry>, val first: Long?) {
+data class ScrobDone(val seq: Long?, val startS: Long?, val artist: String?, val title: String?, val sentTo: Int?) {
+    fun write(o: TlvWriter) = o.apply {
+        u32(Tags.ScrobDone.seq, seq)
+        i64(Tags.ScrobDone.startS, startS)
+        str(Tags.ScrobDone.artist, artist)
+        str(Tags.ScrobDone.title, title)
+        u8(Tags.ScrobDone.sentTo, sentTo)
+    }
+
+    companion object {
+        fun from(n: Node) = ScrobDone(n.long(Tags.ScrobDone.seq), n.long(Tags.ScrobDone.startS), n.str(Tags.ScrobDone.artist), n.str(Tags.ScrobDone.title), n.int(Tags.ScrobDone.sentTo))
+    }
+}
+
+data class PlayLogReply(
+    val log: Long?,
+    val newest: Long?,
+    val more: Boolean?,
+    val entries: List<PlayEntry>,
+    val first: Long?,
+    val held: Long? = null,
+    val done: List<ScrobDone> = emptyList(),
+    val doneLost: Boolean? = null,
+) {
     fun encode() = tlv {
         u64(Tags.PlaylogGetReply.log, log)
         u32(Tags.PlaylogGetReply.newest, newest)
         bool(Tags.PlaylogGetReply.more, more)
         entries.forEach { e -> rec(Tags.PlaylogGetReply.entry) { e.write(this) } }
         u32(Tags.PlaylogGetReply.first, first)
+        u32(Tags.PlaylogGetReply.held, held)
+        done.forEach { d -> rec(Tags.PlaylogGetReply.done) { d.write(this) } }
+        bool(Tags.PlaylogGetReply.doneLost, doneLost)
     }
 
     companion object {
@@ -1033,6 +1091,9 @@ data class PlayLogReply(val log: Long?, val newest: Long?, val more: Boolean?, v
             n.bool(Tags.PlaylogGetReply.more),
             n.nodes(Tags.PlaylogGetReply.entry).map { PlayEntry.from(it) },
             n.long(Tags.PlaylogGetReply.first),
+            n.long(Tags.PlaylogGetReply.held),
+            n.nodes(Tags.PlaylogGetReply.done).map { ScrobDone.from(it) },
+            n.bool(Tags.PlaylogGetReply.doneLost),
         )
     }
 }

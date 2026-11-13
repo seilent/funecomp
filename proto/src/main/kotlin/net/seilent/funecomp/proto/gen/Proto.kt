@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "c60cb3ca143a23e2cbf17d10cff9c3e7c4d67020"
-    const val PROTO_SHA256 = "c625a48c6f28e77df2463ee6c805601486590d8e54ff35f9f82dd42cf212ea64"
-    const val VECTORS_SHA256 = "19dbb100f2c70942008f8c65f7cc89ddb72cb6187eab940946e4beb09be887b5"
+    const val COMMIT = "9ba4d4fa8c3e505db53d200009912e318f3d72bb"
+    const val PROTO_SHA256 = "c85dae2c8f9267cfcc9d6045a116b4e0f3976fbf5592127d99cfbd075a4bb584"
+    const val VECTORS_SHA256 = "566906cb782fd76c17a44a934ff5ac170d1fa91640366690eab6363240bbc4d6"
     const val TOKENS_SHA256 = "39f950417ae47ae5fd89bb98f8fa6b7fefb9d6afecc24d7d5ec71d564416cffb"
     const val TOKENSV1_SHA256 = "32bc09682aa9e40e72dbf872ea90df502e66776e11e1e9b3d92e20753556edd5"
     const val TOKENSR1_SHA256 = "f80924e3d93cfb155396f9cfc053b320bb71e829ba965f1f3234f31d433ce708"
@@ -19,7 +19,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 17
+    const val minor = 18
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -63,6 +63,8 @@ object Proto {
     const val phoneListMs = 30000
     const val svcReplyMs = 90000
     const val svcPkceMs = 600000
+    const val libDeleteMs = 90000
+    const val bindTokenBytes = 16
 }
 
 object Msg {
@@ -122,6 +124,9 @@ object Msg {
     const val APP_END = 0x4d
     const val APP_ABORT = 0x4e
     const val APP_STATE = 0x4f
+    const val LIB_DELETE = 0x50
+    const val BIND_ASK = 0x51
+    const val SCROB_AUTH = 0x52
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -179,6 +184,9 @@ object Msg {
         APP_END to MsgInfo(APP_END, "APP_END", "app", false),
         APP_ABORT to MsgInfo(APP_ABORT, "APP_ABORT", "dev", true),
         APP_STATE to MsgInfo(APP_STATE, "APP_STATE", "dev", true),
+        LIB_DELETE to MsgInfo(LIB_DELETE, "LIB_DELETE", "app", false),
+        BIND_ASK to MsgInfo(BIND_ASK, "BIND_ASK", "app", false),
+        SCROB_AUTH to MsgInfo(SCROB_AUTH, "SCROB_AUTH", "app", false),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -239,7 +247,12 @@ object Feature {
     const val svcAccount = 35
     const val imgFocusX = 36
     const val appPkg = 37
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin", 35 to "svcAccount", 36 to "imgFocusX", 37 to "appPkg")
+    const val trackArtist = 39
+    const val libNext = 40
+    const val libDelete = 41
+    const val cardLog = 42
+    const val scrobWifi = 43
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin", 35 to "svcAccount", 36 to "imgFocusX", 37 to "appPkg", 39 to "trackArtist", 40 to "libNext", 41 to "libDelete", 42 to "cardLog", 43 to "scrobWifi")
 }
 
 object Enums {
@@ -425,6 +438,11 @@ object Enums {
         const val updatePending = 3
         val names: Map<Int, String> = mapOf(0 to "installed", 1 to "declined", 2 to "refused", 3 to "updatePending")
     }
+    object ScrobService {
+        const val lastfm = 1
+        const val listenbrainz = 2
+        val names: Map<Int, String> = mapOf(1 to "lastfm", 2 to "listenbrainz")
+    }
     val byName: Map<String, Map<Int, String>> = mapOf(
         "SOURCE" to Source.names,
         "OUTPUT" to Output.names,
@@ -451,6 +469,7 @@ object Enums {
         "IMG_ORIGIN" to ImgOrigin.names,
         "SVC_LOGIN_RESULT" to SvcLoginResult.names,
         "APP_RESULT" to AppResult.names,
+        "SCROB_SERVICE" to ScrobService.names,
     )
 }
 
@@ -485,6 +504,8 @@ object Tags {
         const val phoneMaxRate = 20
         const val phoneMaxBits = 21
         const val service = 22
+        const val bindToken = 23
+        const val bootId = 24
     }
     object Bye {
         const val reason = 1
@@ -544,6 +565,9 @@ object Tags {
         const val eqEarSlot = 50
         const val service = 51
         const val serviceKey = 52
+        const val cardLogSeq = 53
+        const val scrobAuthRev = 54
+        const val scrobRefused = 55
     }
     object Schema {
         const val pivot = 1
@@ -676,6 +700,9 @@ object Tags {
         const val count = 4
         const val libRev = 5
         const val snapRev = 6
+    }
+    object LibGetReply {
+        const val next = 1
     }
     object Action {
         const val cmd = 1
@@ -840,6 +867,7 @@ object Tags {
     object PlaylogGet {
         const val after = 1
         const val count = 2
+        const val card = 3
     }
     object PlaylogGetReply {
         const val log = 1
@@ -847,10 +875,15 @@ object Tags {
         const val more = 3
         const val entry = 4
         const val first = 5
+        const val held = 6
+        const val done = 7
+        const val doneLost = 8
     }
     object PlaylogAck {
         const val log = 1
         const val upTo = 2
+        const val card = 3
+        const val doneUpTo = 4
     }
     object StreamRead {
         const val file = 1
@@ -956,6 +989,27 @@ object Tags {
         const val text = 4
         const val stage = 5
     }
+    object LibDelete {
+        const val track = 1
+        const val album = 2
+        const val count = 3
+        const val snapRev = 4
+        const val bindToken = 5
+        const val bootId = 6
+    }
+    object LibDeleteReply {
+        const val deleted = 1
+        const val failed = 2
+    }
+    object BindAskReply {
+        const val bindToken = 1
+    }
+    object ScrobAuthMsg {
+        const val rev = 1
+        const val enabled = 2
+        const val auth = 3
+        const val bindToken = 4
+    }
     object Error {
         const val code = 1
         const val text = 2
@@ -1009,6 +1063,7 @@ object Tags {
         const val key = 4
         const val mbid = 5
         const val artist = 6
+        const val noDelete = 9
     }
     object ImgEntry {
         const val name = 1
@@ -1053,6 +1108,8 @@ object Tags {
         const val phoneFile = 15
         const val service = 16
         const val serviceKey = 17
+        const val exposed = 18
+        const val sentTo = 19
     }
     object PhoneItem {
         const val file = 1
@@ -1082,6 +1139,20 @@ object Tags {
         const val signedIn = 5
         const val account = 6
         const val downloads = 7
+    }
+    object ScrobAuth {
+        const val service = 1
+        const val user = 2
+        const val secret = 3
+        const val apiKey = 4
+        const val apiSecret = 5
+    }
+    object ScrobDone {
+        const val seq = 1
+        const val startS = 2
+        const val artist = 3
+        const val title = 4
+        const val sentTo = 5
     }
     val scopes: Map<String, Map<Int, Field>> = mapOf(
         "HELLO" to mapOf(
@@ -1114,6 +1185,8 @@ object Tags {
             20 to Field(20, "phoneMaxRate", Base.U32, null, false),
             21 to Field(21, "phoneMaxBits", Base.U8, null, false),
             22 to Field(22, "service", Base.RECORD, "SvcInfo", true),
+            23 to Field(23, "bindToken", Base.BYTES, null, false),
+            24 to Field(24, "bootId", Base.U64, null, false),
         ),
         "BYE" to mapOf(
             1 to Field(1, "reason", Base.ENUM, "BYE_REASON", false),
@@ -1173,6 +1246,9 @@ object Tags {
             50 to Field(50, "eqEarSlot", Base.STR, null, false),
             51 to Field(51, "service", Base.STR, null, false),
             52 to Field(52, "serviceKey", Base.U64, null, false),
+            53 to Field(53, "cardLogSeq", Base.U32, null, false),
+            54 to Field(54, "scrobAuthRev", Base.U32, null, false),
+            55 to Field(55, "scrobRefused", Base.U8, null, false),
         ),
         "SCHEMA" to mapOf(
             1 to Field(1, "pivot", Base.STR, null, false),
@@ -1305,6 +1381,9 @@ object Tags {
             4 to Field(4, "count", Base.U32, null, false),
             5 to Field(5, "libRev", Base.U32, null, false),
             6 to Field(6, "snapRev", Base.U32, null, false),
+        ),
+        "LIB_GET.reply" to mapOf(
+            1 to Field(1, "next", Base.U32, null, false),
         ),
         "ACTION" to mapOf(
             1 to Field(1, "cmd", Base.ENUM, "ACTION_CMD", false),
@@ -1469,6 +1548,7 @@ object Tags {
         "PLAYLOG_GET" to mapOf(
             1 to Field(1, "after", Base.U32, null, false),
             2 to Field(2, "count", Base.U32, null, false),
+            3 to Field(3, "card", Base.BOOL, null, false),
         ),
         "PLAYLOG_GET.reply" to mapOf(
             1 to Field(1, "log", Base.U64, null, false),
@@ -1476,10 +1556,15 @@ object Tags {
             3 to Field(3, "more", Base.BOOL, null, false),
             4 to Field(4, "entry", Base.RECORD, "PlayEntry", true),
             5 to Field(5, "first", Base.U32, null, false),
+            6 to Field(6, "held", Base.U32, null, false),
+            7 to Field(7, "done", Base.RECORD, "ScrobDone", true),
+            8 to Field(8, "doneLost", Base.BOOL, null, false),
         ),
         "PLAYLOG_ACK" to mapOf(
             1 to Field(1, "log", Base.U64, null, false),
             2 to Field(2, "upTo", Base.U32, null, false),
+            3 to Field(3, "card", Base.BOOL, null, false),
+            4 to Field(4, "doneUpTo", Base.U32, null, false),
         ),
         "STREAM_READ" to mapOf(
             1 to Field(1, "file", Base.U64, null, false),
@@ -1585,6 +1670,27 @@ object Tags {
             4 to Field(4, "text", Base.STR, null, false),
             5 to Field(5, "stage", Base.U32, null, false),
         ),
+        "LIB_DELETE" to mapOf(
+            1 to Field(1, "track", Base.U64, null, false),
+            2 to Field(2, "album", Base.U64, null, false),
+            3 to Field(3, "count", Base.U32, null, false),
+            4 to Field(4, "snapRev", Base.U32, null, false),
+            5 to Field(5, "bindToken", Base.BYTES, null, false),
+            6 to Field(6, "bootId", Base.U64, null, false),
+        ),
+        "LIB_DELETE.reply" to mapOf(
+            1 to Field(1, "deleted", Base.U32, null, false),
+            2 to Field(2, "failed", Base.U32, null, false),
+        ),
+        "BIND_ASK.reply" to mapOf(
+            1 to Field(1, "bindToken", Base.BYTES, null, false),
+        ),
+        "SCROB_AUTH" to mapOf(
+            1 to Field(1, "rev", Base.U32, null, false),
+            2 to Field(2, "enabled", Base.U8, null, false),
+            3 to Field(3, "auth", Base.RECORD, "ScrobAuth", true),
+            4 to Field(4, "bindToken", Base.BYTES, null, false),
+        ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),
             2 to Field(2, "text", Base.STR, null, false),
@@ -1638,6 +1744,7 @@ object Tags {
             4 to Field(4, "key", Base.STR, null, false),
             5 to Field(5, "mbid", Base.STR, null, false),
             6 to Field(6, "artist", Base.STR, null, false),
+            9 to Field(9, "noDelete", Base.BOOL, null, false),
         ),
         "ImgEntry" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
@@ -1682,6 +1789,8 @@ object Tags {
             15 to Field(15, "phoneFile", Base.U64, null, false),
             16 to Field(16, "service", Base.STR, null, false),
             17 to Field(17, "serviceKey", Base.U64, null, false),
+            18 to Field(18, "exposed", Base.BOOL, null, false),
+            19 to Field(19, "sentTo", Base.U8, null, false),
         ),
         "PhoneItem" to mapOf(
             1 to Field(1, "file", Base.U64, null, false),
@@ -1711,6 +1820,20 @@ object Tags {
             5 to Field(5, "signedIn", Base.BOOL, null, false),
             6 to Field(6, "account", Base.STR, null, false),
             7 to Field(7, "downloads", Base.U32, null, false),
+        ),
+        "ScrobAuth" to mapOf(
+            1 to Field(1, "service", Base.ENUM, "SCROB_SERVICE", false),
+            2 to Field(2, "user", Base.STR, null, false),
+            3 to Field(3, "secret", Base.STR, null, false),
+            4 to Field(4, "apiKey", Base.STR, null, false),
+            5 to Field(5, "apiSecret", Base.STR, null, false),
+        ),
+        "ScrobDone" to mapOf(
+            1 to Field(1, "seq", Base.U32, null, false),
+            2 to Field(2, "startS", Base.I64, null, false),
+            3 to Field(3, "artist", Base.STR, null, false),
+            4 to Field(4, "title", Base.STR, null, false),
+            5 to Field(5, "sentTo", Base.U8, null, false),
         ),
     )
 }

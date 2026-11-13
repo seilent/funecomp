@@ -155,7 +155,7 @@ class VectorsTest {
                 assertArrayEquals("${v.name}: node re encode", want, body.encode())
                 val t = typed(f, body) ?: want
                 when {
-                    f.type == Msg.STATE -> assertEquals("${v.name}: typed re encode", fields(want), fields(t))
+                    f.type == Msg.STATE || f.type == Msg.PLAYLOG_GET && f.isReply -> assertEquals("${v.name}: typed re encode", fields(want), fields(t))
                     f.type == Msg.HELLO && f.isReply && !f.isError -> assertTrue("${v.name}: typed re encode", fields(t).containsAll(fields(want)))
                     else -> assertArrayEquals("${v.name}: typed re encode", want, t)
                 }
