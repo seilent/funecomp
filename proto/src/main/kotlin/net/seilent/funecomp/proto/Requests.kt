@@ -187,14 +187,16 @@ object Req {
         i32(Tags.LyrOffset.ms, ms)
     }
 
-    fun playLogGet(after: Long, count: Long) = tlv {
+    fun playLogGet(after: Long, count: Long, card: Boolean? = null) = tlv {
         u32(Tags.PlaylogGet.after, after)
         u32(Tags.PlaylogGet.count, count)
+        bool(Tags.PlaylogGet.card, card)
     }
 
-    fun playLogAck(log: Long, upTo: Long) = tlv {
+    fun playLogAck(log: Long, upTo: Long, card: Boolean? = null) = tlv {
         u64(Tags.PlaylogAck.log, log)
         u32(Tags.PlaylogAck.upTo, upTo)
+        bool(Tags.PlaylogAck.card, card)
     }
 
     fun updBegin(board: String, size: Long, md5: String, sig: ByteArray? = null) = tlv {

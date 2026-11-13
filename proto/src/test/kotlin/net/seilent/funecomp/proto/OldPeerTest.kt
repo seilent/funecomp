@@ -35,6 +35,7 @@ class OldPeerTest {
     private val v1_15 = table("/proto-1.15-ebc0751.txt")
     private val last15 = table("/proto-1.15.txt")
     private val v1_16 = table("/proto-1.16.txt")
+    private val v1_17 = table("/proto-1.17.txt")
 
     private fun text(name: String) = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
 
@@ -602,6 +603,60 @@ class OldPeerTest {
         assertFalse("abc123" in SvcKey("client_id", "abc123").toString())
         assertEquals(90000, Proto.svcReplyMs)
         assertEquals(600000, Proto.svcPkceMs)
+    }
+
+    @Test
+    fun cardLogFramesDecodeWithThe117TableToEmptyFields() {
+        val old = text("/proto-1.17.txt")
+        assertTrue("const minor 17" in old)
+        assertFalse("cardLog" in old)
+        assertEquals("cardLog", Feature.names[42])
+        assertEquals(Groups.mask("cardLog"), 1L shl 42)
+
+        val get = Node.decode("PLAYLOG_GET", body("playlog_get_card"), v1_17)
+        assertEquals(listOf(3), get.unknownTags)
+        assertEquals(41L to 50L, get.long(Tags.PlaylogGet.after) to get.long(Tags.PlaylogGet.count))
+        val ack = Node.decode("PLAYLOG_ACK", body("playlog_ack_card"), v1_17)
+        assertEquals(listOf(3), ack.unknownTags)
+        assertEquals(6563364156341409273L to 44L, ack.long(Tags.PlaylogAck.log) to ack.long(Tags.PlaylogAck.upTo))
+
+        val oldReply = Node.decode("PLAYLOG_GET.reply", body("playlog_card_reply"), v1_17)
+        assertEquals(listOf(6), oldReply.unknownTags)
+        assertEquals(listOf(listOf(18)), oldReply.nodes(Tags.PlaylogGetReply.entry).map { it.unknownTags })
+        val r = PlayLogReply.from(oldReply)
+        assertNull(r.held)
+        assertTrue(r.entries.all { it.exposed == null })
+        assertEquals(44L, r.newest)
+
+        val oldState = Node.decode("STATE", body("state_card_log_seq"), v1_17)
+        assertEquals(listOf(53), oldState.unknownTags)
+        assertNull(State.from(oldState).cardLogSeq)
+        assertEquals(43L, State.from(oldState).playLogSeq)
+    }
+
+    @Test
+    fun cardLogFieldsRoundTripAndMatchTheVectors() {
+        assertArrayEquals(body("playlog_get_card"), Req.playLogGet(41, 50, card = true))
+        assertArrayEquals(body("playlog_ack_card"), Req.playLogAck(6563364156341409273, 44, card = true))
+        assertArrayEquals(body("playlog_get"), Req.playLogGet(41, 50, card = null))
+        assertEquals(true, Node.decode("PLAYLOG_GET", Req.playLogGet(0, 50, card = true)).bool(Tags.PlaylogGet.card))
+        assertEquals(true, Node.decode("PLAYLOG_ACK", Req.playLogAck(7, 3, card = true)).bool(Tags.PlaylogAck.card))
+        assertNull(Node.decode("PLAYLOG_ACK", Req.playLogAck(7, 3)).bool(Tags.PlaylogAck.card))
+
+        val r = PlayLogReply.from(Node.decode("PLAYLOG_GET.reply", body("playlog_card_reply")))
+        assertEquals(6563364156341409273L, r.log)
+        assertEquals(44L to 42L, r.newest to r.held)
+        assertNull(r.first)
+        assertEquals(PlayEntry(44, null, 120000, 241000, 301, "Bohemian Rhapsody", "Queen", exposed = true), r.entries.single())
+
+        val reply = PlayLogReply(9, 5, false, listOf(PlayEntry(5, 1792656000, exposed = true), PlayEntry(4, exposed = false)), null, held = 3)
+        assertEquals(reply, PlayLogReply.from(Node.decode("PLAYLOG_GET.reply", reply.encode())))
+        assertNull(PlayLogReply.from(Node.decode("PLAYLOG_GET.reply", reply.copy(held = null).encode())).held)
+
+        assertEquals(44L, State.from(Node.decode("STATE", body("state_card_log_seq"))).cardLogSeq)
+        val st = State(playLogSeq = 43, cardLogSeq = 44)
+        assertEquals(st, State.from(Node.decode("STATE", st.encode())))
+        assertNull(State.from(Node.decode("STATE", State(playLogSeq = 43).encode())).cardLogSeq)
     }
 
     @Test
