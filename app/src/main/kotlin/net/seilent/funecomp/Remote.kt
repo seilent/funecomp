@@ -1586,7 +1586,7 @@ object Remote : Control {
             everLive = true
             board = hello.board
             Scrobbles.session(hello.has("stateClock"))
-            link?.session?.let { Scrobbles.linked(it, hello.has("playLog")) }
+            link?.session?.let { Scrobbles.linked(it, hello.has("playLog"), hello.board) }
             Firmwares.hello(hello.board, hello.version, hello.has("updSig"), hello.has("update"))
             Lyrics.session()
             dapLyrics.session()

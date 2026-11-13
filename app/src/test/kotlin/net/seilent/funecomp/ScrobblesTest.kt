@@ -33,6 +33,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
 import java.io.File
 import java.io.IOException
+import java.time.ZoneId
 import java.time.ZoneOffset
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -180,7 +181,7 @@ class ScrobblesTest {
         sessions += s
         Thread { s.run() }.apply { isDaemon = true }.start()
         assertTrue(ready.await(5, TimeUnit.SECONDS))
-        Scrobbles.linked(s, playLog)
+        Scrobbles.linked(s, playLog, dap.board)
         return s
     }
 
@@ -304,6 +305,28 @@ class ScrobblesTest {
         Scrobbles.idle()
         Scrobbles.idle()
         assertEquals(listOf("test get 1 ${at + 61}", "playlog: ack error 3", "test get 2 ${at + 31}"), events())
+    }
+
+    private val offline = Http { _, _ -> throw IOException("offline") }
+
+    private fun stored(board: String, vararg entries: PlayEntry): List<Pair<Long, Int?>> {
+        Scrobbles.reset()
+        Scrobbles.zone = { ZoneId.of("Asia/Tokyo") }
+        Scrobbles.init(app, AppPair.EMPTY, offline) {}
+        linkedTo(Dap(board) { n -> if (n.scope == "PLAYLOG_ACK") ByteArray(0) else PlayLogReply(0xA1, entries.size.toLong(), false, entries.toList(), 1).encode() })
+        val dir = File(app.filesDir, "scrobble")
+        waitFor { ScrobbleQueue(dir).after(Accounts.LISTEN_BRAINZ).size == entries.size }
+        return ScrobbleQueue(dir).after(Accounts.LISTEN_BRAINZ).map { it.startS to it.z }
+    }
+
+    @Test
+    fun aPocketBlockEntryWithNoZoneIsStoredAsUtcAndOneWithAZoneUsesIt() {
+        assertEquals(listOf(at to 0, at + 300 - 3600 to 3600), stored("pb", exposed(1, at, null), exposed(2, at + 300, 3600, "Lucky")))
+    }
+
+    @Test
+    fun anotherBoardsEntryWithNoZoneIsReadInThePhoneZone() {
+        assertEquals(listOf(at - 32400 to 32400), stored("v1", exposed(1, at, null)))
     }
 
     @Test

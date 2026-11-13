@@ -34,6 +34,7 @@ import net.seilent.funecomp.ui.ScrobbleView
 import java.io.File
 import java.io.IOException
 import java.time.ZoneId
+import java.time.ZoneOffset
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -48,6 +49,7 @@ object Scrobbles {
     private const val PENDING = "pendingToken"
     private const val PENDING_AT = "pendingAt"
     private const val PENDING_MS = 60 * 60 * 1000L
+    private const val POCKET_BLOCK = "pb"
     const val NO_BROWSER = "no browser"
     const val SIGN_IN_AGAIN = "sign in again"
     const val LISTEN_BRAINZ_TOKEN_URL = "https://listenbrainz.org/settings/"
@@ -71,6 +73,7 @@ object Scrobbles {
     private var sync = playLogSync()
     @Volatile private var link: Session? = null
     private var card = CardView()
+    private var hosted = false
     private val waiting = AtomicInteger()
     private val again = AtomicBoolean()
 
@@ -129,6 +132,7 @@ object Scrobbles {
         now = { System.currentTimeMillis() }
         zone = { ZoneId.systemDefault() }
         link = null
+        hosted = false
         sync = playLogSync()
         waiting.set(0)
         again.set(false)
@@ -151,9 +155,10 @@ object Scrobbles {
         }
     }
 
-    fun linked(s: Session, playLog: Boolean) = post {
+    fun linked(s: Session, playLog: Boolean, board: String? = null) = post {
         link = s
         card = CardView()
+        hosted = board == POCKET_BLOCK
         scrobbler?.session()
         val c = context ?: return@post
         perform(sync.hello(playLog, accounts(c).enabled.isNotEmpty()))
@@ -190,7 +195,7 @@ object Scrobbles {
             }
             is PlayLogSync.Store -> {
                 val upTo = try {
-                    scrobbler?.addLog(d.log, d.entries, zone())
+                    scrobbler?.addLog(d.log, d.entries, if (hosted) ZoneOffset.UTC else zone())
                 } catch (e: IOException) {
                     Log.w(Remote.TAG, "playlog store: $e")
                     null
