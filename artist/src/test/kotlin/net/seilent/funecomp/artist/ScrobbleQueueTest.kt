@@ -276,6 +276,8 @@ class ScrobbleQueueTest {
         assertEquals(Listen(now + 3600, "Radiohead, Thom", "Airbag", null, 241, albumArtist = "Radiohead", mbids = listOf("a74b1b7f-71a5-4011-9441-d0b5e4122711", "8bfac288-ccc5-448d-9573-c33ea2aa5c30")), Listen.of(e, utc))
         assertEquals(emptyList<String>(), Listen.of(e.copy(mbids = listOf("a74b1b7f-71a5-4011-9441-d0b5e4122711", "A74B1B7F-71A5-4011-9441-D0B5E4122711")), utc)!!.mbids)
         assertEquals(3, Listen.of(e.copy(trackNo = 3), utc)!!.trackNo)
+        assertEquals("Radiohead, Thom", Listen.of(e.copy(artist = ""), utc)!!.artist)
+        assertEquals("Radiohead, Thom", Listen.of(e.copy(artist = " "), utc)!!.artist)
     }
 
     @Test

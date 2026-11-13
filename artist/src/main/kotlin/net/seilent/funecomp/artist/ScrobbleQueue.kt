@@ -70,7 +70,7 @@ data class Listen(
         fun of(e: PlayEntry, zone: ZoneId): Listen? {
             if (e.liveSeen == true) return null
             val local = e.startLocalS ?: return null
-            val artist = (e.artist ?: e.artists.joinToString(", ")).trim()
+            val artist = (e.artist?.takeIf { it.isNotBlank() } ?: e.artists.joinToString(", ")).trim()
             val title = e.title?.trim().orEmpty()
             if (artist.isEmpty() || title.isEmpty()) return null
             val start = startS(local, e.zoneS, zone)
