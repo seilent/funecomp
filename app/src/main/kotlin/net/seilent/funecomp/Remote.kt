@@ -122,7 +122,8 @@ val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "
 object Remote : Control {
     const val TAG = "Funecomp"
     const val RECEIVER = DeviceState.RECEIVER
-    private val REFUSALS = setOf(RECEIVER)
+    const val USB_DAC = DeviceState.USB_DAC
+    private val REFUSALS = setOf(RECEIVER, USB_DAC)
     private const val BACKDROP_SIDE = 2048
     private const val BACKDROP_MAX = 4096
     private const val REFETCH_SLACK_MS = 200L

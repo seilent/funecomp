@@ -304,6 +304,7 @@ data class DeviceState(
 
     companion object {
         const val RECEIVER = "bluetooth receiver"
+        const val USB_DAC = "usb dac"
         const val SVC = "svcLogin"
         const val ACCOUNT = "svcAccount"
         const val APP = "appPkg"

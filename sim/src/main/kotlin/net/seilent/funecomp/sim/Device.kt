@@ -102,6 +102,8 @@ private const val LIBRARY = 1
 private const val PHONE = 2
 private const val CROSS_MIN_MS = 30_000L
 private const val CROSS_CAP_MS = 240_000L
+const val USB_DAC_TEXT = "usb dac"
+private val DAC_TRANSPORT = setOf(Enums.TransportCmd.toggle, Enums.TransportCmd.play, Enums.TransportCmd.next, Enums.TransportCmd.prev, Enums.TransportCmd.seek)
 
 class Lyr(val kind: Int, val lines: List<LyrLine>) {
     val crc: Long = lyricsCrc(kind, lines)
@@ -532,6 +534,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     private fun noCard() = if (opts.minor >= 15) Answer.Fail(Err.noCard, CardView.REFUSED) else Answer.Fail(Err.busy, CardView.REFUSED)
+
+    private fun dacRefuse() = if (faults.usbDac) Answer.Fail(Err.refused, USB_DAC_TEXT) else null
 
     private fun cardRefusal(type: Int, b: Node): Answer.Fail? {
         if (cardEdges.isEmpty()) return null
@@ -1253,6 +1257,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun transport(b: Node): Answer {
         stream.transport(b)?.let { return it }
+        if (b.int(Tags.Transport.cmd) in DAC_TRANSPORT) dacRefuse()?.let { return it }
         mark()
         when (b.int(Tags.Transport.cmd)) {
             Enums.TransportCmd.toggle -> playing = !playing
@@ -1643,6 +1648,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun play(b: Node): Answer {
         stream.refuse()?.let { return it }
+        dacRefuse()?.let { return it }
         val ids = b.longs(Tags.Play.track)
         val list: List<Long> = if (ids.isNotEmpty()) {
             if (ids.size > Proto.playMaxTracks) return Answer.Fail(Err.tooBig, "too many tracks")
@@ -1708,6 +1714,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             }
             Enums.QueueCmd.playAt -> {
                 stream.refuse()?.let { return it }
+                dacRefuse()?.let { return it }
                 if (!inQueue(at)) return Answer.Fail(Err.badValue, "bad slot")
                 slot = at!!
                 positionMs = 0
@@ -1827,6 +1834,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Enums.ActionCmd.rescan -> rescan(rescanLib.also { rescanLib = null })
             Enums.ActionCmd.shuffleLibrary -> {
                 stream.refuse()?.let { return it }
+                dacRefuse()?.let { return it }
                 if (lib.tracks.isEmpty()) return Answer.Fail(Err.noLibrary, "no library")
                 queue = lib.tracks.map { it.id }.shuffled().toMutableList()
                 slot = 0
