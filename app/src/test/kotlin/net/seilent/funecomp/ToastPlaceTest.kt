@@ -13,14 +13,24 @@ import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.toSize
 import java.awt.image.BufferedImage
+import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.state.CardView
+import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.LocalUi
@@ -63,8 +73,11 @@ class ToastPlaceTest {
     private val rest get() = box.bottom - ui.px(Tok.toastHeight)
     private val travel get() = ui.px(Tok.motion_toastTravel)
 
+    private lateinit var c: SimControl
+    private val down = LinkView(Phase.CONNECTING, "V1", everLive = true)
+
     private fun start(tag: String, vararg pages: Page, insets: WindowInsets = WindowInsets(0.dp)) {
-        val c = SimControl("v1")
+        c = SimControl("v1")
         c.set("accentOff", "on")
         shell = Shell(Nav(pages.toList()))
         rule.mainClock.autoAdvance = false
@@ -112,6 +125,10 @@ class ToastPlaceTest {
     private fun rise() = settle(Tok.motion_toastRise.toLong() + 200)
 
     private fun shown() = rule.onAllNodesWithTag("toast").fetchSemanticsNodes().isNotEmpty()
+
+    private fun words(): List<String> =
+        rule.onAllNodes(hasAnyAncestor(hasTestTag("toast")) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
+            .fetchSemanticsNodes().flatMap { n -> n.config[SemanticsProperties.Text].map { it.text.lowercase() } }
 
     private fun strip() = rule.onNodeWithTag("toast").fetchSemanticsNode().let { Rect(it.positionInRoot, it.size.toSize()) }
 
@@ -293,6 +310,130 @@ class ToastPlaceTest {
         settle(100)
         assertTrue(shown())
         assertEquals("popped to home: off the bottom place", 0f, offBottom(), 1f)
+    }
+
+    @Test
+    fun theHeldStripSitsAtTheToastPlaceOnHomeMusicAndSettings() {
+        start("home", Page.Home)
+        link = down
+        rise()
+        assertEquals("home: off the bottom place", 0f, offBottom(), 1f)
+        for (p in listOf(Page.Music, Page.Settings)) {
+            shell.nav.push(p)
+            settle(1000)
+            assertTrue(shown())
+            assertEquals("$p: off the bottom place", 0f, offBottom(), 1f)
+        }
+    }
+
+    @Test
+    fun aDropOnHomeGoesToTheTopWhenNowPlayingOpens() {
+        start("home", Page.Home)
+        link = down
+        rise()
+        assertEquals("home: off the bottom place", 0f, offBottom(), 1f)
+        shell.nav.push(Page.NowPlaying)
+        settle(1000)
+        assertTrue(shown())
+        assertEquals("now playing: off the top place", 0f, offTop(), 1f)
+    }
+
+    @Test
+    fun theHeldStripGoesUpUnderASheetAndBackDownWhenItCloses() {
+        start("home", Page.Home)
+        link = down
+        rise()
+        shell.sheet.open("sheet", listOf("a", "b")) {}
+        settle(Tok.motion_sheet.toLong() + 100)
+        assertEquals("sheet open: off the top place", 0f, offTop(), 1f)
+        shell.sheet.close()
+        settle(Tok.motion_sheet.toLong() + 100)
+        assertTrue(shown())
+        assertEquals("sheet closed: off the bottom place", 0f, offBottom(), 1f)
+    }
+
+    @Test
+    fun aDropOnNowPlayingGoesDownWhenNowPlayingIsLeft() {
+        start("home", Page.Home)
+        shell.nav.push(Page.NowPlaying)
+        settle(1000)
+        link = down
+        rise()
+        assertEquals("now playing: off the top place", 0f, offTop(), 1f)
+        shell.nav.pop()
+        settle(1000)
+        assertTrue(shown())
+        assertEquals("home: off the bottom place", 0f, offBottom(), 1f)
+    }
+
+    @Test
+    fun theHeldStripLeavesAtLive() {
+        start("home", Page.Home)
+        link = down
+        rise()
+        assertTrue(shown())
+        link = LinkView(Phase.LIVE, "V1", everLive = true)
+        settle(1000)
+        assertFalse(shown())
+    }
+
+    @Test
+    fun aPairFailedToastDuringADropTakesTheStripForItsHoldThenTheHeldWordsComeBack() {
+        start("home", Page.Home)
+        link = down
+        rise()
+        assertTrue(words().toString(), "connecting" in words())
+        shell.toast.show("fune r1", BoardScan.PAIR_FAILED)
+        settle(300)
+        assertTrue(words().toString(), "pair failed" in words())
+        assertEquals("the swap: off the bottom place", 0f, offBottom(), 1f)
+        settle(Tok.motion_toastHold.toLong() - 600)
+        assertTrue(words().toString(), "pair failed" in words())
+        assertEquals("the hold: off the bottom place", 0f, offBottom(), 1f)
+        settle(600)
+        assertTrue(words().toString(), "connecting" in words())
+        assertTrue(shown())
+        assertEquals("the held words back: off the bottom place", 0f, offBottom(), 1f)
+    }
+
+    @Test
+    fun aCardToastDuringADropTakesTheStrip() {
+        start("hub.music", Page.Home, Page.Music)
+        rule.pivotTo("music", "songs") { settle(it) }
+        c.push(Msg.STATE, c.device.playback.state.copy(card = Enums.Card.busy).encode())
+        settle(300)
+        link = down
+        rise()
+        rule.onNodeWithTag("row.0").performClick()
+        settle(300)
+        assertTrue(words().toString(), CardView.REFUSED in words())
+        assertEquals("the swap: off the bottom place", 0f, offBottom(), 1f)
+    }
+
+    @Test
+    fun theLastRowOfALongListEndsAboveTheHeldStrip() {
+        start("hub.music", Page.Home, Page.Music)
+        rule.pivotTo("music", "songs") { settle(it) }
+        link = down
+        rise()
+        val last = c.device.lib.pages.getValue(LibKey(Enums.View.songs, "")).total.toInt() - 1
+        rule.onNodeWithTag("rows").performScrollToIndex(last)
+        settled("row.$last")
+        val row = rule.onNodeWithTag("row.$last").fetchSemanticsNode().boundsInRoot
+        assertTrue("row.$last ends at ${row.bottom}, the strip starts at ${strip().top}", row.bottom <= strip().top + 0.5f)
+        assertEquals("the strip: off the bottom place", 0f, offBottom(), 1f)
+    }
+
+    private fun settled(tag: String) {
+        var at: Rect? = null
+        var n = 0
+        while (true) {
+            settle(100)
+            val now = rule.onAllNodesWithTag(tag).fetchSemanticsNodes().firstOrNull()?.boundsInRoot
+            if (now != null && now == at) return
+            at = now
+            check(n++ < 30) { "$tag does not settle" }
+        }
     }
 
     @Test

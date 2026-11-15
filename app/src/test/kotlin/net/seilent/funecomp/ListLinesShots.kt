@@ -10,18 +10,22 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -47,6 +51,7 @@ class ListLinesShots {
     private var size by mutableStateOf<Size?>(null)
     private var gen by mutableIntStateOf(0)
     private var shell by mutableStateOf(Shell())
+    private var link by mutableStateOf(LIVE)
     private lateinit var c: SimControl
 
     private fun settle(ms: Long) {
@@ -55,7 +60,8 @@ class ListLinesShots {
         rule.waitForIdle()
     }
 
-    private fun load(sz: Size, pages: List<Page>, lib: Library = Library.synthetic(), faults: List<String> = emptyList(), prep: (SimControl) -> Unit = {}) {
+    private fun load(sz: Size, pages: List<Page>, lib: Library = Library.synthetic(), faults: List<String> = emptyList(), link: LinkView = LIVE, prep: (SimControl) -> Unit = {}) {
+        this.link = link
         c = SimControl("v1", lib, faults = faults, stateNow = SHOT_CLOCK).also {
             shotClock(it)
             prep(it)
@@ -85,7 +91,7 @@ class ListLinesShots {
             val sz = size ?: return@setContent
             key(gen) {
                 Box(Modifier.requiredSize(sz.w.dp, sz.h.dp).testTag("frame")) {
-                    App(c.device, LIVE, c, shell, insets = sz.bars, ime = WindowInsets(0.dp))
+                    App(c.device, link, c, shell, insets = sz.bars, ime = WindowInsets(0.dp))
                 }
             }
         }
@@ -182,10 +188,55 @@ class ListLinesShots {
         }
     }
 
+    private fun end() {
+        val last = c.device.lib.pages.getValue(LibKey(Enums.View.songs, "")).total.toInt() - 1
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToIndex(last)
+        rule.mainClock.autoAdvance = false
+        settle(600)
+    }
+
+    @Test
+    fun held() = shots("held") { dir ->
+        for (sz in SHAPES) {
+            for ((name, pages) in listOf(
+                "home" to HOME,
+                "music" to HOME + Page.Music,
+                "settings" to HOME + Page.Settings,
+                "queue" to HOME + Page.NowPlaying + Page.Queue,
+                "connection" to HOME + Page.Connection,
+                "nowplaying" to HOME + Page.NowPlaying,
+            )) {
+                load(sz, pages, link = DOWN, prep = ::playing)
+                shoot(dir, name)
+            }
+            load(sz, HOME + Page.Music, link = DOWN, prep = ::playing)
+            rule.onNodeWithTag("row.0").performTouchInput { longClick() }
+            settle(600)
+            shoot(dir, "sheet-open")
+            rule.runOnIdle { shell.sheet.close() }
+            settle(600)
+            shoot(dir, "sheet-closed")
+            load(sz, HOME + Page.Music, link = DOWN, prep = ::playing)
+            rule.pivotTo("music", "songs") { settle(it) }
+            end()
+            shoot(dir, "list-end")
+            load(sz, HOME, link = DOWN, prep = ::playing)
+            rule.onNodeWithTag("home.column").performSemanticsAction(SemanticsActions.ScrollBy) { it(0f, 100_000f) }
+            settle(1000)
+            shoot(dir, "home-end")
+            load(sz, HOME + Page.Connection, link = LinkView(Phase.DOWN, "V1", everLive = true, bluetoothOff = true), prep = ::playing)
+            shoot(dir, "connection-bluetoothoff")
+            load(sz, HOME + Page.Connection, link = LinkView(Phase.STOPPED, "V1", bye = Enums.ByeReason.companionOff, everLive = true), prep = ::playing)
+            shoot(dir, "connection-phoneappoff")
+        }
+    }
+
     private companion object {
         val SHAPES = listOf("411x960", "sn411x438", "wm361x343", "flip960x411").map { n -> SIZES.single { it.name == n } }
         val HOME = listOf(Page.Home)
         val LIVE = LinkView(Phase.LIVE, "V1", everLive = true)
+        val DOWN = LinkView(Phase.CONNECTING, "V1", everLive = true)
         val OUT = listOf("card-seq=out")
         val PIVOTS = listOf("albums", "artists", "playlists", "songs", "genres", "folders")
     }

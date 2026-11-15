@@ -26,6 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -583,6 +584,8 @@ internal class ToastLegs {
     }
 }
 
+internal val LocalStripRoom = compositionLocalOf { 0f }
+
 @Composable
 fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolean = false, over: Boolean = false, np: Boolean = false) {
     val ui = LocalUi.current
@@ -603,8 +606,10 @@ fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolea
     }
     var artist by remember { mutableStateOf(held?.first ?: "") }
     var title by remember { mutableStateOf(held?.second ?: "") }
+    val heldNow by rememberUpdatedState(held)
+    val swapAt = remember { longArrayOf(-1L) }
     LaunchedEffect(held) {
-        if (held != null) {
+        if (held != null && swapAt[0] < 0) {
             artist = held.first
             title = held.second
         }
@@ -613,23 +618,37 @@ fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolea
     LaunchedEffect(state.shows, held != null) {
         val fresh = state.shows != handled[0]
         handled[0] = state.shows
-        if (fresh && held == null) {
+        if (fresh) {
             artist = state.artist
             title = state.title
         }
         val t = withFrameMillis { it }
         if (held == null && !fresh) {
-            legs.leave(t)
+            legs.leave(if (swapAt[0] < 0) t else max(t, swapAt[0] + Tok.motion_toastHold.toLong()))
+            swapAt[0] = -1L
         } else {
             val p = legs.show(t, held != null)
             if (p == ToastPhase.HIDDEN) top = place
             if (p == ToastPhase.HIDDEN || p == ToastPhase.OUT) risen = cover
+            if (fresh && held != null) swapAt[0] = t
         }
         now = t
         while (true) {
+            val back = swapAt[0] + Tok.motion_toastHold.toLong()
+            if (swapAt[0] >= 0 && now >= back) {
+                heldNow?.let {
+                    artist = it.first
+                    title = it.second
+                }
+                swapAt[0] = -1L
+            }
             when (legs.phase(now)) {
                 ToastPhase.HIDDEN -> return@LaunchedEffect
-                ToastPhase.HOLD -> if (legs.holdEnd == Long.MAX_VALUE) return@LaunchedEffect else delay(legs.holdEnd - now)
+                ToastPhase.HOLD -> when {
+                    legs.holdEnd != Long.MAX_VALUE -> delay(legs.holdEnd - now)
+                    swapAt[0] >= 0 -> delay(back - now)
+                    else -> return@LaunchedEffect
+                }
                 else -> {}
             }
             withFrameMillis { now = it }

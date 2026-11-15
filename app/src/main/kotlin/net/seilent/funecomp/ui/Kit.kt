@@ -345,12 +345,13 @@ fun Rows(
     ) {
         val sheet = LocalSheet.current
         val past = if (sheet != null && sheet.pastList === state) sheet.past else 0f
+        val bottom = past + LocalStripRoom.current
         val scrolling = remember(state) { { state.isScrollInProgress } }
         CompositionLocalProvider(LocalScrolling provides scrolling) {
             LazyColumn(
                 Modifier.fillMaxSize().testTag("rows"),
                 state = state,
-                contentPadding = PaddingValues(bottom = past.dp()),
+                contentPadding = PaddingValues(bottom = bottom.dp()),
                 flingBehavior = rememberFling(Tok.motion_listFlingRetention),
                 userScrollEnabled = scroll,
                 content = content,
@@ -359,7 +360,7 @@ fun Rows(
         val span = remember(state, show) { ListSpan() }
         val density = LocalDensity.current
         val leadPx = ui.px(lead).roundToInt()
-        ScrollThumb(show, { state.isScrollInProgress }, { span.of(state, size, tail, under?.getBottom(density) ?: 0, past.roundToInt(), head, leadPx) })
+        ScrollThumb(show, { state.isScrollInProgress }, { span.of(state, size, tail, under?.getBottom(density) ?: 0, bottom.roundToInt(), head, leadPx) })
     }
 }
 

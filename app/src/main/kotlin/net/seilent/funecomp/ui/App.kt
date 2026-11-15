@@ -135,7 +135,9 @@ fun App(
         val accent = AccentState(accentFor(device.settings.values[ACCENT_KEY]?.toIntOrNull()), device.settings.values[ACCENT_OFF_KEY] == "on")
         val outer = LocalPressSlots.current
         val slots = remember(outer) { outer ?: PressSlots() }
+        val held = if (link.everLive && link.phase != Phase.LIVE) (link.board ?: link.device ?: "") to statusText(link) else null
         CompositionLocalProvider(
+            LocalStripRoom provides if (held != null) ui.px(Tok.toastHeight) else 0f,
             LocalPressSlots provides slots,
             LocalUi provides ui,
             LocalBleed provides bleed,
@@ -261,7 +263,6 @@ fun App(
             }
             VolumeOverlay(shell.overlay, device, control)
             Sheet(shell.sheet, remember(ime, insets) { ime.exclude(insets) })
-            val held = if (nav.top == Page.NowPlaying && link.everLive && link.phase != Phase.LIVE) (link.board ?: link.device ?: "") to statusText(link) else null
             Toast(shell.toast, held, shell.overlay.drawn || shell.toast.grid, shell.sheet.shown || ime.getBottom(density) > 0, nav.top == Page.NowPlaying)
         }
     }
