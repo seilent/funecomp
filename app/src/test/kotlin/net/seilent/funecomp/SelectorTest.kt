@@ -2,10 +2,12 @@ package net.seilent.funecomp
 
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.ui.End
 import net.seilent.funecomp.ui.Send
 import net.seilent.funecomp.ui.picked
 import net.seilent.funecomp.ui.selects
 import net.seilent.funecomp.ui.selector
+import net.seilent.funecomp.ui.sleepText
 import net.seilent.funecomp.ui.typedMinutes
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -107,6 +109,25 @@ class SelectorTest {
         val off = sleep.selector(null, 0)
         assertEquals(0, off.focus)
         assertEquals(emptyList<String>(), off.info)
+    }
+
+    @Test
+    fun endOfTrackFollowsOffAndIsFocusedWhileArmed() {
+        val s = sleep.selector(null, 29, End(armed = false))
+        assertEquals(listOf("OFF", "END OF TRACK") + words.drop(1) + "type value", s.items)
+        assertEquals(1, s.end)
+        assertEquals(3, s.focus)
+        assertEquals(listOf("29 min left"), s.info)
+        assertEquals(0, sleep.selector(null, 0, End(armed = false)).focus)
+        val armed = sleep.selector(null, 0, End(armed = true))
+        assertEquals(1, armed.focus)
+        assertEquals(listOf("end of track"), armed.info)
+        assertEquals(listOf("end of track"), sleep.selector(null, 9, End(armed = true)).info)
+        assertEquals(listOf("OFF", "END OF TRACK") + words.drop(1), oldSleep.selector(null, 0, End(armed = false)).items)
+        assertNull(sleep.selector(null, 29).end)
+        assertEquals(words + "type value", sleep.selector(null, 29).items)
+        assertEquals("end of track", sleepText(sleep, 12, armed = true))
+        assertEquals("12 min left", sleepText(sleep, 12))
     }
 
     @Test

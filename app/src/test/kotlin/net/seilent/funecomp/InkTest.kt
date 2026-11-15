@@ -63,6 +63,14 @@ class InkTest {
         "07" to Roles.volNumber,
         "Utada Hikaru" to Roles.volArtist,
         "First Love" to Roles.volTitle,
+        "-30" to Roles.npRingText,
+        "+30" to Roles.npRingText,
+        "0.75" to Roles.npRingText,
+        "1" to Roles.npRingText,
+        "1.25" to Roles.npRingText,
+        "1.5" to Roles.npRingText,
+        "1.75" to Roles.npRingText,
+        "2" to Roles.npRingText,
     )
 
     @Test

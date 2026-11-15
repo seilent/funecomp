@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.drawscope.Fill
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFontFamilyResolver
 import androidx.compose.ui.platform.testTag
 import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.cos
@@ -98,6 +99,29 @@ fun ringLook(look: Look): RingStyle = when (look) {
 
 @Composable
 fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifier, press: PressState? = null, tag: String? = null, stroke: Float? = null, glyphSize: Float = size / 2, one: Boolean = false) {
+    RingFrame(size, look, modifier, press, tag, stroke, one) { side, color ->
+        Glyph(glyph, glyphSize, color, Modifier.at(side / 2, side / 2, 0.5f, 0.5f).then(if (tag != null) Modifier.testTag("$tag.glyph") else Modifier))
+        if (one) {
+            val ui = LocalUi.current
+            val a = Math.toRadians(Tok.npRepeatOneAt.toDouble())
+            val r = ui.px(LayoutTok.npRepeatOneR)
+            Glyph(GlyphName.ONE, LayoutTok.npRepeatOne, color, Modifier.at(side / 2 + r * sin(a).toFloat(), side / 2 - r * cos(a).toFloat(), 0.5f, 0.5f).then(if (tag != null) Modifier.testTag("$tag.one") else Modifier))
+        }
+    }
+}
+
+@Composable
+fun Ring(size: Float, face: String, role: Role, look: Look, modifier: Modifier = Modifier, press: PressState? = null, tag: String? = null, stroke: Float? = null) {
+    RingFrame(size, look, modifier, press, tag, stroke, false) { side, color ->
+        val ui = LocalUi.current
+        val resolver = LocalFontFamilyResolver.current
+        val ink = remember(face, role, ui, resolver) { ink(shown(face, role.case), role, ui, resolver) }
+        RoleText(face, role, Modifier.atBaseline(side / 2 - ink.centerX(), side / 2 - ink.centerY()).then(if (tag != null) Modifier.testTag("$tag.face") else Modifier), color = color)
+    }
+}
+
+@Composable
+private fun RingFrame(size: Float, look: Look, modifier: Modifier, press: PressState?, tag: String?, stroke: Float?, one: Boolean, content: @Composable (Float, Color) -> Unit) {
     val ui = LocalUi.current
     val side = ui.px(size)
     val dp = with(LocalDensity.current) { side.toDp() }
@@ -124,11 +148,6 @@ fun Ring(size: Float, glyph: GlyphName, look: Look, modifier: Modifier = Modifie
                 drawCircle(color, radius = (side - width) / 2, style = Stroke(width))
             }
         }
-        Glyph(glyph, glyphSize, color, Modifier.at(side / 2, side / 2, 0.5f, 0.5f).then(if (tag != null) Modifier.testTag("$tag.glyph") else Modifier))
-        if (one) {
-            val a = Math.toRadians(Tok.npRepeatOneAt.toDouble())
-            val r = ui.px(LayoutTok.npRepeatOneR)
-            Glyph(GlyphName.ONE, LayoutTok.npRepeatOne, color, Modifier.at(side / 2 + r * sin(a).toFloat(), side / 2 - r * cos(a).toFloat(), 0.5f, 0.5f).then(if (tag != null) Modifier.testTag("$tag.one") else Modifier))
-        }
+        content(side, color)
     }
 }

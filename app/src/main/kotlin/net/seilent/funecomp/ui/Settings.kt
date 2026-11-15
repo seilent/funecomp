@@ -96,6 +96,9 @@ private const val ADDED_Q100 = 140
 private val ADDED_BAND = Band(Enums.BandType.peak, ADDED_GRID, ADDED_MILLI_HZ, 0, ADDED_Q100)
 private const val MILLI = 1000
 private const val TYPE_VALUE = "type value"
+private const val END_OF_TRACK = "END OF TRACK"
+private const val END_LEFT = "end of track"
+private const val OFF_VALUE = "0"
 private const val ABOUT_KEY = "about"
 private const val SYSTEM = "system"
 private const val CREDIT = "seilent"
@@ -119,7 +122,7 @@ fun Row.word(v: String?): String {
 
 fun Row.nearest(n: Int): Int? = values.mapNotNull { it.toIntOrNull() }.minByOrNull { abs(it - n) }
 
-fun sleepText(row: Row, minutes: Int): String = if (minutes > 0) "$minutes min left" else row.display(null)
+fun sleepText(row: Row, minutes: Int, armed: Boolean = false): String = if (armed) END_LEFT else if (minutes > 0) "$minutes min left" else row.display(null)
 
 fun sleepStart(row: Row, minutes: Int): String? = row.nearest(minutes)?.toString()
 
@@ -181,7 +184,9 @@ fun draftKind(key: String?): Pair<Int, Int?>? = when (key) {
 
 private class Edit(val key: String, val original: String?)
 
-class Selector(val items: List<String>, val focus: Int, val info: List<String>, val typed: Boolean)
+class Selector(val items: List<String>, val focus: Int, val info: List<String>, val typed: Boolean, val end: Int? = null)
+
+class End(val armed: Boolean)
 
 sealed class Send {
     data class Set(val key: String, val value: String) : Send()
@@ -194,12 +199,21 @@ private fun Row.sleep() = key == SLEEP_KEY && kind == Enums.RowKind.draft
 
 fun Row.selects() = editable() && kind != Enums.RowKind.range
 
-fun Row.selector(live: String?, minutes: Int): Selector {
+fun Row.selector(live: String?, minutes: Int, end: End? = null): Selector {
     val items = values.map { word(it) }
     if (!sleep()) return Selector(items, values.indexOf(live).coerceAtLeast(0), emptyList(), false)
     val typed = max?.let { it > (min ?: 0) } == true
-    val info = if (minutes > 0) listOf(sleepText(this, minutes)) else emptyList()
-    return Selector(if (typed) items + TYPE_VALUE else items, values.indexOf(sleepStart(this, minutes)).coerceAtLeast(0), info, typed)
+    val armed = end?.armed == true
+    val info = when {
+        armed -> listOf(sleepText(this, minutes, armed = true))
+        minutes > 0 -> listOf(sleepText(this, minutes))
+        else -> emptyList()
+    }
+    val at = values.indexOf(sleepStart(this, minutes)).coerceAtLeast(0)
+    val e = end?.let { values.indexOf(OFF_VALUE) + 1 }
+    val listed = if (e == null) items else items.take(e) + END_OF_TRACK + items.drop(e)
+    val focus = if (e == null) at else if (armed) e else if (at >= e) at + 1 else at
+    return Selector(if (typed) listed + TYPE_VALUE else listed, focus, info, typed, e)
 }
 
 fun Row.picked(i: Int, live: String?, minutes: Int): Send? {

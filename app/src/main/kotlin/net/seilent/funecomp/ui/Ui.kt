@@ -117,6 +117,7 @@ object Roles {
     val npViewAlbum = Role(LayoutTok.type_npViewAlbum_size, weight(LayoutTok.type_npViewAlbum_style), case(Tok.type_npViewAlbum_case), Tok.type_npViewAlbum_alpha)
     val npViewTitle = Role(LayoutTok.type_npViewTitle_size, weight(LayoutTok.type_npViewTitle_style), case(Tok.type_npViewTitle_case), Tok.type_npViewTitle_alpha)
     val npViewNext = Role(LayoutTok.type_npViewNext_size, weight(Tok.type_npViewNext_style), case(Tok.type_npViewNext_case), Tok.type_npViewNext_alpha)
+    val npRingText = Role(LayoutTok.type_npViewNext_size, weight(LayoutTok.type_npViewTime_style), case(Tok.type_npViewNext_case), Tok.alpha_full)
     val npViewTime = Role(LayoutTok.type_npViewTime_size, weight(LayoutTok.type_npViewTime_style), case(Tok.type_npViewTime_case), Tok.type_npViewTime_alpha)
     val npCount = Role(LayoutTok.type_npCount_size, weight(Tok.type_npCount_style), case(Tok.type_npCount_case), Tok.type_npCount_alpha)
     val time = Role(Tok.type_time_size, weight(Tok.type_time_style), case(Tok.type_time_case), Tok.type_time_alpha)
