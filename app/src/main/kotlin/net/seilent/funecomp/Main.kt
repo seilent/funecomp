@@ -375,7 +375,7 @@ class Main : ComponentActivity() {
         setContent {
             Box(Modifier.fillMaxSize().background(Black)) {
                 val b = battery
-                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, askBattery(), mediaControls, Lyrics.sources, reconnect, reconnectAsk)
+                val link = LinkView(Remote.phase, name, Remote.bye, granted, Remote.everLive, Remote.board, b, askBattery(), mediaControls, Lyrics.sources, reconnect, reconnectAsk, Remote.bluetoothOff)
                 App(Remote.device, link, control, shell, sources, { saveSources(it) }, Remote.backdrop, Remote.credits, { e ->
                     try {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))

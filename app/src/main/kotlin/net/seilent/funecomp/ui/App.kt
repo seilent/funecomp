@@ -244,7 +244,7 @@ fun App(
                     Page.Queue -> Queue(ctx)
                     Page.Playlists -> Playlists(ctx)
                     Page.Settings -> SettingsPage(ctx, firmware)
-                    Page.Connection -> ConnectionPage(ctx, link, gated = shell.gated)
+                    Page.Connection -> ConnectionPage(ctx, link, gated = shell.gated, phoneAppPath = PHONE_APP_PATH)
                     is Page.Online -> OnlinePage(ctx, page, sources, onSources, credits, onCredit, blocked, picks, scrobble, link.lyrics, scrobbleLabels, shell.keys, svc.held)
                     Page.ArtPicked -> ArtPickedPage(ctx, picks, galleryMissing)
                     Page.ArtBlocked -> ArtBlockedPage(ctx, blocked)

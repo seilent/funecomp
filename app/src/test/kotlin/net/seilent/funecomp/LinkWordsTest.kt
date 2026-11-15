@@ -1,5 +1,6 @@
 package net.seilent.funecomp
 
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.CompositionLocalProvider
@@ -17,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BrowseSessions
 import net.seilent.funecomp.ui.ConnectionPage
 import net.seilent.funecomp.ui.Ctx
@@ -24,6 +26,7 @@ import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.LocalSheet
 import net.seilent.funecomp.ui.LocalUi
 import net.seilent.funecomp.ui.Nav
+import net.seilent.funecomp.ui.PHONE_APP_PATH
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
@@ -46,6 +49,7 @@ class LinkWordsTest {
     val rule = createComposeRule()
 
     private var link by mutableStateOf(LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.companionOff, everLive = true))
+    private lateinit var shell: Shell
 
     private fun settle(ms: Long = 600) {
         rule.waitForIdle()
@@ -67,6 +71,18 @@ class LinkWordsTest {
         settle(1000)
         return c
     }
+
+    private fun app(vararg pages: Page) {
+        val c = SimControl("ap80")
+        shell = Shell(Nav(pages.toList()))
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, link, c, shell) }
+        }
+        settle(1000)
+    }
+
+    private fun says(tag: String, words: String) = texts(tag).any { it.equals(words, ignoreCase = true) }
 
     private fun texts(tag: String): List<String> =
         rule.onAllNodes(hasAnyAncestor(hasTestTag(tag)) and SemanticsMatcher.keyIsDefined(SemanticsProperties.Text), useUnmergedTree = true)
@@ -103,6 +119,31 @@ class LinkWordsTest {
         connection(null)
         rule.onNodeWithTag("conn.status").fetchSemanticsNode()
         assertEquals(0, count("conn.phoneapp"))
+    }
+
+    @Test
+    fun bluetoothOffReadsOnStatusTheHomeSubtitleAndTheHeldStrip() {
+        link = LinkView(Phase.DOWN, "AP80", everLive = true, bluetoothOff = true)
+        app(Page.Home, Page.Connection)
+        assertTrue(texts("conn.status").toString(), says("conn.status", "bluetooth off"))
+        rule.runOnIdle { shell.nav.pop() }
+        settle(1000)
+        assertTrue(texts("home.connection").toString(), says("home.connection", "bluetooth off"))
+        rule.runOnIdle { shell.nav.push(Page.NowPlaying) }
+        settle(1000)
+        assertTrue(says("toast", "bluetooth off"))
+    }
+
+    @Test
+    fun thePhoneAppOffByeShowsThePathUnderStatusAndARefusedByeKeepsTheRemedy() {
+        app(Page.Home, Page.Connection)
+        assertTrue(says("conn.phoneapp", PHONE_APP_PATH))
+        assertEquals("settings > system > phone app", PHONE_APP_PATH)
+        assertEquals(0, count("conn.remedy"))
+        link = LinkView(Phase.STOPPED, "AP80", bye = Enums.ByeReason.refused, everLive = true)
+        settle()
+        assertEquals(0, count("conn.phoneapp"))
+        assertEquals(1, count("conn.remedy"))
     }
 
     @Test

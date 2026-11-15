@@ -32,6 +32,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import java.util.Locale
 
 internal const val REMEDY = "settings > system > pair phone app"
+internal const val PHONE_APP_PATH = "settings > system > phone app"
 private const val PAIR_DEVICE = "pair a device"
 private const val PAIRING = "pairing"
 private const val PAIRED = "paired"
