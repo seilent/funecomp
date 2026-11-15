@@ -131,6 +131,18 @@ class SelectorTest {
     }
 
     @Test
+    fun aPickMapsThroughTheEndIndexAndWithBooksOffAndATypedZeroAlwaysSend() {
+        assertEquals(Send.End, sleep.picked(1, null, 0, end = 1, books = true))
+        assertEquals(Send.Minutes(15), sleep.picked(2, null, 0, end = 1, books = true))
+        assertEquals(Send.Minutes(120), sleep.picked(7, null, 0, end = 1, books = true))
+        assertEquals(Send.Minutes(0), sleep.picked(0, null, 0, end = 1, books = true))
+        assertEquals(Send.Minutes(0), sleep.picked(0, null, 0, books = true))
+        assertNull(sleep.picked(0, null, 0))
+        assertEquals(Send.Minutes(0), sleep.typedMinutes("0", 0, books = true))
+        assertNull(sleep.typedMinutes("0", 0))
+    }
+
+    @Test
     fun sleepWithoutMaxHasNoTypedItem() {
         val s = oldSleep.selector(null, 0)
         assertEquals(words, s.items)

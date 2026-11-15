@@ -19,11 +19,13 @@ import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
+import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Row
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
+import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -59,8 +61,10 @@ class SleepRowTest {
 
     private val shell = Shell(Nav(listOf(Page.Home, Page.Settings)))
 
-    private fun start(board: String = "ap80", schema: String? = null, to: String = "power", w: Int = 411, h: Int = 960): SimControl {
-        val c = SimControl(board, now = SystemClock::elapsedRealtime, schema = schema)
+    private val books = LINK_FEATURES or Groups.mask("books")
+
+    private fun start(board: String = "ap80", schema: String? = null, to: String = "power", w: Int = 411, h: Int = 960, features: Long = LINK_FEATURES, faults: List<String> = emptyList()): SimControl {
+        val c = SimControl(board, now = SystemClock::elapsedRealtime, schema = schema, appFeatures = features, faults = faults)
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(w.dp, h.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
@@ -142,6 +146,132 @@ class SleepRowTest {
     fun editStartsOnTheNearestStepAndTheLowerOnATie() {
         val cases = listOf(30 to "30", 29 to "30", 52 to "45", 53 to "60", 105 to "90", 7 to "0", 8 to "15", 1 to "0", 0 to "0")
         for ((m, v) in cases) assertEquals("$m", v, sleepStart(sleep, m))
+    }
+
+    private fun push(c: SimControl, change: (State) -> State) {
+        c.push(Msg.STATE, change(c.device.playback.state).encode())
+        settle(300)
+    }
+
+    @Test
+    fun endOfTrackFollowsOffWithBit48OnBothSides() {
+        start(features = books)
+        tap()
+        assertEquals("END OF TRACK", shell.sheet.items[1])
+        assertEquals(listOf("OFF", "END OF TRACK"), shell.sheet.items.take(2))
+    }
+
+    @Test
+    fun noEndOfTrackAtMinor21WithoutBit48OnTheDevice() {
+        val c = start(features = books, faults = listOf("nobooks"))
+        tap()
+        assertFalse("END OF TRACK" in shell.sheet.items)
+        pick(0)
+        assertEquals(0, c.endOfTracks)
+    }
+
+    @Test
+    fun noEndOfTrackInReceiverModeFromThePhoneOnTheUsbDacOrWithNoCurrentTrack() {
+        val c = start(features = books)
+        for (change in listOf<(State) -> State>({ it.copy(receiver = true) }, { it.copy(source = Enums.Source.phone) }, { it.copy(output = Enums.Output.usbDac) }, { it.copy(track = null) })) {
+            val before = c.device.playback.state
+            push(c, change)
+            tap()
+            assertFalse("END OF TRACK" in shell.sheet.items)
+            dismiss()
+            push(c) { before }
+        }
+        tap()
+        assertTrue("END OF TRACK" in shell.sheet.items)
+    }
+
+    @Test
+    fun pickingEndOfTrackArmsItAndTheRowAndInfoReadEndOfTrack() {
+        val c = start(features = books)
+        tap()
+        pick(1)
+        assertEquals(1, c.endOfTracks)
+        assertEquals(true, c.device.playback.state.sleepEnd)
+        shows("END OF TRACK")
+        tap()
+        assertEquals(1, shell.sheet.focus)
+        assertEquals(listOf("end of track"), shell.sheet.info)
+        pick(1)
+        assertEquals(2, c.endOfTracks)
+    }
+
+    @Test
+    fun withBit48TheOffItemSendsMinutesZeroArmedOrNot() {
+        val c = start(features = books)
+        tap()
+        pick(0)
+        assertEquals(1, drafts(c))
+        c.endOfTrack()
+        settle(300)
+        tap()
+        pick(0)
+        assertEquals(3, drafts(c))
+        assertEquals(null, c.device.playback.state.sleepEnd)
+        assertEquals(0L, simState(c).sleepLeftS)
+        shows("OFF")
+    }
+
+    @Test
+    fun withBit48ATypedZeroSendsMinutesZero() {
+        val c = start(features = books)
+        tap()
+        pick(8)
+        rule.onNodeWithTag("entry").performTextInput("0")
+        rule.onNodeWithTag("entry").performImeAction()
+        settle(600)
+        assertEquals(1, drafts(c))
+    }
+
+    @Test
+    fun theRowTurnsBackAndAnOpenSheetClosesWhenEndOfTrackFires() {
+        val c = start(features = books)
+        c.transport(Enums.TransportCmd.play)
+        c.endOfTrack()
+        shows("END OF TRACK")
+        tap()
+        assertTrue(shell.sheet.shown)
+        advance(c, simState(c).durationMs!! + 1_000)
+        settle(600)
+        assertEquals(null, c.device.playback.state.sleepEnd)
+        assertFalse(shell.sheet.shown)
+        shows("OFF")
+    }
+
+    @Test
+    fun aRefusedEndOfTrackToastsOnceAndSendsNothingMore() {
+        val c = start(features = books, faults = listOf("fail=DRAFT:${Err.refused}"))
+        tap()
+        pick(1)
+        settle(600)
+        assertEquals(1, shell.toast.shows)
+        assertEquals("sleep timer" to "refused on the dap", shell.toast.artist to shell.toast.title)
+        assertEquals(1, c.endOfTracks)
+        assertEquals(1, drafts(c))
+    }
+
+    @Test
+    fun aBadValueEndOfTrackToastsOnce() {
+        start(features = books, faults = listOf("fail=DRAFT:${Err.badValue}"))
+        tap()
+        pick(1)
+        assertEquals(1, shell.toast.shows)
+        assertEquals("sleep timer" to "refused on the dap", shell.toast.artist to shell.toast.title)
+    }
+
+    @Test
+    fun aPickMapsThroughTheEndIndexTheSheetOpenedWith() {
+        val c = start(features = books)
+        tap()
+        push(c) { it.copy(output = Enums.Output.usbDac) }
+        assertTrue(shell.sheet.shown)
+        pick(2)
+        assertEquals(900L, simState(c).sleepLeftS)
+        assertEquals(0, c.endOfTracks)
     }
 
     @Test

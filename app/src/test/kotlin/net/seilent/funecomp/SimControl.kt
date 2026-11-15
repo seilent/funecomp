@@ -198,6 +198,14 @@ class SimControl(
         req(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat))
     }
 
+    var endOfTracks = 0
+
+    override fun endOfTrack(done: (Int?, String?) -> Unit) {
+        endOfTracks++
+        val a = req(Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, sleepEnd = true)) as? Answer.Fail
+        done(a?.code, a?.text)
+    }
+
     val skips = ArrayList<Int>()
     val speeds = ArrayList<Int>()
 

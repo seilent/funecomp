@@ -21,6 +21,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.State
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
@@ -165,9 +166,49 @@ class BookShots {
         SIZES + NP_SIZES,
     )
 
+    private fun power(c: SimControl) = rule.walkPivots(c.device.schema.rows, "power") { settle(1000) }
+
+    private fun tapSleep() {
+        rule.onNodeWithTag("set.sleep").performClick()
+        settle(1000)
+    }
+
+    @Test
+    fun sleepTimer() = shoot(
+        listOf(
+            Case("sleep-sheet", pages = SETTINGS, act = { c, _ ->
+                power(c)
+                tapSleep()
+            }),
+            Case("sleep-armed-sheet", pages = SETTINGS, prep = { c -> c.endOfTrack() }, act = { c, _ ->
+                power(c)
+                tapSleep()
+            }),
+            Case("sleep-timed-sheet", pages = SETTINGS, prep = { c -> c.draft(Enums.DraftKind.sleep, minutes = 45) }, act = { c, _ ->
+                power(c)
+                tapSleep()
+            }),
+            Case("sleep-typed-sheet", pages = SETTINGS, prep = { c -> c.draft(Enums.DraftKind.sleep, minutes = 37) }, act = { c, _ ->
+                power(c)
+                tapSleep()
+            }),
+            Case("sleep-armed-row", pages = SETTINGS, prep = { c -> c.endOfTrack() }, act = { c, _ -> power(c) }),
+            Case("sleep-fired-row", pages = SETTINGS, prep = { c ->
+                c.endOfTrack()
+                c.restate { it.copy(sleepEnd = null, sleepLeftS = 0) }
+            }, act = { c, _ -> power(c) }),
+            Case("sleep-nobit-sheet", faults = listOf("bookplay", "nobooks"), pages = SETTINGS, act = { c, _ ->
+                power(c)
+                tapSleep()
+            }),
+        ),
+        SIZES + NP_SIZES,
+    )
+
     private companion object {
         val IDLE_MS = (Tok.motion_idle + Tok.motion_idleFade).toLong() + 500
         val PRESS_MS = Tok.motion_pressGlow.toLong() + 100
         val NP = listOf(Page.Home, Page.NowPlaying)
+        val SETTINGS = listOf(Page.Home, Page.Settings)
     }
 }

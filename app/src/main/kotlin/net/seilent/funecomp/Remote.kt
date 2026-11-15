@@ -1492,12 +1492,32 @@ object Remote : Control {
         update { it.withSetReply(r.rev) }
     }, done = { code, _ -> main.post { done(code) } })
 
-    override fun draft(kind: Int, value: String?, role: Int?, minutes: Long?, unixS: Long?, zoneS: Int?, pending: () -> Unit, done: (Int?, String?) -> Unit) =
+    override fun draft(kind: Int, value: String?, role: Int?, minutes: Long?, unixS: Long?, zoneS: Int?, pending: () -> Unit, done: (Int?, String?) -> Unit) {
+        val unarm = kind == Enums.DraftKind.sleep && minutes != null && device.books
+        if (unarm) lastSent.sendEnd(false)
         send(
             Msg.DRAFT, Req.draft(kind, value, role, minutes = minutes, unixS = unixS, zoneS = zoneS), "draft ${Enums.DraftKind.names[kind]}",
             ok = { if (DraftReply.from(it).status == Enums.DraftStatus.pending) main.post { pending() } },
-            done = { code, text -> main.post { done(code, text) } },
+            done = { code, text ->
+                main.post {
+                    if (unarm) lastSent.endReplied(false)
+                    done(code, text)
+                }
+            },
         )
+    }
+
+    override fun endOfTrack(done: (Int?, String?) -> Unit) {
+        if (!device.books) return done(-1, null)
+        if (lastSent.end ?: (device.playback.state.sleepEnd == true)) return done(null, null)
+        lastSent.sendEnd(true)
+        send(Msg.DRAFT, Req.draft(Enums.DraftKind.sleep, sleepEnd = true), "draft sleep end", done = { code, text ->
+            main.post {
+                lastSent.endReplied(true)
+                done(code, text)
+            }
+        })
+    }
 
     override fun eqSet(slot: String, key: String?, ints: Profile?, mode: Int?, graphicKey: String?, gains: List<GraphicBand>?, on: Boolean?, done: (Int?) -> Unit) =
         send(Msg.EQ_SET, EqSlots.setRequest(device, slot, key, ints, mode, graphicKey, gains, on), "eq set slot=$slot key=$key graphicKey=$graphicKey on=$on", done = { code, _ -> main.post { done(code) } })

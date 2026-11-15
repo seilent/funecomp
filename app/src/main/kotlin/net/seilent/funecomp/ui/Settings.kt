@@ -69,6 +69,7 @@ import net.seilent.funecomp.state.EqDefault
 import net.seilent.funecomp.state.EqForm
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.EqStage
+import net.seilent.funecomp.state.Playing
 import net.seilent.funecomp.state.Rows as RowRules
 import net.seilent.funecomp.state.SleepLeft
 import java.util.Locale
@@ -193,6 +194,7 @@ sealed class Send {
     data class Draft(val kind: Int, val value: String, val role: Int? = null) : Send()
     data class Minutes(val minutes: Long) : Send()
     data class Refuse(val field: String, val range: String) : Send()
+    data object End : Send()
 }
 
 private fun Row.sleep() = key == SLEEP_KEY && kind == Enums.RowKind.draft
@@ -216,11 +218,12 @@ fun Row.selector(live: String?, minutes: Int, end: End? = null): Selector {
     return Selector(if (typed) listed + TYPE_VALUE else listed, focus, info, typed, e)
 }
 
-fun Row.picked(i: Int, live: String?, minutes: Int): Send? {
-    val v = values.getOrNull(i) ?: return null
+fun Row.picked(i: Int, live: String?, minutes: Int, end: Int? = null, books: Boolean = false): Send? {
+    if (end != null && i == end) return Send.End
+    val v = values.getOrNull(if (end != null && i > end) i - 1 else i) ?: return null
     if (sleep()) {
         val m = v.toLongOrNull() ?: return null
-        return if (m == 0L && minutes == 0) null else Send.Minutes(m)
+        return if (m == 0L && minutes == 0 && !books) null else Send.Minutes(m)
     }
     if (v == live) return null
     if (kind == Enums.RowKind.draft) return draftKind(key)?.let { (k, role) -> Send.Draft(k, v, role) }
@@ -231,13 +234,13 @@ fun Row.refusal() = Send.Refuse((label ?: key ?: "").lowercase(), "${min ?: 0} t
 
 fun Row.refused(code: Int?) = if (code == Err.refused) Send.Refuse((label ?: key ?: "").lowercase(), REFUSED_ON_DAP) else null
 
-fun Row.typedMinutes(text: String, minutes: Int): Send? {
+fun Row.typedMinutes(text: String, minutes: Int, books: Boolean = false): Send? {
     val lo = min ?: 0
     val hi = max ?: lo
     val t = text.trim()
     val n = if (t.isNotEmpty() && t.all { it in '0'..'9' }) t.toIntOrNull() else null
     if (n == null || n !in lo..hi) return refusal()
-    return if (n == 0 && minutes == 0) null else Send.Minutes(n.toLong())
+    return if (n == 0 && minutes == 0 && !books) null else Send.Minutes(n.toLong())
 }
 
 fun Row.actionCmd(): Int? = Enums.ActionCmd.names.entries.firstOrNull { it.value == key }?.key
@@ -325,6 +328,18 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
     }
     LaunchedEffect(ctx.device.updater, ctx.device.installer) { if (ctx.sheet.items != aboutItems(ctx, live.updater, live.installer, { fw }).map { it.title }) ctx.sheet.closeIf(ABOUT_SHEET) }
     fun minutesLeft() = SleepLeft.minutes(live.sleepLeftMs(SystemClock.elapsedRealtime()))
+    fun endFor(): End? {
+        val s = live.playback.state
+        val local = s.receiver != true && s.source != Enums.Source.phone && s.output != Enums.Output.usbDac && live.playing != Playing.None
+        return if (live.books && local) End(armed = s.sleepEnd == true) else null
+    }
+    LaunchedEffect(ctx.device.playback.state.sleepEnd == true) {
+        val o = opened ?: return@LaunchedEffect
+        if (o.row.sleep()) {
+            ctx.sheet.closeIf(o.token)
+            opened = null
+        }
+    }
     fun send(s: Send?, row: Row) {
         when (s) {
             is Send.Set -> ctx.control.set(s.key, s.value) { code -> send(row.refused(code), row) }
@@ -333,6 +348,9 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                 if (code == Err.badValue) row.refusal().let { ctx.toast.show(it.field, it.range) }
             }
             is Send.Refuse -> ctx.toast.show(s.field, s.range)
+            Send.End -> ctx.control.endOfTrack { code, _ ->
+                if (code == Err.refused || code == Err.badValue) send(Send.Refuse((row.label ?: row.key ?: "").lowercase(), REFUSED_ON_DAP), row)
+            }
             null -> {}
         }
     }
@@ -340,7 +358,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
         val hint = minutesLeft().toString()
         ctx.sheet.openEntry((r.label ?: r.key ?: "").lowercase(), owner = token, keep = keep) {
             Entry("", unit = r.words.lastOrNull()?.substringAfterLast(' ', "")?.lowercase().orEmpty(), keyboard = KeyboardType.Number, hint = hint) { text ->
-                val s = r.typedMinutes(text, minutesLeft())
+                val s = r.typedMinutes(text, minutesLeft(), live.books)
                 if (s !is Send.Refuse) ctx.sheet.close()
                 send(s, r)
             }
@@ -349,10 +367,10 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
     fun select(r: Row, keep: Keep) {
         val key = r.key ?: return
         val token = key to ++serial
-        val sel = r.selector(values[key], minutesLeft())
+        val sel = r.selector(values[key], minutesLeft(), if (r.sleep()) endFor() else null)
         opened = Opened(token, r)
         ctx.sheet.open((r.label ?: key).lowercase(), sel.items, sel.focus, sel.info, owner = token, keep = keep) { i ->
-            if (sel.typed && i == sel.items.lastIndex) typeMinutes(r, token, keep) else send(r.picked(i, live.settings.values[key], minutesLeft()), r)
+            if (sel.typed && i == sel.items.lastIndex) typeMinutes(r, token, keep) else send(r.picked(i, live.settings.values[key], minutesLeft(), sel.end, live.books), r)
         }
     }
     fun confirm() {
@@ -412,13 +430,14 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                     val eqRow = eqStage != null
                     val aboutRow = key == ABOUT_KEY
                     val sleepRow = r.sleep()
-                    val minutes = if (sleepRow) sleepMinutes(ctx.device) else 0
+                    val armed = sleepRow && ctx.device.playback.state.sleepEnd == true
+                    val minutes = if (sleepRow && !armed) sleepMinutes(ctx.device) else 0
                     SettingsRow(
                         r.label ?: key,
                         when {
                             eqStage != null -> EqSlots.value(ctx.device.playingEqSlot(eqStage)?.let { ctx.device.eq[it] })
                             aboutRow -> ctx.device.hello?.version ?: ""
-                            sleepRow -> sleepText(r, minutes)
+                            sleepRow -> sleepText(r, minutes, armed)
                             else -> r.display(v, ctx.device.liveWord(key))
                         },
                         Modifier.enter().testTag("set.$key"),
