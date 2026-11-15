@@ -17,6 +17,7 @@ import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -404,5 +405,16 @@ class HubChromeTest {
         val artists = rule.onNodeWithTag("pivot.artists", useUnmergedTree = true).fetchSemanticsNode()
         assertEquals(20f * ui.u, left("pivot.albums"), 1f)
         assertEquals(-2f * ui.u, artists.positionInRoot.x + artists.size.width, 1f)
+    }
+
+    @Test
+    fun aPageThatPassesNoStatusDrawsNoStatusLine() {
+        start(Page.Settings)
+        assertEquals(0, rule.onAllNodesWithTag("status", useUnmergedTree = true).fetchSemanticsNodes().size)
+        for (p in listOf(Page.Online(), Page.Connection)) {
+            shell.nav.push(p)
+            settle(1500)
+            assertEquals(p.toString(), 0, rule.onAllNodesWithTag("status", useUnmergedTree = true).fetchSemanticsNodes().size)
+        }
     }
 }

@@ -5,12 +5,14 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.App
@@ -118,18 +120,26 @@ class CardToastTest {
 
     private val adds = setOf("song sheet play next", "song sheet add to now playing", "collection sheet play next", "collection sheet add to now playing")
 
+    private val album = java.lang.Long.toUnsignedString(Library.synthetic().tracks.first().id)
+
+    private val albumRow = Entry("album page row", { open(Page.Music, Page.Album(album, "First Love", "Utada Hikaru")) }) { tap("row.0") }
+
+    private fun nodes(tag: String) = rule.onAllNodesWithTag(tag, useUnmergedTree = true).fetchSemanticsNodes().size
+
+    private fun refused(e: Entry, line: String) {
+        e.prep()
+        val top = shell.nav.top
+        val shows = shell.toast.shows
+        e.act()
+        assertEquals(e.name, emptyList<String>(), calls)
+        assertEquals(e.name, shows + 1, shell.toast.shows)
+        assertEquals(e.name, line, shell.toast.artist)
+        assertEquals(e.name, "", shell.toast.title)
+        assertEquals(e.name, top, shell.nav.top)
+    }
+
     private fun refusedEverywhere(line: String, at: (Entry) -> Boolean = { true }) {
-        for (e in entries.filter(at)) {
-            e.prep()
-            val top = shell.nav.top
-            val shows = shell.toast.shows
-            e.act()
-            assertEquals(e.name, emptyList<String>(), calls)
-            assertEquals(e.name, shows + 1, shell.toast.shows)
-            assertEquals(e.name, line, shell.toast.artist)
-            assertEquals(e.name, "", shell.toast.title)
-            assertEquals(e.name, top, shell.nav.top)
-        }
+        for (e in entries.filter(at)) refused(e, line)
     }
 
     @Test
@@ -139,9 +149,15 @@ class CardToastTest {
     }
 
     @Test
-    fun noCardToastsAtEveryPlayEntryAndSendsNothing() {
+    fun noCardDrawsItsLineInPlaceOfTheRowsAndTheRingAndAnAlbumRowToast() {
         start(card = Enums.Card.out)
-        refusedEverywhere(CardView.REFUSED)
+        for ((name, prep) in listOf("songs" to ::songs, "albums" to ::albums, "playlists" to { open(Page.Playlists) }, "queue" to { open(Page.NowPlaying, Page.Queue) })) {
+            prep()
+            assertEquals(name, 1, nodes("status"))
+            assertEquals(name, 0, nodes("row.0") + nodes("row.nowplaying") + nodes("queue.1"))
+        }
+        refused(entries.single { it.name == "home ring" }, CardView.REFUSED)
+        refused(albumRow, CardView.REFUSED)
     }
 
     @Test

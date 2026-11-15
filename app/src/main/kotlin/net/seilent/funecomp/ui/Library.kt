@@ -39,6 +39,7 @@ import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.LibList
+import net.seilent.funecomp.state.ListLine
 
 fun songs(n: Long) = "$n " + if (n == 1L) "song" else "songs"
 
@@ -86,14 +87,31 @@ fun Music(ctx: Ctx) {
         Unit
     }
     key(views) {
-        HubPage("music", back, views.map { Enums.View.names.getValue(it) }, pivot, { saved = views[it] }) { shown ->
+        HubPage("music", back, views.map { Enums.View.names.getValue(it) }, pivot, { saved = views[it] }, status = ListLine.card(ctx.device.playback.state.card)) { shown ->
             when (val view = views.getOrNull(shown) ?: return@HubPage) {
                 Enums.View.playlists -> PlaylistRows(ctx)
-                Enums.View.genres -> Pane(ctx, view, "") { _, r, _ -> genreRow(ctx, r) }
-                Enums.View.folders -> Pane(ctx, view, folder) { i, r, list -> folderRow(ctx, folder, i, r, list) { folder = it } }
-                else -> Pane(ctx, view, "") { i, r, _ -> musicRow(ctx, view, i, r) }
+                Enums.View.genres -> Pane(ctx, view, "", line = musicLine(ctx, view, "")) { _, r, _ -> genreRow(ctx, r) }
+                Enums.View.folders -> Pane(ctx, view, folder, line = musicLine(ctx, view, folder)) { i, r, list -> folderRow(ctx, folder, i, r, list) { folder = it } }
+                else -> Pane(ctx, view, "", line = musicLine(ctx, view, "")) { i, r, _ -> musicRow(ctx, view, i, r) }
             }
         }
+    }
+}
+
+@Composable
+private fun musicLine(ctx: Ctx, view: Int, parent: String): String? {
+    val d = ctx.device
+    val total = d.lib.pages[LibKey(view, parent)]?.total
+    val scanning = ListLine.scanning(d)
+    val songs = if (total == 0L && (view != Enums.View.genres || scanning)) libList(d, ctx.control, Enums.View.songs, "")?.total else null
+    return ListLine.empty(d.playback.state.card, scanning, view, total, songs)
+}
+
+@Composable
+private fun LineRow(text: String, width: Float) {
+    val ui = LocalUi.current
+    Box(Modifier.enter().size(width.dp(), ui.px(Tok.rowHeight).dp()).testTag("line")) {
+        RoleText(text, Roles.quickplayHint, Modifier.atBaseline(ui.px(Tok.hubEdge), ui.px(Tok.qpHintDrop)))
     }
 }
 
@@ -119,6 +137,7 @@ fun Pane(
     state: LazyListState = rememberLazyListState(),
     head: Int = 0,
     lead: Float = 0f,
+    line: String? = null,
     spec: (Int, LibRow, LibList) -> RowSpec,
 ) {
     val ui = LocalUi.current
@@ -126,6 +145,7 @@ fun Pane(
     var focus by rememberSaveable(view, parent) { mutableIntStateOf(0) }
     Rows(top ?: ui.contentTop, state, x, show = view to parent, head = head, lead = lead) {
         repeat(head) { item { Spacer(Modifier.size((ui.px(ui.w) - ui.px(x)).dp(), ui.px(lead).dp())) } }
+        if (line != null) item { LineRow(line, ui.px(ui.w) - ui.px(x)) }
         val n = (list?.total ?: 0L).toInt()
         items(n) { i ->
             val r = list?.row(i, ctx.control, view, parent)
@@ -307,7 +327,7 @@ fun PlaylistRows(ctx: Ctx, top: Float? = null) {
 @Composable
 fun Playlists(ctx: Ctx) {
     val n = libList(ctx.device, ctx.control, Enums.View.playlists, "")?.total ?: 0L
-    HubPage("playlists", { ctx.nav.pop() }, count = if (n == 1L) "1 playlist" else "$n playlists") { PlaylistRows(ctx) }
+    HubPage("playlists", { ctx.nav.pop() }, count = if (n == 1L) "1 playlist" else "$n playlists", status = ListLine.card(ctx.device.playback.state.card)) { PlaylistRows(ctx) }
 }
 
 @Composable
@@ -395,8 +415,10 @@ fun Queue(ctx: Ctx) {
     val visible = ((ui.h - ui.contentTop) / Tok.rowHeight).toInt().coerceAtLeast(1)
     val state = rememberLazyListState(initialFirstVisibleItemIndex = (current - visible + 1).coerceAtLeast(0))
     val count = "${if (total > 0 && current >= 0) current + 1 else 0} of $total"
-    HubPage("queue", { ctx.nav.pop() }, count = count) {
+    val line = ListLine.queue(s.card, s.slots)
+    HubPage("queue", { ctx.nav.pop() }, count = count.takeIf { line == null }, status = ListLine.card(s.card)) {
         Rows(ui.contentTop, state) {
+            if (line != null) item { LineRow(line, ui.px(ui.w)) }
             items(total) { i ->
                 val item = q.items[i.toLong()]
                 LaunchedEffect(item == null, i, epoch) {

@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -52,8 +53,8 @@ class ListLinesShots {
         rule.waitForIdle()
     }
 
-    private fun load(sz: Size, pages: List<Page>, lib: Library = Library.synthetic(), prep: (SimControl) -> Unit = {}) {
-        c = SimControl("v1", lib, stateNow = SHOT_CLOCK).also {
+    private fun load(sz: Size, pages: List<Page>, lib: Library = Library.synthetic(), faults: List<String> = emptyList(), prep: (SimControl) -> Unit = {}) {
+        c = SimControl("v1", lib, faults = faults, stateNow = SHOT_CLOCK).also {
             shotClock(it)
             prep(it)
         }
@@ -120,9 +121,38 @@ class ListLinesShots {
         }
     }
 
+    @Test
+    fun lines() = shots("lines") { dir ->
+        val empty = Library(emptyList())
+        for (sz in SHAPES) {
+            for ((name, lib, faults) in listOf(Triple("out", Library.synthetic(), OUT), Triple("error", Library.synthetic(), listOf("card-seq=error")), Triple("empty", empty, emptyList()))) {
+                load(sz, HOME + Page.Music, lib, faults)
+                for (p in PIVOTS) {
+                    rule.pivotTo("music", p) { settle(it) }
+                    shoot(dir, "music-$p-$name")
+                }
+            }
+            load(sz, HOME + Page.Playlists, faults = OUT)
+            shoot(dir, "playlists-out")
+            load(sz, HOME + Page.NowPlaying + Page.Queue, faults = OUT)
+            shoot(dir, "queue-out")
+            load(sz, HOME + Page.NowPlaying + Page.Queue, empty)
+            shoot(dir, "queue-empty")
+            load(sz, HOME + Page.Music, faults = OUT)
+            rule.onNodeWithTag("pivot.artists").performClick()
+            for ((at, step) in listOf(50L to 50L, 150L to 100L, 400L to 250L)) {
+                rule.mainClock.advanceTimeBy(step)
+                rule.waitForIdle()
+                shoot(dir, "switch-out-$at")
+            }
+        }
+    }
+
     private companion object {
         val SHAPES = listOf("411x960", "sn411x438", "wm361x343", "flip960x411").map { n -> SIZES.single { it.name == n } }
         val HOME = listOf(Page.Home)
         val LIVE = LinkView(Phase.LIVE, "V1", everLive = true)
+        val OUT = listOf("card-seq=out")
+        val PIVOTS = listOf("albums", "artists", "playlists", "songs", "genres", "folders")
     }
 }

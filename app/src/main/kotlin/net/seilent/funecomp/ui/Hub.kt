@@ -158,6 +158,7 @@ fun HubPage(
     headerX: Float = Tok.page_headerX,
     headerAlpha: Float = Roles.pageHeader.alpha,
     headerCase: Case = Roles.pageHeader.case,
+    status: String? = null,
     content: @Composable (Int) -> Unit,
 ) {
     val entrance = remember { Entrance() }
@@ -218,11 +219,13 @@ fun HubPage(
                 alpha = 1f - out.value
             },
         ) {
-            CompositionLocalProvider(LocalEntrance provides entrance) { content(shownAt) }
+            CompositionLocalProvider(LocalEntrance provides entrance) {
+                if (status == null) content(shownAt) else RoleText(status, Roles.quickplayHint, Modifier.enter().atBaseline(ui.px(Tok.hubEdge), ui.px(ui.contentTop + Tok.qpHintDrop)).testTag("status"))
+            }
         }
         CroppedHeader(header, onBack = onBack, x = headerX, alpha = headerAlpha, case = headerCase)
         if (pivots.isNotEmpty()) PivotStrip(pivots, active, onPivot, land)
-        if (count != null) {
+        if (count != null && status == null) {
             val x = ui.px(Tok.hubEdge)
             val room = ui.px(ui.w) - 2 * x
             val measurer = rememberTextMeasurer()
