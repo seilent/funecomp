@@ -118,7 +118,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin", "svcAccount", "eqSlots", "eqStages", "appPkg", "trackArtist", "cardLog")
+val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin", "svcAccount", "eqSlots", "eqStages", "appPkg", "trackArtist", "libDelete", "cardLog")
 
 object Remote : Control {
     const val TAG = "Funecomp"
@@ -254,6 +254,11 @@ object Remote : Control {
     @Volatile private var heartToast: ((String, String) -> Unit)? = null
     private val refusalToast = AtomicReference<((String, String) -> Unit)?>()
     private val main = Handler(Looper.getMainLooper())
+    @Volatile internal var helloHook: (() -> Unit)? = null
+    private val sessionRequest = BindAsk.Request { s, type, payload, timeoutMs, done -> (s as? Session)?.request(type, payload, timeoutMs, done) ?: done(Session.Result.Closed) }
+    private val binder = BindAsk(sessionRequest) { Log.i(TAG, it) }
+    internal val bindAsking: Boolean get() = binder.asking
+    internal val session: Session? get() = link?.session
 
     fun debuggable(context: Context) = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
@@ -266,6 +271,7 @@ object Remote : Control {
             }
             drop()
             Svc.init(context)
+            BindTokens.init(context)
             thumbs(context)
             val connect = connector(context.applicationContext, spec)
             if (connect == null) {
@@ -283,7 +289,7 @@ object Remote : Control {
             Log.i(TAG, "link $spec")
             wake(context)
             val version = context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "0"
-            val l = Link(connect, listener(generation), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(version, features = LINK_FEATURES), SystemClock::elapsedRealtime)
+            val l = Link(connect, listener(generation, BindTokens.key(spec)), Reconnect(clock = SystemClock::elapsedRealtime), Session.Config(version, features = LINK_FEATURES), SystemClock::elapsedRealtime)
             link = l
             art = worker(context, l)
             l.start()
@@ -1569,7 +1575,9 @@ object Remote : Control {
 
     private fun update(f: (DeviceState) -> DeviceState) = synchronized(stateLock) { device = f(device) }
 
-    private fun listener(gen: Int) = object : Link.Listener {
+    fun bindAsk(key: String, tap: Tap?, session: Session?, done: (Session.Result) -> Unit) = binder.ask(key, tap, session, done)
+
+    private fun listener(gen: Int, dap: String) = object : Link.Listener {
         private val live get() = gen == generation
 
         override fun onAttempt(at: Long) {
@@ -1578,8 +1586,14 @@ object Remote : Control {
             Log.i(TAG, "attempt at=$at")
         }
 
-        override fun onHello(hello: HelloReply) {
+        override fun onHello(raw: HelloReply) {
+            helloHook?.invoke()
+            raw.bindToken?.let { t ->
+                Log.i(TAG, if (BindTokens.put(dap, t)) "bind token stored" else "bind token not stored, ${t.size} bytes")
+                t.fill(0)
+            }
             if (!live) return
+            val hello = raw.copy(bindToken = null)
             artKey = null
             thumbs?.let { t ->
                 (hello.snapRev ?: hello.libRev)?.let { t.rev(it) }

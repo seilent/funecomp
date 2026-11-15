@@ -55,11 +55,13 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
+import android.os.SystemClock
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import net.seilent.funecomp.Tap
 import net.seilent.funecomp.proto.gen.Tok
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -101,7 +103,7 @@ class SheetState {
     var focus by mutableIntStateOf(0)
     var entry by mutableStateOf<(@Composable () -> Unit)?>(null)
         private set
-    private var pick: (Int) -> Unit = {}
+    private var pick: (Int, Tap) -> Unit = { _, _ -> }
     private var dismiss: () -> Unit = {}
     private var onPress: ((Int, Float) -> Boolean)? = null
     private var onHold: ((Int) -> Boolean)? = null
@@ -149,6 +151,29 @@ class SheetState {
         onScrim: (() -> Boolean)? = null,
         guard: Long = 0L,
         pick: (Int) -> Unit,
+    ) = open(title, items, focus, info, onDismiss, owner, infoValues, itemValues, infoMixed, infoDrop, itemMixed, titleMixed, infoLines, keep, accent, onPress, onHold, onScrim, guard) { i, _ -> pick(i) }
+
+    fun open(
+        title: String,
+        items: List<String>,
+        focus: Int = 0,
+        info: List<String> = emptyList(),
+        onDismiss: () -> Unit = {},
+        owner: Any? = null,
+        infoValues: () -> List<String> = { emptyList() },
+        itemValues: () -> List<String> = { emptyList() },
+        infoMixed: () -> List<Boolean> = { emptyList() },
+        infoDrop: () -> List<Boolean> = { emptyList() },
+        itemMixed: () -> List<Boolean> = { emptyList() },
+        titleMixed: Boolean = false,
+        infoLines: () -> List<String> = { info },
+        keep: Keep? = null,
+        accent: () -> Int = { -1 },
+        onPress: ((i: Int, x: Float) -> Boolean)? = null,
+        onHold: ((i: Int) -> Boolean)? = null,
+        onScrim: (() -> Boolean)? = null,
+        guard: Long = 0L,
+        pick: (Int, Tap) -> Unit,
     ) {
         this.owner = owner
         this.guard = guard
@@ -202,7 +227,7 @@ class SheetState {
         this.items = listOf("")
         this.focus = 0
         this.entry = entry
-        this.pick = {}
+        this.pick = { _, _ -> }
         this.dismiss = {}
         shown = true
     }
@@ -235,7 +260,7 @@ class SheetState {
         dismiss = {}
         val p = pick
         close()
-        p(i)
+        p(i, Tap(SystemClock.elapsedRealtime()))
     }
 
     fun owns(owner: Any): Boolean = shown && this.owner == owner
@@ -251,7 +276,7 @@ class SheetState {
         armed = false
         owner = null
         keep = null
-        pick = {}
+        pick = { _, _ -> }
         onPress = null
         onHold = null
         onScrim = null

@@ -22,6 +22,7 @@ class TestApp : Application(), TestLifecycleApplication {
             throw IOException("tests never reach the network: $it")
         }
         Remote.resetArtist()
+        BindTokens.reset()
         CoverBlur.context = Dispatchers.Unconfined
         rearmUiDispatcher()
     }

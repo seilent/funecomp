@@ -3,6 +3,7 @@
     <exclude domain="sharedpref" path="art.xml" />
     <exclude domain="sharedpref" path="scrobble.xml" />
     <exclude domain="sharedpref" path="device.xml" />
+    <exclude domain="sharedpref" path="bind.xml" />
     <exclude domain="file" path="lyrics/" />
     <exclude domain="file" path="art/" />
     <exclude domain="file" path="thumb/" />

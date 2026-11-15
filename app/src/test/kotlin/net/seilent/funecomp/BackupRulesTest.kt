@@ -21,6 +21,7 @@ class BackupRulesTest {
         "sharedpref art.xml",
         "sharedpref scrobble.xml",
         "sharedpref device.xml",
+        "sharedpref ${BindTokens.FILE}.xml",
     )
 
     private val web = listOf("root app_webview/", "root app_webview_login/")

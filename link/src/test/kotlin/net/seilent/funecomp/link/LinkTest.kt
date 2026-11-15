@@ -1,6 +1,7 @@
 package net.seilent.funecomp.link
 
 import net.seilent.funecomp.proto.Bye
+import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Req
@@ -153,6 +154,25 @@ class LinkTest {
         waitFor { rec.state.lib.pages.isNotEmpty() }
         val stale = s.call(Msg.LIB_GET, Req.libGet(Enums.View.artists, "", 0, 100, 999)) as Session.Result.Failed
         assertEquals(Err.staleRev, stale.error.code)
+        s.close("done")
+    }
+
+    @Test
+    fun aHelloTokenGoesToTheListenerAndNeverIntoTheSessionHello() {
+        val got = CountDownLatch(1)
+        var token: ByteArray? = null
+        val l = object : Session.Listener {
+            override fun onHello(hello: HelloReply) {
+                token = hello.bindToken
+                got.countDown()
+            }
+        }
+        val s = Session(TcpTransport("127.0.0.1", sim("bind-window")), l, Session.Config("test", features = Groups.mask("libDelete")))
+        Thread { s.run() }.apply { isDaemon = true }.start()
+        assertTrue(got.await(5, TimeUnit.SECONDS))
+        assertEquals(16, token?.size)
+        assertNull(s.hello!!.bindToken)
+        assertNotNull(s.hello!!.bootId)
         s.close("done")
     }
 

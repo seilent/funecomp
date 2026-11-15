@@ -141,7 +141,7 @@ class Session(
                     if (h.major != Proto.major) {
                         close("version")
                     } else {
-                        hello = h
+                        hello = h.copy(bindToken = null)
                         listener.onHello(h)
                     }
                 }
