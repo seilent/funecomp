@@ -276,7 +276,10 @@ fun ink(text: String, role: Role, ui: Ui, resolver: FontFamily.Resolver): RectF 
     }
     val path = Path()
     paint.getTextPath(text, 0, text.length, 0f, 0f, path)
-    return RectF().also { path.computeBounds(it, true) }
+    return RectF().also {
+        path.computeBounds(it, true)
+        it.offset(-paint.letterSpacing * size / 2, 0f)
+    }
 }
 
 class MicroFling(private val k: Float, private val threshold: Float) : FloatDecayAnimationSpec {

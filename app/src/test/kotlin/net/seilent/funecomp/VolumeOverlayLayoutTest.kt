@@ -112,7 +112,10 @@ class VolumeOverlayLayoutTest {
         }
         val path = Path()
         paint.getTextPath(t.layoutInput.text.text, 0, t.layoutInput.text.length, 0f, 0f, path)
-        val r = RectF().also { path.computeBounds(it, true) }
+        val r = RectF().also {
+            path.computeBounds(it, true)
+            it.offset(-paint.letterSpacing * paint.textSize / 2, 0f)
+        }
         return Rect(b.left + r.left, b.top + t.firstBaseline + r.top, b.left + r.right, b.top + t.firstBaseline + r.bottom)
     }
 
