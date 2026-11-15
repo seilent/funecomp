@@ -51,6 +51,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -422,6 +424,33 @@ class ToastPlaceTest {
         val row = rule.onNodeWithTag("row.$last").fetchSemanticsNode().boundsInRoot
         assertTrue("row.$last ends at ${row.bottom}, the strip starts at ${strip().top}", row.bottom <= strip().top + 0.5f)
         assertEquals("the strip: off the bottom place", 0f, offBottom(), 1f)
+    }
+
+    @Test
+    fun theHeldStripHidesTheRowsUnderIt() {
+        start("hub.music", Page.Home, Page.Music)
+        rule.pivotTo("music", "songs") { settle(it) }
+        val rows = capture()
+        link = down
+        rise()
+        settled("toast")
+        val s = strip()
+        val over = capture()
+        val last = c.device.lib.pages.getValue(LibKey(Enums.View.songs, "")).total.toInt() - 1
+        rule.onNodeWithTag("rows").performScrollToIndex(last)
+        settled("row.$last")
+        assertEquals(s, strip())
+        val clear = capture()
+        var ink = 0
+        var off = 0
+        for (y in ceil(s.top).toInt() until floor(s.bottom).toInt().coerceAtMost(over.height)) {
+            for (x in 0 until over.width) {
+                if (x < over.width / 2) ink = maxOf(ink, red(rows, x, y))
+                if (over.getRGB(x, y) != clear.getRGB(x, y)) off++
+            }
+        }
+        assertTrue("no row ink under the strip's place: $ink", ink > 40)
+        assertEquals("strip pixels that differ over the rows and over the list end", 0, off)
     }
 
     private fun settled(tag: String) {

@@ -665,7 +665,7 @@ fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolea
     val edge = ui.px(Tok.edge)
     Box(
         Modifier.offset { IntOffset(0, y.roundToInt()) }.size(ui.px(ui.w).dp(), strip.dp())
-            .alpha(a).background(Black.copy(alpha = Tok.scrim_overlay_alpha)).testTag("toast"),
+            .alpha(a).background(Black).testTag("toast"),
     ) {
         Box(Modifier.at(edge, 0f).size((ui.px(ui.w) - 2 * edge).dp(), h.dp()).clipToBounds()) {
             RoleText(artist, Roles.toastArtist, Modifier.atBaseline(0f, ui.px(Tok.toastArtistBaseline)))
