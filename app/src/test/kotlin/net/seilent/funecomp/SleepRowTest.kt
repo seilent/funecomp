@@ -61,9 +61,10 @@ class SleepRowTest {
 
     private val shell = Shell(Nav(listOf(Page.Home, Page.Settings)))
 
-    private val books = LINK_FEATURES or Groups.mask("books")
+    private val books = LINK_FEATURES
+    private val noBooks = LINK_FEATURES and Groups.mask("books").inv()
 
-    private fun start(board: String = "ap80", schema: String? = null, to: String = "power", w: Int = 411, h: Int = 960, features: Long = LINK_FEATURES, faults: List<String> = emptyList()): SimControl {
+    private fun start(board: String = "ap80", schema: String? = null, to: String = "power", w: Int = 411, h: Int = 960, features: Long = noBooks, faults: List<String> = emptyList()): SimControl {
         val c = SimControl(board, now = SystemClock::elapsedRealtime, schema = schema, appFeatures = features, faults = faults)
         rule.mainClock.autoAdvance = false
         rule.setContent {
