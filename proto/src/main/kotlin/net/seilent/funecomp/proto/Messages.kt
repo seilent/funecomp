@@ -73,7 +73,6 @@ object Groups {
         "playlistEdit",
         "trackInfo",
         "artistSongs",
-        "books",
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 

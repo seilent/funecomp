@@ -221,6 +221,11 @@ class Faults(specs: List<String>) {
     var delFailed = 0
     var delRescanMs = 2000L
     val noDelete = HashSet<Long>()
+    var book = false
+    var bookPlay = false
+    var noStretch = false
+    var noBooks = false
+    var bookLeak = false
 
     init {
         val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
@@ -402,6 +407,14 @@ class Faults(specs: List<String>) {
                 "del-failed" -> delFailed = v.toInt()
                 "del-rescan-ms" -> delRescanMs = v.toLong()
                 "no-delete" -> noDelete += v.toULongOrNull()?.toLong() ?: throw IllegalArgumentException("no-delete: album first missing in $v")
+                "book" -> book = true
+                "bookplay" -> {
+                    book = true
+                    bookPlay = true
+                }
+                "nostretch" -> noStretch = true
+                "nobooks" -> noBooks = true
+                "bookleak" -> bookLeak = true
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')
@@ -502,6 +515,7 @@ class Options(
         if (minor < 16) faults.features = faults.features and Groups.mask("svcLogin").inv()
         if (minor < 17) faults.features = faults.features and Groups.mask("imgFocusX", "svcAccount", "appPkg").inv()
         if (minor < 18) faults.features = faults.features and Groups.mask("cardLog", "trackArtist", "libDelete").inv()
+        if (minor < 21 || faults.noBooks) faults.features = faults.features and Groups.mask("books").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }

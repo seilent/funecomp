@@ -178,6 +178,25 @@ class LibDeleteSimTest {
     }
 
     @Test
+    fun anAlbumDeleteUnderTheBookFaultKeepsTheBookAndItsQueuedChapters() {
+        val (d, out, token) = bound("bookplay")
+        val chapters = (0..4).map { Library.BOOK_FIRST + it }
+        assertEquals(LibDeleteReply(album.size.toLong(), 0), reply(d, req(d, Msg.LIB_DELETE, albumAsk(d, token), out)))
+        t += 2000
+        d.tick(out)
+        assertTrue(album.none { it.id in d.lib.byId })
+        assertTrue(chapters.all { d.lib.byId[it]?.book == true })
+        out.frames.clear()
+        req(d, Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.page, offset = 0, count = 500), out)
+        val items = out.of(Msg.QUEUE).flatMap { Queue.from(it).items }
+        assertEquals(chapters, items.map { it.track })
+        assertTrue(items.all { it.book == true && it.title != null })
+        val s = State.from(Node.decode("STATE", d.state(out = out)))
+        assertEquals(Library.BOOK_FIRST + 2 to true, s.track to s.book)
+        assertEquals("Chapter 3", s.title)
+    }
+
+    @Test
     fun aSongWithAFailureOwesNoRescanAndOneWithoutDoes() {
         val (d, out, token) = bound("del-failed=1", "del-ms=50", "del-rescan-ms=10")
         val a = req(d, Msg.LIB_DELETE, songAsk(d, token), out)

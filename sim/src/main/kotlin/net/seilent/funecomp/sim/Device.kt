@@ -106,7 +106,12 @@ private const val PHONE = 2
 private const val CROSS_MIN_MS = 30_000L
 private const val CROSS_CAP_MS = 240_000L
 const val USB_DAC_TEXT = "usb dac"
-private val DAC_TRANSPORT = setOf(Enums.TransportCmd.toggle, Enums.TransportCmd.play, Enums.TransportCmd.next, Enums.TransportCmd.prev, Enums.TransportCmd.seek)
+private const val SKIP_MAX_MS = 3_600_000
+private const val BOOK_SLOT = 2
+private const val BOOK_AT_MS = 900_000L
+private const val BOOK_SPEED = 150
+private val BOOK_SPEEDS = setOf(75, 100, 125, 150, 175, 200)
+private val DAC_TRANSPORT = setOf(Enums.TransportCmd.toggle, Enums.TransportCmd.play, Enums.TransportCmd.next, Enums.TransportCmd.prev, Enums.TransportCmd.seek, Enums.TransportCmd.skip, Enums.TransportCmd.speed)
 private const val BIND_COOL_MS = 60_000L
 private const val BIND_COOL_MAX_MS = 3_600_000L
 
@@ -180,7 +185,7 @@ private fun whole(v: Float): String {
 }
 
 class Device(private val opts: Options, lib: Library, private val clock: () -> Long) {
-    @Volatile var lib: Library = lib
+    @Volatile var lib: Library = if (opts.faults.book) lib.withBook() else lib
         private set
     private val board = opts.board
     private val faults = opts.faults
@@ -225,6 +230,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         private set
     private var sleepLeftS = 0L
     private var sleepSetAt = 0L
+    private var sleepEnd = false
 
     private class Preset(val name: String, val profile: Profile)
 
@@ -258,11 +264,14 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private val headsetPicks = HashMap<String, EqUnit>()
     private val graphicPresets = linkedMapOf(GRAPHIC_DIR + "Rock.ini" to GraphicPreset("Rock", listOf(40, 30, 10, 0, -10, -20, 0, 10, 30, 60)))
 
-    private var queue: MutableList<Long> = (lib.tracks + lib.services).map { it.id }.toMutableList()
-    private var slot = 0
-    private var playing = false
-    private var positionMs = 0L
-    private var positionAt = 0L
+    private var queue: MutableList<Long> = (if (faults.bookPlay) this.lib.books else lib.tracks + lib.services).map { it.id }.toMutableList()
+    private var slot = if (faults.bookPlay) BOOK_SLOT else 0
+    private var playing = faults.bookPlay
+    private var positionMs = if (faults.bookPlay) BOOK_AT_MS else 0L
+    private var positionAt = clock()
+    private var bookSpeed = if (faults.bookPlay) BOOK_SPEED else 100
+    private var bookPlay = faults.bookPlay
+    private val spots = HashMap<Pair<String, String>, Pair<Int, Long>>()
     private var shuffle = false
     private var repeat = Enums.Repeat.off
     private var volume = 60
@@ -543,7 +552,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         return when (cmd) {
             Enums.TransportCmd.toggle, Enums.TransportCmd.play -> !playing && !stream.receiver
             Enums.TransportCmd.next, Enums.TransportCmd.prev -> !(stream.player() && !playing)
-            Enums.TransportCmd.seek, Enums.TransportCmd.shuffle -> true
+            Enums.TransportCmd.seek, Enums.TransportCmd.shuffle, Enums.TransportCmd.skip, Enums.TransportCmd.speed -> true
             else -> false
         }
     }
@@ -641,6 +650,27 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun devBit(bit: Int) = (faults.features ushr bit) and 1L == 1L
 
+    private fun booksFor(out: Out?) = devBit(Feature.books) && appBit(out, Feature.books)
+
+    private fun chapter() = lib.byId[queue.getOrNull(slot)]?.book == true
+
+    private fun bookEntry() = bookPlay && chapter()
+
+    private fun bookOf(t: Track) = lib.books.filter { it.album == t.album && it.albumArtist == t.albumArtist }
+
+    private fun sameBook(a: Track?, b: Track) = a?.book == true && a.album == b.album && a.albumArtist == b.albumArtist
+
+    private fun rate() = if (chapter() && devBit(Feature.books) && !faults.noStretch) bookSpeed else 100
+
+    private fun booksRefusal(type: Int, b: Node, out: Out): Answer.Fail? {
+        val book = when (type) {
+            Msg.TRANSPORT -> b.int(Tags.Transport.cmd).let { it == Enums.TransportCmd.skip || it == Enums.TransportCmd.speed }
+            Msg.DRAFT -> b.int(Tags.Draft.kind) == Enums.DraftKind.sleep && b.bool(Tags.Draft.sleepEnd) != null
+            else -> false
+        }
+        return if (book && !booksFor(out)) Answer.Fail(Err.refused, "refused") else null
+    }
+
     private fun appBit(out: Out?, bit: Int) = out != null && ((linked[out] ?: 0L) ushr bit) and 1L == 1L
 
     private fun trackArtist(out: Out) = devBit(Feature.trackArtist) && appBit(out, Feature.trackArtist)
@@ -683,7 +713,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun position(): Long {
         val t = lib.byId[queue.getOrNull(slot)]
-        val p = if (playing) positionMs + (now() - positionAt) else positionMs
+        val p = if (playing) positionMs + (now() - positionAt) * rate() / 100 else positionMs
         return minOf(p, t?.durationMs ?: p)
     }
 
@@ -692,7 +722,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         positionAt = now()
     }
 
-    private fun sleepLeft(): Long = if (sleepLeftS <= 0) 0 else maxOf(0L, sleepLeftS - (now() - sleepSetAt) / 1000)
+    private fun sleepLeft(): Long = when {
+        sleepEnd -> lib.byId[queue.getOrNull(slot)]?.let { t -> ((t.durationMs - position()).coerceAtLeast(0) * 100 / rate() + 999) / 1000 } ?: 0
+        sleepLeftS <= 0 -> 0
+        else -> maxOf(0L, sleepLeftS - (now() - sleepSetAt) / 1000)
+    }
 
     private fun rowTrack(t: Track): Long? = if (t.service == null) t.id else if (faults.svcRowZero) 0L else null
 
@@ -711,7 +745,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private fun build(receipt: Long?, out: Out?): ByteArray = run {
         cardEdge()
         val row = lib.byId[queue.getOrNull(slot)]
-        val t = row?.takeIf { it.service == null }
+        val t = row?.takeIf { it.service == null && !it.book }
+        val chapter = row?.book == true
+        val bookPeer = booksFor(out) || faults.bookLeak
         val on = mounted()
         lastStateAt = now()
         val sample = if (v110) now() else receipt ?: now()
@@ -730,7 +766,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         val unread = t != null && (late || t.title in faults.lyricsAbsent)
         val svc = row?.service?.takeIf { svcApp(out) }
         stream.over(State(
-            source, output, row?.let { rowTrack(it) }, row?.title, row?.artist, row?.artists.orEmpty(),
+            source, output, row?.takeIf { !chapter || bookPeer }?.let { rowTrack(it) }, row?.title, row?.artist, row?.artists.orEmpty(),
             row?.mbids.orEmpty(), row?.durationMs, position(), sample, sent, playing, shuffle, repeat,
             volume, maxVolume, bat, queueRev, slot.toLong(), queue.size.toLong(), lib.rev, row?.album, sleepLeft(),
             if (v12) opts.battery.charging else null,
@@ -753,6 +789,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             service = svc,
             serviceKey = row?.serviceKey?.takeIf { svc != null },
             cardLogSeq = if (out != null && out in cardPeers) cardLog.newest().takeIf { it > 0 } else null,
+            book = if (chapter && bookPeer) true else null,
+            speedPct = if (chapter && bookPeer && !faults.noStretch) bookSpeed else null,
+            sleepEnd = if (sleepEnd && booksFor(out)) true else null,
         )).encode()
     }
 
@@ -803,7 +842,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             opts.log("sleep expired")
             send(out, Msg.STATE, state(out = out))
         } else if (playing && t != null && position() >= t.durationMs) {
-            advance(1, auto = true)
+            ended()
             send(out, Msg.STATE, state(out = out))
         } else if (late && now() - flagAt >= (faults.lyricsLate ?: 0)) {
             send(out, Msg.STATE, state(out = out))
@@ -859,12 +898,13 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     fun logPlay(e: PlayEntry): PlayEntry = synchronized(lock) { playLog.append(e) }
 
     private fun follow() {
+        if (chapter() && !stopped) lib.byId[queue[slot]]?.let { t -> spots[t.album to t.albumArtist] = bookOf(t).indexOfFirst { it.id == t.id } to position() }
         val now = now()
         if (playing) played += now - playAt
         playAt = now
         val t = lib.byId[queue.getOrNull(slot)]
         val pt = lib.byId[playTrack]
-        if (pt != null && !playLogged && pt.durationMs > CROSS_MIN_MS && played >= minOf(pt.durationMs / 2, CROSS_CAP_MS)) {
+        if (pt != null && !pt.book && !playLogged && pt.durationMs > CROSS_MIN_MS && played >= minOf(pt.durationMs / 2, CROSS_CAP_MS)) {
             playLogged = true
             when (route()) {
                 "phone" -> {
@@ -909,8 +949,19 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         )
     }
 
+    private fun ended() {
+        advance(1, auto = true)
+        if (sleepEnd) {
+            sleepEnd = false
+            playing = false
+            opts.log("end of track")
+        }
+    }
+
     private fun advance(d: Int, auto: Boolean) {
         if (queue.isEmpty()) return
+        val t = lib.byId[queue.getOrNull(slot)]
+        if (auto && t != null && bookEntry() && !sameBook(lib.byId[queue.getOrNull(slot + 1)], t)) spots[t.album to t.albumArtist] = 0 to 0L
         if (auto && repeat == Enums.Repeat.one) {
             positionMs = 0
         } else {
@@ -1161,6 +1212,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             cardStart(now())
         }
         cardEdge()
+        booksRefusal(type, body, out)?.let { return@synchronized it }
         if (type != Msg.LIB_DELETE) cardRefusal(type, body)?.let {
             if (it.code == Err.noCard) forceCard()
             cardPush(out)
@@ -1336,14 +1388,64 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 if (ms > t.durationMs) return Answer.Fail(Err.badValue, "seek past end")
                 positionMs = ms
             }
-            Enums.TransportCmd.shuffle -> shuffle = b.bool(Tags.Transport.on) ?: return Answer.Fail(Err.badValue, "no on")
-            Enums.TransportCmd.repeat -> repeat = b.int(Tags.Transport.repeat) ?: return Answer.Fail(Err.badValue, "no repeat")
+            Enums.TransportCmd.shuffle -> {
+                if (bookEntry()) return Answer.Fail(Err.refused, "refused")
+                shuffle = b.bool(Tags.Transport.on) ?: return Answer.Fail(Err.badValue, "no on")
+            }
+            Enums.TransportCmd.repeat -> {
+                if (bookEntry()) return Answer.Fail(Err.refused, "refused")
+                repeat = b.int(Tags.Transport.repeat) ?: return Answer.Fail(Err.badValue, "no repeat")
+            }
+            Enums.TransportCmd.skip -> {
+                val ms = b.int(Tags.Transport.skipMs)?.takeIf { it in -SKIP_MAX_MS..SKIP_MAX_MS } ?: return Answer.Fail(Err.badValue, "bad value")
+                if (!chapter()) return Answer.Fail(Err.refused, "refused")
+                skip(ms)
+            }
+            Enums.TransportCmd.speed -> {
+                val pct = b.int(Tags.Transport.speedPct)?.takeIf { it in BOOK_SPEEDS } ?: return Answer.Fail(Err.badValue, "bad value")
+                if (!chapter() || faults.noStretch) return Answer.Fail(Err.refused, "refused")
+                bookSpeed = pct
+            }
             else -> return Answer.Fail(Err.badValue, "no cmd")
         }
         if (playing) stopped = false
         positionAt = now()
         if (playing && faults.cardRun?.start == CardRun.Start.Play && cardArmed) cardStart(now())
         return changed()
+    }
+
+    private fun skip(ms: Int) {
+        if (!bookEntry()) {
+            val t = lib.byId.getValue(queue[slot])
+            val at = positionMs + ms
+            if (at >= t.durationMs) advance(1, auto = false) else positionMs = at.coerceAtLeast(0)
+            return
+        }
+        var at = positionMs + ms
+        val from = slot
+        while (true) {
+            val t = lib.byId.getValue(queue[slot])
+            if (at < 0) {
+                val prev = lib.byId[queue.getOrNull(slot - 1)]?.takeIf { sameBook(it, t) }
+                if (prev == null) {
+                    at = 0
+                    break
+                }
+                slot--
+                at += prev.durationMs
+            } else if (at >= t.durationMs) {
+                if (!sameBook(lib.byId[queue.getOrNull(slot + 1)], t)) {
+                    ended()
+                    return
+                }
+                at -= t.durationMs
+                slot++
+            } else {
+                break
+            }
+        }
+        positionMs = at
+        if (slot != from) playFresh = true
     }
 
     private val steps: IntArray = IntArray(101).also { t ->
@@ -1524,12 +1626,20 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 prefs[key] = v
             }
             Enums.DraftKind.sleep -> {
-                val m = b.long(Tags.Draft.minutes) ?: return Answer.Fail(Err.badValue, "no minutes")
-                val r = rows.firstOrNull { it.key == "sleep" }
-                val ok = r?.max?.let { m in (r.min ?: 0).toLong()..it } ?: (m.toString() in r?.values.orEmpty())
-                if (!ok) return Answer.Fail(Err.badValue, "bad minutes")
-                sleepLeftS = m * 60
-                sleepSetAt = now()
+                if (b.bool(Tags.Draft.sleepEnd) == true) {
+                    if (b.long(Tags.Draft.minutes) != null) return Answer.Fail(Err.badValue, "bad value")
+                    if (lib.byId[queue.getOrNull(slot)] == null || stream.receiver || faults.usbDac) return Answer.Fail(Err.refused, "refused")
+                    sleepEnd = true
+                    sleepLeftS = 0
+                } else {
+                    val m = b.long(Tags.Draft.minutes) ?: return Answer.Fail(Err.badValue, if (b.bool(Tags.Draft.sleepEnd) == null) "no minutes" else "bad value")
+                    val r = rows.firstOrNull { it.key == "sleep" }
+                    val ok = r?.max?.let { m in (r.min ?: 0).toLong()..it } ?: (m.toString() in r?.values.orEmpty())
+                    if (!ok) return Answer.Fail(Err.badValue, "bad minutes")
+                    sleepEnd = false
+                    sleepLeftS = m * 60
+                    sleepSetAt = now()
+                }
             }
             Enums.DraftKind.clock -> {
                 val s = b.long(Tags.Draft.unixS) ?: return Answer.Fail(Err.badValue, "bad clock")
@@ -1729,6 +1839,26 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (list.isEmpty()) return Answer.Fail(Err.badValue, "nothing to play")
         val start = n(b.long(Tags.Play.start), 0)
         if (start !in list.indices) return Answer.Fail(Err.badValue, "bad start")
+        sleepEnd = false
+        val named = ids.map { lib.byId[it] }
+        val first = named.firstOrNull()
+        if (first != null && named.all { sameBook(it, first) }) {
+            val book = bookOf(first)
+            val (at, ms) = if (ids.toSet() == book.map { it.id }.toSet()) spots[first.album to first.albumArtist] ?: (0 to 0L) else book.indexOfFirst { it.id == first.id } to 0L
+            queue = book.map { it.id }.toMutableList()
+            slot = at
+            shuffle = false
+            repeat = Enums.Repeat.off
+            playing = true
+            stopped = false
+            playFresh = true
+            positionMs = ms
+            positionAt = now()
+            bookPlay = true
+            queueRev++
+            return changed()
+        }
+        bookPlay = false
         val sh = b.bool(Tags.Play.shuffle) ?: false
         queue = if (sh) (listOf(list[start]) + (list - list[start]).shuffled()).toMutableList() else list.toMutableList()
         slot = if (sh) 0 else start
@@ -1747,6 +1877,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             val t = lib.byId[id]
             when {
                 t?.service != null -> QueueItem(rowTrack(t), t.title, t.artists, t.mbids, t.album, t.durationMs, service = t.service, serviceKey = t.serviceKey)
+                t?.book == true -> QueueItem(id, t.title, t.artists, t.mbids, t.album, t.durationMs, book = if (booksFor(out)) true else null)
                 v12 && t != null -> QueueItem(id, t.title, t.artists, t.mbids, t.album, t.durationMs, hasSynced(id), if (v14) hasPlain(id) else null)
                 v11 && t != null -> QueueItem(id, t.title, t.artists, t.mbids)
                 else -> QueueItem(id, t?.title)
@@ -1811,6 +1942,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             }
             Enums.QueueCmd.clear -> {
                 queue.clear()
+                bookPlay = false
                 slot = 0
                 playing = false
                 stopped = true
@@ -1844,6 +1976,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         mark()
         if (queue.isEmpty() || stopped) {
             queue = ids.toMutableList()
+            bookPlay = false
             slot = 0
             playing = false
             stopped = false
@@ -1907,6 +2040,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 dacRefuse()?.let { return it }
                 if (lib.tracks.isEmpty()) return Answer.Fail(Err.noLibrary, "no library")
                 queue = lib.tracks.map { it.id }.shuffled().toMutableList()
+                bookPlay = false
+                sleepEnd = false
                 slot = 0
                 shuffle = true
                 playing = true
@@ -1917,6 +2052,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Enums.ActionCmd.favorite -> {
                 val id = b.long(Tags.Action.track) ?: return Answer.Fail(Err.badValue, "no track")
                 if (id !in lib.byId) return Answer.Fail(Err.staleRev, "stale rev")
+                if (lib.byId[id]?.book == true) return Answer.Fail(Err.refused, "refused")
                 if (favsBusy > 0) {
                     favsBusy--
                     return Answer.Fail(Err.busy, faults.favsBusyText)
@@ -2071,6 +2207,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             lib = next
             if (requeue) {
                 queue = next.tracks.map { it.id }.toMutableList()
+                bookPlay = false
                 slot = 0
                 queueRev++
             }

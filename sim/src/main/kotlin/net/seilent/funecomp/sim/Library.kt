@@ -19,6 +19,7 @@ class Track(
     val no: Int = 1,
     val service: String? = null,
     val serviceKey: Long? = null,
+    val book: Boolean = false,
 ) {
     fun mbidOf(name: String): String? = mbids.getOrNull(artists.indexOf(name))?.takeIf { it.isNotEmpty() }
 }
@@ -27,8 +28,8 @@ private class Album(val artist: String, val album: String, val genre: String, va
 
 class Playlist(val name: String, val source: String, val tracks: List<Long>)
 
-class Library(val tracks: List<Track>, val services: List<Track> = emptyList(), playlists: List<Playlist> = emptyList()) {
-    val byId: Map<Long, Track> = (tracks + services).associateBy { it.id }
+class Library(val tracks: List<Track>, val services: List<Track> = emptyList(), playlists: List<Playlist> = emptyList(), val books: List<Track> = emptyList()) {
+    val byId: Map<Long, Track> = (tracks + services + books).associateBy { it.id }
     val favorites = LinkedHashSet<Long>()
     var rev = 1L
     var snapRev = 1L
@@ -75,11 +76,18 @@ class Library(val tracks: List<Track>, val services: List<Track> = emptyList(), 
         return albums.firstOrNull { a -> a.any { it.id == t.id } }
     }
 
+    fun withBook() = Library(tracks, services, lists, book()).also {
+        it.favorites += favorites
+        it.hidden += hidden
+        it.rev = rev
+        it.snapRev = snapRev
+    }
+
     fun albumKey(track: Long): String? = albums.firstOrNull { a -> a.any { it.id == track } }?.let { java.lang.Long.toUnsignedString(it[0].id) }
 
     fun albumAt(first: Long): List<Track>? = albums.firstOrNull { it[0].id == first }
 
-    fun without(gone: Set<Long>): Library = Library(tracks.filter { it.id !in gone }, services, lists.toList()).also { it.hidden += hidden }
+    fun without(gone: Set<Long>): Library = Library(tracks.filter { it.id !in gone }, services, lists.toList(), books).also { it.hidden += hidden }
 
     private fun albumRow(a: List<Track>) = LibRow(a[0].album, a.size.toLong(), a[0].id, java.lang.Long.toUnsignedString(a[0].id), artist = a[0].albumArtist.ifEmpty { null })
 
@@ -184,6 +192,13 @@ class Library(val tracks: List<Track>, val services: List<Track> = emptyList(), 
             val names = split(artist, albumArtist)
             val id = if (service == null) hash64("$folder/$file") else hash64("$service:${java.lang.Long.toUnsignedString(serviceKey ?: 0)}")
             return Track(id, artist, names, album, albumArtist, title, durationMs, folder, file, names.indices.map { mbids.getOrElse(it) { "" }.trim() }, genre.trim(), no, service, serviceKey)
+        }
+
+        const val BOOK_FIRST = 399L
+
+        fun book(): List<Track> = (1..5).map { n ->
+            val title = "Chapter $n"
+            Track(BOOK_FIRST + n - 1, "Natsume Soseki", listOf("Natsume Soseki"), "Kokoro", "Natsume Soseki", title, 1_800_000, "Natsume Soseki/Kokoro", "%02d %s.m4b".format(n, title), no = n, book = true)
         }
 
         fun load(f: File): Library {

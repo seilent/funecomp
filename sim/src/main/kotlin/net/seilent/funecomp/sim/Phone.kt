@@ -156,7 +156,7 @@ class Phone(private val opts: Options, private val clock: () -> Long) {
             artists = Library.split(artist, ""), mbids = emptyList(), durationMs = duration(l), positionMs = sentPos,
             playing = playing, shuffle = false, repeat = Enums.Repeat.off, album = if (late) before?.album.orEmpty() else l.album,
             lyrics = null, favorite = null, lyricsPlain = null, lyricsCrc = null, lyricsOffsetMs = null, receiver = hold, phoneName = l.name,
-            phoneArtCrc = coverCrc(), phoneTrackNo = l.trackNo?.toLong(), phoneTracks = l.count?.toLong(),
+            phoneArtCrc = coverCrc(), phoneTrackNo = l.trackNo?.toLong(), phoneTracks = l.count?.toLong(), book = null, speedPct = null, sleepEnd = null,
         )
     }
 
