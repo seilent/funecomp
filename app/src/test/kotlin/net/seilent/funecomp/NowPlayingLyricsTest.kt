@@ -879,6 +879,20 @@ class NowPlayingLyricsTest {
     }
 
     @Test
+    fun aBookLeavesTheLyricsViewAsATrackWithoutLyricsDoes() {
+        start(minor = 15)
+        enterBy("np.art")
+        lyricsOn()
+        val s = c.device.playback.state
+        c.device = c.device.withState(s.copy(track = 401, title = "Chapter 3", lyrics = null, lyricsPlain = null, lyricsCrc = null, book = true), SystemClock.elapsedRealtime())
+        lyrics = LyricsFetch().decide(c.device, 0).show
+        assertEquals(LyricsFetch.Show.None, lyrics)
+        settle(2500)
+        normal()
+        assertTrue(c.mode)
+    }
+
+    @Test
     fun noneShowsTheTitle() {
         start(copy = null)
         enterBy("np.art")

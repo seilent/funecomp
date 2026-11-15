@@ -46,6 +46,17 @@ class LyricsFetchTest {
     }
 
     @Test
+    fun aBookReadsNoneWhereNoFlagsWait() {
+        val f = LyricsFetch()
+        val book = DeviceState(hello()).withState(State(track = 7, snapRev = 4, book = true), 0)
+        assertEquals(LyricsFetch.Decision(LyricsFetch.Show.None, null), f.decide(book, 0))
+        assertEquals(false, LyricsFetch.follow(book))
+        assertEquals(null, LyricsFetch.follow(DeviceState(hello()).withState(State(track = 7, snapRev = 4), 0)))
+        assertEquals(LyricsFetch.Decision(LyricsFetch.Show.None, null), f.decide(device().let { it.withState(it.playback.state.copy(book = true), 0) }, 0))
+        assertEquals(LyricsFetch.Show.Blank, LyricsFetch().decide(device(lyrics = null, plain = null, crc = null), 0).show)
+    }
+
+    @Test
     fun noBit11IsOffAtAnyMinor() {
         val f = LyricsFetch()
         val off = Groups.all and (1L shl Feature.lyricsGet).inv()

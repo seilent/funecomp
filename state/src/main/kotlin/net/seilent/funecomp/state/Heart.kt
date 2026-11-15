@@ -94,7 +94,7 @@ class Heart(private val windowMs: Long = WINDOW_MS) {
             else -> null
         }
 
-        fun shown(hello: HelloReply?, s: State) = hello?.snapRev != null && s.library != null && s.source != Enums.Source.phone
+        fun shown(hello: HelloReply?, s: State) = hello?.snapRev != null && s.library != null && s.source != Enums.Source.phone && s.book != true
 
         fun lit(s: State) = s.favorite == true
     }

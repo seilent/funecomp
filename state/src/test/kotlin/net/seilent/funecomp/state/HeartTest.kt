@@ -30,6 +30,12 @@ class HeartTest {
     }
 
     @Test
+    fun aBookHasNoHeart() {
+        assertFalse(Heart.shown(hello(4), a.copy(book = true)))
+        assertTrue(Heart.shown(hello(4), a.copy(book = false)))
+    }
+
+    @Test
     fun theStateAfterTheReplyPicksTheToast() {
         val h = Heart()
         val t = h.tap(a)!!

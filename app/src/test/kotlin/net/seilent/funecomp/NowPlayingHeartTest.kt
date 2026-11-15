@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
+import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
@@ -42,8 +43,8 @@ class NowPlayingHeartTest {
 
     private lateinit var shell: Shell
 
-    private fun start(minor: Int = 3, vararg faults: String, pages: List<Page> = listOf(Page.Home, Page.NowPlaying)): SimControl {
-        val c = SimControl("v1", minor = minor, faults = faults.toList())
+    private fun start(minor: Int = 3, vararg faults: String, pages: List<Page> = listOf(Page.Home, Page.NowPlaying), features: Long = LINK_FEATURES): SimControl {
+        val c = SimControl("v1", minor = minor, faults = faults.toList(), appFeatures = features)
         shell = Shell(Nav(pages))
         rule.mainClock.autoAdvance = false
         rule.setContent {
@@ -155,6 +156,18 @@ class NowPlayingHeartTest {
         assertNull(c.device.lib.snap)
         assertEquals(c.device.lib.rev, c.device.lib.libRev(Enums.View.albums))
         assertTrue(c.actions.isEmpty())
+    }
+
+    @Test
+    fun aBookHasNoHeartAndTheMusicAfterItHasItBack() {
+        val c = start(21, "bookplay", features = LINK_FEATURES or Groups.mask("books"))
+        assertEquals(true, c.device.playback.state.book)
+        assertNotNull(c.device.playback.state.library)
+        assertEquals(0, rule.onAllNodesWithTag("np.heart").fetchSemanticsNodes().size)
+        c.play(null, null, 0, false, listOf(c.sim.lib.tracks[0].id))
+        settle(300)
+        assertNull(c.device.playback.state.book)
+        rule.onNodeWithTag("np.heart").assertExists()
     }
 
     @Test

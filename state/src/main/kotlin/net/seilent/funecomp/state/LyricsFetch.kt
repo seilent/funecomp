@@ -87,7 +87,7 @@ class LyricsFetch {
         if (last != null && last.first == track && crc != null && last.second != crc) marks.entries.removeAll { it.key.track == track && it.value == Mark.FAILED }
         seen = track to crc
         if (held != track) held = null
-        if (s.lyrics == false && s.lyricsPlain == false) {
+        if (s.book == true || (s.lyrics == false && s.lyricsPlain == false)) {
             held = null
             cache.remove(track)
             return Decision(Show.None, null)
@@ -184,7 +184,7 @@ class LyricsFetch {
             val s = d.playback.state
             return when {
                 !d.playback.seen -> null
-                !d.has(GROUP) || s.library == null || s.source == Enums.Source.phone -> false
+                !d.has(GROUP) || s.library == null || s.source == Enums.Source.phone || s.book == true -> false
                 s.lyrics == null -> null
                 else -> s.lyrics
             }
