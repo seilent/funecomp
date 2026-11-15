@@ -1245,7 +1245,7 @@ object Remote : Control {
         val h = device.hello
         val w = h?.backdropW ?: FETCH_W
         val hh = h?.backdropH ?: FETCH_H
-        for ((name, mbid) in ArtPusher.order(device.playback.state)) {
+        for ((name, mbid) in Forward.playingArtists(device.playback.state)) {
             try {
                 if (a.get(name, mbid, w, hh) != null) return
             } catch (e: IOException) {

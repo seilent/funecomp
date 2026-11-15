@@ -11,6 +11,7 @@ import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.link.ImagePush
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
+import net.seilent.funecomp.proto.Groups
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Req
@@ -172,6 +173,8 @@ class ForwardTest {
         override fun at(key: String) = ats[key]
     }
 
+    private val books = Session.Config("test", features = Groups.mask("books"))
+
     private fun stores() = synchronized(lines) { lines.filter { it.startsWith("stored name=") } }.map { it.removePrefix("stored name=").substringBefore(" mbid=") }
 
     @Test
@@ -211,6 +214,33 @@ class ForwardTest {
     }
 
     @Test
+    fun aBookStatePushesNothingForItsAuthor() {
+        val (sim, port) = sim(30, 21, Options.IMG_CAP, "bookplay")
+        val looked = Lookups()
+        val s = session(port, config = books)
+        assertEquals(true, device.playback.state.book)
+        val r = forward(looked).run(s) { true }
+        assertEquals(ArtPusher.Stop.DONE, r.stop)
+        assertFalse("Natsume Soseki" in looked.names)
+        assertTrue(sim.device.stored.keys.none { "soseki" in it })
+        assertEquals(30, sim.device.stored.size)
+    }
+
+    @Test
+    fun aBookQueueItemIsNotPushedAndAMusicItemAfterItIs() {
+        val (sim, port) = sim(30, 21, Options.IMG_CAP, "bookplay")
+        val looked = Lookups()
+        val s = session(port, config = books)
+        assertTrue(s.call(Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.add, tracks = listOf(sim.device.lib.tracks[0].id))) is Session.Result.Ok)
+        val end = System.nanoTime() + 5_000_000_000L
+        while (device.playback.state.slots != 6L && System.nanoTime() < end) Thread.sleep(10)
+        assertEquals(6L, device.playback.state.slots)
+        val r = forward(looked, sweeping = { false }).run(s) { true }
+        assertEquals(ArtPusher.Stop.DONE, r.stop)
+        assertEquals(listOf("Artist 001"), looked.names)
+    }
+
+    @Test
     fun withNothingOnTheCurrentAndQueueStagesRunAndThePendingUpgradesAndTheSweepDoNot() {
         val (sim, port) = sim(30)
         val looked = Lookups()
@@ -237,6 +267,15 @@ class ForwardTest {
         ups.open = true
         forward(Lookups(), upgrades = ups).run(s) { true }
         assertEquals((1..30).map { "Artist %03d".format(it) }, ups.ran.sorted())
+    }
+
+    @Test
+    fun aBookAuthorIsNotAmongTheCurrentAndQueueUpgrades() {
+        val (_, port) = sim(30, 21, Options.IMG_CAP, "bookplay")
+        val s = session(port, config = books)
+        val ups = Ups(false, listOf("Natsume Soseki") + (1..30).map { "Artist %03d".format(it) })
+        assertEquals(ArtPusher.Stop.DONE, forward(Lookups(), sweeping = { false }, upgrades = ups).run(s) { true }.stop)
+        assertEquals(emptyList<String>(), ups.ran.toList())
     }
 
     @Test

@@ -115,7 +115,7 @@ class Forward(
         val curOrigin = { n: String -> if (st.source == Enums.Source.local) front(n) else ArtPusher.origin(st.source) }
         var now: ArtPusher.Report? = null
         val stop = run {
-            val cur = pusher.run(ArtPusher.order(st).filter { real(it.first) }, originOf = curOrigin)
+            val cur = pusher.run(playingArtists(st).filter { real(it.first) }, originOf = curOrigin)
             claim(s, cur, curOrigin)
             note(s, "current", cur)
             now = cur
@@ -127,7 +127,7 @@ class Forward(
                 note(s, "queue", q)
                 if (q.stop != ArtPusher.Stop.DONE) return@run q
             }
-            val playing = ArtPusher.order(st).filter { real(it.first) }
+            val playing = playingArtists(st).filter { real(it.first) }
             upgrade(s, pusher, keep, playing.map { Triple(it.first, it.second, curOrigin(it.first)) } + up.map { Triple(it.first, it.second, front(it.first)) }, null)?.let { return@run it }
             if (retagging() && s.hello?.has("imgOrigin") == true) retag(s, library, keep)?.let { return@run it }
             if (holding()) held(s, library, keep)?.let { return@run it }
@@ -482,7 +482,7 @@ class Forward(
         val recorded = { e: ImgEntry -> blocks?.let { b -> b.records.records().any { r -> matches(r, e, b) } } == true }
         val open = l.entries.filter { it.full != true && it.name in l.names && it.name.isNotBlank() && real(it.name) && !recorded(it) && it.srcCrc !in blocked }
         val st = device().playback.state
-        val first = ArtPusher.order(st).map { it.first } + upcoming(s, st, keep).map { it.first }
+        val first = playingArtists(st).map { it.first } + upcoming(s, st, keep).map { it.first }
         val rank = HashMap<String, Int>()
         first.forEachIndexed { i, n -> rank.putIfAbsent(Names.fold(n), i) }
         return open.sortedWith(compareBy<ImgEntry> { rank[Names.fold(it.name)] ?: Int.MAX_VALUE }.thenByDescending { it.shownS ?: 0 })
@@ -643,7 +643,7 @@ class Forward(
             }
             val items = device().queue.items
             for (i in offset until offset + count) {
-                val item = items[i] ?: continue
+                val item = items[i]?.takeIf { it.book != true } ?: continue
                 item.artists.forEachIndexed { j, a -> out += a to item.mbids.getOrNull(j)?.takeIf { it.isNotBlank() } }
             }
             return true
@@ -805,6 +805,8 @@ class Forward(
         private const val PAUSE_STEP_MS = 100L
 
         private fun real(name: String) = name.trim().lowercase() !in PLACEHOLDERS
+
+        fun playingArtists(st: State): List<Pair<String, String?>> = if (st.book == true) emptyList() else ArtPusher.order(st)
 
         fun phoneArtists(st: State): List<Pair<String, String?>> =
             if (st.source != Enums.Source.phone) emptyList() else ArtPusher.order(st).filter { real(it.first) }
