@@ -17,6 +17,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
@@ -51,8 +52,8 @@ class ListLinesShots {
         rule.waitForIdle()
     }
 
-    private fun load(sz: Size, pages: List<Page>, prep: (SimControl) -> Unit = {}) {
-        c = SimControl("v1", stateNow = SHOT_CLOCK).also {
+    private fun load(sz: Size, pages: List<Page>, lib: Library = Library.synthetic(), prep: (SimControl) -> Unit = {}) {
+        c = SimControl("v1", lib, stateNow = SHOT_CLOCK).also {
             shotClock(it)
             prep(it)
         }
@@ -108,6 +109,14 @@ class ListLinesShots {
             load(sz, HOME + Page.Music, prep = ::playing)
             sheet("row.0", 1)
             shoot(dir, "added-songs")
+        }
+    }
+
+    @Test
+    fun queue() = shots("queue") { dir ->
+        for (sz in SHAPES) {
+            load(sz, HOME + Page.NowPlaying + Page.Queue, QUEUE_LIB)
+            shoot(dir, "rows")
         }
     }
 

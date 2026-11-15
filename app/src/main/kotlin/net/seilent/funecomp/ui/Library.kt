@@ -404,7 +404,7 @@ fun Queue(ctx: Ctx) {
                 }
                 val title = item?.title ?: ""
                 ListRow(
-                    title, Modifier.enter().testTag("queue.$i"), number = "${i + 1}", playing = i == current, focused = focus == i,
+                    title, Modifier.enter().testTag("queue.$i"), secondary = item?.artists?.joinToString(", ") ?: "", number = "${i + 1}", playing = i == current, focused = focus == i,
                     onTap = {
                         focus = i
                         if (!playRefused(ctx.live(), ctx.toast)) ctx.control.queueOp(Enums.QueueCmd.playAt, slot = i.toLong())
