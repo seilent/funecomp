@@ -54,6 +54,28 @@ class StateTest {
     }
 
     @Test
+    fun positionMovesAtTheBookSpeed() {
+        val d = DeviceState().withRtt(80).withRtt(40).withState(playing(10_000, 1_000, 1_030).copy(speedPct = 150), now = 5_000)
+        assertEquals(10_075L, d.positionMs(5_000))
+        assertEquals(13_075L, d.positionMs(7_000))
+        val fast = d.withState(playing(10_000, 1_000, 1_030).copy(speedPct = 200), now = 5_000)
+        assertEquals(14_100L, fast.positionMs(7_000))
+        val music = d.withState(playing(10_000, 1_000, 1_030), now = 5_000)
+        assertEquals(12_050L, music.positionMs(7_000))
+    }
+
+    @Test
+    fun aBookPausedOrHeldDoesNotMoveAndClampsAtTheDuration() {
+        val paused = DeviceState().withState(playing(5_000, 0, 50).copy(playing = false, speedPct = 200), now = 0)
+        assertEquals(5_000L, paused.positionMs(60_000))
+        val held = DeviceState().withState(playing(5_000, 0, 50).copy(positionHeld = true, speedPct = 200), now = 0)
+        assertEquals(5_000L, held.positionMs(60_000))
+        val end = DeviceState().withState(playing(199_000, 0, 0).copy(speedPct = 200), now = 0)
+        assertEquals(199_800L, end.positionMs(400))
+        assertEquals(200_000L, end.positionMs(600))
+    }
+
+    @Test
     fun positionFollowsDeviceAcrossDrift() {
         var d = DeviceState().withRtt(20)
         var phone = 100_000L

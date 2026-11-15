@@ -199,7 +199,7 @@ class MediaLink(
             return PlaybackState.Builder()
                 .setActions(ACTIONS)
                 .addCustomAction(PlaybackState.CustomAction.Builder(STOP, STOP, android.R.drawable.ic_menu_close_clear_cancel).build())
-                .setState(state, position, if (playing && !held) 1f else 0f, now)
+                .setState(state, position, if (playing && !held) (device.playback.state.speedPct ?: 100) / 100f else 0f, now)
                 .build()
         }
     }

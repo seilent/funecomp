@@ -71,6 +71,21 @@ class PosReplayTest {
     private fun stamps() = lines("stamps.txt").map { it.toLong() }
 
     @Test
+    fun aRunAt150KeepsThePositionInStepAtEachState() {
+        var d = DeviceState().withHello(hello(true)).copy(clock = DeviceClock(DeviceClock.WINDOW_MS), rttMs = 40)
+        var worst = 0L
+        for (i in 0..60) {
+            val sample = 1_000_000L + i * 10_000L
+            val at = 5_000_000L + i * 10_000L + 25
+            val s = State(positionMs = 100_000L + i * 15_000L, sentMs = sample + 3, sampleMs = sample, playing = true, speedPct = 150)
+            val old = d.positionMs(at)
+            d = d.withState(s, at)
+            if (i > 0) worst = maxOf(worst, abs(d.positionMs(at) - old))
+        }
+        assertTrue("worst $worst", worst <= q)
+    }
+
+    @Test
     fun theLyrslideRunMatchesTheIndependentReplay() {
         val steps = replay("run.tsv", DeviceClock.WINDOW_MS)
         assertEquals(expected("run-back.tsv"), steps.rows())

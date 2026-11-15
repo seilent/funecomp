@@ -181,6 +181,8 @@ data class DeviceState(
 
     private fun both(bit: Int) = hello?.let { (it.features ushr bit) and 1L == 1L } == true && (appFeatures ushr bit) and 1L == 1L
 
+    val books: Boolean get() = both(Feature.books)
+
     val eqForm: EqForm get() {
         val n = hello?.eqSlots?.size ?: 0
         return when {

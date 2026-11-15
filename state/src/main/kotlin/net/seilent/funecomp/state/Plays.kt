@@ -59,7 +59,7 @@ class Plays(open: Play? = null) {
             is Playing.Service -> playing.key?.let { it to playing.service }
             else -> null
         }
-        if (s.source != Enums.Source.local || id == null) {
+        if (s.source != Enums.Source.local || id == null || s.book == true) {
             prev = null
             return emptyList()
         }

@@ -157,6 +157,19 @@ class PlaysTest {
         assertNull(r.plays.open)
     }
 
+    @Test
+    fun aBookFrameGivesNoEventsAndLeavesTheOpenPlay() {
+        val r = Run()
+        r.play(0, 60_000, track = 8)
+        val open = r.plays.open
+        for (i in 0..60) r.at(st(i * 10_000L, 70_000 + i * 10_000L, track = 401, dur = 1_800_000).copy(book = true), wall + 70_040 + i * 10_000L)
+        assertEquals(1, r.events.size)
+        assertEquals(open, r.plays.open)
+        r.play(0, 120_000, startAt = 700_000, track = 8)
+        assertEquals(listOf(8L, 8L, 8L), r.events.map { it.play.track })
+        assertEquals(100_000L to wall + 700_040, r.scrobbles.single().play.let { it.playedMs to it.startMs })
+    }
+
     private fun Run.clocked() = also { plays.session(clocked = true) }
 
     private fun stamped(pos: Long, sample: Long, sent: Long = sample, track: Long = 7, held: Boolean? = null, at: Long = boot) =

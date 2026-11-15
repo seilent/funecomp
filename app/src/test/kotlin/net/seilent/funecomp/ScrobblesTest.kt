@@ -239,6 +239,16 @@ class ScrobblesTest {
     }
 
     @Test
+    fun aBookSendsNoNowPlayingAndNoListen() {
+        Scrobbles.linked(session(), false)
+        Scrobbles.state(state(0).copy(book = true), 2_000_000_000_000)
+        Scrobbles.state(state(31_000).copy(book = true), 2_000_000_031_000)
+        Scrobbles.idle()
+        assertEquals(0, nowPlaying())
+        assertEquals(0, listens())
+    }
+
+    @Test
     fun aSecondYieldWhileAFlushIsPendingPostsNoOther() {
         Scrobbles.reset()
         ScrobbleQueue(File(app.filesDir, "scrobble")).addLog(0xA1, listOf(exposed()), setOf(Accounts.LISTEN_BRAINZ), ZoneOffset.UTC, at + 86400)

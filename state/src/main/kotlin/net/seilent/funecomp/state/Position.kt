@@ -9,7 +9,7 @@ object Position {
         val sent = s.sentMs
         val sample = s.sampleMs
         val lag = (if (sent != null && sample != null) sent - sample else 0L) + p.lateMs + (rttMs ?: 0L) / 2
-        return clamp(base + lag + (now - p.receivedAt), duration)
+        return clamp(base + (lag + now - p.receivedAt) * (s.speedPct ?: 100) / 100, duration)
     }
 
     private fun clamp(v: Long, duration: Long?) = v.coerceIn(0L, duration?.takeIf { it > 0 } ?: Long.MAX_VALUE)

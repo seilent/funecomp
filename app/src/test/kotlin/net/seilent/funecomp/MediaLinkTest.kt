@@ -113,6 +113,17 @@ class MediaLinkTest {
     }
 
     @Test
+    fun aBookAt150PlaysAtOneAndAHalfAndHeldAtZero() {
+        val book = st.copy(book = true, speedPct = 150)
+        val p = MediaLink.state(device(book, at = 10_000), playing = true, now = 12_000)
+        assertEquals(1.5f, p.playbackSpeed)
+        assertEquals(61_000L + (40 + 10 + 2_000) * 3 / 2, p.position)
+        val held = MediaLink.state(device(book.copy(positionHeld = true), at = 10_000), playing = true, now = 12_000)
+        assertEquals(0f, held.playbackSpeed)
+        assertEquals(61_000L, held.position)
+    }
+
+    @Test
     fun callbacksSendTransport() {
         link.live(device(), true, false)
         val t = link.callback
