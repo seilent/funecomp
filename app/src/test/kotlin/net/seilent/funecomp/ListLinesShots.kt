@@ -10,10 +10,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -152,6 +154,31 @@ class ListLinesShots {
                 rule.waitForIdle()
                 shoot(dir, "switch-out-$at")
             }
+        }
+    }
+
+    private fun phoneAppOn(s: SimControl) {
+        val d = s.device
+        s.device = d.copy(settings = d.settings.copy(text = d.settings.text + "\ncompanion=on\n"))
+    }
+
+    private fun scrollTo(tag: String) {
+        rule.mainClock.autoAdvance = true
+        rule.onNodeWithTag("rows").performScrollToNode(hasTestTag(tag))
+        rule.mainClock.autoAdvance = false
+        settle(600)
+    }
+
+    @Test
+    fun readonly() = shots("readonly") { dir ->
+        for (sz in SHAPES) {
+            load(sz, HOME + Page.Settings, prep = ::phoneAppOn)
+            rule.walkPivots(c.device.schema.rows, "display") { settle(1000) }
+            scrollTo("set.size")
+            shoot(dir, "display-size")
+            rule.walkPivots(c.device.schema.rows, "system", "display") { settle(1000) }
+            scrollTo("set.companion")
+            shoot(dir, "system-phoneapp")
         }
     }
 

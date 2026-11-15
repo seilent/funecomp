@@ -410,7 +410,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
                         Modifier.enter().testTag("set.$key"),
                         focused = focus == i,
                         editing = editing,
-                        info = r.kind == Enums.RowKind.info && !eqRow && !aboutRow,
+                        info = (r.kind == Enums.RowKind.info || RowRules.readOnly(r)) && !eqRow && !aboutRow,
                         swatch = if (key != ACCENT_KEY) null else if (editing && v != edit?.original) accentFor(v?.toIntOrNull()) else if (AccentOff) white(Tok.alpha_full) else accentFor(v?.toIntOrNull()),
                     ) { x ->
                         if (edit != null && !editing) {
