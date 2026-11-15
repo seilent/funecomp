@@ -64,9 +64,9 @@ class GenresTest {
         val c = SimControl("ap80", minor = minor, faults = faults)
         c.transport(Enums.TransportCmd.shuffle, on = shuffle)
         val control = object : Control by c {
-            override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>) {
+            override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>, libRev: Long?, done: (Int?) -> Unit) {
                 plays += Play(view, parent, start)
-                c.play(view, parent, start, shuffle, tracks)
+                c.play(view, parent, start, shuffle, tracks, libRev, done)
             }
 
             override fun libGet(view: Int, parent: String, offset: Long) {

@@ -11,8 +11,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import net.seilent.funecomp.proto.gen.Enums
@@ -53,12 +55,12 @@ class ListPageShots {
         rule.waitForIdle()
     }
 
-    private fun load(sz: Size, top: Page, lib: Library = Library(BASE.tracks, playlists = LISTS), minor: Int = Proto.minor, prep: (SimControl) -> Unit = {}) {
+    private fun load(sz: Size, top: Page?, lib: Library = Library(BASE.tracks, playlists = LISTS), minor: Int = Proto.minor, prep: (SimControl) -> Unit = {}) {
         c = SimControl("v1", lib, minor = minor, stateNow = SHOT_CLOCK).also {
             shotClock(it)
             prep(it)
         }
-        shell = Shell(Nav(UNDER + top))
+        shell = Shell(Nav(UNDER + listOfNotNull(top)))
         size = sz
         gen++
         settle(1000)
@@ -130,6 +132,23 @@ class ListPageShots {
             rule.runOnIdle { c.lists { delete(ROAD_KEY) } }
             settle(1000)
             shoot(dir, "gone")
+        }
+    }
+
+    private fun hold(tag: String) {
+        rule.onNodeWithTag(tag).performTouchInput { longClick() }
+        settle(600)
+    }
+
+    @Test
+    fun sheets() = shots("sheets") { dir ->
+        for (sz in SHAPES) {
+            load(sz, null)
+            hold("row.playlist.0")
+            shoot(dir, "list")
+            load(sz, null)
+            hold("row.playlist.1")
+            shoot(dir, "list-empty")
         }
     }
 

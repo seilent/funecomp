@@ -79,7 +79,7 @@ interface Control {
     fun volume(detents: Int)
     fun volumePercent(pct: Int, done: () -> Unit = {}) = done()
     fun libGet(view: Int, parent: String, offset: Long)
-    fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean = false, tracks: List<Long> = emptyList())
+    fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean = false, tracks: List<Long> = emptyList(), libRev: Long? = null, done: (Int?) -> Unit = {})
     fun queuePage(offset: Long)
     fun queueOp(cmd: Int, slot: Long? = null, to: Long? = null, tracks: List<Long> = emptyList())
     fun queueAdd(cmd: Int, view: Int?, parent: String?, tracks: List<Long> = emptyList(), done: (Long?, Int?) -> Unit = { _, _ -> }) = done(null, -1)

@@ -1390,11 +1390,16 @@ object Remote : Control {
         })
     }
 
-    override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>) {
+    override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>, libRev: Long?, done: (Int?) -> Unit) {
         val lib = device.lib.takeIf { tracks.isEmpty() }
-        send(Msg.PLAY, Req.play(view, parent, lib?.libRev(view), start, shuffle, tracks, lib?.snapRev(view)), "play view=$view parent=$parent start=$start", failed = { code ->
-            if (code == Err.badValue && start > 0 && tracks.isEmpty()) play(view, parent, 0, shuffle, tracks)
-        }, done = ::playRefused)
+        send(Msg.PLAY, Req.play(view, parent, libRev ?: lib?.libRev(view), start, shuffle, tracks, lib?.snapRev(view)), "play view=$view parent=$parent start=$start", done = { code, text ->
+            if (code == Err.badValue && start > 0 && tracks.isEmpty()) {
+                play(view, parent, 0, shuffle, tracks, libRev, done)
+            } else {
+                playRefused(code, text)
+                main.post { done(code) }
+            }
+        })
     }
 
     override fun queuePage(offset: Long) {
@@ -1497,7 +1502,7 @@ object Remote : Control {
 
     private fun forget(key: String) = synchronized(asked) { asked.remove(key) }
 
-    private fun send(type: Int, payload: ByteArray, what: String, ok: ((Node) -> Unit)? = null, fail: (() -> Unit)? = null, failed: ((Int) -> Unit)? = null, done: ((Int?, String?) -> Unit)? = null) {
+    private fun send(type: Int, payload: ByteArray, what: String, ok: ((Node) -> Unit)? = null, fail: (() -> Unit)? = null, done: ((Int?, String?) -> Unit)? = null) {
         val s = link?.session
         if (s == null) {
             Log.i(TAG, "$what: no session")
@@ -1513,7 +1518,6 @@ object Remote : Control {
             }
             Log.i(TAG, "$what -> $out")
             if (r is Session.Result.Ok) ok?.invoke(r.body) else fail?.invoke()
-            if (r is Session.Result.Failed) failed?.invoke(r.error.code)
             when (r) {
                 is Session.Result.Ok -> done?.invoke(null, null)
                 is Session.Result.Failed -> done?.invoke(r.error.code, r.error.text)

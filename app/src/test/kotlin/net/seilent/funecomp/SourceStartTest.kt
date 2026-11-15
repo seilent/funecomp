@@ -50,9 +50,9 @@ class SourceStartTest {
         val c = SimControl("ap80")
         c.transport(Enums.TransportCmd.shuffle, on = shuffle)
         val control = object : Control by c {
-            override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>) {
+            override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>, libRev: Long?, done: (Int?) -> Unit) {
                 starts += start
-                c.play(view, parent, start, shuffle, tracks)
+                c.play(view, parent, start, shuffle, tracks, libRev, done)
             }
 
             override fun log(message: String) {

@@ -47,6 +47,7 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.HomeShuffle
 import net.seilent.funecomp.state.LibKey
+import net.seilent.funecomp.state.ListPlays
 import net.seilent.funecomp.state.LyricsFetch
 
 private const val ACCENT_KEY = "accentHue"
@@ -78,6 +79,9 @@ class Shell(
     var offset by mutableStateOf<OffsetEdit?>(null)
     val shuffle = HomeShuffle()
     val shown = mutableStateMapOf<LibKey, Shown>()
+    var stale by mutableStateOf<ListPlays.Tap?>(null)
+        private set
+    val lists = ListPlays(LIB_PAGE) { stale = it }
 }
 
 fun homeItems(device: DeviceState, link: LinkView): List<HomeItem> {
@@ -126,7 +130,10 @@ fun App(
     val root = Modifier.pointerInput(shell) {
         awaitPointerEventScope {
             while (true) {
-                if (awaitPointerEvent(PointerEventPass.Initial).changes.any { it.changedToDown() }) shell.shuffle.end()
+                if (awaitPointerEvent(PointerEventPass.Initial).changes.any { it.changedToDown() }) {
+                    shell.shuffle.end()
+                    shell.lists.end()
+                }
             }
         }
     }
@@ -152,7 +159,7 @@ fun App(
             SideEffect { shell.sheet.page = { nav.top } }
             val browse = remember(nav) { BrowseSessions() }
             val current by rememberUpdatedState(device)
-            val ctx = Ctx(device, control, nav, shell.sheet, shell.toast, browse) { current }
+            val ctx = Ctx(device, control, nav, shell.sheet, shell.toast, browse, shell.lists) { current }
             val lifecycle = LocalLifecycleOwner.current.lifecycle
             val main = remember { Handler(Looper.getMainLooper()) }
             fun openNowPlaying() {
@@ -161,7 +168,10 @@ fun App(
             LaunchedEffect(shell.overlay.shows) {
                 slots.drop()
                 shell.shuffle.end()
+                shell.lists.end()
             }
+            LaunchedEffect(nav.top, nav.stack.size, shell.sheet.shown) { shell.lists.page(nav.top, nav.stack.size, shell.sheet.shown) }
+            LaunchedEffect(link.phase) { listStep(ctx, shell.lists.link(link.phase == Phase.LIVE)) }
             LaunchedEffect(nav.top, shell.sheet.shown, link.phase) {
                 if (nav.top != Page.Home || shell.sheet.shown || link.phase != Phase.LIVE) shell.shuffle.end()
             }
@@ -175,6 +185,7 @@ fun App(
                         control.refusals(null, sink)
                         slots.reset()
                         shell.shuffle.end()
+                        shell.lists.stop()
                     }
                 }
                 lifecycle.addObserver(started)
@@ -229,6 +240,17 @@ fun App(
             if (link.phase == Phase.LIVE) libList(device, control, Enums.View.playlists, "")
             val open = nav.stack.filterIsInstance<Page.List>().mapTo(HashSet()) { LibKey(it.view, it.key) }
             SideEffect { (shell.shown.keys - open).forEach { shell.shown.remove(it) } }
+            val stale = shell.stale
+            LaunchedEffect(stale, if (stale != null) device.lib else null, device.playback.state.card) {
+                if (stale == null) return@LaunchedEffect
+                shell.lists.asks(device.lib).forEach { control.libGet(it.view, it.parent, it.offset) }
+                listStep(ctx, shell.lists.decide(device.lib, device.playback.state.card))
+            }
+            LaunchedEffect(stale) {
+                val t = stale ?: return@LaunchedEffect
+                delay(ListPlays.BOUND_MS)
+                listStep(ctx, shell.lists.timeout(t))
+            }
             BackHandler(shell.sheet.shown || nav.stack.size > 1) {
                 if (shell.sheet.shown) {
                     if (shell.sheet.armed) return@BackHandler

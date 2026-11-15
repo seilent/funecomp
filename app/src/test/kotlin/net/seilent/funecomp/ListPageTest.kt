@@ -15,7 +15,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,6 +28,7 @@ import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Playlist
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
@@ -61,6 +64,9 @@ class ListPageTest {
     private val under = listOf(Page.Home, Page.Playlists)
     private lateinit var c: SimControl
     private lateinit var shell: Shell
+    private var holdRows = false
+    private val heldRows = ArrayList<() -> Unit>()
+    private val plays = ArrayList<Pair<Long, Long?>>()
 
     private fun start(top: Page = roadPage) {
         val lists = listOf(
@@ -70,10 +76,20 @@ class ListPageTest {
             Playlist("empty", emptyKey, emptyList()),
         )
         c = SimControl("v1", Library(base.tracks, playlists = lists))
+        val control = object : Control by c {
+            override fun libGet(view: Int, parent: String, offset: Long) {
+                if (holdRows && parent.isNotEmpty()) heldRows += { c.libGet(view, parent, offset) } else c.libGet(view, parent, offset)
+            }
+
+            override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>, libRev: Long?, done: (Int?) -> Unit) {
+                plays += start to libRev
+                c.play(view, parent, start, shuffle, tracks, libRev, done)
+            }
+        }
         shell = Shell(Nav(under + top))
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE, "V1", everLive = true), c, shell) }
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE, "V1", everLive = true), control, shell) }
         }
         settle(1500)
     }
@@ -239,6 +255,47 @@ class ListPageTest {
         settle()
         assertEquals(roadPage, shell.nav.top)
         assertEquals(listOf("no card"), words("status"))
+    }
+
+    @Test
+    fun openPlaylistPushesTheViewPage() {
+        start(Page.Playlists)
+        rule.onNodeWithTag("row.playlist.0").performTouchInput { longClick() }
+        settle()
+        assertEquals("open playlist", shell.sheet.items.last())
+        rule.runOnIdle { shell.sheet.accept(shell.sheet.items.lastIndex) }
+        settle()
+        assertEquals(roadPage, shell.nav.top)
+        assertEquals("12 SONGS", text("count"))
+        open(Page.Playlists)
+        rule.onNodeWithTag("row.favorites").performTouchInput { longClick() }
+        settle()
+        assertEquals(listOf("open playlist"), shell.sheet.items)
+        rule.runOnIdle { shell.sheet.accept(0) }
+        settle()
+        assertEquals(Page.List(Enums.View.favorites, "", "favorites"), shell.nav.top)
+        assertNothingHere("FAVORITES")
+    }
+
+    @Test
+    fun aRowTapReadBeforeAMoveSendsItsOwnRevAndPlaysItsTrack() {
+        start()
+        val rev = c.device.lib.rev
+        holdRows = true
+        rule.runOnIdle { c.lists { edit(roadKey, road - road[2]) } }
+        settle()
+        assertNull(c.device.lib.pages[LibKey(Enums.View.playlists, roadKey)])
+        assertEquals(title(road[5]), layout(inRow(5, hasTestTag("primary"))).layoutInput.text.text)
+        rule.onNodeWithTag("row.5").performClick()
+        settle()
+        assertEquals(listOf(5L to rev), plays)
+        assertEquals(Page.NowPlaying, shell.nav.top)
+        holdRows = false
+        rule.runOnIdle { heldRows.toList().forEach { it() } }
+        settle()
+        assertEquals(listOf(5L to rev, 4L to null), plays)
+        assertEquals(title(road[5]), c.device.playback.state.title)
+        assertEquals(Page.NowPlaying, shell.nav.top)
     }
 
     @Test

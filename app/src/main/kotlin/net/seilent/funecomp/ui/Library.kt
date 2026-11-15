@@ -41,6 +41,7 @@ import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.LibList
 import net.seilent.funecomp.state.ListGone
 import net.seilent.funecomp.state.ListLine
+import net.seilent.funecomp.state.ListPlays
 
 fun songs(n: Long) = "$n " + if (n == 1L) "song" else "songs"
 
@@ -64,12 +65,14 @@ fun LibList.row(i: Int, control: Control, view: Int, parent: String): LibRow? {
     return r
 }
 
-class Ctx(val device: DeviceState, val control: Control, val nav: Nav, val sheet: SheetState, val toast: ToastState, val browse: BrowseSessions, val live: () -> DeviceState = { device })
+class Ctx(val device: DeviceState, val control: Control, val nav: Nav, val sheet: SheetState, val toast: ToastState, val browse: BrowseSessions, val lists: ListPlays = ListPlays(LIB_PAGE), val live: () -> DeviceState = { device })
 
 const val ADD_TO_NOW_PLAYING = "add to now playing"
 private const val PLAY_NEXT = "play next"
 private const val SONG_ADDED = "song added to now playing"
 private const val SONGS_ADDED = "songs added to now playing"
+private const val OPEN_PLAYLIST = "open playlist"
+private const val UNREADABLE = "playlist not readable"
 
 fun musicViews(device: DeviceState) = listOf(Enums.View.albums, Enums.View.artists, Enums.View.playlists, Enums.View.songs) +
     listOfNotNull(Enums.View.genres.takeIf { device.has("genres") }) + listOf(Enums.View.folders)
@@ -215,6 +218,73 @@ private fun queueAdd(ctx: Ctx, cmd: Int, title: String, view: Int?, parent: Stri
     ctx.control.queueAdd(cmd, view, parent, tracks) { added, code -> queued(ctx, title, tracks.size == 1, added, code) }
 }
 
+private fun listSource(ctx: Ctx, view: Int, key: String, name: String, count: Long?, shuffle: Boolean = false) {
+    if (count == 0L) return
+    val random = shuffle || ctx.device.playback.state.shuffle == true
+    val start = sourceStart(count, random)
+    if (start == null) ctx.control.log("start 0 (no count)")
+    listPlay(ctx, ListPlays.Want(view, key, name, start = start ?: 0L, shuffle = shuffle, random = random))
+}
+
+private fun listPlay(ctx: Ctx, want: ListPlays.Want) {
+    val live = ctx.live()
+    if (playRefused(live, ctx.toast)) return
+    val pushed = Page.NowPlaying !in ctx.nav.stack
+    ctx.nav.popTo(Page.NowPlaying)
+    val w = want.copy(rev = want.rev ?: live.lib.libRev(want.view))
+    playList(ctx, ctx.lists.tap(w, live.playback.state.queueRev, pushed, ctx.nav.top, ctx.nav.stack.size), w.start, w.rev)
+}
+
+private fun playList(ctx: Ctx, t: ListPlays.Tap, start: Long, libRev: Long?) {
+    val w = t.want
+    ctx.control.play(w.view, w.key, start, w.shuffle, libRev = libRev) { code -> listStep(ctx, ctx.lists.replied(t, code, ctx.live().playback.state.queueRev)) }
+}
+
+private fun listAdd(ctx: Ctx, cmd: Int, name: String, view: Int, key: String) {
+    val live = ctx.live()
+    if (queueRefused(live, ctx.toast)) return
+    addList(ctx, ctx.lists.tap(ListPlays.Want(view, key, name, rev = live.lib.libRev(view), add = cmd), null, false, ctx.nav.top, ctx.nav.stack.size))
+}
+
+private fun addList(ctx: Ctx, t: ListPlays.Tap) {
+    val w = t.want
+    val cmd = w.add ?: return
+    ctx.control.queueAdd(cmd, w.view, w.key) { added, code ->
+        val step = ctx.lists.replied(t, code, null)
+        if (code == Err.staleRev) listStep(ctx, step) else queued(ctx, w.name, false, added, code)
+    }
+}
+
+fun listStep(ctx: Ctx, step: ListPlays.Step) {
+    when (step) {
+        is ListPlays.Step.Back -> {
+            val t = step.tap
+            if (t.want.add == null && t.pushed && ctx.nav.top == Page.NowPlaying && ctx.nav.stack.size == t.depth) ctx.nav.pop()
+            step.gone?.let { ctx.toast.show(UNREADABLE, it) }
+        }
+        is ListPlays.Step.Again -> {
+            val t = step.tap
+            if (t.want.add != null) addList(ctx, t) else playList(ctx, t, step.at ?: if (t.want.random) sourceStart(step.count, true) ?: 0L else t.want.start, null)
+        }
+        ListPlays.Step.Stay -> Unit
+    }
+}
+
+private fun listSheet(ctx: Ctx, title: String, view: Int, key: String, count: Long?) {
+    val items = buildList<Pair<String, () -> Unit>> {
+        if (count != 0L) {
+            add("play" to { listSource(ctx, view, key, title, count) })
+            if (ctx.device.has("queueAdd")) {
+                add(PLAY_NEXT to { listAdd(ctx, Enums.QueueCmd.playNext, title, view, key) })
+                add(ADD_TO_NOW_PLAYING to { listAdd(ctx, Enums.QueueCmd.add, title, view, key) })
+            }
+            add("shuffle" to { listSource(ctx, view, key, title, count, shuffle = true) })
+        }
+        add(OPEN_PLAYLIST to { ctx.nav.push(Page.List(view, key, title)) })
+    }
+    ctx.sheet.open(title, items.map { it.first }) { items[it].second() }
+}
+
 private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
     val items = listOf("play", PLAY_NEXT) + if (ctx.device.has("queueAdd")) listOf(ADD_TO_NOW_PLAYING) else emptyList()
     ctx.sheet.open(r.name ?: "", items) {
@@ -311,8 +381,8 @@ fun PlaylistRows(ctx: Ctx, top: Float? = null) {
         item {
             ListRow("favorites", Modifier.enter().testTag("row.favorites"), songs(fav?.total ?: 0), bold = true, focused = focus == 1, onTap = {
                 focus = 1
-                if ((fav?.total ?: 0L) > 0L) playSource(ctx, Enums.View.favorites, "", fav?.total)
-            }, onLong = { groupSheet(ctx, "favorites", Enums.View.favorites, "", fav?.total) })
+                if ((fav?.total ?: 0L) > 0L) listSource(ctx, Enums.View.favorites, "", "favorites", fav?.total)
+            }, onLong = { listSheet(ctx, "favorites", Enums.View.favorites, "", fav?.total) })
         }
         val n = (list?.total ?: 0L).toInt()
         items(n) { i ->
@@ -320,8 +390,8 @@ fun PlaylistRows(ctx: Ctx, top: Float? = null) {
             val name = r?.name ?: ""
             ListRow(name, Modifier.enter().testTag("row.playlist.$i"), songs(r?.count ?: 0), bold = true, focused = focus == i + 2, onTap = {
                 focus = i + 2
-                if (r != null) playSource(ctx, Enums.View.playlists, r.key ?: name, r.count)
-            }, onLong = { if (r != null) groupSheet(ctx, name, Enums.View.playlists, r.key ?: name, r.count) })
+                if (r != null) listSource(ctx, Enums.View.playlists, r.key ?: name, name, r.count)
+            }, onLong = { if (r != null) listSheet(ctx, name, Enums.View.playlists, r.key ?: name, r.count) })
         }
     }
 }
@@ -348,6 +418,7 @@ fun ListPage(ctx: Ctx, page: Page.List, held: MutableMap<LibKey, Shown>) {
     SideEffect { if (ready && list != null && page in ctx.nav.stack && held[key]?.list !== list) held[key] = Shown(d.lib.rev, list) }
     val drawn = if (ready) list else held[key]?.list ?: list
     val line = ListLine.list(card, drawn?.total, ListGone.gone(page.view, page.key, card, root))
+    val drawnRev = if (ready) d.lib.rev else held[key]?.rev ?: d.lib.rev
     LaunchedEffect(list?.rows?.size, first, last) {
         val m = list ?: return@LaunchedEffect
         if (!ready) m.firstMissing(first, minOf(last + 1, m.total))?.let { ctx.control.libGet(page.view, page.key, it) }
@@ -372,7 +443,7 @@ fun ListPage(ctx: Ctx, page: Page.List, held: MutableMap<LibKey, Shown>) {
     val count = drawn?.total?.takeIf { line == null }?.let { songs(it) }
     HubPage(page.name, { ctx.nav.pop() }, count = count, headerCase = case(Tok.type_listCollection_case), headerWeight = weight(Tok.type_listCollection_style), status = ListLine.card(card)) {
         Pane(ctx, page.view, page.key, state = state, line = line, list = drawn) { i, r, _ ->
-            RowSpec(r.name ?: "", r.artist ?: "", "${i + 1}", playing = r.first != null && r.first == d.playback.state.library, libSub = true, tap = { playAndShow(ctx, page.view, page.key, i.toLong()) })
+            RowSpec(r.name ?: "", r.artist ?: "", "${i + 1}", playing = r.first != null && r.first == d.playback.state.library, libSub = true, tap = { listPlay(ctx, ListPlays.Want(page.view, page.key, page.name, r.first, i.toLong(), rev = drawnRev)) })
         }
     }
 }

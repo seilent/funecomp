@@ -47,7 +47,7 @@ class CardToastTest {
         val s = c.device.playback.state
         c.push(Msg.STATE, s.copy(card = card ?: s.card, source = if (phone) Enums.Source.phone else s.source).encode())
         val control = object : Control by c {
-            override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>) {
+            override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>, libRev: Long?, done: (Int?) -> Unit) {
                 calls += "play"
             }
 

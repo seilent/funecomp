@@ -214,9 +214,9 @@ class SimControl(
         req(Msg.LIB_GET, Req.libGet(view, parent, offset, LIB_PAGE, device.lib.libRev(view), device.lib.snapRev(view)))
     }
 
-    override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>) {
+    override fun play(view: Int?, parent: String?, start: Long, shuffle: Boolean, tracks: List<Long>, libRev: Long?, done: (Int?) -> Unit) {
         val lib = device.lib.takeIf { tracks.isEmpty() }
-        req(Msg.PLAY, Req.play(view, parent, lib?.libRev(view), start, shuffle, tracks, lib?.snapRev(view)))
+        done((req(Msg.PLAY, Req.play(view, parent, libRev ?: lib?.libRev(view), start, shuffle, tracks, lib?.snapRev(view))) as? Answer.Fail)?.code)
     }
 
     override fun queuePage(offset: Long) {
