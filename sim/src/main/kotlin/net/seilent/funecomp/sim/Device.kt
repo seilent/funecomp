@@ -1885,6 +1885,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
     }
 
+    fun lists(out: Out, change: Library.() -> Unit) = synchronized(lock) {
+        lib.change()
+        send(out, Msg.STATE, state(out = out))
+    }
+
     fun rescan(next: Library?) = synchronized(lock) {
         faults.scanMs?.let { scanUntil = now() + it }
         val old = lib

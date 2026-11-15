@@ -25,11 +25,46 @@ class Track(
 
 private class Album(val artist: String, val album: String, val genre: String, val titles: List<String>)
 
-class Library(val tracks: List<Track>, val services: List<Track> = emptyList()) {
+class Playlist(val name: String, val source: String, val tracks: List<Long>)
+
+class Library(val tracks: List<Track>, val services: List<Track> = emptyList(), playlists: List<Playlist> = emptyList()) {
     val byId: Map<Long, Track> = (tracks + services).associateBy { it.id }
     val favorites = LinkedHashSet<Long>()
     var rev = 1L
     var snapRev = 1L
+    private val lists = playlists.toMutableList()
+    private val hidden = HashSet<String>()
+
+    val playlists: List<Playlist> get() = lists.filter { it.source !in hidden }
+
+    fun rename(source: String, to: String, name: String) {
+        val i = lists.indexOfFirst { it.source == source }
+        if (i >= 0) lists[i] = Playlist(name, to, lists[i].tracks)
+        rev++
+    }
+
+    fun hide(source: String, on: Boolean = true) {
+        if (on) hidden += source else hidden -= source
+        rev++
+    }
+
+    fun delete(source: String) {
+        lists.removeAll { it.source == source }
+        rev++
+    }
+
+    fun edit(source: String, tracks: List<Long>) {
+        val i = lists.indexOfFirst { it.source == source }
+        if (i >= 0) lists[i] = Playlist(lists[i].name, source, tracks)
+        rev++
+    }
+
+    private fun listTracks(parent: String): List<Long>? = playlists.firstOrNull { it.source == parent }?.tracks?.filter { it in byId }
+
+    private fun listRow(p: Playlist): LibRow {
+        val ts = p.tracks.filter { it in byId }
+        return LibRow(p.name, ts.size.toLong(), ts.firstOrNull(), p.source)
+    }
 
     private val albums: List<List<Track>> =
         tracks.groupBy { it.album to it.albumArtist }.values.toList()
@@ -56,7 +91,7 @@ class Library(val tracks: List<Track>, val services: List<Track> = emptyList()) 
         Enums.View.artistAlbums -> albums.filter { a -> a.any { parent in it.artists } }.map { albumRow(it) }
             .takeIf { tracks.any { parent in it.artists } }
         Enums.View.albumTracks -> albumOf(parent)?.map { trackRow(it) }
-        Enums.View.playlists -> emptyList()
+        Enums.View.playlists -> if (parent.isEmpty()) playlists.map { listRow(it) } else listTracks(parent)?.map { trackRow(byId.getValue(it)) }
         Enums.View.folders -> {
             val under = under(parent)
             if (parent.isNotEmpty() && under.isEmpty()) {
@@ -68,7 +103,7 @@ class Library(val tracks: List<Track>, val services: List<Track> = emptyList()) 
                 } + own(parent).map { trackRow(it) }
             }
         }
-        Enums.View.favorites -> favorites.mapNotNull { byId[it] }.map { trackRow(it) }
+        Enums.View.favorites -> favorites.toList().reversed().mapNotNull { byId[it] }.map { trackRow(it) }
         Enums.View.genres -> if (parent.isEmpty()) {
             genres().map { g ->
                 val ts = tracks.filter { it.genre == g }
@@ -103,8 +138,8 @@ class Library(val tracks: List<Track>, val services: List<Track> = emptyList()) 
         Enums.View.artistAlbums -> tracks.filter { parent in it.artists }.map { it.id }.takeIf { it.isNotEmpty() }
         Enums.View.albumTracks -> albumOf(parent)?.map { it.id }
         Enums.View.folders -> folderOrder(parent).map { it.id }.takeIf { parent.isEmpty() || it.isNotEmpty() }
-        Enums.View.favorites -> favorites.toList()
-        Enums.View.playlists -> emptyList()
+        Enums.View.favorites -> favorites.toList().reversed()
+        Enums.View.playlists -> if (parent.isEmpty()) emptyList() else listTracks(parent)
         Enums.View.genres -> if (parent.isEmpty()) emptyList() else tracks.filter { it.genre == parent }.map { it.id }.takeIf { it.isNotEmpty() }
         else -> null
     }
