@@ -36,6 +36,7 @@ class OldPeerTest {
     private val last15 = table("/proto-1.15.txt")
     private val v1_16 = table("/proto-1.16.txt")
     private val v1_17 = table("/proto-1.17.txt")
+    private val v1_18 = table("/proto-1.18.txt")
 
     private fun text(name: String) = OldPeerTest::class.java.getResourceAsStream(name)!!.bufferedReader().readText()
 
@@ -657,6 +658,42 @@ class OldPeerTest {
         val st = State(playLogSeq = 43, cardLogSeq = 44)
         assertEquals(st, State.from(Node.decode("STATE", st.encode())))
         assertNull(State.from(Node.decode("STATE", State(playLogSeq = 43).encode())).cardLogSeq)
+    }
+
+    @Test
+    fun protocol121FramesDecodeWithThe118TableToEmptyFields() {
+        val old = text("/proto-1.18.txt")
+        assertTrue("const minor 18" in old)
+        assertFalse("books" in old)
+        assertEquals("books", Feature.names[48])
+        assertEquals(1L shl 48, Groups.mask("books"))
+
+        val oldState = Node.decode("STATE", body("state_book"), v1_18)
+        assertEquals(listOf(58, 59, 60), oldState.unknownTags)
+        val st = State.from(oldState)
+        assertNull(st.book)
+        assertNull(st.speedPct)
+        assertNull(st.sleepEnd)
+        assertEquals(600L, st.sleepLeftS)
+        assertEquals(401L, st.track)
+        val now = State.from(Node.decode("STATE", body("state_book")))
+        assertEquals(Triple(true, 150, true), Triple(now.book, now.speedPct, now.sleepEnd))
+
+        val oldQueue = Node.decode("QUEUE", body("queue_book"), v1_18)
+        assertEquals(listOf(listOf(12), emptyList()), oldQueue.nodes(Tags.Queue.item).map { it.unknownTags })
+        val q = Queue.from(oldQueue)
+        assertTrue(q.items.all { it.book == null })
+        assertEquals(401L, q.items.first().track)
+        assertEquals(listOf(true, null), Queue.from(Node.decode("QUEUE", body("queue_book"))).items.map { it.book })
+    }
+
+    @Test
+    fun protocol121BuildersMatchTheVectors() {
+        assertArrayEquals(body("transport_skip"), Req.transport(Enums.TransportCmd.skip, skipMs = -30000))
+        assertArrayEquals(body("transport_speed"), Req.transport(Enums.TransportCmd.speed, speedPct = 150))
+        assertArrayEquals(body("transport_speed_step"), Req.transport(Enums.TransportCmd.speed, speedPct = 110))
+        assertArrayEquals(body("draft_sleep_end"), Req.draft(Enums.DraftKind.sleep, sleepEnd = true))
+        assertArrayEquals(body("draft_sleep_end_minutes"), Req.draft(Enums.DraftKind.sleep, minutes = 30, sleepEnd = true))
     }
 
     @Test

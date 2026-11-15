@@ -7,9 +7,9 @@ class Field(val tag: Int, val name: String, val base: Base, val ref: String?, va
 class MsgInfo(val id: Int, val name: String, val dir: String, val push: Boolean)
 
 object Pin {
-    const val COMMIT = "9ba4d4fa8c3e505db53d200009912e318f3d72bb"
-    const val PROTO_SHA256 = "c85dae2c8f9267cfcc9d6045a116b4e0f3976fbf5592127d99cfbd075a4bb584"
-    const val VECTORS_SHA256 = "566906cb782fd76c17a44a934ff5ac170d1fa91640366690eab6363240bbc4d6"
+    const val COMMIT = "088d8a8524312d80f57ce31c04491c1f9ad1596c"
+    const val PROTO_SHA256 = "e39abf87b9de92171792e699f28ff65337b5985fbbab522d634b203618e1d882"
+    const val VECTORS_SHA256 = "0b855f72fa0496a5a46b953872bc68f7a8cb646d0d4fce2393e04729c0ec0d8d"
     const val TOKENS_SHA256 = "39f950417ae47ae5fd89bb98f8fa6b7fefb9d6afecc24d7d5ec71d564416cffb"
     const val TOKENSV1_SHA256 = "32bc09682aa9e40e72dbf872ea90df502e66776e11e1e9b3d92e20753556edd5"
     const val TOKENSR1_SHA256 = "f80924e3d93cfb155396f9cfc053b320bb71e829ba965f1f3234f31d433ce708"
@@ -19,7 +19,7 @@ object Proto {
     const val uuid = "6238ed73-a581-4335-9d8a-df1ecf688118"
     const val magic = 0x50434446
     const val major = 1
-    const val minor = 18
+    const val minor = 21
     const val headerBytes = 6
     const val tlvHeaderBytes = 3
     const val maxPayload = 16384
@@ -127,6 +127,10 @@ object Msg {
     const val LIB_DELETE = 0x50
     const val BIND_ASK = 0x51
     const val SCROB_AUTH = 0x52
+    const val QP_GET = 0x53
+    const val QP_PIN = 0x54
+    const val PL_EDIT = 0x55
+    const val TRACK_INFO = 0x56
     val info: Map<Int, MsgInfo> = mapOf(
         HELLO to MsgInfo(HELLO, "HELLO", "app", false),
         PING to MsgInfo(PING, "PING", "both", false),
@@ -187,6 +191,10 @@ object Msg {
         LIB_DELETE to MsgInfo(LIB_DELETE, "LIB_DELETE", "app", false),
         BIND_ASK to MsgInfo(BIND_ASK, "BIND_ASK", "app", false),
         SCROB_AUTH to MsgInfo(SCROB_AUTH, "SCROB_AUTH", "app", false),
+        QP_GET to MsgInfo(QP_GET, "QP_GET", "app", false),
+        QP_PIN to MsgInfo(QP_PIN, "QP_PIN", "app", false),
+        PL_EDIT to MsgInfo(PL_EDIT, "PL_EDIT", "app", false),
+        TRACK_INFO to MsgInfo(TRACK_INFO, "TRACK_INFO", "app", false),
     )
     val byName: Map<String, Int> = info.values.associate { it.name to it.id }
 }
@@ -244,6 +252,7 @@ object Feature {
     const val eqStages = 29
     const val liveRows = 30
     const val svcLogin = 32
+    const val libSections = 34
     const val svcAccount = 35
     const val imgFocusX = 36
     const val appPkg = 37
@@ -252,7 +261,12 @@ object Feature {
     const val libDelete = 41
     const val cardLog = 42
     const val scrobWifi = 43
-    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin", 35 to "svcAccount", 36 to "imgFocusX", 37 to "appPkg", 39 to "trackArtist", 40 to "libNext", 41 to "libDelete", 42 to "cardLog", 43 to "scrobWifi")
+    const val quickplay = 44
+    const val playlistEdit = 45
+    const val trackInfo = 46
+    const val artistSongs = 47
+    const val books = 48
+    val names: Map<Int, String> = mapOf(0 to "settings", 1 to "eq", 2 to "library", 3 to "queue", 4 to "image", 5 to "art", 6 to "lyrics", 7 to "update", 8 to "clockAuto", 9 to "eqPresets", 10 to "artBlock", 11 to "lyricsGet", 12 to "artPick", 13 to "imgOrigin", 14 to "stateClock", 15 to "eqSlots", 16 to "eqGraphic", 17 to "eqPass", 18 to "outputKinds", 19 to "rowConfirm", 20 to "search", 21 to "lyricsOffset", 22 to "receiver", 23 to "playLog", 24 to "genres", 25 to "queueAdd", 26 to "phoneFiles", 27 to "updSig", 28 to "imgSource", 29 to "eqStages", 30 to "liveRows", 32 to "svcLogin", 34 to "libSections", 35 to "svcAccount", 36 to "imgFocusX", 37 to "appPkg", 39 to "trackArtist", 40 to "libNext", 41 to "libDelete", 42 to "cardLog", 43 to "scrobWifi", 44 to "quickplay", 45 to "playlistEdit", 46 to "trackInfo", 47 to "artistSongs", 48 to "books")
 }
 
 object Enums {
@@ -343,7 +357,8 @@ object Enums {
         const val searchAlbums = 9
         const val searchSongs = 10
         const val genres = 11
-        val names: Map<Int, String> = mapOf(0 to "artists", 1 to "albums", 2 to "songs", 3 to "artistAlbums", 4 to "albumTracks", 5 to "playlists", 6 to "folders", 7 to "favorites", 8 to "searchArtists", 9 to "searchAlbums", 10 to "searchSongs", 11 to "genres")
+        const val artistSongs = 12
+        val names: Map<Int, String> = mapOf(0 to "artists", 1 to "albums", 2 to "songs", 3 to "artistAlbums", 4 to "albumTracks", 5 to "playlists", 6 to "folders", 7 to "favorites", 8 to "searchArtists", 9 to "searchAlbums", 10 to "searchSongs", 11 to "genres", 12 to "artistSongs")
     }
     object TransportCmd {
         const val toggle = 0
@@ -354,7 +369,9 @@ object Enums {
         const val seek = 5
         const val shuffle = 6
         const val repeat = 7
-        val names: Map<Int, String> = mapOf(0 to "toggle", 1 to "play", 2 to "pause", 3 to "next", 4 to "prev", 5 to "seek", 6 to "shuffle", 7 to "repeat")
+        const val skip = 8
+        const val speed = 9
+        val names: Map<Int, String> = mapOf(0 to "toggle", 1 to "play", 2 to "pause", 3 to "next", 4 to "prev", 5 to "seek", 6 to "shuffle", 7 to "repeat", 8 to "skip", 9 to "speed")
     }
     object DraftKind {
         const val usbMode = 0
@@ -443,6 +460,27 @@ object Enums {
         const val listenbrainz = 2
         val names: Map<Int, String> = mapOf(1 to "lastfm", 2 to "listenbrainz")
     }
+    object QpSection {
+        const val pins = 0
+        const val history = 1
+        const val newAlbums = 2
+        val names: Map<Int, String> = mapOf(0 to "pins", 1 to "history", 2 to "newAlbums")
+    }
+    object QpKind {
+        const val song = 0
+        const val album = 1
+        const val artist = 2
+        const val service = 3
+        val names: Map<Int, String> = mapOf(0 to "song", 1 to "album", 2 to "artist", 3 to "service")
+    }
+    object PlOp {
+        const val add = 0
+        const val create = 1
+        const val remove = 2
+        const val move = 3
+        const val drop = 4
+        val names: Map<Int, String> = mapOf(0 to "add", 1 to "create", 2 to "remove", 3 to "move", 4 to "drop")
+    }
     val byName: Map<String, Map<Int, String>> = mapOf(
         "SOURCE" to Source.names,
         "OUTPUT" to Output.names,
@@ -470,6 +508,9 @@ object Enums {
         "SVC_LOGIN_RESULT" to SvcLoginResult.names,
         "APP_RESULT" to AppResult.names,
         "SCROB_SERVICE" to ScrobService.names,
+        "QP_SECTION" to QpSection.names,
+        "QP_KIND" to QpKind.names,
+        "PL_OP" to PlOp.names,
     )
 }
 
@@ -568,6 +609,11 @@ object Tags {
         const val cardLogSeq = 53
         const val scrobAuthRev = 54
         const val scrobRefused = 55
+        const val qpRev = 56
+        const val scanFound = 57
+        const val book = 58
+        const val speedPct = 59
+        const val sleepEnd = 60
     }
     object Schema {
         const val pivot = 1
@@ -618,6 +664,7 @@ object Tags {
         const val more = 6
         const val row = 7
         const val snapRev = 8
+        const val section = 9
     }
     object Live {
         const val rev = 1
@@ -628,6 +675,8 @@ object Tags {
         const val seekMs = 2
         const val on = 3
         const val repeat = 4
+        const val skipMs = 5
+        const val speedPct = 6
     }
     object Volume {
         const val set = 1
@@ -650,6 +699,7 @@ object Tags {
         const val unixS = 5
         const val zoneS = 6
         const val automatic = 7
+        const val sleepEnd = 8
     }
     object DraftReply {
         const val status = 1
@@ -674,6 +724,8 @@ object Tags {
         const val track = 6
         const val snapRev = 7
         const val phoneList = 8
+        const val service = 9
+        const val serviceKey = 10
     }
     object QueueOp {
         const val cmd = 1
@@ -1010,6 +1062,60 @@ object Tags {
         const val auth = 3
         const val bindToken = 4
     }
+    object QpGet {
+        const val offset = 1
+        const val count = 2
+        const val rev = 3
+    }
+    object QpGetReply {
+        const val rev = 1
+        const val snapRev = 2
+        const val offset = 3
+        const val total = 4
+        const val more = 5
+        const val item = 6
+        const val waiting = 7
+        const val counts = 8
+    }
+    object QpPin {
+        const val kind = 1
+        const val key = 2
+        const val on = 3
+        const val snapRev = 4
+    }
+    object QpPinReply {
+        const val rev = 1
+    }
+    object PlEdit {
+        const val op = 1
+        const val source = 2
+        const val favorites = 3
+        const val track = 4
+        const val view = 5
+        const val parent = 6
+        const val libRev = 7
+        const val snapRev = 8
+        const val row = 9
+        const val step = 10
+        const val bindToken = 11
+        const val bootId = 12
+    }
+    object PlEditReply {
+        const val added = 1
+        const val name = 2
+        const val source = 3
+        const val row = 4
+        const val libRev = 5
+    }
+    object TrackInfo {
+        const val track = 1
+        const val snapRev = 2
+    }
+    object TrackInfoReply {
+        const val line = 1
+        const val pathRow = 2
+        const val snapRev = 3
+    }
     object Error {
         const val code = 1
         const val text = 2
@@ -1055,6 +1161,7 @@ object Tags {
         const val phoneFile = 9
         const val service = 10
         const val serviceKey = 11
+        const val book = 12
     }
     object LibRow {
         const val name = 1
@@ -1064,6 +1171,10 @@ object Tags {
         const val mbid = 5
         const val artist = 6
         const val noDelete = 9
+        const val album = 10
+        const val albumKey = 11
+        const val albumArtist = 12
+        const val writable = 13
     }
     object ImgEntry {
         const val name = 1
@@ -1153,6 +1264,21 @@ object Tags {
         const val artist = 3
         const val title = 4
         const val sentTo = 5
+    }
+    object QpItem {
+        const val section = 1
+        const val kind = 2
+        const val name = 3
+        const val key = 4
+        const val first = 5
+        const val count = 6
+        const val artist = 7
+        const val service = 8
+        const val serviceKey = 9
+    }
+    object LibSection {
+        const val letter = 1
+        const val rows = 2
     }
     val scopes: Map<String, Map<Int, Field>> = mapOf(
         "HELLO" to mapOf(
@@ -1249,6 +1375,11 @@ object Tags {
             53 to Field(53, "cardLogSeq", Base.U32, null, false),
             54 to Field(54, "scrobAuthRev", Base.U32, null, false),
             55 to Field(55, "scrobRefused", Base.U8, null, false),
+            56 to Field(56, "qpRev", Base.U32, null, false),
+            57 to Field(57, "scanFound", Base.U32, null, false),
+            58 to Field(58, "book", Base.BOOL, null, false),
+            59 to Field(59, "speedPct", Base.U16, null, false),
+            60 to Field(60, "sleepEnd", Base.BOOL, null, false),
         ),
         "SCHEMA" to mapOf(
             1 to Field(1, "pivot", Base.STR, null, false),
@@ -1299,6 +1430,7 @@ object Tags {
             6 to Field(6, "more", Base.BOOL, null, false),
             7 to Field(7, "row", Base.RECORD, "LibRow", true),
             8 to Field(8, "snapRev", Base.U32, null, false),
+            9 to Field(9, "section", Base.RECORD, "LibSection", true),
         ),
         "LIVE" to mapOf(
             1 to Field(1, "rev", Base.U32, null, false),
@@ -1309,6 +1441,8 @@ object Tags {
             2 to Field(2, "seekMs", Base.U32, null, false),
             3 to Field(3, "on", Base.BOOL, null, false),
             4 to Field(4, "repeat", Base.ENUM, "REPEAT", false),
+            5 to Field(5, "skipMs", Base.I32, null, false),
+            6 to Field(6, "speedPct", Base.U16, null, false),
         ),
         "VOLUME" to mapOf(
             1 to Field(1, "set", Base.U16, null, false),
@@ -1331,6 +1465,7 @@ object Tags {
             5 to Field(5, "unixS", Base.I64, null, false),
             6 to Field(6, "zoneS", Base.I32, null, false),
             7 to Field(7, "automatic", Base.BOOL, null, false),
+            8 to Field(8, "sleepEnd", Base.BOOL, null, false),
         ),
         "DRAFT.reply" to mapOf(
             1 to Field(1, "status", Base.ENUM, "DRAFT_STATUS", false),
@@ -1355,6 +1490,8 @@ object Tags {
             6 to Field(6, "track", Base.U64, null, true),
             7 to Field(7, "snapRev", Base.U32, null, false),
             8 to Field(8, "phoneList", Base.U32, null, false),
+            9 to Field(9, "service", Base.STR, null, false),
+            10 to Field(10, "serviceKey", Base.U64, null, false),
         ),
         "QUEUE_OP" to mapOf(
             1 to Field(1, "cmd", Base.ENUM, "QUEUE_CMD", false),
@@ -1691,6 +1828,60 @@ object Tags {
             3 to Field(3, "auth", Base.RECORD, "ScrobAuth", true),
             4 to Field(4, "bindToken", Base.BYTES, null, false),
         ),
+        "QP_GET" to mapOf(
+            1 to Field(1, "offset", Base.U32, null, false),
+            2 to Field(2, "count", Base.U32, null, false),
+            3 to Field(3, "rev", Base.U32, null, false),
+        ),
+        "QP_GET.reply" to mapOf(
+            1 to Field(1, "rev", Base.U32, null, false),
+            2 to Field(2, "snapRev", Base.U32, null, false),
+            3 to Field(3, "offset", Base.U32, null, false),
+            4 to Field(4, "total", Base.U32, null, false),
+            5 to Field(5, "more", Base.BOOL, null, false),
+            6 to Field(6, "item", Base.RECORD, "QpItem", true),
+            7 to Field(7, "waiting", Base.BOOL, null, false),
+            8 to Field(8, "counts", Base.U32, null, true),
+        ),
+        "QP_PIN" to mapOf(
+            1 to Field(1, "kind", Base.ENUM, "QP_KIND", false),
+            2 to Field(2, "key", Base.STR, null, false),
+            3 to Field(3, "on", Base.BOOL, null, false),
+            4 to Field(4, "snapRev", Base.U32, null, false),
+        ),
+        "QP_PIN.reply" to mapOf(
+            1 to Field(1, "rev", Base.U32, null, false),
+        ),
+        "PL_EDIT" to mapOf(
+            1 to Field(1, "op", Base.ENUM, "PL_OP", false),
+            2 to Field(2, "source", Base.STR, null, false),
+            3 to Field(3, "favorites", Base.BOOL, null, false),
+            4 to Field(4, "track", Base.U64, null, true),
+            5 to Field(5, "view", Base.ENUM, "VIEW", false),
+            6 to Field(6, "parent", Base.STR, null, false),
+            7 to Field(7, "libRev", Base.U32, null, false),
+            8 to Field(8, "snapRev", Base.U32, null, false),
+            9 to Field(9, "row", Base.U32, null, false),
+            10 to Field(10, "step", Base.I32, null, false),
+            11 to Field(11, "bindToken", Base.BYTES, null, false),
+            12 to Field(12, "bootId", Base.U64, null, false),
+        ),
+        "PL_EDIT.reply" to mapOf(
+            1 to Field(1, "added", Base.U32, null, false),
+            2 to Field(2, "name", Base.STR, null, false),
+            3 to Field(3, "source", Base.STR, null, false),
+            4 to Field(4, "row", Base.U32, null, false),
+            5 to Field(5, "libRev", Base.U32, null, false),
+        ),
+        "TRACK_INFO" to mapOf(
+            1 to Field(1, "track", Base.U64, null, false),
+            2 to Field(2, "snapRev", Base.U32, null, false),
+        ),
+        "TRACK_INFO.reply" to mapOf(
+            1 to Field(1, "line", Base.STR, null, true),
+            2 to Field(2, "pathRow", Base.U32, null, false),
+            3 to Field(3, "snapRev", Base.U32, null, false),
+        ),
         "error" to mapOf(
             1 to Field(1, "code", Base.U8, null, false),
             2 to Field(2, "text", Base.STR, null, false),
@@ -1736,6 +1927,7 @@ object Tags {
             9 to Field(9, "phoneFile", Base.U64, null, false),
             10 to Field(10, "service", Base.STR, null, false),
             11 to Field(11, "serviceKey", Base.U64, null, false),
+            12 to Field(12, "book", Base.BOOL, null, false),
         ),
         "LibRow" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
@@ -1745,6 +1937,10 @@ object Tags {
             5 to Field(5, "mbid", Base.STR, null, false),
             6 to Field(6, "artist", Base.STR, null, false),
             9 to Field(9, "noDelete", Base.BOOL, null, false),
+            10 to Field(10, "album", Base.STR, null, false),
+            11 to Field(11, "albumKey", Base.STR, null, false),
+            12 to Field(12, "albumArtist", Base.STR, null, false),
+            13 to Field(13, "writable", Base.BOOL, null, false),
         ),
         "ImgEntry" to mapOf(
             1 to Field(1, "name", Base.STR, null, false),
@@ -1834,6 +2030,21 @@ object Tags {
             3 to Field(3, "artist", Base.STR, null, false),
             4 to Field(4, "title", Base.STR, null, false),
             5 to Field(5, "sentTo", Base.U8, null, false),
+        ),
+        "QpItem" to mapOf(
+            1 to Field(1, "section", Base.ENUM, "QP_SECTION", false),
+            2 to Field(2, "kind", Base.ENUM, "QP_KIND", false),
+            3 to Field(3, "name", Base.STR, null, false),
+            4 to Field(4, "key", Base.STR, null, false),
+            5 to Field(5, "first", Base.U64, null, false),
+            6 to Field(6, "count", Base.U32, null, false),
+            7 to Field(7, "artist", Base.STR, null, false),
+            8 to Field(8, "service", Base.STR, null, false),
+            9 to Field(9, "serviceKey", Base.U64, null, false),
+        ),
+        "LibSection" to mapOf(
+            1 to Field(1, "letter", Base.STR, null, false),
+            2 to Field(2, "rows", Base.U32, null, false),
         ),
     )
 }

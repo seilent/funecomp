@@ -13,11 +13,13 @@ object Req {
         return String(b, 0, n, Charsets.UTF_8)
     }
 
-    fun transport(cmd: Int, seekMs: Long? = null, on: Boolean? = null, repeat: Int? = null) = tlv {
+    fun transport(cmd: Int, seekMs: Long? = null, on: Boolean? = null, repeat: Int? = null, skipMs: Int? = null, speedPct: Int? = null) = tlv {
         enum(Tags.Transport.cmd, cmd)
         u32(Tags.Transport.seekMs, seekMs)
         bool(Tags.Transport.on, on)
         enum(Tags.Transport.repeat, repeat)
+        i32(Tags.Transport.skipMs, skipMs)
+        u16(Tags.Transport.speedPct, speedPct)
     }
 
     fun volume(set: Int? = null, step: Int? = null, percent: Int? = null) = tlv {
@@ -28,7 +30,7 @@ object Req {
 
     fun set(text: String) = tlv { str(Tags.Set.text, text) }
 
-    fun draft(kind: Int, value: String? = null, role: Int? = null, minutes: Long? = null, unixS: Long? = null, zoneS: Int? = null, automatic: Boolean? = null) = tlv {
+    fun draft(kind: Int, value: String? = null, role: Int? = null, minutes: Long? = null, unixS: Long? = null, zoneS: Int? = null, automatic: Boolean? = null, sleepEnd: Boolean? = null) = tlv {
         enum(Tags.Draft.kind, kind)
         str(Tags.Draft.`value`, value)
         enum(Tags.Draft.role, role)
@@ -36,6 +38,7 @@ object Req {
         i64(Tags.Draft.unixS, unixS)
         i32(Tags.Draft.zoneS, zoneS)
         bool(Tags.Draft.automatic, automatic)
+        bool(Tags.Draft.sleepEnd, sleepEnd)
     }
 
     fun eqSet(slot: String? = null, output: Int? = null, key: String? = null, ints: Profile? = null, mode: Int? = null, graphicKey: String? = null, gains: List<GraphicBand>? = null, on: Boolean? = null, target: Long? = null) = tlv {

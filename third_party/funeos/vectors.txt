@@ -10,7 +10,7 @@ dec hello 0.body.minor 0
 dec hello 0.body.appVersion 0.1.0
 act hello accept
 vec hello_reply dev
-hex hello_reply bc000101010001040046444350020200010003020012000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
+hex hello_reply bc000101010001040046444350020200010003020015000404006170383005100032303236313031362e396431323564320602006801070200e0010802008001
 hex hello_reply 090200e0010a0400004000000b0400307500000c0400881300000d0800ffff0000000000000e0400070000000f04000300000010040004000000111a00010a00
 hex hello_reply 6865616470686f6e6573020a004845414450484f4e4553111800010900626c7565746f6f7468020900424c5545544f4f54481201000012010001120100021201
 hex hello_reply 0003
@@ -21,7 +21,7 @@ dec hello_reply 0.flags 0x01
 dec hello_reply 0.seq 1
 dec hello_reply 0.body.magic 1346585670
 dec hello_reply 0.body.major 1
-dec hello_reply 0.body.minor 18
+dec hello_reply 0.body.minor 21
 dec hello_reply 0.body.board ap80
 dec hello_reply 0.body.version 20261016.9d125d2
 dec hello_reply 0.body.screenW 360
@@ -710,12 +710,12 @@ dec img_del_reply 0.flags 0x01
 dec img_del_reply 0.seq 19
 act img_del_reply accept
 vec transport_unknown_enum app
-hex transport_unknown_enum 04002004140001010009
+hex transport_unknown_enum 040020041400010100ff
 dec transport_unknown_enum 0.len 4
 dec transport_unknown_enum 0.type TRANSPORT
 dec transport_unknown_enum 0.flags 0x04
 dec transport_unknown_enum 0.seq 20
-dec transport_unknown_enum 0.body.cmd 9
+dec transport_unknown_enum 0.body.cmd 255
 act transport_unknown_enum reply
 vec transport_unknown_enum_error dev
 hex transport_unknown_enum_error 100020031400010100020209006261642076616c7565
@@ -6698,3 +6698,935 @@ dec playlog_ack_done 0.body.log 6563364156341409273
 dec playlog_ack_done 0.body.doneUpTo 40
 dec playlog_ack_done 0.body.card true
 act playlog_ack_done accept
+vec hello_bit44 app
+hex hello_bit44 2400010401000104004644435002020001000302001300040500302e312e300508000000000000100000
+dec hello_bit44 0.len 36
+dec hello_bit44 0.type HELLO
+dec hello_bit44 0.flags 0x04
+dec hello_bit44 0.seq 1
+dec hello_bit44 0.body.magic 1346585670
+dec hello_bit44 0.body.major 1
+dec hello_bit44 0.body.minor 19
+dec hello_bit44 0.body.appVersion 0.1.0
+dec hello_bit44 0.body.features 17592186044416
+act hello_bit44 accept
+vec hello_reply_bit44 dev
+hex hello_reply_bit44 3e00010101000104004644435002020001000302001300040200723105060076302e352e30060200e0010702002003080200000209020020030d0800ffffff7f
+hex hello_reply_bit44 b91f0000
+re hello_reply_bit44 hello
+dec hello_reply_bit44 0.len 62
+dec hello_reply_bit44 0.type HELLO
+dec hello_reply_bit44 0.flags 0x01
+dec hello_reply_bit44 0.seq 1
+dec hello_reply_bit44 0.body.magic 1346585670
+dec hello_reply_bit44 0.body.major 1
+dec hello_reply_bit44 0.body.minor 19
+dec hello_reply_bit44 0.body.board r1
+dec hello_reply_bit44 0.body.version v0.5.0
+dec hello_reply_bit44 0.body.screenW 480
+dec hello_reply_bit44 0.body.screenH 800
+dec hello_reply_bit44 0.body.backdropW 512
+dec hello_reply_bit44 0.body.backdropH 800
+dec hello_reply_bit44 0.body.features 34881576894463
+act hello_reply_bit44 accept
+vec qp_get app
+hex qp_get 0e0053046e000104000000000002040008000000
+dec qp_get 0.len 14
+dec qp_get 0.type QP_GET
+dec qp_get 0.flags 0x04
+dec qp_get 0.seq 110
+dec qp_get 0.body.offset 0
+dec qp_get 0.body.count 8
+act qp_get accept
+vec qp_get_reply dev
+hex qp_get_reply 6c0153016e000104000500000002040004000000030400000000000404000500000005010000063b0001010000020100000309004175746f6d61746963040300
+hex qp_get_reply 323031050800c90000000000000006040001000000070c0055746164612048696b617275063c000101000002010001030a004669727374204c6f766504030032
+hex qp_get_reply 3031050800c9000000000000000604000c000000070c0055746164612048696b6172750638000101000002010002030c0055746164612048696b617275040c00
+hex qp_get_reply 55746164612048696b617275050800c9000000000000000604001e000000063a000101000102010003030d00486172626f72204c6967687473070c0051756965
+hex qp_get_reply 7420486172626f72080500746964616c090800305a000000000000063f000101000202010001030d0048656172742053746174696f6e0403003330310508002d
+hex qp_get_reply 010000000000000604000d000000070c0055746164612048696b617275080400030000000804000100000008040001000000
+re qp_get_reply qp_get
+dec qp_get_reply 0.len 364
+dec qp_get_reply 0.type QP_GET
+dec qp_get_reply 0.flags 0x01
+dec qp_get_reply 0.seq 110
+dec qp_get_reply 0.body.rev 5
+dec qp_get_reply 0.body.snapRev 4
+dec qp_get_reply 0.body.offset 0
+dec qp_get_reply 0.body.total 5
+dec qp_get_reply 0.body.more false
+dec qp_get_reply 0.body.item[0].section pins
+dec qp_get_reply 0.body.item[0].kind song
+dec qp_get_reply 0.body.item[0].name Automatic
+dec qp_get_reply 0.body.item[0].key 201
+dec qp_get_reply 0.body.item[0].first 201
+dec qp_get_reply 0.body.item[0].count 1
+dec qp_get_reply 0.body.item[0].artist Utada Hikaru
+dec qp_get_reply 0.body.item[1].section pins
+dec qp_get_reply 0.body.item[1].kind album
+dec qp_get_reply 0.body.item[1].name First Love
+dec qp_get_reply 0.body.item[1].key 201
+dec qp_get_reply 0.body.item[1].first 201
+dec qp_get_reply 0.body.item[1].count 12
+dec qp_get_reply 0.body.item[1].artist Utada Hikaru
+dec qp_get_reply 0.body.item[2].section pins
+dec qp_get_reply 0.body.item[2].kind artist
+dec qp_get_reply 0.body.item[2].name Utada Hikaru
+dec qp_get_reply 0.body.item[2].key Utada Hikaru
+dec qp_get_reply 0.body.item[2].first 201
+dec qp_get_reply 0.body.item[2].count 30
+dec qp_get_reply 0.body.item[3].section history
+dec qp_get_reply 0.body.item[3].kind service
+dec qp_get_reply 0.body.item[3].name Harbor Lights
+dec qp_get_reply 0.body.item[3].artist Quiet Harbor
+dec qp_get_reply 0.body.item[3].service tidal
+dec qp_get_reply 0.body.item[3].serviceKey 23088
+dec qp_get_reply 0.body.item[4].section newAlbums
+dec qp_get_reply 0.body.item[4].kind album
+dec qp_get_reply 0.body.item[4].name Heart Station
+dec qp_get_reply 0.body.item[4].key 301
+dec qp_get_reply 0.body.item[4].first 301
+dec qp_get_reply 0.body.item[4].count 13
+dec qp_get_reply 0.body.item[4].artist Utada Hikaru
+dec qp_get_reply 0.body.counts[0] 3
+dec qp_get_reply 0.body.counts[1] 1
+dec qp_get_reply 0.body.counts[2] 1
+act qp_get_reply accept
+vec qp_get_wait dev
+hex qp_get_wait 240053016e00010400060000000204000400000003040000000000040400000000000501000007010001
+re qp_get_wait qp_get
+dec qp_get_wait 0.len 36
+dec qp_get_wait 0.type QP_GET
+dec qp_get_wait 0.flags 0x01
+dec qp_get_wait 0.seq 110
+dec qp_get_wait 0.body.rev 6
+dec qp_get_wait 0.body.snapRev 4
+dec qp_get_wait 0.body.offset 0
+dec qp_get_wait 0.body.total 0
+dec qp_get_wait 0.body.more false
+dec qp_get_wait 0.body.waiting true
+act qp_get_wait accept
+vec qp_get_nobit dev
+hex qp_get_nobit 0e0053036e0001010001020700756e6b6e6f776e
+re qp_get_nobit qp_get
+dec qp_get_nobit 0.len 14
+dec qp_get_nobit 0.type QP_GET
+dec qp_get_nobit 0.flags 0x03
+dec qp_get_nobit 0.seq 110
+dec qp_get_nobit 0.body.code 1
+dec qp_get_nobit 0.body.text unknown
+act qp_get_nobit accept
+vec qp_get_head app
+hex qp_get_head 0e0053046f000104000000000002040000000000
+dec qp_get_head 0.len 14
+dec qp_get_head 0.type QP_GET
+dec qp_get_head 0.flags 0x04
+dec qp_get_head 0.seq 111
+dec qp_get_head 0.body.offset 0
+dec qp_get_head 0.body.count 0
+act qp_get_head accept
+vec qp_get_head_reply dev
+hex qp_get_head_reply 350053016f000104000500000002040004000000030400000000000404000500000005010001080400030000000804000100000008040001000000
+re qp_get_head_reply qp_get_head
+dec qp_get_head_reply 0.len 53
+dec qp_get_head_reply 0.type QP_GET
+dec qp_get_head_reply 0.flags 0x01
+dec qp_get_head_reply 0.seq 111
+dec qp_get_head_reply 0.body.rev 5
+dec qp_get_head_reply 0.body.snapRev 4
+dec qp_get_head_reply 0.body.offset 0
+dec qp_get_head_reply 0.body.total 5
+dec qp_get_head_reply 0.body.more true
+dec qp_get_head_reply 0.body.counts[0] 3
+dec qp_get_head_reply 0.body.counts[1] 1
+dec qp_get_head_reply 0.body.counts[2] 1
+act qp_get_head_reply accept
+vec qp_get_next app
+hex qp_get_next 150053047000010400010000000204000200000003040005000000
+dec qp_get_next 0.len 21
+dec qp_get_next 0.type QP_GET
+dec qp_get_next 0.flags 0x04
+dec qp_get_next 0.seq 112
+dec qp_get_next 0.body.offset 1
+dec qp_get_next 0.body.count 2
+dec qp_get_next 0.body.rev 5
+act qp_get_next accept
+vec qp_get_next_reply dev
+hex qp_get_next_reply af00530170000104000500000002040004000000030400010000000404000500000005010001063c000101000002010001030a004669727374204c6f76650403
+hex qp_get_next_reply 00323031050800c9000000000000000604000c000000070c0055746164612048696b6172750638000101000002010002030c0055746164612048696b61727504
+hex qp_get_next_reply 0c0055746164612048696b617275050800c9000000000000000604001e000000080400030000000804000100000008040001000000
+re qp_get_next_reply qp_get_next
+dec qp_get_next_reply 0.len 175
+dec qp_get_next_reply 0.type QP_GET
+dec qp_get_next_reply 0.flags 0x01
+dec qp_get_next_reply 0.seq 112
+dec qp_get_next_reply 0.body.rev 5
+dec qp_get_next_reply 0.body.snapRev 4
+dec qp_get_next_reply 0.body.offset 1
+dec qp_get_next_reply 0.body.total 5
+dec qp_get_next_reply 0.body.more true
+dec qp_get_next_reply 0.body.item[0].section pins
+dec qp_get_next_reply 0.body.item[0].kind album
+dec qp_get_next_reply 0.body.item[0].name First Love
+dec qp_get_next_reply 0.body.item[0].key 201
+dec qp_get_next_reply 0.body.item[0].first 201
+dec qp_get_next_reply 0.body.item[0].count 12
+dec qp_get_next_reply 0.body.item[0].artist Utada Hikaru
+dec qp_get_next_reply 0.body.item[1].section pins
+dec qp_get_next_reply 0.body.item[1].kind artist
+dec qp_get_next_reply 0.body.item[1].name Utada Hikaru
+dec qp_get_next_reply 0.body.item[1].key Utada Hikaru
+dec qp_get_next_reply 0.body.item[1].first 201
+dec qp_get_next_reply 0.body.item[1].count 30
+dec qp_get_next_reply 0.body.counts[0] 3
+dec qp_get_next_reply 0.body.counts[1] 1
+dec qp_get_next_reply 0.body.counts[2] 1
+act qp_get_next_reply accept
+vec qp_get_wait_stale dev
+hex qp_get_wait_stale 240053017000010400060000000204000400000003040000000000040400000000000501000007010001
+re qp_get_wait_stale qp_get_next
+dec qp_get_wait_stale 0.len 36
+dec qp_get_wait_stale 0.type QP_GET
+dec qp_get_wait_stale 0.flags 0x01
+dec qp_get_wait_stale 0.seq 112
+dec qp_get_wait_stale 0.body.rev 6
+dec qp_get_wait_stale 0.body.snapRev 4
+dec qp_get_wait_stale 0.body.offset 0
+dec qp_get_wait_stale 0.body.total 0
+dec qp_get_wait_stale 0.body.more false
+dec qp_get_wait_stale 0.body.waiting true
+act qp_get_wait_stale accept
+vec qp_get_norev app
+hex qp_get_norev 0e00530471000104000100000002040002000000
+dec qp_get_norev 0.len 14
+dec qp_get_norev 0.type QP_GET
+dec qp_get_norev 0.flags 0x04
+dec qp_get_norev 0.seq 113
+dec qp_get_norev 0.body.offset 1
+dec qp_get_norev 0.body.count 2
+act qp_get_norev accept
+vec qp_get_norev_reply dev
+hex qp_get_norev_reply 0f0053037100010100070208007374616c65526576
+re qp_get_norev_reply qp_get_norev
+dec qp_get_norev_reply 0.len 15
+dec qp_get_norev_reply 0.type QP_GET
+dec qp_get_norev_reply 0.flags 0x03
+dec qp_get_norev_reply 0.seq 113
+dec qp_get_norev_reply 0.body.code 7
+dec qp_get_norev_reply 0.body.text staleRev
+act qp_get_norev_reply accept
+vec qp_pin app
+hex qp_pin 150054047200010100010203003230310301000104040004000000
+dec qp_pin 0.len 21
+dec qp_pin 0.type QP_PIN
+dec qp_pin 0.flags 0x04
+dec qp_pin 0.seq 114
+dec qp_pin 0.body.kind album
+dec qp_pin 0.body.key 201
+dec qp_pin 0.body.on true
+dec qp_pin 0.body.snapRev 4
+act qp_pin accept
+vec qp_pin_reply dev
+hex qp_pin_reply 07005401720001040006000000
+re qp_pin_reply qp_pin
+dec qp_pin_reply 0.len 7
+dec qp_pin_reply 0.type QP_PIN
+dec qp_pin_reply 0.flags 0x01
+dec qp_pin_reply 0.seq 114
+dec qp_pin_reply 0.body.rev 6
+act qp_pin_reply accept
+vec qp_pin_card dev
+hex qp_pin_card 1900540372000101000e02120063617264206e6f7420617661696c61626c65
+re qp_pin_card qp_pin
+dec qp_pin_card 0.len 25
+dec qp_pin_card 0.type QP_PIN
+dec qp_pin_card 0.flags 0x03
+dec qp_pin_card 0.seq 114
+dec qp_pin_card 0.body.code 14
+dec qp_pin_card 0.body.text card not available
+act qp_pin_card accept
+vec qp_pin_full dev
+hex qp_pin_full 0e0054037200010100090207006e6f5370616365
+re qp_pin_full qp_pin
+dec qp_pin_full 0.len 14
+dec qp_pin_full 0.type QP_PIN
+dec qp_pin_full 0.flags 0x03
+dec qp_pin_full 0.seq 114
+dec qp_pin_full 0.body.code 9
+dec qp_pin_full 0.body.text noSpace
+act qp_pin_full accept
+vec qp_pin_service app
+hex qp_pin_service 13005404730001010003020100310301000104040004000000
+dec qp_pin_service 0.len 19
+dec qp_pin_service 0.type QP_PIN
+dec qp_pin_service 0.flags 0x04
+dec qp_pin_service 0.seq 115
+dec qp_pin_service 0.body.kind service
+dec qp_pin_service 0.body.key 1
+dec qp_pin_service 0.body.on true
+dec qp_pin_service 0.body.snapRev 4
+act qp_pin_service accept
+vec qp_pin_service_reply dev
+hex qp_pin_service_reply 0f00540373000101000202080062616456616c7565
+re qp_pin_service_reply qp_pin_service
+dec qp_pin_service_reply 0.len 15
+dec qp_pin_service_reply 0.type QP_PIN
+dec qp_pin_service_reply 0.flags 0x03
+dec qp_pin_service_reply 0.seq 115
+dec qp_pin_service_reply 0.body.code 2
+dec qp_pin_service_reply 0.body.text badValue
+act qp_pin_service_reply accept
+vec play_service app
+hex play_service 130025047400090500746964616c0a0800305a000000000000
+dec play_service 0.len 19
+dec play_service 0.type PLAY
+dec play_service 0.flags 0x04
+dec play_service 0.seq 116
+dec play_service 0.body.service tidal
+dec play_service 0.body.serviceKey 23088
+act play_service accept
+vec play_service_reply dev
+hex play_service_reply 000025017400
+re play_service_reply play_service
+dec play_service_reply 0.len 0
+dec play_service_reply 0.type PLAY
+dec play_service_reply 0.flags 0x01
+dec play_service_reply 0.seq 116
+act play_service_reply accept
+vec play_service_gone dev
+hex play_service_gone 0f00250374000101000a0208006e6f74466f756e64
+re play_service_gone play_service
+dec play_service_gone 0.len 15
+dec play_service_gone 0.type PLAY
+dec play_service_gone 0.flags 0x03
+dec play_service_gone 0.seq 116
+dec play_service_gone 0.body.code 10
+dec play_service_gone 0.body.text notFound
+act play_service_gone accept
+vec state_qp_rev dev
+hex state_qp_rev 250010000b0001010000020100000308006700000000000000090400dc0500000c01000138040007000000
+dec state_qp_rev 0.len 37
+dec state_qp_rev 0.type STATE
+dec state_qp_rev 0.flags 0x00
+dec state_qp_rev 0.seq 11
+dec state_qp_rev 0.body.source local
+dec state_qp_rev 0.body.output wired
+dec state_qp_rev 0.body.track 103
+dec state_qp_rev 0.body.positionMs 1500
+dec state_qp_rev 0.body.playing true
+dec state_qp_rev 0.body.qpRev 7
+act state_qp_rev accept
+vec hello_bit47 app
+hex hello_bit47 2400010401000104004644435002020001000302001400040500302e312e300508000000040004e00000
+dec hello_bit47 0.len 36
+dec hello_bit47 0.type HELLO
+dec hello_bit47 0.flags 0x04
+dec hello_bit47 0.seq 1
+dec hello_bit47 0.body.magic 1346585670
+dec hello_bit47 0.body.major 1
+dec hello_bit47 0.body.minor 20
+dec hello_bit47 0.body.appVersion 0.1.0
+dec hello_bit47 0.body.features 246307784753152
+act hello_bit47 accept
+vec hello_reply_bit47 dev
+hex hello_reply_bit47 3e00010101000104004644435002020001000302001400040200723105060076302e362e30060200e0010702002003080200000209020020030d0800ffffff7f
+hex hello_reply_bit47 bdff0000
+re hello_reply_bit47 hello
+dec hello_reply_bit47 0.len 62
+dec hello_reply_bit47 0.type HELLO
+dec hello_reply_bit47 0.flags 0x01
+dec hello_reply_bit47 0.seq 1
+dec hello_reply_bit47 0.body.magic 1346585670
+dec hello_reply_bit47 0.body.major 1
+dec hello_reply_bit47 0.body.minor 20
+dec hello_reply_bit47 0.body.board r1
+dec hello_reply_bit47 0.body.version v0.6.0
+dec hello_reply_bit47 0.body.screenW 480
+dec hello_reply_bit47 0.body.screenH 800
+dec hello_reply_bit47 0.body.backdropW 512
+dec hello_reply_bit47 0.body.backdropH 800
+dec hello_reply_bit47 0.body.features 281189361385471
+act hello_reply_bit47 accept
+vec pl_edit_add app
+hex pl_edit_add 2f005504780001010000021200506c61796c697374732f6d69782e6d337538040800c900000000000000040800ca00000000000000
+dec pl_edit_add 0.len 47
+dec pl_edit_add 0.type PL_EDIT
+dec pl_edit_add 0.flags 0x04
+dec pl_edit_add 0.seq 120
+dec pl_edit_add 0.body.op add
+dec pl_edit_add 0.body.source Playlists/mix.m3u8
+dec pl_edit_add 0.body.track[0] 201
+dec pl_edit_add 0.body.track[1] 202
+act pl_edit_add accept
+vec pl_edit_add_reply dev
+hex pl_edit_add_reply 140055017800010400020000000203006d697805040008000000
+re pl_edit_add_reply pl_edit_add
+dec pl_edit_add_reply 0.len 20
+dec pl_edit_add_reply 0.type PL_EDIT
+dec pl_edit_add_reply 0.flags 0x01
+dec pl_edit_add_reply 0.seq 120
+dec pl_edit_add_reply 0.body.added 2
+dec pl_edit_add_reply 0.body.name mix
+dec pl_edit_add_reply 0.body.libRev 8
+act pl_edit_add_reply accept
+vec pl_edit_fav app
+hex pl_edit_fav 2000550479000101000003010001050100040603003230310704000700000008040004000000
+dec pl_edit_fav 0.len 32
+dec pl_edit_fav 0.type PL_EDIT
+dec pl_edit_fav 0.flags 0x04
+dec pl_edit_fav 0.seq 121
+dec pl_edit_fav 0.body.op add
+dec pl_edit_fav 0.body.favorites true
+dec pl_edit_fav 0.body.view albumTracks
+dec pl_edit_fav 0.body.parent 201
+dec pl_edit_fav 0.body.libRev 7
+dec pl_edit_fav 0.body.snapRev 4
+act pl_edit_fav accept
+vec pl_edit_fav_reply dev
+hex pl_edit_fav_reply 1a00550179000104000c0000000209006661766f726974657305040008000000
+re pl_edit_fav_reply pl_edit_fav
+dec pl_edit_fav_reply 0.len 26
+dec pl_edit_fav_reply 0.type PL_EDIT
+dec pl_edit_fav_reply 0.flags 0x01
+dec pl_edit_fav_reply 0.seq 121
+dec pl_edit_fav_reply 0.body.added 12
+dec pl_edit_fav_reply 0.body.name favorites
+dec pl_edit_fav_reply 0.body.libRev 8
+act pl_edit_fav_reply accept
+vec pl_edit_create app
+hex pl_edit_create 250055047a00010100010501000c060c0055746164612048696b6172750704000700000008040004000000
+dec pl_edit_create 0.len 37
+dec pl_edit_create 0.type PL_EDIT
+dec pl_edit_create 0.flags 0x04
+dec pl_edit_create 0.seq 122
+dec pl_edit_create 0.body.op create
+dec pl_edit_create 0.body.view artistSongs
+dec pl_edit_create 0.body.parent Utada Hikaru
+dec pl_edit_create 0.body.libRev 7
+dec pl_edit_create 0.body.snapRev 4
+act pl_edit_create accept
+vec pl_edit_create_reply dev
+hex pl_edit_create_reply 370055017a000104001e000000020a00706c61796c6973742031031900506c61796c697374732f706c61796c69737420312e6d33753805040008000000
+re pl_edit_create_reply pl_edit_create
+dec pl_edit_create_reply 0.len 55
+dec pl_edit_create_reply 0.type PL_EDIT
+dec pl_edit_create_reply 0.flags 0x01
+dec pl_edit_create_reply 0.seq 122
+dec pl_edit_create_reply 0.body.added 30
+dec pl_edit_create_reply 0.body.name playlist 1
+dec pl_edit_create_reply 0.body.source Playlists/playlist 1.m3u8
+dec pl_edit_create_reply 0.body.libRev 8
+act pl_edit_create_reply accept
+vec pl_edit_remove app
+hex pl_edit_remove 320055047b0001010002021200506c61796c697374732f6d69782e6d337538040800ca000000000000000704000800000009040001000000
+dec pl_edit_remove 0.len 50
+dec pl_edit_remove 0.type PL_EDIT
+dec pl_edit_remove 0.flags 0x04
+dec pl_edit_remove 0.seq 123
+dec pl_edit_remove 0.body.op remove
+dec pl_edit_remove 0.body.source Playlists/mix.m3u8
+dec pl_edit_remove 0.body.track[0] 202
+dec pl_edit_remove 0.body.libRev 8
+dec pl_edit_remove 0.body.row 1
+act pl_edit_remove accept
+vec pl_edit_remove_reply dev
+hex pl_edit_remove_reply 070055017b0005040009000000
+re pl_edit_remove_reply pl_edit_remove
+dec pl_edit_remove_reply 0.len 7
+dec pl_edit_remove_reply 0.type PL_EDIT
+dec pl_edit_remove_reply 0.flags 0x01
+dec pl_edit_remove_reply 0.seq 123
+dec pl_edit_remove_reply 0.body.libRev 9
+act pl_edit_remove_reply accept
+vec pl_edit_move app
+hex pl_edit_move 280055047c000101000303010001040800c90000000000000007040009000000090400000000000a040001000000
+dec pl_edit_move 0.len 40
+dec pl_edit_move 0.type PL_EDIT
+dec pl_edit_move 0.flags 0x04
+dec pl_edit_move 0.seq 124
+dec pl_edit_move 0.body.op move
+dec pl_edit_move 0.body.favorites true
+dec pl_edit_move 0.body.track[0] 201
+dec pl_edit_move 0.body.libRev 9
+dec pl_edit_move 0.body.row 0
+dec pl_edit_move 0.body.step 1
+act pl_edit_move accept
+vec pl_edit_move_reply dev
+hex pl_edit_move_reply 0e0055017c00040400010000000504000a000000
+re pl_edit_move_reply pl_edit_move
+dec pl_edit_move_reply 0.len 14
+dec pl_edit_move_reply 0.type PL_EDIT
+dec pl_edit_move_reply 0.flags 0x01
+dec pl_edit_move_reply 0.seq 124
+dec pl_edit_move_reply 0.body.row 1
+dec pl_edit_move_reply 0.body.libRev 10
+act pl_edit_move_reply accept
+vec pl_edit_drop app
+hex pl_edit_drop 3e0055047d0001010004021200506c61796c697374732f6d69782e6d3375380704000a0000000b1000a0a1a2a3a4a5a6a7a8a9aaabacadaeaf0c080007b0ed5e
+hex pl_edit_drop 07b0ed5e
+dec pl_edit_drop 0.len 62
+dec pl_edit_drop 0.type PL_EDIT
+dec pl_edit_drop 0.flags 0x04
+dec pl_edit_drop 0.seq 125
+dec pl_edit_drop 0.body.op drop
+dec pl_edit_drop 0.body.source Playlists/mix.m3u8
+dec pl_edit_drop 0.body.libRev 10
+dec pl_edit_drop 0.body.bindToken a0a1a2a3a4a5a6a7a8a9aaabacadaeaf
+dec pl_edit_drop 0.body.bootId 6840316954749546503
+act pl_edit_drop accept
+vec pl_edit_drop_reply dev
+hex pl_edit_drop_reply 070055017d000504000b000000
+re pl_edit_drop_reply pl_edit_drop
+dec pl_edit_drop_reply 0.len 7
+dec pl_edit_drop_reply 0.type PL_EDIT
+dec pl_edit_drop_reply 0.flags 0x01
+dec pl_edit_drop_reply 0.seq 125
+dec pl_edit_drop_reply 0.body.libRev 11
+act pl_edit_drop_reply accept
+vec pl_edit_stale dev
+hex pl_edit_stale 0f0055037b00010100070208007374616c65526576
+re pl_edit_stale pl_edit_remove
+dec pl_edit_stale 0.len 15
+dec pl_edit_stale 0.type PL_EDIT
+dec pl_edit_stale 0.flags 0x03
+dec pl_edit_stale 0.seq 123
+dec pl_edit_stale 0.body.code 7
+dec pl_edit_stale 0.body.text staleRev
+act pl_edit_stale accept
+vec pl_edit_m3u dev
+hex pl_edit_m3u 0e00550378000101000402070072656675736564
+re pl_edit_m3u pl_edit_add
+dec pl_edit_m3u 0.len 14
+dec pl_edit_m3u 0.type PL_EDIT
+dec pl_edit_m3u 0.flags 0x03
+dec pl_edit_m3u 0.seq 120
+dec pl_edit_m3u 0.body.code 4
+dec pl_edit_m3u 0.body.text refused
+act pl_edit_m3u accept
+vec pl_edit_token dev
+hex pl_edit_token 120055037d0001010004020b006e6f7420616c6c6f776564
+re pl_edit_token pl_edit_drop
+dec pl_edit_token 0.len 18
+dec pl_edit_token 0.type PL_EDIT
+dec pl_edit_token 0.flags 0x03
+dec pl_edit_token 0.seq 125
+dec pl_edit_token 0.body.code 4
+dec pl_edit_token 0.body.text not allowed
+act pl_edit_token accept
+vec pl_edit_ro dev
+hex pl_edit_ro 1500550378000101000b020e00636172642072656164206f6e6c79
+re pl_edit_ro pl_edit_add
+dec pl_edit_ro 0.len 21
+dec pl_edit_ro 0.type PL_EDIT
+dec pl_edit_ro 0.flags 0x03
+dec pl_edit_ro 0.seq 120
+dec pl_edit_ro 0.body.code 11
+dec pl_edit_ro 0.body.text card read only
+act pl_edit_ro accept
+vec pl_edit_big dev
+hex pl_edit_big 0d005503790001010005020600746f6f426967
+re pl_edit_big pl_edit_fav
+dec pl_edit_big 0.len 13
+dec pl_edit_big 0.type PL_EDIT
+dec pl_edit_big 0.flags 0x03
+dec pl_edit_big 0.seq 121
+dec pl_edit_big 0.body.code 5
+dec pl_edit_big 0.body.text tooBig
+act pl_edit_big accept
+vec pl_edit_waiting dev
+hex pl_edit_waiting 13005503790001010003020c00656469742077616974696e67
+re pl_edit_waiting pl_edit_fav
+dec pl_edit_waiting 0.len 19
+dec pl_edit_waiting 0.type PL_EDIT
+dec pl_edit_waiting 0.flags 0x03
+dec pl_edit_waiting 0.seq 121
+dec pl_edit_waiting 0.body.code 3
+dec pl_edit_waiting 0.body.text edit waiting
+act pl_edit_waiting accept
+vec pl_edit_card dev
+hex pl_edit_card 190055037a000101000e02120063617264206e6f7420617661696c61626c65
+re pl_edit_card pl_edit_create
+dec pl_edit_card 0.len 25
+dec pl_edit_card 0.type PL_EDIT
+dec pl_edit_card 0.flags 0x03
+dec pl_edit_card 0.seq 122
+dec pl_edit_card 0.body.code 14
+dec pl_edit_card 0.body.text card not available
+act pl_edit_card accept
+vec pl_edit_nobit dev
+hex pl_edit_nobit 0e005503780001010001020700756e6b6e6f776e
+re pl_edit_nobit pl_edit_add
+dec pl_edit_nobit 0.len 14
+dec pl_edit_nobit 0.type PL_EDIT
+dec pl_edit_nobit 0.flags 0x03
+dec pl_edit_nobit 0.seq 120
+dec pl_edit_nobit 0.body.code 1
+dec pl_edit_nobit 0.body.text unknown
+act pl_edit_nobit accept
+vec track_info app
+hex track_info 120056047e00010800c90000000000000002040004000000
+dec track_info 0.len 18
+dec track_info 0.type TRACK_INFO
+dec track_info 0.flags 0x04
+dec track_info 0.seq 126
+dec track_info 0.body.track 201
+dec track_info 0.body.snapRev 4
+act track_info accept
+vec track_info_reply dev
+hex track_info_reply 9b0056017e00010a004669727374204c6f76650105004a2d506f7001040031393939010400464c414301080034342e31206b487a010600313620626974010600
+hex track_info_reply 73746572656f01090031303030206b627073010400343a323701070033332e34204d42012d0055746164612048696b617275202f204669727374204c6f766520
+hex track_info_reply 2f203031204175746f6d617469632e666c61630204000a00000003040004000000
+re track_info_reply track_info
+dec track_info_reply 0.len 155
+dec track_info_reply 0.type TRACK_INFO
+dec track_info_reply 0.flags 0x01
+dec track_info_reply 0.seq 126
+dec track_info_reply 0.body.line[0] First Love
+dec track_info_reply 0.body.line[1] J-Pop
+dec track_info_reply 0.body.line[2] 1999
+dec track_info_reply 0.body.line[3] FLAC
+dec track_info_reply 0.body.line[4] 44.1 kHz
+dec track_info_reply 0.body.line[5] 16 bit
+dec track_info_reply 0.body.line[6] stereo
+dec track_info_reply 0.body.line[7] 1000 kbps
+dec track_info_reply 0.body.line[8] 4:27
+dec track_info_reply 0.body.line[9] 33.4 MB
+dec track_info_reply 0.body.line[10] Utada Hikaru / First Love / 01 Automatic.flac
+dec track_info_reply 0.body.pathRow 10
+dec track_info_reply 0.body.snapRev 4
+act track_info_reply accept
+vec track_info_gone dev
+hex track_info_gone 0f0056037e00010100070208007374616c65526576
+re track_info_gone track_info
+dec track_info_gone 0.len 15
+dec track_info_gone 0.type TRACK_INFO
+dec track_info_gone 0.flags 0x03
+dec track_info_gone 0.seq 126
+dec track_info_gone 0.body.code 7
+dec track_info_gone 0.body.text staleRev
+act track_info_gone accept
+vec lib_get_artist_songs app
+hex lib_get_artist_songs 280027047f000101000c020c0055746164612048696b617275030400000000000404000200000005040007000000
+dec lib_get_artist_songs 0.len 40
+dec lib_get_artist_songs 0.type LIB_GET
+dec lib_get_artist_songs 0.flags 0x04
+dec lib_get_artist_songs 0.seq 127
+dec lib_get_artist_songs 0.body.view artistSongs
+dec lib_get_artist_songs 0.body.parent Utada Hikaru
+dec lib_get_artist_songs 0.body.offset 0
+dec lib_get_artist_songs 0.body.count 2
+dec lib_get_artist_songs 0.body.libRev 7
+act lib_get_artist_songs accept
+vec lib_artist_songs dev
+hex lib_artist_songs eb0015000c00010400070000000201000c030c0055746164612048696b61727508040004000000040400000000000504001e0000000601000107550001090041
+hex lib_artist_songs 75746f6d6174696302040001000000030800c900000000000000040300323031060c0055746164612048696b6172750a0a004669727374204c6f76650b030032
+hex lib_artist_songs 30310c0c0055746164612048696b617275075d00010e00466c61766f72204f66204c696665020400010000000308002d01000000000000040300333031060c00
+hex lib_artist_songs 55746164612048696b6172750a0d0048656172742053746174696f6e0b03003330310c0c0055746164612048696b617275
+dec lib_artist_songs 0.len 235
+dec lib_artist_songs 0.type LIB
+dec lib_artist_songs 0.flags 0x00
+dec lib_artist_songs 0.seq 12
+dec lib_artist_songs 0.body.libRev 7
+dec lib_artist_songs 0.body.view artistSongs
+dec lib_artist_songs 0.body.parent Utada Hikaru
+dec lib_artist_songs 0.body.snapRev 4
+dec lib_artist_songs 0.body.offset 0
+dec lib_artist_songs 0.body.total 30
+dec lib_artist_songs 0.body.more true
+dec lib_artist_songs 0.body.row[0].name Automatic
+dec lib_artist_songs 0.body.row[0].count 1
+dec lib_artist_songs 0.body.row[0].first 201
+dec lib_artist_songs 0.body.row[0].key 201
+dec lib_artist_songs 0.body.row[0].artist Utada Hikaru
+dec lib_artist_songs 0.body.row[0].album First Love
+dec lib_artist_songs 0.body.row[0].albumKey 201
+dec lib_artist_songs 0.body.row[0].albumArtist Utada Hikaru
+dec lib_artist_songs 0.body.row[1].name Flavor Of Life
+dec lib_artist_songs 0.body.row[1].count 1
+dec lib_artist_songs 0.body.row[1].first 301
+dec lib_artist_songs 0.body.row[1].key 301
+dec lib_artist_songs 0.body.row[1].artist Utada Hikaru
+dec lib_artist_songs 0.body.row[1].album Heart Station
+dec lib_artist_songs 0.body.row[1].albumKey 301
+dec lib_artist_songs 0.body.row[1].albumArtist Utada Hikaru
+act lib_artist_songs accept
+vec lib_playlists_writable dev
+hex lib_playlists_writable 8a0015000d000104000700000002010005030000080400040000000404000000000005040002000000060100000731000103006d697802040003000000030800
+hex lib_playlists_writable c900000000000000041200506c61796c697374732f6d69782e6d3375380d010001072c000103006f6c64020400010000000308002d0100000000000004110050
+hex lib_playlists_writable 6c61796c697374732f6f6c642e6d3375
+dec lib_playlists_writable 0.len 138
+dec lib_playlists_writable 0.type LIB
+dec lib_playlists_writable 0.flags 0x00
+dec lib_playlists_writable 0.seq 13
+dec lib_playlists_writable 0.body.libRev 7
+dec lib_playlists_writable 0.body.view playlists
+dec lib_playlists_writable 0.body.parent
+dec lib_playlists_writable 0.body.snapRev 4
+dec lib_playlists_writable 0.body.offset 0
+dec lib_playlists_writable 0.body.total 2
+dec lib_playlists_writable 0.body.more false
+dec lib_playlists_writable 0.body.row[0].name mix
+dec lib_playlists_writable 0.body.row[0].count 3
+dec lib_playlists_writable 0.body.row[0].first 201
+dec lib_playlists_writable 0.body.row[0].key Playlists/mix.m3u8
+dec lib_playlists_writable 0.body.row[0].writable true
+dec lib_playlists_writable 0.body.row[1].name old
+dec lib_playlists_writable 0.body.row[1].count 1
+dec lib_playlists_writable 0.body.row[1].first 301
+dec lib_playlists_writable 0.body.row[1].key Playlists/old.m3u
+act lib_playlists_writable accept
+vec lib_sections dev
+hex lib_sections ed0015000e00010400070000000201000003000008040004000000090b000101002302040001000000090b000101004102040002000000090b00010100550204
+hex lib_sections 00010000000404000000000005040004000000060100000720000104003250616302040001000000030800650000000000000004040032506163072200010500
+hex lib_sections 41696d6572020400020000000308006f0000000000000004050041696d6572071e0001030041646f02040003000000030800790000000000000004030041646f
+hex lib_sections 073000010c0055746164612048696b6172750204001e000000030800c900000000000000040c0055746164612048696b617275
+dec lib_sections 0.len 237
+dec lib_sections 0.type LIB
+dec lib_sections 0.flags 0x00
+dec lib_sections 0.seq 14
+dec lib_sections 0.body.libRev 7
+dec lib_sections 0.body.view artists
+dec lib_sections 0.body.parent
+dec lib_sections 0.body.snapRev 4
+dec lib_sections 0.body.section[0].letter #
+dec lib_sections 0.body.section[0].rows 1
+dec lib_sections 0.body.section[1].letter A
+dec lib_sections 0.body.section[1].rows 2
+dec lib_sections 0.body.section[2].letter U
+dec lib_sections 0.body.section[2].rows 1
+dec lib_sections 0.body.offset 0
+dec lib_sections 0.body.total 4
+dec lib_sections 0.body.more false
+dec lib_sections 0.body.row[0].name 2Pac
+dec lib_sections 0.body.row[0].count 1
+dec lib_sections 0.body.row[0].first 101
+dec lib_sections 0.body.row[0].key 2Pac
+dec lib_sections 0.body.row[1].name Aimer
+dec lib_sections 0.body.row[1].count 2
+dec lib_sections 0.body.row[1].first 111
+dec lib_sections 0.body.row[1].key Aimer
+dec lib_sections 0.body.row[2].name Ado
+dec lib_sections 0.body.row[2].count 3
+dec lib_sections 0.body.row[2].first 121
+dec lib_sections 0.body.row[2].key Ado
+dec lib_sections 0.body.row[3].name Utada Hikaru
+dec lib_sections 0.body.row[3].count 30
+dec lib_sections 0.body.row[3].first 201
+dec lib_sections 0.body.row[3].key Utada Hikaru
+act lib_sections accept
+vec state_scan_found dev
+hex state_scan_found 1a0010000f0001010000020100000c01000015040001000000390400d8040000
+dec state_scan_found 0.len 26
+dec state_scan_found 0.type STATE
+dec state_scan_found 0.flags 0x00
+dec state_scan_found 0.seq 15
+dec state_scan_found 0.body.source local
+dec state_scan_found 0.body.output wired
+dec state_scan_found 0.body.playing false
+dec state_scan_found 0.body.libRev 1
+dec state_scan_found 0.body.scanFound 1240
+act state_scan_found accept
+vec state_usb_dac dev
+hex state_usb_dac 13001000100001010000020100040c01000115040007000000
+dec state_usb_dac 0.len 19
+dec state_usb_dac 0.type STATE
+dec state_usb_dac 0.flags 0x00
+dec state_usb_dac 0.seq 16
+dec state_usb_dac 0.body.source local
+dec state_usb_dac 0.body.output usbDac
+dec state_usb_dac 0.body.playing true
+dec state_usb_dac 0.body.libRev 7
+act state_usb_dac accept
+vec hello_bit48 app
+hex hello_bit48 2400010401000104004644435002020001000302001500040500302e312e300508000000000000000100
+dec hello_bit48 0.len 36
+dec hello_bit48 0.type HELLO
+dec hello_bit48 0.flags 0x04
+dec hello_bit48 0.seq 1
+dec hello_bit48 0.body.magic 1346585670
+dec hello_bit48 0.body.major 1
+dec hello_bit48 0.body.minor 21
+dec hello_bit48 0.body.appVersion 0.1.0
+dec hello_bit48 0.body.features 281474976710656
+act hello_bit48 accept
+vec hello_reply_bit48 dev
+hex hello_reply_bit48 3e00010101000104004644435002020001000302001500040200723105060076302e372e30060200e0010702002003080200000209020020030d0800ffffff7f
+hex hello_reply_bit48 bdff0100
+re hello_reply_bit48 hello
+dec hello_reply_bit48 0.len 62
+dec hello_reply_bit48 0.type HELLO
+dec hello_reply_bit48 0.flags 0x01
+dec hello_reply_bit48 0.seq 1
+dec hello_reply_bit48 0.body.magic 1346585670
+dec hello_reply_bit48 0.body.major 1
+dec hello_reply_bit48 0.body.minor 21
+dec hello_reply_bit48 0.body.board r1
+dec hello_reply_bit48 0.body.version v0.7.0
+dec hello_reply_bit48 0.body.screenW 480
+dec hello_reply_bit48 0.body.screenH 800
+dec hello_reply_bit48 0.body.backdropW 512
+dec hello_reply_bit48 0.body.backdropH 800
+dec hello_reply_bit48 0.body.features 562664338096127
+act hello_reply_bit48 accept
+vec transport_skip app
+hex transport_skip 0b002004820001010008050400d08affff
+dec transport_skip 0.len 11
+dec transport_skip 0.type TRANSPORT
+dec transport_skip 0.flags 0x04
+dec transport_skip 0.seq 130
+dec transport_skip 0.body.cmd skip
+dec transport_skip 0.body.skipMs -30000
+act transport_skip accept
+vec transport_skip_reply dev
+hex transport_skip_reply 000020018200
+re transport_skip_reply transport_skip
+dec transport_skip_reply 0.len 0
+dec transport_skip_reply 0.type TRANSPORT
+dec transport_skip_reply 0.flags 0x01
+dec transport_skip_reply 0.seq 130
+act transport_skip_reply accept
+vec transport_skip_refused dev
+hex transport_skip_refused 0e00200382000101000402070072656675736564
+re transport_skip_refused transport_skip
+dec transport_skip_refused 0.len 14
+dec transport_skip_refused 0.type TRANSPORT
+dec transport_skip_refused 0.flags 0x03
+dec transport_skip_refused 0.seq 130
+dec transport_skip_refused 0.body.code 4
+dec transport_skip_refused 0.body.text refused
+act transport_skip_refused accept
+vec transport_speed app
+hex transport_speed 090020048300010100090602009600
+dec transport_speed 0.len 9
+dec transport_speed 0.type TRANSPORT
+dec transport_speed 0.flags 0x04
+dec transport_speed 0.seq 131
+dec transport_speed 0.body.cmd speed
+dec transport_speed 0.body.speedPct 150
+act transport_speed accept
+vec transport_speed_reply dev
+hex transport_speed_reply 000020018300
+re transport_speed_reply transport_speed
+dec transport_speed_reply 0.len 0
+dec transport_speed_reply 0.type TRANSPORT
+dec transport_speed_reply 0.flags 0x01
+dec transport_speed_reply 0.seq 131
+act transport_speed_reply accept
+vec transport_speed_refused dev
+hex transport_speed_refused 0e00200383000101000402070072656675736564
+re transport_speed_refused transport_speed
+dec transport_speed_refused 0.len 14
+dec transport_speed_refused 0.type TRANSPORT
+dec transport_speed_refused 0.flags 0x03
+dec transport_speed_refused 0.seq 131
+dec transport_speed_refused 0.body.code 4
+dec transport_speed_refused 0.body.text refused
+act transport_speed_refused accept
+vec transport_speed_step app
+hex transport_speed_step 090020048400010100090602006e00
+dec transport_speed_step 0.len 9
+dec transport_speed_step 0.type TRANSPORT
+dec transport_speed_step 0.flags 0x04
+dec transport_speed_step 0.seq 132
+dec transport_speed_step 0.body.cmd speed
+dec transport_speed_step 0.body.speedPct 110
+act transport_speed_step accept
+vec transport_speed_step_error dev
+hex transport_speed_step_error 100020038400010100020209006261642076616c7565
+re transport_speed_step_error transport_speed_step
+dec transport_speed_step_error 0.len 16
+dec transport_speed_step_error 0.type TRANSPORT
+dec transport_speed_step_error 0.flags 0x03
+dec transport_speed_step_error 0.seq 132
+dec transport_speed_step_error 0.body.code 2
+dec transport_speed_step_error 0.body.text bad value
+act transport_speed_step_error accept
+vec draft_sleep_end app
+hex draft_sleep_end 0800230485000101000208010001
+dec draft_sleep_end 0.len 8
+dec draft_sleep_end 0.type DRAFT
+dec draft_sleep_end 0.flags 0x04
+dec draft_sleep_end 0.seq 133
+dec draft_sleep_end 0.body.kind sleep
+dec draft_sleep_end 0.body.sleepEnd true
+act draft_sleep_end accept
+vec draft_sleep_end_reply dev
+hex draft_sleep_end_reply 04002301850001010000
+re draft_sleep_end_reply draft_sleep_end
+dec draft_sleep_end_reply 0.len 4
+dec draft_sleep_end_reply 0.type DRAFT
+dec draft_sleep_end_reply 0.flags 0x01
+dec draft_sleep_end_reply 0.seq 133
+dec draft_sleep_end_reply 0.body.status done
+act draft_sleep_end_reply accept
+vec draft_sleep_end_refused dev
+hex draft_sleep_end_refused 0e00230385000101000402070072656675736564
+re draft_sleep_end_refused draft_sleep_end
+dec draft_sleep_end_refused 0.len 14
+dec draft_sleep_end_refused 0.type DRAFT
+dec draft_sleep_end_refused 0.flags 0x03
+dec draft_sleep_end_refused 0.seq 133
+dec draft_sleep_end_refused 0.body.code 4
+dec draft_sleep_end_refused 0.body.text refused
+act draft_sleep_end_refused accept
+vec draft_sleep_end_minutes app
+hex draft_sleep_end_minutes 0f0023048600010100020404001e00000008010001
+dec draft_sleep_end_minutes 0.len 15
+dec draft_sleep_end_minutes 0.type DRAFT
+dec draft_sleep_end_minutes 0.flags 0x04
+dec draft_sleep_end_minutes 0.seq 134
+dec draft_sleep_end_minutes 0.body.kind sleep
+dec draft_sleep_end_minutes 0.body.minutes 30
+dec draft_sleep_end_minutes 0.body.sleepEnd true
+act draft_sleep_end_minutes accept
+vec draft_sleep_end_minutes_error dev
+hex draft_sleep_end_minutes_error 100023038600010100020209006261642076616c7565
+re draft_sleep_end_minutes_error draft_sleep_end_minutes
+dec draft_sleep_end_minutes_error 0.len 16
+dec draft_sleep_end_minutes_error 0.type DRAFT
+dec draft_sleep_end_minutes_error 0.flags 0x03
+dec draft_sleep_end_minutes_error 0.seq 134
+dec draft_sleep_end_minutes_error 0.body.code 2
+dec draft_sleep_end_minutes_error 0.body.text bad value
+act draft_sleep_end_minutes_error accept
+vec state_book dev
+hex state_book 3900100011000101000002010000030800910100000000000008040040771b00090400a0bb0d000c010001170400580200003a0100013b020096003c010001
+dec state_book 0.len 57
+dec state_book 0.type STATE
+dec state_book 0.flags 0x00
+dec state_book 0.seq 17
+dec state_book 0.body.source local
+dec state_book 0.body.output wired
+dec state_book 0.body.track 401
+dec state_book 0.body.durationMs 1800000
+dec state_book 0.body.positionMs 900000
+dec state_book 0.body.playing true
+dec state_book 0.body.sleepLeftS 600
+dec state_book 0.body.book true
+dec state_book 0.body.speedPct 150
+dec state_book 0.body.sleepEnd true
+act state_book accept
+vec queue_book dev
+hex queue_book 9500140012000104000f000000020400000000000304000200000004010000053c000108009101000000000000020900436861707465722033030e004e617473
+hex queue_book 756d6520536f73656b690506004b6f6b6f726f06040040771b000c010001053a00010800c9000000000000000209004175746f6d61746963030c005574616461
+hex queue_book 2048696b617275050a004669727374204c6f766506040030da0400
+dec queue_book 0.len 149
+dec queue_book 0.type QUEUE
+dec queue_book 0.flags 0x00
+dec queue_book 0.seq 18
+dec queue_book 0.body.rev 15
+dec queue_book 0.body.offset 0
+dec queue_book 0.body.total 2
+dec queue_book 0.body.more false
+dec queue_book 0.body.item[0].track 401
+dec queue_book 0.body.item[0].title Chapter 3
+dec queue_book 0.body.item[0].artists[0] Natsume Soseki
+dec queue_book 0.body.item[0].album Kokoro
+dec queue_book 0.body.item[0].durationMs 1800000
+dec queue_book 0.body.item[0].book true
+dec queue_book 0.body.item[1].track 201
+dec queue_book 0.body.item[1].title Automatic
+dec queue_book 0.body.item[1].artists[0] Utada Hikaru
+dec queue_book 0.body.item[1].album First Love
+dec queue_book 0.body.item[1].durationMs 318000
+act queue_book accept

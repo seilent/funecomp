@@ -43,6 +43,7 @@ object Groups {
         "eqStages" to emptySet(),
         "liveRows" to setOf(Msg.LIVE),
         "svcLogin" to setOf(Msg.SVC_LOGIN, Msg.SVC_LOGIN_END, Msg.SVC_PKCE, Msg.SVC_KEYS),
+        "libSections" to emptySet(),
         "svcAccount" to setOf(Msg.SVC_LOGIN_START, Msg.SVC_LOGOUT, Msg.SVC_STATE),
         "imgFocusX" to emptySet(),
         "appPkg" to setOf(Msg.APP_BEGIN, Msg.APP_DATA, Msg.APP_END, Msg.APP_ABORT, Msg.APP_STATE),
@@ -51,6 +52,11 @@ object Groups {
         "libDelete" to setOf(Msg.LIB_DELETE, Msg.BIND_ASK),
         "cardLog" to emptySet(),
         "scrobWifi" to setOf(Msg.SCROB_AUTH),
+        "quickplay" to setOf(Msg.QP_GET, Msg.QP_PIN),
+        "playlistEdit" to setOf(Msg.PL_EDIT),
+        "trackInfo" to setOf(Msg.TRACK_INFO),
+        "artistSongs" to emptySet(),
+        "books" to emptySet(),
     )
     val unserved: Set<String> = setOf(
         "eqPass",
@@ -60,8 +66,14 @@ object Groups {
         "receiver",
         "phoneFiles",
         "imgSource",
+        "libSections",
         "libNext",
         "scrobWifi",
+        "quickplay",
+        "playlistEdit",
+        "trackInfo",
+        "artistSongs",
+        "books",
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }
 
@@ -312,6 +324,11 @@ data class State(
     val cardLogSeq: Long? = null,
     val scrobAuthRev: Long? = null,
     val scrobRefused: Int? = null,
+    val qpRev: Long? = null,
+    val scanFound: Long? = null,
+    val book: Boolean? = null,
+    val speedPct: Int? = null,
+    val sleepEnd: Boolean? = null,
 ) {
     val library: Long? get() = track?.takeIf { it != 0L && service == null }
 
@@ -371,6 +388,11 @@ data class State(
         u32(Tags.State.cardLogSeq, cardLogSeq)
         u32(Tags.State.scrobAuthRev, scrobAuthRev)
         u8(Tags.State.scrobRefused, scrobRefused)
+        u32(Tags.State.qpRev, qpRev)
+        u32(Tags.State.scanFound, scanFound)
+        bool(Tags.State.book, book)
+        u16(Tags.State.speedPct, speedPct)
+        bool(Tags.State.sleepEnd, sleepEnd)
     }
 
     companion object {
@@ -430,6 +452,11 @@ data class State(
             n.long(Tags.State.cardLogSeq),
             n.long(Tags.State.scrobAuthRev),
             n.int(Tags.State.scrobRefused),
+            n.long(Tags.State.qpRev),
+            n.long(Tags.State.scanFound),
+            n.bool(Tags.State.book),
+            n.int(Tags.State.speedPct),
+            n.bool(Tags.State.sleepEnd),
         )
     }
 }
@@ -678,6 +705,7 @@ data class QueueItem(
     val phoneFile: Long? = null,
     val service: String? = null,
     val serviceKey: Long? = null,
+    val book: Boolean? = null,
 ) {
     val library: Long? get() = track?.takeIf { it != 0L && service == null }
 
@@ -693,6 +721,7 @@ data class QueueItem(
         u64(Tags.QueueItem.phoneFile, phoneFile)
         str(Tags.QueueItem.service, service)
         u64(Tags.QueueItem.serviceKey, serviceKey)
+        bool(Tags.QueueItem.book, book)
     }
 
     val size: Int get() = TlvWriter().rec(Tags.Queue.item) { write(this) }.size
@@ -716,13 +745,26 @@ data class Queue(val rev: Long, val page: PageInfo, val items: List<QueueItem>) 
                     it.long(Tags.QueueItem.track), it.str(Tags.QueueItem.title), it.strs(Tags.QueueItem.artists), it.strs(Tags.QueueItem.mbids),
                     it.str(Tags.QueueItem.album), it.long(Tags.QueueItem.durationMs), it.bool(Tags.QueueItem.lyrics),
                     it.bool(Tags.QueueItem.lyricsPlain), it.long(Tags.QueueItem.phoneFile), it.str(Tags.QueueItem.service), it.long(Tags.QueueItem.serviceKey),
+                    it.bool(Tags.QueueItem.book),
                 )
             },
         )
     }
 }
 
-data class LibRow(val name: String?, val count: Long?, val first: Long?, val key: String?, val mbid: String? = null, val artist: String? = null, val noDelete: Boolean? = null) {
+data class LibRow(
+    val name: String?,
+    val count: Long?,
+    val first: Long?,
+    val key: String?,
+    val mbid: String? = null,
+    val artist: String? = null,
+    val noDelete: Boolean? = null,
+    val album: String? = null,
+    val albumKey: String? = null,
+    val albumArtist: String? = null,
+    val writable: Boolean? = null,
+) {
     fun write(o: TlvWriter) = o.apply {
         str(Tags.LibRow.name, name)
         u32(Tags.LibRow.count, count)
@@ -731,6 +773,10 @@ data class LibRow(val name: String?, val count: Long?, val first: Long?, val key
         str(Tags.LibRow.mbid, mbid)
         str(Tags.LibRow.artist, artist)
         bool(Tags.LibRow.noDelete, noDelete)
+        str(Tags.LibRow.album, album)
+        str(Tags.LibRow.albumKey, albumKey)
+        str(Tags.LibRow.albumArtist, albumArtist)
+        bool(Tags.LibRow.writable, writable)
     }
 
     val size: Int get() = TlvWriter().rec(Tags.Lib.row) { write(this) }.size
@@ -738,12 +784,20 @@ data class LibRow(val name: String?, val count: Long?, val first: Long?, val key
 
 fun listView(view: Int?) = view == Enums.View.playlists || view == Enums.View.favorites
 
-data class Lib(val libRev: Long, val view: Int, val parent: String?, val page: PageInfo, val rows: List<LibRow>, val snapRev: Long? = null) {
+data class LibSection(val letter: String?, val rows: Long?) {
+    fun write(o: TlvWriter) = o.apply {
+        str(Tags.LibSection.letter, letter)
+        u32(Tags.LibSection.rows, rows)
+    }
+}
+
+data class Lib(val libRev: Long, val view: Int, val parent: String?, val page: PageInfo, val rows: List<LibRow>, val snapRev: Long? = null, val sections: List<LibSection> = emptyList()) {
     fun encode() = tlv {
         u32(Tags.Lib.libRev, libRev)
         enum(Tags.Lib.view, view)
         str(Tags.Lib.parent, parent)
         u32(Tags.Lib.snapRev, snapRev)
+        sections.forEach { c -> rec(Tags.Lib.section) { c.write(this) } }
         u32(Tags.Lib.offset, page.offset)
         u32(Tags.Lib.total, page.total)
         bool(Tags.Lib.more, page.more)
@@ -757,9 +811,13 @@ data class Lib(val libRev: Long, val view: Int, val parent: String?, val page: P
             n.str(Tags.Lib.parent),
             PageInfo.read(n, Tags.Lib.offset, Tags.Lib.total, Tags.Lib.more),
             n.nodes(Tags.Lib.row).map {
-                LibRow(it.str(Tags.LibRow.name), it.long(Tags.LibRow.count), it.long(Tags.LibRow.first), it.str(Tags.LibRow.key), it.str(Tags.LibRow.mbid), it.str(Tags.LibRow.artist), it.bool(Tags.LibRow.noDelete))
+                LibRow(
+                    it.str(Tags.LibRow.name), it.long(Tags.LibRow.count), it.long(Tags.LibRow.first), it.str(Tags.LibRow.key), it.str(Tags.LibRow.mbid), it.str(Tags.LibRow.artist), it.bool(Tags.LibRow.noDelete),
+                    it.str(Tags.LibRow.album), it.str(Tags.LibRow.albumKey), it.str(Tags.LibRow.albumArtist), it.bool(Tags.LibRow.writable),
+                )
             },
             n.long(Tags.Lib.snapRev),
+            n.nodes(Tags.Lib.section).map { LibSection(it.str(Tags.LibSection.letter), it.long(Tags.LibSection.rows)) },
         )
     }
 }

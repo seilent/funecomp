@@ -1,7 +1,7 @@
 const uuid 6238ed73-a581-4335-9d8a-df1ecf688118
 const magic 0x50434446
 const major 1
-const minor 18
+const minor 21
 const headerBytes 6
 const tlvHeaderBytes 3
 const maxPayload 16384
@@ -95,6 +95,7 @@ feature imgSource 28
 feature eqStages 29
 feature liveRows 30
 feature svcLogin 32
+feature libSections 34
 feature svcAccount 35
 feature imgFocusX 36
 feature appPkg 37
@@ -103,6 +104,11 @@ feature libNext 40
 feature libDelete 41
 feature cardLog 42
 feature scrobWifi 43
+feature quickplay 44
+feature playlistEdit 45
+feature trackInfo 46
+feature artistSongs 47
+feature books 48
 enum SOURCE 0 local
 enum SOURCE 1 phone
 enum SOURCE 2 phoneFile
@@ -159,6 +165,7 @@ enum VIEW 8 searchArtists
 enum VIEW 9 searchAlbums
 enum VIEW 10 searchSongs
 enum VIEW 11 genres
+enum VIEW 12 artistSongs
 enum TRANSPORT_CMD 0 toggle
 enum TRANSPORT_CMD 1 play
 enum TRANSPORT_CMD 2 pause
@@ -167,6 +174,8 @@ enum TRANSPORT_CMD 4 prev
 enum TRANSPORT_CMD 5 seek
 enum TRANSPORT_CMD 6 shuffle
 enum TRANSPORT_CMD 7 repeat
+enum TRANSPORT_CMD 8 skip
+enum TRANSPORT_CMD 9 speed
 enum DRAFT_KIND 0 usbMode
 enum DRAFT_KIND 1 btCodec
 enum DRAFT_KIND 2 sleep
@@ -212,6 +221,18 @@ enum APP_RESULT 2 refused
 enum APP_RESULT 3 updatePending
 enum SCROB_SERVICE 1 lastfm
 enum SCROB_SERVICE 2 listenbrainz
+enum QP_SECTION 0 pins
+enum QP_SECTION 1 history
+enum QP_SECTION 2 newAlbums
+enum QP_KIND 0 song
+enum QP_KIND 1 album
+enum QP_KIND 2 artist
+enum QP_KIND 3 service
+enum PL_OP 0 add
+enum PL_OP 1 create
+enum PL_OP 2 remove
+enum PL_OP 3 move
+enum PL_OP 4 drop
 msg HELLO 0x01 app req
 tag HELLO 1 magic u32 one
 tag HELLO 2 major u16 one
@@ -303,6 +324,11 @@ tag STATE 52 serviceKey u64 one
 tag STATE 53 cardLogSeq u32 one
 tag STATE 54 scrobAuthRev u32 one
 tag STATE 55 scrobRefused u8 one
+tag STATE 56 qpRev u32 one
+tag STATE 57 scanFound u32 one
+tag STATE 58 book bool one
+tag STATE 59 speedPct u16 one
+tag STATE 60 sleepEnd bool one
 msg SCHEMA 0x11 dev push
 tag SCHEMA 1 pivot str one
 tag SCHEMA 2 offset u32 one
@@ -348,6 +374,7 @@ tag LIB 5 total u32 one
 tag LIB 6 more bool one
 tag LIB 7 row LibRow list
 tag LIB 8 snapRev u32 one
+tag LIB 9 section LibSection list
 msg LIVE 0x16 dev push
 tag LIVE 1 rev u32 one
 tag LIVE 2 text str one
@@ -356,6 +383,8 @@ tag TRANSPORT 1 cmd TRANSPORT_CMD one
 tag TRANSPORT 2 seekMs u32 one
 tag TRANSPORT 3 on bool one
 tag TRANSPORT 4 repeat REPEAT one
+tag TRANSPORT 5 skipMs i32 one
+tag TRANSPORT 6 speedPct u16 one
 msg VOLUME 0x21 app req
 tag VOLUME 1 set u16 one
 tag VOLUME 2 step i32 one
@@ -373,6 +402,7 @@ tag DRAFT 4 minutes u32 one
 tag DRAFT 5 unixS i64 one
 tag DRAFT 6 zoneS i32 one
 tag DRAFT 7 automatic bool one
+tag DRAFT 8 sleepEnd bool one
 tag DRAFT.reply 1 status DRAFT_STATUS one
 msg EQ_SET 0x24 app req
 tag EQ_SET 1 output EQ_OUTPUT one
@@ -393,6 +423,8 @@ tag PLAY 5 shuffle bool one
 tag PLAY 6 track u64 list
 tag PLAY 7 snapRev u32 one
 tag PLAY 8 phoneList u32 one
+tag PLAY 9 service str one
+tag PLAY 10 serviceKey u64 one
 msg QUEUE_OP 0x26 app req
 tag QUEUE_OP 1 cmd QUEUE_CMD one
 tag QUEUE_OP 2 rev u32 one
@@ -647,6 +679,48 @@ tag SCROB_AUTH 1 rev u32 one
 tag SCROB_AUTH 2 enabled u8 one
 tag SCROB_AUTH 3 auth ScrobAuth list
 tag SCROB_AUTH 4 bindToken bytes one
+msg QP_GET 0x53 app req
+tag QP_GET 1 offset u32 one
+tag QP_GET 2 count u32 one
+tag QP_GET 3 rev u32 one
+tag QP_GET.reply 1 rev u32 one
+tag QP_GET.reply 2 snapRev u32 one
+tag QP_GET.reply 3 offset u32 one
+tag QP_GET.reply 4 total u32 one
+tag QP_GET.reply 5 more bool one
+tag QP_GET.reply 6 item QpItem list
+tag QP_GET.reply 7 waiting bool one
+tag QP_GET.reply 8 counts u32 list
+msg QP_PIN 0x54 app req
+tag QP_PIN 1 kind QP_KIND one
+tag QP_PIN 2 key str one
+tag QP_PIN 3 on bool one
+tag QP_PIN 4 snapRev u32 one
+tag QP_PIN.reply 1 rev u32 one
+msg PL_EDIT 0x55 app req
+tag PL_EDIT 1 op PL_OP one
+tag PL_EDIT 2 source str one
+tag PL_EDIT 3 favorites bool one
+tag PL_EDIT 4 track u64 list
+tag PL_EDIT 5 view VIEW one
+tag PL_EDIT 6 parent str one
+tag PL_EDIT 7 libRev u32 one
+tag PL_EDIT 8 snapRev u32 one
+tag PL_EDIT 9 row u32 one
+tag PL_EDIT 10 step i32 one
+tag PL_EDIT 11 bindToken bytes one
+tag PL_EDIT 12 bootId u64 one
+tag PL_EDIT.reply 1 added u32 one
+tag PL_EDIT.reply 2 name str one
+tag PL_EDIT.reply 3 source str one
+tag PL_EDIT.reply 4 row u32 one
+tag PL_EDIT.reply 5 libRev u32 one
+msg TRACK_INFO 0x56 app req
+tag TRACK_INFO 1 track u64 one
+tag TRACK_INFO 2 snapRev u32 one
+tag TRACK_INFO.reply 1 line str list
+tag TRACK_INFO.reply 2 pathRow u32 one
+tag TRACK_INFO.reply 3 snapRev u32 one
 tag error 1 code u8 one
 tag error 2 text str one
 tag error 3 refused str list
@@ -681,6 +755,7 @@ tag QueueItem 8 lyricsPlain bool one
 tag QueueItem 9 phoneFile u64 one
 tag QueueItem 10 service str one
 tag QueueItem 11 serviceKey u64 one
+tag QueueItem 12 book bool one
 tag LibRow 1 name str one
 tag LibRow 2 count u32 one
 tag LibRow 3 first u64 one
@@ -688,6 +763,10 @@ tag LibRow 4 key str one
 tag LibRow 5 mbid str one
 tag LibRow 6 artist str one
 tag LibRow 9 noDelete bool one
+tag LibRow 10 album str one
+tag LibRow 11 albumKey str one
+tag LibRow 12 albumArtist str one
+tag LibRow 13 writable bool one
 tag ImgEntry 1 name str one
 tag ImgEntry 2 mbid str one
 tag ImgEntry 3 origin IMG_ORIGIN list
@@ -755,3 +834,14 @@ tag ScrobDone 2 startS i64 one
 tag ScrobDone 3 artist str one
 tag ScrobDone 4 title str one
 tag ScrobDone 5 sentTo u8 one
+tag QpItem 1 section QP_SECTION one
+tag QpItem 2 kind QP_KIND one
+tag QpItem 3 name str one
+tag QpItem 4 key str one
+tag QpItem 5 first u64 one
+tag QpItem 6 count u32 one
+tag QpItem 7 artist str one
+tag QpItem 8 service str one
+tag QpItem 9 serviceKey u64 one
+tag LibSection 1 letter str one
+tag LibSection 2 rows u32 one
