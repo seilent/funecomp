@@ -32,13 +32,7 @@ class Heart(private val windowMs: Long = WINDOW_MS) {
         val p = pending?.takeIf { it.tap === t } ?: return null
         if (code != null) {
             pending = null
-            return when {
-                code == Err.noCard -> Toast(CARD, "")
-                code != Err.busy -> null
-                minor < CARD_MINOR -> Toast(text?.takeIf { it in COPY } ?: CARD, "")
-                text == UNREADABLE -> Toast(UNREADABLE, "")
-                else -> null
-            }
+            return refusal(code, text, minor)
         }
         p.result?.let {
             pending = null
@@ -91,6 +85,14 @@ class Heart(private val windowMs: Long = WINDOW_MS) {
         const val UNREADABLE = "favorites not readable"
         private val COPY = setOf(CARD, UNREADABLE)
         const val CARD_MINOR = 15
+
+        fun refusal(code: Int, text: String?, minor: Int): Toast? = when {
+            code == Err.noCard -> Toast(CARD, "")
+            code != Err.busy -> null
+            minor < CARD_MINOR -> Toast(text?.takeIf { it in COPY } ?: CARD, "")
+            text == UNREADABLE -> Toast(UNREADABLE, "")
+            else -> null
+        }
 
         fun shown(hello: HelloReply?, s: State) = hello?.snapRev != null && s.library != null && s.source != Enums.Source.phone
 

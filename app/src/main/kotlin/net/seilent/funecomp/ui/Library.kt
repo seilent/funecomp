@@ -1,5 +1,7 @@
 package net.seilent.funecomp.ui
 
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -31,6 +33,7 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import net.seilent.funecomp.art.Thumbs
+import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.LibRow
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
@@ -73,6 +76,7 @@ private const val SONG_ADDED = "song added to now playing"
 private const val SONGS_ADDED = "songs added to now playing"
 private const val OPEN_PLAYLIST = "open playlist"
 private const val UNREADABLE = "playlist not readable"
+private const val REMOVE = "remove"
 
 fun musicViews(device: DeviceState) = listOf(Enums.View.albums, Enums.View.artists, Enums.View.playlists, Enums.View.songs) +
     listOfNotNull(Enums.View.genres.takeIf { device.has("genres") }) + listOf(Enums.View.folders)
@@ -404,8 +408,39 @@ fun Playlists(ctx: Ctx) {
 
 class Shown(val rev: Long?, val list: LibList)
 
+class Mark(val rev: Long? = null, val ok: Boolean = false, val replied: Boolean = false, val hello: HelloReply? = null)
+
+private fun LibList.without(tracks: Set<Long>): LibList {
+    val cut = rows.filterValues { it.first in tracks }.keys.sorted()
+    if (cut.isEmpty()) return this
+    val kept = rows.filterValues { it.first !in tracks }.mapKeys { (i, _) -> i - cut.count { it < i } }
+    return LibList(total - cut.size, kept)
+}
+
+private fun removeSheet(ctx: Ctx, r: LibRow, key: LibKey, marks: MutableMap<Long, Mark>) {
+    val track = r.first ?: return
+    ctx.sheet.open(r.name ?: "", listOf(REMOVE)) {
+        val d = ctx.live()
+        if (d.hello == null || track in marks || d.lib.pages[key]?.rows?.values?.any { it.first == track } != true) return@open
+        marks[track] = Mark()
+        val main = Handler(Looper.getMainLooper())
+        ctx.control.action(Enums.ActionCmd.favorite, track) { code, text -> main.post { removed(ctx, track, code, text, marks) } }
+    }
+}
+
+private fun removed(ctx: Ctx, track: Long, code: Int?, text: String?, marks: MutableMap<Long, Mark>) {
+    if (track !in marks) return
+    if (code != null && code != ListPlays.LOST) {
+        marks.remove(track)
+        Heart.refusal(code, text, ctx.live().hello?.minor ?: 0)?.let { ctx.toast.show(it.line, it.title) }
+        return
+    }
+    val d = ctx.live()
+    marks[track] = Mark(d.lib.rev, code == null, true, d.hello)
+}
+
 @Composable
-fun ListPage(ctx: Ctx, page: Page.List, held: MutableMap<LibKey, Shown>) {
+fun ListPage(ctx: Ctx, page: Page.List, held: MutableMap<LibKey, Shown>, marks: MutableMap<Long, Mark>) {
     val d = ctx.device
     val key = LibKey(page.view, page.key)
     val state = rememberLazyListState()
@@ -416,7 +451,9 @@ fun ListPage(ctx: Ctx, page: Page.List, held: MutableMap<LibKey, Shown>) {
     val last by remember(state) { derivedStateOf { state.layoutInfo.visibleItemsInfo.lastOrNull()?.index?.toLong() ?: state.firstVisibleItemIndex.toLong() } }
     val ready = list != null && (list.total == 0L || (list.firstMissing(0, 1) == null && list.firstMissing(first, minOf(last + 1, list.total)) == null))
     SideEffect { if (ready && list != null && page in ctx.nav.stack && held[key]?.list !== list) held[key] = Shown(d.lib.rev, list) }
-    val drawn = if (ready) list else held[key]?.list ?: list
+    val cut = if (page.view == Enums.View.favorites) marks.filterValues { it.ok }.keys else emptySet()
+    SideEffect { if (ready && page.view == Enums.View.favorites) marks.filterValues { it.replied && it.rev != d.lib.rev }.keys.forEach { marks.remove(it) } }
+    val drawn = (if (ready) list else held[key]?.list ?: list)?.without(cut)
     val line = ListLine.list(card, drawn?.total, ListGone.gone(page.view, page.key, card, root))
     val drawnRev = if (ready) d.lib.rev else held[key]?.rev ?: d.lib.rev
     LaunchedEffect(list?.rows?.size, first, last) {
@@ -443,7 +480,7 @@ fun ListPage(ctx: Ctx, page: Page.List, held: MutableMap<LibKey, Shown>) {
     val count = drawn?.total?.takeIf { line == null }?.let { songs(it) }
     HubPage(page.name, { ctx.nav.pop() }, count = count, headerCase = case(Tok.type_listCollection_case), headerWeight = weight(Tok.type_listCollection_style), status = ListLine.card(card)) {
         Pane(ctx, page.view, page.key, state = state, line = line, list = drawn) { i, r, _ ->
-            RowSpec(r.name ?: "", r.artist ?: "", "${i + 1}", playing = r.first != null && r.first == d.playback.state.library, libSub = true, tap = { listPlay(ctx, ListPlays.Want(page.view, page.key, page.name, r.first, i.toLong(), rev = drawnRev)) })
+            RowSpec(r.name ?: "", r.artist ?: "", "${i + 1}", playing = r.first != null && r.first == d.playback.state.library, libSub = true, tap = { listPlay(ctx, ListPlays.Want(page.view, page.key, page.name, r.first, i.toLong(), rev = drawnRev)) }, long = if (page.view == Enums.View.favorites) { { removeSheet(ctx, r, key, marks) } } else null)
         }
     }
 }

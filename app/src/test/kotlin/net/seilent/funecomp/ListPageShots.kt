@@ -149,6 +149,9 @@ class ListPageShots {
             load(sz, null)
             hold("row.playlist.1")
             shoot(dir, "list-empty")
+            load(sz, Page.List(Enums.View.favorites, "", "favorites")) { s -> for (i in listOf(3, 8, 14)) s.action(Enums.ActionCmd.favorite, BASE.tracks[i].id) }
+            hold("row.0")
+            shoot(dir, "favorites-row")
         }
     }
 

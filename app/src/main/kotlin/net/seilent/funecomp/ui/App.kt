@@ -79,6 +79,7 @@ class Shell(
     var offset by mutableStateOf<OffsetEdit?>(null)
     val shuffle = HomeShuffle()
     val shown = mutableStateMapOf<LibKey, Shown>()
+    val marks = mutableStateMapOf<Long, Mark>()
     var stale by mutableStateOf<ListPlays.Tap?>(null)
         private set
     val lists = ListPlays(LIB_PAGE) { stale = it }
@@ -240,6 +241,10 @@ fun App(
             if (link.phase == Phase.LIVE) libList(device, control, Enums.View.playlists, "")
             val open = nav.stack.filterIsInstance<Page.List>().mapTo(HashSet()) { LibKey(it.view, it.key) }
             SideEffect { (shell.shown.keys - open).forEach { shell.shown.remove(it) } }
+            SideEffect {
+                val listed = open.any { it.view == Enums.View.favorites }
+                shell.marks.filterValues { it.replied && (if (it.ok) !listed else it.rev != device.lib.rev || it.hello !== device.hello) }.keys.forEach { shell.marks.remove(it) }
+            }
             val stale = shell.stale
             LaunchedEffect(stale, if (stale != null) device.lib else null, device.playback.state.card) {
                 if (stale == null) return@LaunchedEffect
@@ -282,7 +287,7 @@ fun App(
                     is Page.AutoEq -> AutoEqPage(ctx, page, remember(ime, insets) { ime.exclude(insets) })
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
-                    is Page.List -> ListPage(ctx, page, shell.shown)
+                    is Page.List -> ListPage(ctx, page, shell.shown, shell.marks)
                     is Page.Eq -> EqPage(ctx, page)
                     is Page.Browse -> BrowsePage(ctx, page, remember(ime, insets) { ime.exclude(insets) })
                     is Page.PickPreview -> PickPreviewPage(ctx, page)
