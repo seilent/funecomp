@@ -39,6 +39,7 @@ import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.LibList
+import net.seilent.funecomp.state.ListGone
 import net.seilent.funecomp.state.ListLine
 
 fun songs(n: Long) = "$n " + if (n == 1L) "song" else "songs"
@@ -123,6 +124,7 @@ class RowSpec(
     val countLine: Boolean = false,
     val ring: Boolean = false,
     val playing: Boolean = false,
+    val libSub: Boolean = false,
     val tap: () -> Unit,
     val long: (() -> Unit)? = null,
 )
@@ -138,15 +140,15 @@ fun Pane(
     head: Int = 0,
     lead: Float = 0f,
     line: String? = null,
+    list: LibList? = libList(ctx.device, ctx.control, view, parent),
     spec: (Int, LibRow, LibList) -> RowSpec,
 ) {
     val ui = LocalUi.current
-    val list = libList(ctx.device, ctx.control, view, parent)
     var focus by rememberSaveable(view, parent) { mutableIntStateOf(0) }
     Rows(top ?: ui.contentTop, state, x, show = view to parent, head = head, lead = lead) {
         repeat(head) { item { Spacer(Modifier.size((ui.px(ui.w) - ui.px(x)).dp(), ui.px(lead).dp())) } }
         if (line != null) item { LineRow(line, ui.px(ui.w) - ui.px(x)) }
-        val n = (list?.total ?: 0L).toInt()
+        val n = if (line != null) 0 else (list?.total ?: 0L).toInt()
         items(n) { i ->
             val r = list?.row(i, ctx.control, view, parent)
             Box(Modifier.enter()) {
@@ -156,7 +158,7 @@ fun Pane(
                     val s = spec(i, r, list)
                     ListRow(
                         s.primary, Modifier.testTag("row.$i"), s.secondary, s.number, "", s.bold, s.countLine, s.ring,
-                        playing = s.playing, focused = focus == i, width = ui.px(ui.w) - ui.px(x),
+                        playing = s.playing, libSub = s.libSub, focused = focus == i, width = ui.px(ui.w) - ui.px(x),
                         onTap = {
                             focus = i
                             s.tap()
@@ -328,6 +330,51 @@ fun PlaylistRows(ctx: Ctx, top: Float? = null) {
 fun Playlists(ctx: Ctx) {
     val n = libList(ctx.device, ctx.control, Enums.View.playlists, "")?.total ?: 0L
     HubPage("playlists", { ctx.nav.pop() }, count = if (n == 1L) "1 playlist" else "$n playlists", status = ListLine.card(ctx.device.playback.state.card)) { PlaylistRows(ctx) }
+}
+
+class Shown(val rev: Long?, val list: LibList)
+
+@Composable
+fun ListPage(ctx: Ctx, page: Page.List, held: MutableMap<LibKey, Shown>) {
+    val d = ctx.device
+    val key = LibKey(page.view, page.key)
+    val state = rememberLazyListState()
+    val list = libList(d, ctx.control, page.view, page.key)
+    val card = d.playback.state.card
+    val root = d.lib.pages[LibKey(Enums.View.playlists, "")]
+    val first by remember(state) { derivedStateOf { state.firstVisibleItemIndex.toLong() } }
+    val last by remember(state) { derivedStateOf { state.layoutInfo.visibleItemsInfo.lastOrNull()?.index?.toLong() ?: state.firstVisibleItemIndex.toLong() } }
+    val ready = list != null && (list.total == 0L || (list.firstMissing(0, 1) == null && list.firstMissing(first, minOf(last + 1, list.total)) == null))
+    SideEffect { if (ready && list != null && page in ctx.nav.stack && held[key]?.list !== list) held[key] = Shown(d.lib.rev, list) }
+    val drawn = if (ready) list else held[key]?.list ?: list
+    val line = ListLine.list(card, drawn?.total, ListGone.gone(page.view, page.key, card, root))
+    LaunchedEffect(list?.rows?.size, first, last) {
+        val m = list ?: return@LaunchedEffect
+        if (!ready) m.firstMissing(first, minOf(last + 1, m.total))?.let { ctx.control.libGet(page.view, page.key, it) }
+    }
+    val walk = page.view == Enums.View.playlists && (list == null || list.total == 0L) && root != null
+    LaunchedEffect(walk, root?.rows?.size, d.lib.rev) {
+        if (walk && root != null) root.firstMissing(0, root.total)?.let { ctx.control.libGet(Enums.View.playlists, "", it) }
+    }
+    var pending by remember { mutableStateOf(false) }
+    val seen = remember { arrayOf(card) }
+    LaunchedEffect(card) {
+        val down = card == Enums.Card.out || card == Enums.Card.error
+        pending = down && (pending || (seen[0] != Enums.Card.out && seen[0] != Enums.Card.error))
+        seen[0] = card
+    }
+    LaunchedEffect(pending, ctx.sheet.shown, ctx.nav.turning) {
+        if (pending && !ctx.sheet.shown && !ctx.nav.turning && ctx.nav.top == page) {
+            pending = false
+            ctx.nav.pop()
+        }
+    }
+    val count = drawn?.total?.takeIf { line == null }?.let { songs(it) }
+    HubPage(page.name, { ctx.nav.pop() }, count = count, headerCase = case(Tok.type_listCollection_case), headerWeight = weight(Tok.type_listCollection_style), status = ListLine.card(card)) {
+        Pane(ctx, page.view, page.key, state = state, line = line, list = drawn) { i, r, _ ->
+            RowSpec(r.name ?: "", r.artist ?: "", "${i + 1}", playing = r.first != null && r.first == d.playback.state.library, libSub = true, tap = { playAndShow(ctx, page.view, page.key, i.toLong()) })
+        }
+    }
 }
 
 @Composable

@@ -215,9 +215,9 @@ fun HeaderWord(text: String, role: Role, x: Float, tracking: Float, tag: String 
 }
 
 @Composable
-fun CroppedHeader(text: String, onBack: (() -> Unit)? = null, x: Float = Tok.page_headerX, alpha: Float = Roles.pageHeader.alpha, case: Case = Roles.pageHeader.case) {
+fun CroppedHeader(text: String, onBack: (() -> Unit)? = null, x: Float = Tok.page_headerX, alpha: Float = Roles.pageHeader.alpha, case: Case = Roles.pageHeader.case, weight: FontWeight = Roles.pageHeader.weight) {
     val ui = LocalUi.current
-    HeaderWord(text, Roles.pageHeader.copy(alpha = alpha, case = case), ui.px(x * ui.headerScale), Tok.trackingHeader, onBack = onBack)
+    HeaderWord(text, Roles.pageHeader.copy(weight = weight, alpha = alpha, case = case), ui.px(x * ui.headerScale), Tok.trackingHeader, onBack = onBack)
 }
 
 @Composable
@@ -392,6 +392,7 @@ fun ListRow(
     countLine: Boolean = false,
     ring: Boolean = false,
     playing: Boolean = false,
+    libSub: Boolean = false,
     focused: Boolean = false,
     width: Float? = null,
     onTap: () -> Unit = {},
@@ -403,7 +404,7 @@ fun ListRow(
     val indented = number.isNotEmpty() || ring
     val textX = ui.px(Tok.hubEdge + if (indented) Tok.songIndent else 0f)
     val primaryRole = (if (bold) Roles.listPlaylist else Roles.listPrimary).let { if (playing && AccentOff) it.copy(weight = FontWeight.Bold) else it }
-    val secondaryRole = if (bold || countLine) Roles.listCount else Roles.listSecondary
+    val secondaryRole = (if (bold || countLine) Roles.listCount else Roles.listSecondary).let { if (libSub) it.copy(alpha = Tok.type_listLibSecondary_alpha) else it }
     val c by animateColorAsState(
         if (playing) Accent else white(if (focused) primaryRole.alpha else primaryRole.dim),
         tween(Tok.motion_focusAlpha.toInt()),

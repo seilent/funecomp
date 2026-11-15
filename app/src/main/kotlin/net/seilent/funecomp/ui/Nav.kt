@@ -53,9 +53,10 @@ sealed interface Page {
     data class AutoEq(val slot: String) : Page
     data class Artist(val name: String, val songs: Long? = null) : Page
     data class Album(val key: String, val title: String, val artist: String) : Page
+    data class List(val view: Int, val key: String, val name: String) : Page
     data class Eq(val output: Int, val stage: EqStage = EqStage.USER) : Page
     data class Browse(val target: PickFor) : Page
-    data class PickPreview(val target: PickFor, val previews: List<Preview>, val fromBrowse: Boolean = false) : Page
+    data class PickPreview(val target: PickFor, val previews: kotlin.collections.List<Preview>, val fromBrowse: Boolean = false) : Page
 }
 
 val LocalEntry = staticCompositionLocalOf { "" }

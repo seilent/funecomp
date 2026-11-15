@@ -94,4 +94,20 @@ class ListLineTest {
         assertNull(ListLine.queue(null, 0))
         assertNull(ListLine.queue(ready, null))
     }
+
+    @Test
+    fun aListSaysNothingHereEmptyOrGoneWithAReadyCard() {
+        assertEquals("nothing here", ListLine.list(ready, 0, false))
+        assertEquals("nothing here", ListLine.list(ready, 0, null))
+        assertEquals("nothing here", ListLine.list(ready, 12, true))
+        assertEquals("nothing here", ListLine.list(ready, null, true))
+        assertNull(ListLine.list(ready, 12, false))
+        assertNull(ListLine.list(ready, 12, null))
+        assertNull(ListLine.list(ready, null, null))
+        assertNull(ListLine.list(ready, null, false))
+        for (c in listOf(Enums.Card.out, Enums.Card.error, Enums.Card.busy, null)) {
+            assertNull(ListLine.list(c, 0, false))
+            assertNull(ListLine.list(c, null, true))
+        }
+    }
 }

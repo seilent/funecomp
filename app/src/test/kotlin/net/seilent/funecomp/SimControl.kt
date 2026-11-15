@@ -186,6 +186,8 @@ class SimControl(
 
     fun tick() = sim.tick(out)
 
+    fun lists(change: Library.() -> Unit) = sim.lists(out, change)
+
     val transports = ArrayList<Int>()
 
     override fun transport(cmd: Int, seekMs: Long?, on: Boolean?, repeat: Int?) {

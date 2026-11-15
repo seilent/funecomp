@@ -5,6 +5,7 @@ import net.seilent.funecomp.proto.gen.Enums
 object ListLine {
     private const val RESCAN = "rescan"
     private const val SCANNING = "SCANNING"
+    private const val NOTHING = "nothing here"
 
     fun scanning(d: DeviceState) = d.liveWord(RESCAN) == SCANNING
 
@@ -23,5 +24,7 @@ object ListLine {
         return "no ${Enums.View.names.getValue(view)}"
     }
 
-    fun queue(c: Int?, slots: Long?): String? = if (c == Enums.Card.ready && slots == 0L) "nothing here" else null
+    fun queue(c: Int?, slots: Long?): String? = if (c == Enums.Card.ready && slots == 0L) NOTHING else null
+
+    fun list(c: Int?, total: Long?, gone: Boolean?): String? = if (c == Enums.Card.ready && (gone == true || total == 0L)) NOTHING else null
 }

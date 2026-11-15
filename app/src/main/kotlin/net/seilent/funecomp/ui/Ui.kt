@@ -77,14 +77,14 @@ enum class Case { UPPER, LOWER, MIXED }
 @Immutable
 data class Role(val size: Float, val weight: FontWeight, val case: Case, val alpha: Float, val dim: Float = alpha)
 
-private fun weight(style: String) = when (style) {
+internal fun weight(style: String) = when (style) {
     "Light" -> FontWeight.Light
     "SemiLight" -> FontWeight(350)
     "Bold" -> FontWeight.Bold
     else -> FontWeight.Normal
 }
 
-private fun case(c: String) = when (c) {
+internal fun case(c: String) = when (c) {
     "upper" -> Case.UPPER
     "lower" -> Case.LOWER
     else -> Case.MIXED

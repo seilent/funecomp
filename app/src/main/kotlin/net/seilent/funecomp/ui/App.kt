@@ -21,6 +21,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -76,6 +77,7 @@ class Shell(
     val keys = KeysFlow()
     var offset by mutableStateOf<OffsetEdit?>(null)
     val shuffle = HomeShuffle()
+    val shown = mutableStateMapOf<LibKey, Shown>()
 }
 
 fun homeItems(device: DeviceState, link: LinkView): List<HomeItem> {
@@ -225,6 +227,8 @@ fun App(
             }
             SvcSheets(ctx, shell, svc, ime.getBottom(density) > 0)
             if (link.phase == Phase.LIVE) libList(device, control, Enums.View.playlists, "")
+            val open = nav.stack.filterIsInstance<Page.List>().mapTo(HashSet()) { LibKey(it.view, it.key) }
+            SideEffect { (shell.shown.keys - open).forEach { shell.shown.remove(it) } }
             BackHandler(shell.sheet.shown || nav.stack.size > 1) {
                 if (shell.sheet.shown) {
                     if (shell.sheet.armed) return@BackHandler
@@ -256,6 +260,7 @@ fun App(
                     is Page.AutoEq -> AutoEqPage(ctx, page, remember(ime, insets) { ime.exclude(insets) })
                     is Page.Artist -> ArtistDetail(ctx, page)
                     is Page.Album -> AlbumDetail(ctx, page)
+                    is Page.List -> ListPage(ctx, page, shell.shown)
                     is Page.Eq -> EqPage(ctx, page)
                     is Page.Browse -> BrowsePage(ctx, page, remember(ime, insets) { ime.exclude(insets) })
                     is Page.PickPreview -> PickPreviewPage(ctx, page)
