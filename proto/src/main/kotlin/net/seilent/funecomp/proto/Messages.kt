@@ -778,6 +778,16 @@ data class SetReply(val rev: Long, val kept: List<String>, val refused: List<Str
     }
 }
 
+data class DraftReply(val status: Int?) {
+    fun encode() = tlv {
+        enum(Tags.DraftReply.status, status)
+    }
+
+    companion object {
+        fun from(n: Node) = DraftReply(n.int(Tags.DraftReply.status))
+    }
+}
+
 data class ImgBeginReply(val offset: Long, val crc: Long) {
     fun encode() = tlv {
         u32(Tags.ImgBeginReply.offset, offset)

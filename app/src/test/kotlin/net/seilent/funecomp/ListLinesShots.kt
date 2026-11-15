@@ -110,6 +110,13 @@ class ListLinesShots {
             load(sz, HOME + Page.Music, prep = ::playing)
             sheet("row.0", 1)
             shoot(dir, "added-songs")
+            load(sz, HOME + Page.Settings, faults = listOf("draftpending"))
+            rule.walkPivots(c.device.schema.rows, "connect") { settle(1000) }
+            rule.onNodeWithTag("set.usbMode").performClick()
+            settle(600)
+            rule.onNodeWithTag("sheet.item.2").performClick()
+            settle(600)
+            shoot(dir, "pending")
         }
     }
 

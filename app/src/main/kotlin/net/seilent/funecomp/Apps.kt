@@ -15,6 +15,7 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.state.CardView
+import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.AppsView
 import net.seilent.funecomp.ui.Phase
@@ -339,7 +340,7 @@ class Apps(
 
     private fun outcome(p: Push, r: AppPush.Outcome) {
         when (r) {
-            AppPush.Outcome.Asked -> wait(p, CONFIRM)
+            AppPush.Outcome.Asked -> wait(p, DeviceState.CONFIRM)
             AppPush.Outcome.Checking -> wait(p, CHECKING)
             is AppPush.Outcome.Retry -> busy(p)
             is AppPush.Outcome.Aborted -> when (r.abort.code) {
@@ -431,7 +432,6 @@ class Apps(
         const val TAKEN_MAX = 16
         const val APP_BIT = "appPkg"
         const val CHECKING_FILE = "checking file"
-        const val CONFIRM = "confirm on the dap"
         const val CHECKING = "checking on the dap"
         const val INSTALLED = "installed"
         const val DECLINED = "declined on the dap"

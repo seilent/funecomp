@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.unit.dp
+import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.AppsView
 import net.seilent.funecomp.ui.Control
@@ -144,7 +145,7 @@ class AppsUiTest {
     fun eachLineShows() {
         start()
         val lines = listOf(
-            Apps.CHECKING_FILE, Apps.CONFIRM, Apps.CHECKING, Apps.INSTALLED, Apps.DECLINED, Apps.EXPIRED, Apps.PENDING,
+            Apps.CHECKING_FILE, DeviceState.CONFIRM, Apps.CHECKING, Apps.INSTALLED, Apps.DECLINED, Apps.EXPIRED, Apps.PENDING,
             Apps.NO_ANSWER, Apps.SIGNATURE, Apps.OLDER, Apps.NO_ROOM, Apps.BOARD, Apps.DAMAGED, Apps.NEWER, Apps.SEND_FAILED,
             Apps.BLUETOOTH, Apps.BUSY_STOP, Apps.OTHER_DAP, Apps.STREAMING, Apps.NO_INSTALLER, Apps.FIRMWARE,
         )

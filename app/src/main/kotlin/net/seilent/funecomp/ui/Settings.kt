@@ -314,7 +314,7 @@ fun SettingsPage(ctx: Ctx, firmware: FirmwareView = FirmwareView()) {
     fun send(s: Send?, row: Row) {
         when (s) {
             is Send.Set -> ctx.control.set(s.key, s.value) { code -> send(row.refused(code), row) }
-            is Send.Draft -> ctx.control.draft(s.kind, value = s.value, role = s.role) { code, _ -> send(row.refused(code), row) }
+            is Send.Draft -> ctx.control.draft(s.kind, value = s.value, role = s.role, pending = { ctx.toast.show((row.label ?: row.key ?: "").lowercase(), DeviceState.CONFIRM) }) { code, _ -> send(row.refused(code), row) }
             is Send.Minutes -> ctx.control.draft(Enums.DraftKind.sleep, minutes = s.minutes) { code, _ ->
                 if (code == Err.badValue) row.refusal().let { ctx.toast.show(it.field, it.range) }
             }

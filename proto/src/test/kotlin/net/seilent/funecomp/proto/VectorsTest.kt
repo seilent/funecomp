@@ -1,6 +1,7 @@
 package net.seilent.funecomp.proto
 
 import net.seilent.funecomp.proto.gen.Base
+import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
@@ -180,6 +181,7 @@ class VectorsTest {
         if (f.isReply) return when (f.type) {
             Msg.HELLO -> HelloReply.from(n).encode()
             Msg.SET -> SetReply.from(n).encode()
+            Msg.DRAFT -> DraftReply.from(n).encode()
             Msg.IMG_BEGIN -> ImgBeginReply.from(n).encode()
             Msg.IMG_LIST -> ImgListReply.from(n).encode()
             Msg.ART_GET -> ArtGetReply.from(n).encode()
@@ -230,6 +232,13 @@ class VectorsTest {
             Msg.SVC_STATE -> SvcState.from(n).encode()
             else -> null
         }
+    }
+
+    @Test
+    fun theDraftRepliesReadTheirStatus() {
+        fun status(name: String) = run(vecs.getValue(name)).frames.single().let { DraftReply.from(Node.decode(Inbound.scope(it), it.payload)).status }
+        assertEquals(Enums.DraftStatus.done, status("draft_clock_reply"))
+        assertEquals(Enums.DraftStatus.pending, status("draft_codec_reply"))
     }
 
     @Test

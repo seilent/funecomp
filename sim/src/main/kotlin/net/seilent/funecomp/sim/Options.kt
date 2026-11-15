@@ -209,6 +209,7 @@ class Faults(specs: List<String>) {
     var askHeldMs: Long? = null
     var replaceMs: Long? = null
     var usbDac = false
+    var draftPending = false
 
     init {
         val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
@@ -378,6 +379,7 @@ class Faults(specs: List<String>) {
                 "svc-keys-wait" -> svcKeysWaitMs = v.toLongOrNull() ?: throw IllegalArgumentException("svc-keys-wait: delay missing in $v")
                 "ask-held" -> askHeldMs = v.toLongOrNull() ?: throw IllegalArgumentException("ask-held: time missing in $v")
                 "usbdac" -> usbDac = true
+                "draftpending" -> draftPending = true
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')

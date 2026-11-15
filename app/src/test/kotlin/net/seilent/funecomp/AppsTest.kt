@@ -25,6 +25,7 @@ import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.CardView
+import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.AppsView
 import net.seilent.funecomp.ui.Phase
@@ -292,11 +293,11 @@ class AppsTest {
     fun anotherStagesResultToastsAndThePushGoesOn() {
         live("app-ask-ms=60000")
         send()
-        info(Apps.CONFIRM)
+        info(DeviceState.CONFIRM)
         sim.current!!.push(Msg.APP_STATE, AppState("paddle", 4, Enums.AppResult.installed, "installed", 99).encode())
         waitFor { toasts.isNotEmpty() }
         assertEquals("paddle installed", toasts.single())
-        assertEquals(Apps.CONFIRM, apps.view.info)
+        assertEquals(DeviceState.CONFIRM, apps.view.info)
     }
 
     @Test
@@ -304,7 +305,7 @@ class AppsTest {
         live("app-ask-ms=60000", "slow-bps=20000")
         send()
         waitFor { apps.view.send.startsWith("app ") && Remote.bulkSending() }
-        info(Apps.CONFIRM, 20_000)
+        info(DeviceState.CONFIRM, 20_000)
         assertFalse(Remote.bulkSending())
     }
 
@@ -449,7 +450,7 @@ class AppsTest {
     fun anOlderStagesKeptResultToastsAndTheNewerPushEndsOnItsOwn() {
         live("app-ask=expire", "app-ask-ms=600")
         send(pkg(id = "tidal"))
-        info(Apps.CONFIRM)
+        info(DeviceState.CONFIRM)
         sim.current!!.drop("test")
         waitFor { Remote.phase != Phase.LIVE }
         send(pkg(id = "tidal"))
@@ -490,7 +491,7 @@ class AppsTest {
         fresh(resultMs = 1500)
         live("app-ask-ms=600")
         send()
-        info(Apps.CONFIRM)
+        info(DeviceState.CONFIRM)
         sim.current!!.drop("test")
         info(byeText(null))
         tick(2000)
@@ -503,13 +504,13 @@ class AppsTest {
         fresh(resultMs = 3000, liveMs = 3000)
         live("app-ask-ms=60000")
         send()
-        info(Apps.CONFIRM)
+        info(DeviceState.CONFIRM)
         val lives = apps.lives
         vt.addAndGet(2700)
         sim.current!!.drop("test")
         waitFor(advance = false) { apps.lives > lives }
         quiet(500)
-        assertEquals(Apps.CONFIRM, apps.view.info)
+        assertEquals(DeviceState.CONFIRM, apps.view.info)
         sim.current!!.push(Msg.APP_STATE, AppState("paddle", 3, Enums.AppResult.installed, "installed", 1).encode())
         info(Apps.INSTALLED)
     }
@@ -624,7 +625,7 @@ class AppsTest {
         fresh(resultMs = 1500, liveMs = 500)
         live("app-ask-ms=60000")
         send()
-        info(Apps.CONFIRM)
+        info(DeviceState.CONFIRM)
         sim.current!!.bye(Enums.ByeReason.refused)
         info(byeText(Enums.ByeReason.refused))
         val lives = apps.lives
@@ -690,7 +691,7 @@ class AppsTest {
     @Test
     fun theLinesAreTheseWords() {
         val words = listOf(
-            Apps.CHECKING_FILE to "checking file", Apps.CONFIRM to "confirm on the dap", Apps.CHECKING to "checking on the dap",
+            Apps.CHECKING_FILE to "checking file", DeviceState.CONFIRM to "confirm on the dap", Apps.CHECKING to "checking on the dap",
             Apps.INSTALLED to "installed", Apps.DECLINED to "declined on the dap", Apps.EXPIRED to "not confirmed in time",
             Apps.PENDING to "installs after this track", Apps.NO_ANSWER to "no answer from the dap",
             Apps.SIGNATURE to "signature not accepted", Apps.OLDER to "older than installed", Apps.NO_ROOM to "no room",
@@ -840,10 +841,10 @@ class AppsTest {
         assertEquals(emptyList<String>(), logs.drop(from).filter { "rx IMG_BEGIN" in it || "rx LRC_PUT" in it })
         val held = Remote.artWants.get()
         go.countDown()
-        info(Apps.CONFIRM)
+        info(DeviceState.CONFIRM)
         assertTrue(Remote.artWants.get() > held)
         waitFor(20_000) { sim.device.stored.values.any { it.name == artist } && logs.any { it.startsWith("stored lrc") } }
-        assertEquals(Apps.CONFIRM, apps.view.info)
+        assertEquals(DeviceState.CONFIRM, apps.view.info)
     }
 
     private fun ends(line: String, vararg faults: String, states: Int = 1) {
@@ -1071,11 +1072,11 @@ class AppsTest {
         send()
         info(Apps.DAP_BUSY)
         relinkInTheRetryWait("app-ask-ms=600000")
-        info(Apps.CONFIRM)
+        info(DeviceState.CONFIRM)
         assertEquals(2, begins())
         tick(20_000)
         apps.sync()
-        assertEquals(Apps.CONFIRM, apps.view.info)
+        assertEquals(DeviceState.CONFIRM, apps.view.info)
         assertEquals(2, begins())
     }
 
@@ -1253,7 +1254,7 @@ class AppsTest {
         fresh(resultMs = 1500)
         live("app-ask-ms=60000")
         send()
-        info(Apps.CONFIRM)
+        info(DeviceState.CONFIRM)
         tick(1500)
         apps.sync()
         info(Apps.NO_ANSWER)
@@ -1324,7 +1325,7 @@ class AppsTest {
         sim.device.apps.restart()
         send(pkg(version = 4))
         waitFor { logs.count { it.startsWith("app begin stage=1 ") } == 2 }
-        info(Apps.CONFIRM)
+        info(DeviceState.CONFIRM)
         info(Apps.INSTALLED)
         assertTrue(toasts.isEmpty())
     }
@@ -1334,7 +1335,7 @@ class AppsTest {
         fresh(resultMs = 1500, liveMs = 500)
         live("app-ask-ms=60000")
         send()
-        info(Apps.CONFIRM)
+        info(DeviceState.CONFIRM)
         sim.stop()
         info(byeText(null))
         quiet(2000)

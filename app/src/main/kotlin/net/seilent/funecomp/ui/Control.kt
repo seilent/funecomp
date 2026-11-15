@@ -85,7 +85,7 @@ interface Control {
     fun queueAdd(cmd: Int, view: Int?, parent: String?, tracks: List<Long> = emptyList(), done: (Long?, Int?) -> Unit = { _, _ -> }) = done(null, -1)
     fun set(key: String, value: String, done: (Int?) -> Unit = {}) = set(listOf(key to value), done)
     fun set(values: List<Pair<String, String>>, done: (Int?) -> Unit = {})
-    fun draft(kind: Int, value: String? = null, role: Int? = null, minutes: Long? = null, unixS: Long? = null, zoneS: Int? = null, done: (Int?, String?) -> Unit = { _, _ -> })
+    fun draft(kind: Int, value: String? = null, role: Int? = null, minutes: Long? = null, unixS: Long? = null, zoneS: Int? = null, pending: () -> Unit = {}, done: (Int?, String?) -> Unit = { _, _ -> })
     fun eqSet(slot: String, key: String? = null, ints: Profile? = null, mode: Int? = null, graphicKey: String? = null, gains: List<GraphicBand>? = null, on: Boolean? = null, done: (Int?) -> Unit = {})
     fun eqPreset(op: Int, slot: String?, key: String?, name: String?, ints: Profile?, replace: Boolean, mode: Int? = null, gains: List<GraphicBand>? = null, done: (Int?, String?) -> Unit) {}
     fun action(cmd: Int, track: Long? = null, done: (Int?, String?) -> Unit = { _, _ -> })

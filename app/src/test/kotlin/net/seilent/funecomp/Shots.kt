@@ -1261,7 +1261,7 @@ val SHOTS = listOf(
     Shot("apps-checking", board = "v1", pages = APPS, apps = AppsView(send = Apps.CHECKING_FILE)),
     Shot("apps-picked", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE)),
     Shot("apps-sending", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, send = "app 40%")),
-    Shot("apps-confirm", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.CONFIRM)),
+    Shot("apps-confirm", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = DeviceState.CONFIRM)),
     Shot("apps-installed", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.INSTALLED)),
     Shot("apps-refused-signature", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.endLine(Err.badSignature, "signature"))),
     Shot("apps-refused-no-room", board = "v1", pages = APPS, apps = AppsView(picked = APP_FILE, info = Apps.endLine(Err.noSpace, "no room"))),

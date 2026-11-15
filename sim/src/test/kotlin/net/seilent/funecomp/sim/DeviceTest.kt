@@ -1,6 +1,7 @@
 package net.seilent.funecomp.sim
 
 import net.seilent.funecomp.proto.Band
+import net.seilent.funecomp.proto.DraftReply
 import net.seilent.funecomp.proto.Eq
 import net.seilent.funecomp.proto.Frame
 import net.seilent.funecomp.proto.FrameReader
@@ -739,6 +740,20 @@ class DeviceTest {
         val none = fail(req(d, Msg.SET, Req.set("companion=on\n")))
         assertEquals(Err.refused, none.code)
         assertEquals(listOf("companion"), none.refused)
+    }
+
+    @Test
+    fun draftPendingAnswersAUsbModePickPendingAndKeepsTheMode() {
+        val d = device("v1", "draftpending")
+        val out = Sink()
+        val reply = DraftReply.from(Node.decode("DRAFT.reply", ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.usbMode, "storage"), out))))
+        assertEquals(Enums.DraftStatus.pending, reply.status)
+        assertTrue(out.of(Msg.SETTINGS).isEmpty())
+        val after = Sink()
+        d.greet(after)
+        assertTrue("usbMode=prompt" in Settings.from(after.of(Msg.SETTINGS).last()).text.lines())
+        val codec = DraftReply.from(Node.decode("DRAFT.reply", ok(req(d, Msg.DRAFT, Req.draft(Enums.DraftKind.btCodec, "aptx", Enums.BtRole.receiver)))))
+        assertEquals(Enums.DraftStatus.done, codec.status)
     }
 
     @Test

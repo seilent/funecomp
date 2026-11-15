@@ -95,4 +95,27 @@ class SettingsRemoteTest {
         assertEquals(listOf(null, Err.refused), codes)
         assertEquals("ldac", Remote.device.settings.values["btCodecHeadphones"])
     }
+
+    @Test
+    fun aUsbModeDraftTheDapHoldsCallsPendingOnceBeforeDone() {
+        live("draftpending")
+        val calls = ArrayList<String>()
+        Remote.draft(Enums.DraftKind.usbMode, "storage", pending = { calls += "pending" }) { code, _ -> calls += "done $code" }
+        waitFor { calls.size == 2 }
+        Thread.sleep(300)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("pending", "done null"), calls)
+        assertEquals("prompt", Remote.device.settings.values["usbMode"])
+    }
+
+    @Test
+    fun aUsbModeDraftTheDapTakesCallsNoPending() {
+        live()
+        val calls = ArrayList<String>()
+        Remote.draft(Enums.DraftKind.usbMode, "storage", pending = { calls += "pending" }) { code, _ -> calls += "done $code" }
+        waitFor { calls.isNotEmpty() && Remote.device.settings.values["usbMode"] == "storage" }
+        Thread.sleep(300)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf("done null"), calls)
+    }
 }

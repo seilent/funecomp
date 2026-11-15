@@ -2,6 +2,7 @@ package net.seilent.funecomp.sim
 
 import net.seilent.funecomp.proto.ArtGetReply
 import net.seilent.funecomp.proto.Band
+import net.seilent.funecomp.proto.DraftReply
 import net.seilent.funecomp.proto.Eq
 import net.seilent.funecomp.proto.EqName
 import net.seilent.funecomp.proto.EqPresetReply
@@ -1447,6 +1448,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 val r = rows.first { it.key == "usbMode" }
                 if (Enums.RowFlag.readOnly in r.flags) return Answer.Fail(Err.refused, "refused")
                 val v = b.str(Tags.Draft.`value`)?.takeIf { it in r.values } ?: return Answer.Fail(Err.badValue, "bad usb mode")
+                if (faults.draftPending) return Answer.Ok(DraftReply(Enums.DraftStatus.pending).encode())
                 prefs["usbMode"] = v
             }
             Enums.DraftKind.btCodec -> {

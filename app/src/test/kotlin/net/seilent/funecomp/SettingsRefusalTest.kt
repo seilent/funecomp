@@ -14,6 +14,7 @@ import androidx.compose.ui.unit.dp
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.ui.App
+import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.ONLINE_SCROBBLING
@@ -38,20 +39,26 @@ class SettingsRefusalTest {
     val rule = createComposeRule()
 
     private lateinit var shell: Shell
+    private var held: (() -> Unit)? = null
 
-    private fun start(page: Page, vararg faults: String, through: String? = null): SimControl {
+    private fun start(page: Page, vararg faults: String, through: String? = null, hold: Boolean = false): SimControl {
         shell = Shell(Nav(listOf(Page.Home, page)))
         val c = SimControl("v1", faults = faults.toList(), through = through)
+        val control = if (!hold) c else object : Control by c {
+            override fun draft(kind: Int, value: String?, role: Int?, minutes: Long?, unixS: Long?, zoneS: Int?, pending: () -> Unit, done: (Int?, String?) -> Unit) {
+                held = { c.draft(kind, value, role, minutes, unixS, zoneS, pending, done) }
+            }
+        }
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), c, shell) }
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE), control, shell) }
         }
         settle(1000)
         return c
     }
 
-    private fun settings(to: String, faults: List<String> = emptyList(), through: String? = null): SimControl {
-        val c = start(Page.Settings, *faults.toTypedArray(), through = through)
+    private fun settings(to: String, faults: List<String> = emptyList(), through: String? = null, hold: Boolean = false): SimControl {
+        val c = start(Page.Settings, *faults.toTypedArray(), through = through, hold = hold)
         rule.walkPivots(c.device.schema.rows, to) { settle(1000) }
         return c
     }
@@ -175,6 +182,42 @@ class SettingsRefusalTest {
         assertEquals(listOf(Err.refused), c.failed)
         assertEquals("usb mode" to "refused on the dap", toast())
         assertEquals("prompt", c.device.settings.values["usbMode"])
+    }
+
+    @Test
+    fun aUsbModePickTheDapHoldsForItsConfirmToastsTheRowOverTheConfirmLine() {
+        val c = settings("connect", faults = listOf("draftpending"))
+        tap("set.usbMode")
+        pick(2)
+        assertEquals(listOf("DRAFT"), c.sent.filter { it == "SET" || it == "DRAFT" })
+        assertEquals(emptyList<Int>(), c.failed)
+        assertEquals(1, shell.toast.shows)
+        assertEquals("usb mode" to "confirm on the dap", toast())
+        assertEquals("prompt", c.device.settings.values["usbMode"])
+    }
+
+    @Test
+    fun aUsbModePickTheDapTakesShowsNoToast() {
+        val c = settings("connect")
+        tap("set.usbMode")
+        pick(2)
+        assertEquals(0, shell.toast.shows)
+        assertEquals("dock", c.device.settings.values["usbMode"])
+    }
+
+    @Test
+    fun aPendingReplyAfterSettingsWasLeftToastsOnThePageShown() {
+        settings("connect", faults = listOf("draftpending"), hold = true)
+        tap("set.usbMode")
+        pick(2)
+        rule.runOnIdle { shell.nav.pop() }
+        settle(1000)
+        assertEquals(listOf(Page.Home), shell.nav.stack.toList())
+        assertEquals(0, shell.toast.shows)
+        rule.runOnIdle { held!!() }
+        settle(600)
+        assertEquals(1, shell.toast.shows)
+        assertEquals("usb mode" to "confirm on the dap", toast())
     }
 
     @Test

@@ -14,6 +14,7 @@ import net.seilent.funecomp.artist.AutoEqIndex
 import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.proto.ArtGetReply
+import net.seilent.funecomp.proto.DraftReply
 import net.seilent.funecomp.proto.EqPresetReply
 import net.seilent.funecomp.proto.ErrorReply
 import net.seilent.funecomp.proto.GraphicBand
@@ -252,10 +253,11 @@ class SimControl(
 
     val draftBodies = ArrayList<Node>()
 
-    override fun draft(kind: Int, value: String?, role: Int?, minutes: Long?, unixS: Long?, zoneS: Int?, done: (Int?, String?) -> Unit) {
+    override fun draft(kind: Int, value: String?, role: Int?, minutes: Long?, unixS: Long?, zoneS: Int?, pending: () -> Unit, done: (Int?, String?) -> Unit) {
         val payload = Req.draft(kind, value, role, minutes = minutes, unixS = unixS, zoneS = zoneS)
         draftBodies += Node.decode("DRAFT", payload)
         val a = req(Msg.DRAFT, payload)
+        if (a is Answer.Ok && DraftReply.from(Node.decode("DRAFT.reply", a.payload)).status == Enums.DraftStatus.pending) pending()
         if (a is Answer.Fail) done(a.code, a.text) else done(null, null)
     }
 

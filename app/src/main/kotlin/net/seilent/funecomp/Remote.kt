@@ -65,6 +65,7 @@ import net.seilent.funecomp.proto.ArtBlock
 import net.seilent.funecomp.proto.ArtPick
 import net.seilent.funecomp.proto.ArtPickReply
 import net.seilent.funecomp.proto.Bye
+import net.seilent.funecomp.proto.DraftReply
 import net.seilent.funecomp.proto.EqPresetReply
 import net.seilent.funecomp.proto.GraphicBand
 import net.seilent.funecomp.proto.Groups
@@ -1429,8 +1430,12 @@ object Remote : Control {
         update { it.withSetReply(r.rev) }
     }, done = { code, _ -> main.post { done(code) } })
 
-    override fun draft(kind: Int, value: String?, role: Int?, minutes: Long?, unixS: Long?, zoneS: Int?, done: (Int?, String?) -> Unit) =
-        send(Msg.DRAFT, Req.draft(kind, value, role, minutes = minutes, unixS = unixS, zoneS = zoneS), "draft ${Enums.DraftKind.names[kind]}", done = { code, text -> main.post { done(code, text) } })
+    override fun draft(kind: Int, value: String?, role: Int?, minutes: Long?, unixS: Long?, zoneS: Int?, pending: () -> Unit, done: (Int?, String?) -> Unit) =
+        send(
+            Msg.DRAFT, Req.draft(kind, value, role, minutes = minutes, unixS = unixS, zoneS = zoneS), "draft ${Enums.DraftKind.names[kind]}",
+            ok = { if (DraftReply.from(it).status == Enums.DraftStatus.pending) main.post { pending() } },
+            done = { code, text -> main.post { done(code, text) } },
+        )
 
     override fun eqSet(slot: String, key: String?, ints: Profile?, mode: Int?, graphicKey: String?, gains: List<GraphicBand>?, on: Boolean?, done: (Int?) -> Unit) =
         send(Msg.EQ_SET, EqSlots.setRequest(device, slot, key, ints, mode, graphicKey, gains, on), "eq set slot=$slot key=$key graphicKey=$graphicKey on=$on", done = { code, _ -> main.post { done(code) } })
