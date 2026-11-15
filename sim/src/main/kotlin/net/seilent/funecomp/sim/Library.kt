@@ -77,7 +77,11 @@ class Library(val tracks: List<Track>, val services: List<Track> = emptyList(), 
 
     fun albumKey(track: Long): String? = albums.firstOrNull { a -> a.any { it.id == track } }?.let { java.lang.Long.toUnsignedString(it[0].id) }
 
-    private fun albumRow(a: List<Track>) = LibRow(a[0].album, a.size.toLong(), a[0].id, java.lang.Long.toUnsignedString(a[0].id))
+    fun albumAt(first: Long): List<Track>? = albums.firstOrNull { it[0].id == first }
+
+    fun without(gone: Set<Long>): Library = Library(tracks.filter { it.id !in gone }, services, lists.toList()).also { it.hidden += hidden }
+
+    private fun albumRow(a: List<Track>) = LibRow(a[0].album, a.size.toLong(), a[0].id, java.lang.Long.toUnsignedString(a[0].id), artist = a[0].albumArtist.ifEmpty { null })
 
     private fun trackRow(t: Track, artist: Boolean = false) = LibRow(t.title, 1, t.id, java.lang.Long.toUnsignedString(t.id), artist = t.artists.joinToString(", ").takeIf { artist && it.isNotEmpty() })
 

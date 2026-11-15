@@ -210,6 +210,17 @@ class Faults(specs: List<String>) {
     var replaceMs: Long? = null
     var usbDac = false
     var draftPending = false
+    var bindWindow = false
+    var bindAnswer = "allow"
+    var bindMs = 300L
+    var delChanged = false
+    var delReadonly = false
+    var delCue: Long? = null
+    var delPath = false
+    var delMs = 200L
+    var delFailed = 0
+    var delRescanMs = 2000L
+    val noDelete = HashSet<Long>()
 
     init {
         val tokens = specs.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.fold(ArrayList<String>()) { acc, t ->
@@ -380,6 +391,17 @@ class Faults(specs: List<String>) {
                 "ask-held" -> askHeldMs = v.toLongOrNull() ?: throw IllegalArgumentException("ask-held: time missing in $v")
                 "usbdac" -> usbDac = true
                 "draftpending" -> draftPending = true
+                "bind-window" -> bindWindow = true
+                "bind" -> bindAnswer = v.also { require(it in BIND_ANSWERS) { "bind: one of $BIND_ANSWERS, not $v" } }
+                "bind-ms" -> bindMs = v.toLong()
+                "del-changed" -> delChanged = true
+                "del-readonly" -> delReadonly = true
+                "del-cue" -> delCue = v.toULongOrNull()?.toLong() ?: throw IllegalArgumentException("del-cue: track missing in $v")
+                "del-path" -> delPath = true
+                "del-ms" -> delMs = v.toLong()
+                "del-failed" -> delFailed = v.toInt()
+                "del-rescan-ms" -> delRescanMs = v.toLong()
+                "no-delete" -> noDelete += v.toULongOrNull()?.toLong() ?: throw IllegalArgumentException("no-delete: album first missing in $v")
                 "enum" -> {
                     val target = v.substringBefore('=')
                     val msg = target.substringBefore('.')
@@ -418,6 +440,7 @@ class Faults(specs: List<String>) {
 
     companion object {
         const val SVC_HOST = "svcdemo.test"
+        val BIND_ANSWERS = setOf("allow", "allowfail", "keep", "screen", "busy", "cool", "refused")
     }
 }
 
@@ -464,6 +487,7 @@ class Options(
     val cardLog: List<PlayEntry> = emptyList(),
     val cardKey: String = CardLog.KEY,
     val bind: Boolean = true,
+    val bootId: Long = BOOT_ID,
 ) {
     init {
         if (minor < 2) faults.features = faults.features and Groups.mask("art", "lyrics", "update", "clockAuto").inv()
@@ -477,13 +501,14 @@ class Options(
         if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig", "liveRows", "eqStages").inv()
         if (minor < 16) faults.features = faults.features and Groups.mask("svcLogin").inv()
         if (minor < 17) faults.features = faults.features and Groups.mask("imgFocusX", "svcAccount", "appPkg").inv()
-        if (minor < 18) faults.features = faults.features and Groups.mask("cardLog", "trackArtist").inv()
+        if (minor < 18) faults.features = faults.features and Groups.mask("cardLog", "trackArtist", "libDelete").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }
 
     companion object {
         const val IMG_CAP = 128L shl 20
+        const val BOOT_ID = -0x61c8864680b583ebL
 
         fun svc(v: String): SvcInfo {
             val p = v.split(':')

@@ -1,6 +1,7 @@
 package net.seilent.funecomp.sim
 
 import net.seilent.funecomp.proto.ArtGetReply
+import net.seilent.funecomp.proto.BindAskReply
 import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.DraftReply
 import net.seilent.funecomp.proto.Eq
@@ -17,6 +18,7 @@ import net.seilent.funecomp.proto.ImgBeginReply
 import net.seilent.funecomp.proto.ImgEntry
 import net.seilent.funecomp.proto.ImgListReply
 import net.seilent.funecomp.proto.Lib
+import net.seilent.funecomp.proto.LibDeleteReply
 import net.seilent.funecomp.proto.Live
 import net.seilent.funecomp.proto.LrcReply
 import net.seilent.funecomp.proto.LyrGetReply
@@ -89,7 +91,7 @@ private class Sent(val schema: Long, val legacy: Long, val live: Long)
 sealed class Answer {
     class Ok(val payload: ByteArray = ByteArray(0), val state: Boolean = false, val then: ((Out) -> Unit)? = null, val batch: Boolean = false) : Answer()
     class Fail(val code: Int, val text: String, val refused: List<String> = emptyList(), val before: ((Out) -> Unit)? = null, val then: ((Out) -> Unit)? = null) : Answer()
-    class Later(val ms: Long, val then: () -> Answer) : Answer()
+    class Later(val ms: Long, val at: Long? = null, val then: () -> Answer) : Answer()
 }
 
 private const val FULL_VOLUME = 255
@@ -105,6 +107,8 @@ private const val CROSS_MIN_MS = 30_000L
 private const val CROSS_CAP_MS = 240_000L
 const val USB_DAC_TEXT = "usb dac"
 private val DAC_TRANSPORT = setOf(Enums.TransportCmd.toggle, Enums.TransportCmd.play, Enums.TransportCmd.next, Enums.TransportCmd.prev, Enums.TransportCmd.seek)
+private const val BIND_COOL_MS = 60_000L
+private const val BIND_COOL_MAX_MS = 3_600_000L
 
 class Lyr(val kind: Int, val lines: List<LyrLine>) {
     val crc: Long = lyricsCrc(kind, lines)
@@ -345,6 +349,16 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     private var pushOut: Out? = null
     private var updOut: Out? = null
     private val stream = Phone(opts, clock)
+    private var bootId = opts.bootId
+    private var bindHeld: ByteArray? = null
+    private var bindWindow = faults.bindWindow
+    private var bindOut: Out? = null
+    private var bindCoolMs = BIND_COOL_MS
+    private var bindCoolUntil = Long.MIN_VALUE
+    private var delWait = false
+    private var delGone: Set<Long> = emptySet()
+    private var delRescanAt: Long? = null
+    private var runs = 0
 
     init {
         opts.lrcDir?.listFiles { f -> f.name.endsWith(".lrc") }?.forEach { f ->
@@ -585,17 +599,45 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         partials.clear()
         push = null
         apps.restart()
+        bootId = (bootId + 1).takeIf { it != 0L } ?: 1L
+        bindOut = null
+        bindCoolMs = BIND_COOL_MS
+        bindCoolUntil = Long.MIN_VALUE
+        delWait = false
+        delGone = emptySet()
+        delRescanAt = null
+        runs++
     }
 
-    fun helloReply(out: Out? = null) = HelloReply(
-        faults.major, opts.minor, board.name, opts.version ?: "sim.${board.name}", board.screenW, board.screenH,
-        board.backdropW, board.backdropH, Proto.maxPayload, opts.idleMs, opts.busyMs,
-        if (out == null || out in bitPeers) faults.features else faults.features and Groups.mask("cardLog").inv(), lib.rev, settingsRev,
-        if (v13) lib.snapRev else null,
-        services = if (svcBoth(out?.let { linked[it] } ?: 0L)) opts.services else emptyList(),
-        eqSlots = if (devBit(Feature.eqSlots)) EAR_LABELS.entries.take(if (devBit(Feature.eqStages) && appBit(out, Feature.eqStages)) 4 else 2).map { EqSlot(it.key, it.value) } else emptyList(),
-        bandTypes = if (devBit(Feature.eqSlots)) DAP_BAND_TYPES else emptyList(),
-    )
+    fun helloReply(out: Out? = null) = synchronized(lock) {
+        HelloReply(
+            faults.major, opts.minor, board.name, opts.version ?: "sim.${board.name}", board.screenW, board.screenH,
+            board.backdropW, board.backdropH, Proto.maxPayload, opts.idleMs, opts.busyMs,
+            if (out == null || out in bitPeers) faults.features else faults.features and Groups.mask("cardLog").inv(), lib.rev, settingsRev,
+            if (v13) lib.snapRev else null,
+            services = if (svcBoth(out?.let { linked[it] } ?: 0L)) opts.services else emptyList(),
+            eqSlots = if (devBit(Feature.eqSlots)) EAR_LABELS.entries.take(if (devBit(Feature.eqStages) && appBit(out, Feature.eqStages)) 4 else 2).map { EqSlot(it.key, it.value) } else emptyList(),
+            bandTypes = if (devBit(Feature.eqSlots)) DAP_BAND_TYPES else emptyList(),
+            bindToken = bindIssue(out),
+            bootId = bootId.takeIf { delBoth(out) },
+        )
+    }
+
+    val bindToken: ByteArray? get() = synchronized(lock) { bindHeld?.copyOf() }
+
+    private fun delBoth(out: Out?) = devBit(Feature.libDelete) && appBit(out, Feature.libDelete)
+
+    private fun bindPeer(out: Out?) = out != null && firstPeer != null && peerApp[out] == firstPeer
+
+    private fun bindIssue(out: Out?): ByteArray? {
+        val scrob = devBit(Feature.scrobWifi) && appBit(out, Feature.scrobWifi)
+        if (!bindWindow || !bindPeer(out) || !(delBoth(out) || scrob)) return null
+        bindWindow = false
+        opts.log("bind token issued")
+        return bindMake()
+    }
+
+    private fun bindMake(): ByteArray = kotlin.random.Random.nextBytes(Proto.bindTokenBytes).also { bindHeld = it.copyOf() }
 
     private fun devBit(bit: Int) = (faults.features ushr bit) and 1L == 1L
 
@@ -732,6 +774,16 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
                 send(out, Msg.STATE, state(out = out))
             }
         }
+        delRescanAt?.let { at ->
+            if (now() >= at) {
+                delRescanAt = null
+                val gone = delGone
+                delGone = emptySet()
+                replace(lib.without(gone), requeue = false)
+                opts.log("lib delete rescan rev=${lib.rev} snapRev=${lib.snapRev}")
+                send(out, Msg.STATE, state(out = out))
+            }
+        }
         cardFindAt?.let { at ->
             if (now() >= at) {
                 cardFindAt = null
@@ -785,6 +837,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     fun unlinked(out: Out) = synchronized(lock) {
+        if (bindOut === out) {
+            bindOut = null
+            bindDecline()
+            opts.log("bind ask closed, declined")
+        }
         linked.remove(out)
         svc.forget(out)
         cardSent.remove(out)
@@ -1104,7 +1161,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             cardStart(now())
         }
         cardEdge()
-        cardRefusal(type, body)?.let {
+        if (type != Msg.LIB_DELETE) cardRefusal(type, body)?.let {
             if (it.code == Err.noCard) forceCard()
             cardPush(out)
             return@synchronized it
@@ -1142,6 +1199,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Msg.SVC_KEYS -> svcKeys(body)
             Msg.SVC_LOGIN_START -> svcGate(body, out, Tags.SvcLoginStart.service) ?: svc.start(body, out, cardOk(), faults.svcOff || streamingOff()) { o -> state(out = o) }
             Msg.SVC_LOGOUT -> svcGate(body, out, Tags.SvcLogout.service) ?: svc.logout(body, out, cardOk(), faults.svcOff || streamingOff())
+            Msg.LIB_DELETE -> libDelete(body, out)
+            Msg.BIND_ASK -> bindAsk(out)
             else -> Answer.Fail(Err.unknown, "unknown")
         }.also { follow() }
     }
@@ -1173,6 +1232,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
     }
 
     fun resolve(a: Answer.Later): Answer = synchronized(lock) { a.then() }
+
+    fun due(a: Answer.Later): Boolean = synchronized(lock) { a.at == null || now() >= a.at }
 
     fun svcSet(out: Out?, a: SvcAcct) = synchronized(lock) {
         svc.set(a)
@@ -1234,6 +1295,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun rebind(app: String?) = synchronized(lock) {
         firstPeer = app.orEmpty()
+        bindHeld = null
         opts.log("cardlog bound ${app.orEmpty()}")
     }
 
@@ -1807,7 +1869,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (!viewServed(view)) return Answer.Fail(Err.badValue, "bad view")
         revCode(b, Tags.LibGet.libRev, Tags.LibGet.snapRev, listView(view), false)?.let { return revFail(it) }
         val parent = b.str(Tags.LibGet.parent) ?: ""
-        val rows = lib.rows(view, parent, trackArtist(out))?.map { if (v11) it else it.copy(mbid = null) } ?: return Answer.Fail(Err.staleRev, "stale rev")
+        val del = delBoth(out) && (view == Enums.View.albums || view == Enums.View.artistAlbums || view == Enums.View.searchAlbums)
+        val rows = lib.rows(view, parent, trackArtist(out))?.map { r ->
+            val row = if (v11) r else r.copy(mbid = null)
+            if (del && row.first?.let { f -> f in faults.noDelete } == true) row.copy(noDelete = true) else row
+        } ?: return Answer.Fail(Err.staleRev, "stale rev")
         val offset = n(b.long(Tags.LibGet.offset), 0)
         if (offset > rows.size) return Answer.Fail(Err.badValue, "offset past end")
         val end = minOf(rows.size, offset + n(b.long(Tags.LibGet.count), 100))
@@ -1864,6 +1930,107 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         return changed()
     }
 
+    private fun notAllowed() = Answer.Fail(Err.refused, "not allowed")
+
+    private fun libChanged(why: String = "library changed") = Answer.Fail(Err.staleRev, why)
+
+    private fun cardDown(): Boolean = edgeAt(now())?.let { it.value != Enums.Card.ready } == true
+
+    private fun libDelete(b: Node, out: Out): Answer {
+        if (Msg.LIB_DELETE in faults.refuse || !bindPeer(out)) return Answer.Fail(Err.refused, "refused")
+        val token = b.bytes(Tags.LibDelete.bindToken)
+        val held = bindHeld
+        if (token == null || held == null) return notAllowed()
+        if (token.size != Proto.bindTokenBytes) return Answer.Fail(Err.badValue, "bad value")
+        if (!MessageDigest.isEqual(token, held)) return notAllowed()
+        if (delWait) return Answer.Fail(Err.busy, "delete waiting")
+        if (cardDown()) {
+            val f = noCard()
+            if (f.code == Err.noCard) forceCard()
+            cardPush(out)
+            return f
+        }
+        val track = b.long(Tags.LibDelete.track)
+        val album = b.long(Tags.LibDelete.album)
+        val count = b.long(Tags.LibDelete.count)
+        val snap = b.long(Tags.LibDelete.snapRev)
+        val boot = b.long(Tags.LibDelete.bootId)
+        if (snap == null || boot == null || (track == null) == (album == null) || (album != null && count == null)) return Answer.Fail(Err.badValue, "bad value")
+        if (boot != bootId) return libChanged()
+        if (snap != lib.snapRev) return libChanged()
+        val tracks = if (album != null) lib.albumAt(album).orEmpty() else listOfNotNull(lib.byId[track]?.takeIf { it.service == null })
+        if (tracks.isEmpty()) return Answer.Fail(Err.notFound, "not found")
+        if (faults.delChanged) return libChanged()
+        if (faults.delReadonly) return Answer.Fail(Err.readOnly, "card is read only")
+        if (album != null && count != tracks.size.toLong()) return libChanged("count changed")
+        if (tracks.any { it.id == faults.delCue }) return Answer.Fail(Err.refused, "part of a cue image")
+        if (faults.delPath || (album != null && album in faults.noDelete)) return Answer.Fail(Err.refused, "refused")
+        val ids = tracks.mapTo(HashSet()) { it.id }
+        dropQueued(ids)
+        send(out, Msg.STATE, state(out = out))
+        delWait = true
+        val failed = faults.delFailed.coerceIn(0, tracks.size)
+        opts.log("lib delete ${if (album != null) "album" else "song"} ${tracks.size} tracks, $failed failing")
+        val run = runs
+        return Answer.Later(faults.delMs, now() + faults.delMs) {
+            if (run != runs) return@Later libChanged()
+            delWait = false
+            if (failed == 0 || album != null) {
+                delGone = delGone + tracks.dropLast(failed).map { it.id }
+                delRescanAt = now() + faults.delRescanMs
+            }
+            Answer.Ok(LibDeleteReply((tracks.size - failed).toLong(), failed.toLong()).encode())
+        }
+    }
+
+    private fun dropQueued(ids: Set<Long>) {
+        mark()
+        val cur = queue.getOrNull(slot)
+        val before = queue.take(slot).count { it in ids }
+        queue.removeAll { it in ids }
+        slot = (slot - before).coerceIn(0, maxOf(0, queue.size - 1))
+        if (cur in ids) positionMs = 0
+        positionAt = now()
+        queueRev++
+    }
+
+    private fun bindDecline() {
+        bindCoolUntil = now() + bindCoolMs
+        bindCoolMs = minOf(bindCoolMs * 2, BIND_COOL_MAX_MS)
+    }
+
+    private fun bindAsk(out: Out): Answer {
+        val answer = faults.bindAnswer
+        if (Msg.BIND_ASK in faults.refuse || answer == "refused" || !bindPeer(out)) return Answer.Fail(Err.refused, "refused")
+        if (bindOut != null || answer == "busy") return Answer.Fail(Err.busy, "busy")
+        if (answer == "screen") return Answer.Fail(Err.busy, "screen off")
+        if (answer == "cool" || now() < bindCoolUntil) return Answer.Fail(Err.refused, "declined")
+        bindOut = out
+        opts.log("bind ask open")
+        return Answer.Later(faults.bindMs, now() + faults.bindMs) { if (bindOut === out) bindEnd(answer) else Answer.Fail(Err.refused, "declined") }
+    }
+
+    private fun bindEnd(answer: String): Answer {
+        bindOut = null
+        val a = when (answer) {
+            "allow" -> {
+                bindCoolMs = BIND_COOL_MS
+                bindCoolUntil = Long.MIN_VALUE
+                Answer.Ok(BindAskReply(bindMake()).encode())
+            }
+            "allowfail" -> {
+                bindHeld = null
+                Answer.Fail(Err.busy, "busy")
+            }
+            else -> {
+                bindDecline()
+                Answer.Fail(Err.refused, "declined")
+            }
+        }
+        opts.log("bind ask ${if (a is Answer.Fail) a.text else "allowed"}")
+        return a
+    }
+
     internal fun fold(name: String) = ArtKey.fold(name)
 
     fun source(v: Int) = synchronized(lock) { source = v }
@@ -1892,7 +2059,9 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         send(out, Msg.STATE, state(out = out))
     }
 
-    fun rescan(next: Library?) = synchronized(lock) {
+    fun rescan(next: Library?) = synchronized(lock) { replace(next, requeue = true) }
+
+    private fun replace(next: Library?, requeue: Boolean) {
         faults.scanMs?.let { scanUntil = now() + it }
         val old = lib
         if (next != null) {
@@ -1900,9 +2069,11 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             next.snapRev = old.snapRev
             next.favorites += old.favorites.filter { it in next.byId }
             lib = next
-            queue = next.tracks.map { it.id }.toMutableList()
-            slot = 0
-            queueRev++
+            if (requeue) {
+                queue = next.tracks.map { it.id }.toMutableList()
+                slot = 0
+                queueRev++
+            }
         }
         lib.rev++
         lib.snapRev++

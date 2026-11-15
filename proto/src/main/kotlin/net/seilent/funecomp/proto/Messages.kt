@@ -61,7 +61,6 @@ object Groups {
         "phoneFiles",
         "imgSource",
         "libNext",
-        "libDelete",
         "scrobWifi",
     )
     private val bits: Map<String, Int> = Feature.names.entries.associate { it.value to it.key }

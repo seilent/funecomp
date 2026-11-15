@@ -54,6 +54,7 @@ class Conn(
     private class Ask(val type: Int, val seq: Int, val deadline: Long, val done: (String) -> Unit, val svcSeq: Long? = null)
 
     private var ask: Ask? = null
+    private val laters = ArrayList<Pair<Frame, Answer.Later>>()
     private var batch: ByteArrayOutputStream? = null
 
     val asks: Boolean get() = Groups.allowed(Msg.ART_BLOCK, appFeatures) && Groups.allowed(Msg.ART_BLOCK, faults.features)
@@ -170,7 +171,7 @@ class Conn(
                 error(f, a.code, a.text, a.refused)
                 a.then?.invoke(this)
             }
-            is Answer.Later -> device.svc.timer.schedule({
+            is Answer.Later -> if (a.at != null) synchronized(lock) { laters += f to a } else device.svc.timer.schedule({
                 val r = device.resolve(a)
                 if (closed == null) answer(f, r, clock(), null)
             }, a.ms, TimeUnit.MILLISECONDS)
@@ -192,6 +193,8 @@ class Conn(
         }
         answered(null, "closed")
         device.unlinked(this)
+        val parked = synchronized(lock) { laters.toList().also { laters.clear() } }
+        for ((_, a) in parked) device.resolve(a)
         try {
             closer()
         } catch (_: Exception) {
@@ -242,6 +245,9 @@ class Conn(
             return
         }
         device.tick(this)
+        val parked = synchronized(lock) { laters.toList() }
+        val due = parked.filter { device.due(it.second) }.filter { synchronized(lock) { laters.remove(it) } }
+        for ((f, a) in due) answer(f, device.resolve(a), now, null)
         if (silence >= opts.idleMs && pingSeq == null) {
             val s = synchronized(lock) { nextSeq() }
             pingSeq = s

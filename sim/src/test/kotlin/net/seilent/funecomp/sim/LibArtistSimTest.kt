@@ -54,10 +54,11 @@ class LibArtistSimTest {
     }
 
     @Test
-    fun albumAndPlaylistRowsCarryNoArtist() {
+    fun albumRowsCarryTheAlbumArtistAndPlaylistRowsNone() {
         val d = device()
         val out = link(d)
-        assertTrue(rows(d, out, Enums.View.albums).all { it.artist == null })
+        assertEquals(lib.tracks.groupBy { it.album to it.albumArtist }.keys.map { it.second }, rows(d, out, Enums.View.albums).map { it.artist })
+        assertEquals("Various Artists", rows(d, out, Enums.View.albums).single { it.name == "Black Panther" }.artist)
         assertEquals(listOf<String?>(null), rows(d, out, Enums.View.playlists).map { it.artist })
     }
 
