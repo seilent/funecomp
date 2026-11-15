@@ -8,6 +8,7 @@ import android.os.Looper
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
@@ -95,27 +96,27 @@ class CardPlayToastTest {
         answered("PLAY", 1)
         Remote.queueOp(Enums.QueueCmd.playAt, slot = 1)
         answered("QUEUE_OP", 2)
-        Remote.queueOp(Enums.QueueCmd.playNext, tracks = listOf(lib.tracks[2].id))
+        Remote.queueAdd(Enums.QueueCmd.playNext, null, null, listOf(lib.tracks[2].id)) { _, _ -> }
         answered("QUEUE_OP", 3)
         Remote.action(Enums.ActionCmd.shuffleLibrary)
         answered("ACTION", 1)
         quiet()
     }
 
-    private fun late14(msg: String, send: () -> Unit) {
+    private fun late14(msg: String, heard: () -> Boolean = { toasts.isNotEmpty() }, toasted: List<Pair<String, String>> = listOf(CardView.REFUSED to ""), send: () -> Unit) {
         val c = link(listOf("card-run=1000+500@hello", "late-state=500", "play-lag=20000"))
         afterReady(2)
         val before = refused(msg)
         assertTrue(!Remote.device.cardDown)
         send()
-        waitFor { refused(msg) > before && toasts.isNotEmpty() }
+        waitFor { refused(msg) > before && heard() }
         quiet()
         assertEquals(1, refused(msg) - before)
         val ready = logs.indexOfFirst { it.startsWith("card state ready") }
         val busy = logs.withIndex().firstOrNull { it.index > ready && it.value.startsWith("card state busy") }?.index ?: -1
         val no = logs.indexOfLast { " tx $msg flags=0x03 " in it }
         assertTrue("$ready $busy $no", ready in 0 until busy && busy < no)
-        assertEquals(listOf(CardView.REFUSED to ""), toasts.toList())
+        assertEquals(toasted, toasts.toList())
         c.destroy()
     }
 
@@ -126,7 +127,11 @@ class CardPlayToastTest {
     fun aLate14OnAPlayAtAfterTheReadyEdgeToastsFromThe14() = late14("QUEUE_OP") { Remote.queueOp(Enums.QueueCmd.playAt, slot = 1) }
 
     @Test
-    fun aLate14OnAPlayNextAfterTheReadyEdgeToastsFromThe14() = late14("QUEUE_OP") { Remote.queueOp(Enums.QueueCmd.playNext, tracks = listOf(lib.tracks[2].id)) }
+    fun aLate14OnAPlayNextAfterTheReadyEdgeAnswers14ToItsCaller() {
+        var code: Int? = null
+        late14("QUEUE_OP", { code != null }, emptyList()) { Remote.queueAdd(Enums.QueueCmd.playNext, null, null, listOf(lib.tracks[2].id)) { _, r -> code = r } }
+        assertEquals(Err.noCard, code)
+    }
 
     @Test
     fun aLate14OnAShuffleAfterTheReadyEdgeToastsFromThe14() = late14("ACTION") { Remote.action(Enums.ActionCmd.shuffleLibrary) }

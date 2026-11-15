@@ -66,6 +66,8 @@ class Ctx(val device: DeviceState, val control: Control, val nav: Nav, val sheet
 
 const val ADD_TO_NOW_PLAYING = "add to now playing"
 private const val PLAY_NEXT = "play next"
+private const val SONG_ADDED = "song added to now playing"
+private const val SONGS_ADDED = "songs added to now playing"
 
 fun musicViews(device: DeviceState) = listOf(Enums.View.albums, Enums.View.artists, Enums.View.playlists, Enums.View.songs) +
     listOfNotNull(Enums.View.genres.takeIf { device.has("genres") }) + listOf(Enums.View.folders)
@@ -178,10 +180,9 @@ private fun playSource(ctx: Ctx, view: Int, parent: String, count: Long?, shuffl
     playAndShow(ctx, view, parent, start ?: 0L, shuffle)
 }
 
-private fun queued(ctx: Ctx, title: String, added: Long?, code: Int?) {
+private fun queued(ctx: Ctx, title: String, one: Boolean, added: Long?, code: Int?) {
     when {
-        code == null && added != null -> ctx.toast.show("added ${songs(added)}", title)
-        code == null -> ctx.control.log("queue add reply with no count")
+        code == null -> ctx.toast.show(if (added == 1L || (added == null && one)) SONG_ADDED else SONGS_ADDED, title)
         code == Err.noCard -> ctx.toast.show(Heart.CARD, "")
         else -> ctx.control.log("queue add error $code")
     }
@@ -189,7 +190,7 @@ private fun queued(ctx: Ctx, title: String, added: Long?, code: Int?) {
 
 private fun queueAdd(ctx: Ctx, cmd: Int, title: String, view: Int?, parent: String?, tracks: List<Long> = emptyList()) {
     if (queueRefused(ctx.live(), ctx.toast)) return
-    ctx.control.queueAdd(cmd, view, parent, tracks) { added, code -> queued(ctx, title, added, code) }
+    ctx.control.queueAdd(cmd, view, parent, tracks) { added, code -> queued(ctx, title, tracks.size == 1, added, code) }
 }
 
 private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
@@ -197,11 +198,7 @@ private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
     ctx.sheet.open(r.name ?: "", items) {
         when (it) {
             0 -> play()
-            1 -> r.first?.let { id ->
-                if (queueRefused(ctx.live(), ctx.toast)) return@let
-                ctx.control.queueOp(Enums.QueueCmd.playNext, tracks = listOf(id))
-                ctx.toast.show("added 1 song", r.name ?: "")
-            }
+            1 -> r.first?.let { id -> queueAdd(ctx, Enums.QueueCmd.playNext, r.name ?: "", null, null, listOf(id)) }
             2 -> r.first?.let { id -> queueAdd(ctx, Enums.QueueCmd.add, r.name ?: "", null, null, listOf(id)) }
         }
     }

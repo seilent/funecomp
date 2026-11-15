@@ -153,7 +153,7 @@ class CardToastTest {
     @Test
     fun aPhoneStreamSendsPlayNextAndAddToQueue() {
         start(phone = true)
-        val sent = mapOf("song sheet play next" to "queue playNext", "song sheet add to now playing" to "add add", "collection sheet play next" to "add playNext", "collection sheet add to now playing" to "add add")
+        val sent = mapOf("song sheet play next" to "add playNext", "song sheet add to now playing" to "add add", "collection sheet play next" to "add playNext", "collection sheet add to now playing" to "add add")
         for (e in entries.filter { it.name in adds }) {
             e.prep()
             calls.clear()
@@ -166,7 +166,7 @@ class CardToastTest {
     @Test
     fun aReadyCardSendsAtEveryPlayEntryAndAListPlayOpensNowPlayingBeforeAnyReply() {
         start(card = Enums.Card.ready)
-        val sent = listOf("action shuffleLibrary", "play", "queue playNext", "add add", "play", "add playNext", "add add", "queue playAt")
+        val sent = listOf("action shuffleLibrary", "play", "add playNext", "add add", "play", "add playNext", "add add", "queue playAt")
         for ((i, e) in entries.withIndex()) {
             e.prep()
             calls.clear()

@@ -177,7 +177,7 @@ class GenresTest {
         assertEquals(Enums.View.genres, b.int(Tags.QueueOp.view))
         assertEquals("J-Pop", b.str(Tags.QueueOp.parent))
         assertNull(b.long(Tags.QueueOp.rev))
-        assertEquals("added 10 songs", shell.toast.artist)
+        assertEquals("songs added to now playing", shell.toast.artist)
         assertEquals("J-Pop", shell.toast.title)
     }
 

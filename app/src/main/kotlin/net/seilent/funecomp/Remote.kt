@@ -1404,7 +1404,7 @@ object Remote : Control {
 
     override fun queueOp(cmd: Int, slot: Long?, to: Long?, tracks: List<Long>) {
         val rev = device.queue.rev ?: device.playback.state.queueRev
-        send(Msg.QUEUE_OP, Req.queueOp(cmd, rev, slot = slot, to = to, tracks = tracks), "queue ${Enums.QueueCmd.names[cmd]} slot=$slot to=$to", done = if (cmd == Enums.QueueCmd.playAt || cmd == Enums.QueueCmd.playNext) ::playRefused else ::refused)
+        send(Msg.QUEUE_OP, Req.queueOp(cmd, rev, slot = slot, to = to, tracks = tracks), "queue ${Enums.QueueCmd.names[cmd]} slot=$slot to=$to", done = if (cmd == Enums.QueueCmd.playAt) ::playRefused else ::refused)
     }
 
     override fun queueAdd(cmd: Int, view: Int?, parent: String?, tracks: List<Long>, done: (Long?, Int?) -> Unit) {
