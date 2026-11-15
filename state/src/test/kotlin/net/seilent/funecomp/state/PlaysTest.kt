@@ -138,6 +138,18 @@ class PlaysTest {
     }
 
     @Test
+    fun aReconnectAfterARestartWithAnEqualLibRevAndTheSameTrackStartedLaterIsANewPlay() {
+        val r = Run()
+        r.play(0, 60_000)
+        val first = r.plays.open!!
+        r.plays.session()
+        val events = r.at(st(5_000, 5_000).copy(sampleMs = 2_000), wall + 300_000)
+        assertTrue(events.any { it is Plays.Event.NowPlaying })
+        assertTrue(r.plays.open!!.startMs - first.startMs > Plays.CONTINUE_MS)
+        assertEquals(2, r.events.count { it is Plays.Event.NowPlaying })
+    }
+
+    @Test
     fun phoneSourceIsIgnored() {
         val r = Run()
         for (i in 0..20) r.at(st(i * 10_000L, i * 10_000L, source = Enums.Source.phone), wall + i * 10_000L)

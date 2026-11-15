@@ -7,6 +7,7 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
 import android.os.SystemClock
+import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.link.Session
@@ -36,6 +37,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
+import java.io.File
 import java.util.Base64
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
@@ -54,6 +56,7 @@ class HelloTokenTest {
 
     @Before
     fun setUp() {
+        Remote.resetThumbs()
         scrobblesOff(app)
         debuggable(true)
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
@@ -73,6 +76,7 @@ class HelloTokenTest {
         sims.forEach { it.stop() }
         BindTokens.reset()
         exec.shutdownNow()
+        Remote.resetThumbs()
         scrobblesReset()
     }
 
@@ -225,5 +229,66 @@ class HelloTokenTest {
         assertArrayEquals(token, BindTokens.get(key))
         assertFalse(Remote.bindAsking)
         assertEquals(emptyList<String>(), leaked(token))
+    }
+
+    @Test
+    fun theThumbIndexOfADapGoesAtANewBootIdAndStaysAcrossTheSameOne() {
+        val dir = File(app.filesDir, "thumb").apply { mkdirs() }
+        val prefs = app.getSharedPreferences(Main.DEVICE_PREFS, Context.MODE_PRIVATE)
+        fun boot(id: Long) = Sim(Options(Board.of("v1"), Faults(emptyList()), log = { logs += it }, bootId = id)).also { sims += it }
+        val first = boot(11)
+        val port = listenBelowEphemeral(first)
+        val spec = "tcp:127.0.0.1:$port"
+        val key = BindTokens.key(spec)
+        val index = File(dir, Thumbs.indexName(key, first.device.helloReply().snapRev!!))
+        val elsewhere = File(dir, Thumbs.indexName("tcp:127.0.0.1:1", 1))
+        fun seed() = index.writeText("track:101:256\t5\n")
+        fun relink(id: Long) {
+            Remote.stop()
+            sims.last().stop()
+            listenAgain(boot(id), port)
+            start(spec)
+            waitFor { Remote.phase == Phase.LIVE }
+        }
+        seed()
+        elsewhere.writeText("track:101:256\t5\n")
+        start(spec)
+        waitFor { Remote.phase == Phase.LIVE }
+        assertFalse(index.exists())
+        assertTrue(elsewhere.exists())
+        assertEquals("11", prefs.getString("boot.$key", null))
+        seed()
+        relink(11)
+        assertTrue(index.exists())
+        relink(12)
+        assertFalse(index.exists())
+        assertTrue(elsewhere.exists())
+        assertEquals("12", prefs.getString("boot.$key", null))
+        assertEquals(2, ShadowLog.getLogs().count { it.msg == "boot changed, thumb index dropped" })
+    }
+
+    @Test
+    fun aDapWithNoBootIdKeepsItsThumbIndexAcrossRestarts() {
+        val dir = File(app.filesDir, "thumb").apply { mkdirs() }
+        val prefs = app.getSharedPreferences(Main.DEVICE_PREFS, Context.MODE_PRIVATE)
+        fun boot() = Sim(Options(Board.of("v1"), Faults(emptyList()), log = { logs += it }, minor = 17)).also { sims += it }
+        val first = boot()
+        val port = listenBelowEphemeral(first)
+        val spec = "tcp:127.0.0.1:$port"
+        val key = BindTokens.key(spec)
+        val index = File(dir, Thumbs.indexName(key, first.device.helloReply().snapRev!!))
+        index.writeText("track:101:256\t5\n")
+        start(spec)
+        waitFor { Remote.phase == Phase.LIVE }
+        assertNull(Remote.device.hello!!.bootId)
+        assertTrue(index.exists())
+        Remote.stop()
+        sims.last().stop()
+        listenAgain(boot(), port)
+        start(spec)
+        waitFor { Remote.phase == Phase.LIVE }
+        assertTrue(index.exists())
+        assertNull(prefs.getString("boot.$key", null))
+        assertTrue(ShadowLog.getLogs().none { it.msg == "boot changed, thumb index dropped" })
     }
 }

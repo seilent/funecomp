@@ -23,7 +23,7 @@ class ThumbsTest {
 
     private val jpeg = byteArrayOf(1, 2, 3, 4)
 
-    private fun thumbs(rev: Long = 3) = Thumbs(tmp.root).also { it.rev(rev) }
+    private fun thumbs(rev: Long = 3, key: String = DAP) = Thumbs(tmp.root).also { it.rev(key, rev) }
 
     @Test
     fun buckets() {
@@ -134,11 +134,63 @@ class ThumbsTest {
         val w = Want(0, 101, 512, null)
         t.want(w)
         t.done(t.next()!!, Got.Image(5, jpeg))
-        t.rev(4)
+        t.rev(DAP, 4)
         assertNull(t.cached(101, 512))
-        assertFalse(tmp.root.resolve("index-3.tsv").exists())
+        assertFalse(tmp.root.resolve(Thumbs.indexName(DAP, 3)).exists())
         assertTrue(tmp.root.resolve("00000005.jpg").exists())
         assertNull(Thumbs(tmp.root).want(w))
+    }
+
+    @Test
+    fun anEqualRevUnderAnotherDapStartsEmpty() {
+        val t = thumbs(3)
+        val w = Want(0, 101, 512, null)
+        t.want(w)
+        t.done(t.next()!!, Got.Image(5, jpeg))
+        t.rev(OTHER, 3)
+        assertNull(t.cached(101, 512))
+        assertTrue(tmp.root.resolve(Thumbs.indexName(DAP, 3)).exists())
+        t.rev(DAP, 3)
+        assertEquals(5L, t.crc(101, 512))
+    }
+
+    @Test
+    fun aBootDropsThatDapsIndexOnlyAndTheNextRevStartsEmpty() {
+        val t = thumbs(3)
+        val w = Want(0, 101, 512, null)
+        t.want(w)
+        t.done(t.next()!!, Got.Image(5, jpeg))
+        t.rev(OTHER, 7)
+        t.want(w)
+        t.done(t.next()!!, Got.Image(6, jpeg))
+        t.boot(DAP)
+        assertNull(t.want(w))
+        assertNull(t.next())
+        assertFalse(tmp.root.resolve(Thumbs.indexName(DAP, 3)).exists())
+        assertTrue(tmp.root.resolve(Thumbs.indexName(OTHER, 7)).exists())
+        t.rev(DAP, 3)
+        assertNull(t.cached(101, 512))
+        assertTrue(tmp.root.resolve("00000005.jpg").exists())
+    }
+
+    @Test
+    fun legacyIndexFilesGoAtTheFirstRevChange() {
+        tmp.root.resolve("index-3.tsv").writeText("track:101:512\t5\n")
+        tmp.root.resolve("index-9.tsv").writeText("track:101:512\t5\n")
+        val t = thumbs(3)
+        assertNull(t.cached(101, 512))
+        assertFalse(tmp.root.resolve("index-3.tsv").exists())
+        assertFalse(tmp.root.resolve("index-9.tsv").exists())
+    }
+
+    @Test
+    fun theSameDapAndRevAcrossARestartKeepsTheIndex() {
+        val t = thumbs(3)
+        val w = Want(0, 101, 512, null)
+        t.want(w)
+        t.done(t.next()!!, Got.Image(5, jpeg))
+        assertEquals(5L, thumbs(3).crc(101, 512))
+        assertNull(thumbs(3, OTHER).crc(101, 512))
     }
 
     @Test
@@ -183,5 +235,10 @@ class ThumbsTest {
             t.want(w)
             assertEquals("$code", w, t.next())
         }
+    }
+
+    private companion object {
+        const val DAP = "rfcomm:AA:BB:CC:00:00:01"
+        const val OTHER = "rfcomm:AA:BB:CC:00:00:02"
     }
 }

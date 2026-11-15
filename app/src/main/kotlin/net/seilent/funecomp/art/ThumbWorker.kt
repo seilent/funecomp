@@ -35,9 +35,22 @@ class ThumbWorker(dir: File, private val link: () -> Session?, private val card:
 
     fun albumCrc(album: String, px: Int): Long? = thumbs.albumCrc(album, Thumbs.bucket(px))
 
-    fun rev(libRev: Long) = thumbs.rev(libRev)
+    fun rev(key: String, libRev: Long) = thumbs.rev(key, libRev)
+
+    fun boot(key: String) {
+        thumbs.boot(key)
+        exec.execute {
+            images.clear()
+            synchronized(media) { media.clear() }
+            order.clear()
+        }
+    }
 
     fun session() = thumbs.session()
+
+    fun stop() {
+        exec.shutdownNow()
+    }
 
     fun cardReady() {
         thumbs.cardReady()

@@ -126,6 +126,7 @@ object Remote : Control {
     const val USB_DAC = DeviceState.USB_DAC
     private val REFUSALS = setOf(RECEIVER, USB_DAC)
     private const val BACKDROP_SIDE = 2048
+    private const val BOOT = "boot."
     private const val BACKDROP_MAX = 4096
     private const val REFETCH_SLACK_MS = 200L
     private const val FETCH_W = 360
@@ -466,6 +467,11 @@ object Remote : Control {
 
     fun thumbs(context: Context): ThumbWorker = synchronized(lock) {
         thumbs ?: ThumbWorker(File(context.applicationContext.filesDir, "thumb"), { link?.session }, { device.card }) { Log.i(TAG, it) }.also { thumbs = it }
+    }
+
+    internal fun resetThumbs() = synchronized(lock) {
+        thumbs?.stop()
+        thumbs = null
     }
 
     override fun wantArt(slot: Int, track: Long, px: Int, album: String?) {
@@ -1596,7 +1602,15 @@ object Remote : Control {
             val hello = raw.copy(bindToken = null)
             artKey = null
             thumbs?.let { t ->
-                (hello.snapRev ?: hello.libRev)?.let { t.rev(it) }
+                val boot = hello.bootId?.let { java.lang.Long.toUnsignedString(it) }
+                val prefs = app?.getSharedPreferences(Main.DEVICE_PREFS, Context.MODE_PRIVATE)
+                val kept = boot?.let { prefs?.getString(BOOT + dap, null) }
+                if (boot != null && prefs != null && kept != boot) {
+                    Log.i(TAG, "boot changed, thumb index dropped")
+                    t.boot(dap)
+                }
+                (hello.snapRev ?: hello.libRev)?.let { t.rev(dap, it) }
+                if (boot != null && kept != boot) prefs?.edit()?.putString(BOOT + dap, boot)?.commit()
                 t.session()
             }
             update { it.withHello(hello, LINK_FEATURES) }
@@ -1650,7 +1664,7 @@ object Remote : Control {
             edit?.state(s, mark)
             phoneCover.state(s)
             pending?.take(Forward.phoneArtists(s))
-            (s.snapRev ?: s.libRev)?.let { r -> if (r != (old.snapRev ?: old.libRev)) thumbs?.rev(r) }
+            (s.snapRev ?: s.libRev)?.let { r -> if (r != (old.snapRev ?: old.libRev)) thumbs?.rev(dap, r) }
             heartShow(heart.state(s))
             Scrobbles.state(s, System.currentTimeMillis(), device.card)
             Firmwares.state()

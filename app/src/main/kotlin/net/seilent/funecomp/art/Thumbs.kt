@@ -3,6 +3,7 @@ package net.seilent.funecomp.art
 import net.seilent.funecomp.proto.gen.Err
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
+import java.util.zip.CRC32
 
 class Thumbs(private val dir: File) {
     data class Want(val slot: Int, val track: Long, val px: Int, val album: String?) {
@@ -23,6 +24,7 @@ class Thumbs(private val dir: File) {
         data object Wait : Done
     }
 
+    private var dap: String? = null
     private var rev: Long? = null
     private val index = ConcurrentHashMap<String, Long>()
     private val misses = HashSet<String>()
@@ -31,19 +33,33 @@ class Thumbs(private val dir: File) {
     private val queued = arrayOfNulls<Want>(SLOTS)
 
     @Synchronized
-    fun rev(libRev: Long) {
-        if (libRev == rev) return
+    fun rev(key: String, libRev: Long) {
+        if (key == dap && libRev == rev) return
+        dap = key
         rev = libRev
-        index.clear()
-        misses.clear()
-        waiting.clear()
-        retries.clear()
-        dir.listFiles { f -> f.name.startsWith(INDEX) && f.name != indexName(libRev) }?.forEach { it.delete() }
-        val f = File(dir, indexName(libRev))
+        clear()
+        val own = indexName(key, libRev)
+        dir.listFiles { f -> f.name != own && (LEGACY.matches(f.name) || f.name.startsWith(prefix(key))) }?.forEach { it.delete() }
+        val f = File(dir, own)
         if (f.isFile) f.readLines().forEach { l ->
             val p = l.split('\t')
             if (p.size == 2) p[1].toLongOrNull()?.let { index[p[0]] = it }
         }
+    }
+
+    @Synchronized
+    fun boot(key: String) {
+        dap = null
+        rev = null
+        clear()
+        dir.listFiles { f -> f.name.startsWith(prefix(key)) }?.forEach { it.delete() }
+    }
+
+    private fun clear() {
+        index.clear()
+        misses.clear()
+        waiting.clear()
+        retries.clear()
     }
 
     @Synchronized
@@ -144,7 +160,8 @@ class Thumbs(private val dir: File) {
         index[w.key] = crc
         w.album?.let { index[album(it, w.px)] = crc }
         val r = rev ?: return
-        write(File(dir, indexName(r)), index.entries.joinToString("") { "${it.key}\t${it.value}\n" }.toByteArray())
+        val k = dap ?: return
+        write(File(dir, indexName(k, r)), index.entries.joinToString("") { "${it.key}\t${it.value}\n" }.toByteArray())
     }
 
     private fun write(f: File, bytes: ByteArray) {
@@ -164,6 +181,7 @@ class Thumbs(private val dir: File) {
         const val MEDIA = 2
         private const val SLOTS = 3
         private const val INDEX = "index-"
+        private val LEGACY = Regex("index-\\d+\\.tsv")
         private const val BUSY_TRIES = 3
         const val BUSY_RETRY_MS = 5_000L
 
@@ -176,6 +194,8 @@ class Thumbs(private val dir: File) {
 
         private fun album(name: String, px: Int) = "album:${name.replace('\t', ' ').replace('\n', ' ')}:$px"
 
-        private fun indexName(rev: Long) = "$INDEX$rev.tsv"
+        private fun prefix(key: String) = "$INDEX%08x-".format(CRC32().apply { update(key.toByteArray(Charsets.UTF_8)) }.value)
+
+        internal fun indexName(key: String, rev: Long) = "${prefix(key)}$rev.tsv"
     }
 }

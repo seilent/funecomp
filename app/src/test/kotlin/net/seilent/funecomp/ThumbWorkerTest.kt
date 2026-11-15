@@ -35,15 +35,16 @@ class ThumbWorkerTest {
     private val logs = CopyOnWriteArrayList<String>()
     private var sim: Sim? = null
     private var session: Session? = null
+    private var worker: ThumbWorker? = null
 
     @After
     fun tearDown() {
+        worker?.stop()
         session?.close("done")
         sim?.stop()
     }
 
-    @Test
-    fun aThumbFetchedForTheMediaSlotAlsoReachesNowPlaying() {
+    private fun fetched(): Triple<ThumbWorker, Long, String> {
         val lib = Library.synthetic()
         val art = tmp.newFolder("art")
         val jpeg = java.awt.image.BufferedImage(600, 600, java.awt.image.BufferedImage.TYPE_INT_RGB)
@@ -62,8 +63,8 @@ class ThumbWorkerTest {
         session = link
         Thread { link.run() }.apply { isDaemon = true }.start()
         assertTrue(ready.await(10, TimeUnit.SECONDS))
-        val worker = ThumbWorker(tmp.newFolder("thumb"), { link })
-        hello!!.libRev?.let { worker.rev(it) }
+        val worker = ThumbWorker(tmp.newFolder("thumb"), { link }).also { this.worker = it }
+        hello!!.libRev?.let { worker.rev("tcp:127.0.0.1:$port", it) }
         worker.session()
         val track = lib.tracks.first().id
         worker.want(Thumbs.MEDIA, track, MediaLink.ART_PX, null)
@@ -77,7 +78,24 @@ class ThumbWorkerTest {
             check(System.currentTimeMillis() < end) { "no now playing image; media=${worker.media(track, MediaLink.ART_PX) != null} ${logs.filter { it.startsWith("art get") }}" }
             Thread.sleep(50)
         }
+        return Triple(worker, track, "tcp:127.0.0.1:$port")
+    }
+
+    @Test
+    fun aThumbFetchedForTheMediaSlotAlsoReachesNowPlaying() {
+        val (worker, track) = fetched()
         assertNotNull(worker.media(track, MediaLink.ART_PX))
         assertEquals(1, logs.count { it.startsWith("art get") && it.contains("offset=0 ") })
+    }
+
+    @Test
+    fun aBootDropsTheDecodedImagesOnTheWorkerThread() {
+        val (worker, track, key) = fetched()
+        worker.boot(key)
+        val end = System.currentTimeMillis() + 10_000
+        while (worker.image(track, 667) != null || worker.media(track, MediaLink.ART_PX) != null) {
+            check(System.currentTimeMillis() < end) { "decoded images kept after a boot" }
+            Thread.sleep(20)
+        }
     }
 }
