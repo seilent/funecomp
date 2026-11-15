@@ -79,19 +79,19 @@ class Library(val tracks: List<Track>, val services: List<Track> = emptyList(), 
 
     private fun albumRow(a: List<Track>) = LibRow(a[0].album, a.size.toLong(), a[0].id, java.lang.Long.toUnsignedString(a[0].id))
 
-    private fun trackRow(t: Track) = LibRow(t.title, 1, t.id, java.lang.Long.toUnsignedString(t.id))
+    private fun trackRow(t: Track, artist: Boolean = false) = LibRow(t.title, 1, t.id, java.lang.Long.toUnsignedString(t.id), artist = t.artists.joinToString(", ").takeIf { artist && it.isNotEmpty() })
 
-    fun rows(view: Int, parent: String): List<LibRow>? = when (view) {
+    fun rows(view: Int, parent: String, artist: Boolean = false): List<LibRow>? = when (view) {
         Enums.View.artists -> tracks.flatMap { it.artists }.distinct().map { a ->
             val ts = tracks.filter { a in it.artists }
             LibRow(a, ts.size.toLong(), ts[0].id, a, ts[0].mbidOf(a))
         }
         Enums.View.albums -> albums.map { albumRow(it) }
-        Enums.View.songs -> tracks.map { trackRow(it) }
+        Enums.View.songs -> tracks.map { trackRow(it, artist) }
         Enums.View.artistAlbums -> albums.filter { a -> a.any { parent in it.artists } }.map { albumRow(it) }
             .takeIf { tracks.any { parent in it.artists } }
-        Enums.View.albumTracks -> albumOf(parent)?.map { trackRow(it) }
-        Enums.View.playlists -> if (parent.isEmpty()) playlists.map { listRow(it) } else listTracks(parent)?.map { trackRow(byId.getValue(it)) }
+        Enums.View.albumTracks -> albumOf(parent)?.map { trackRow(it, artist) }
+        Enums.View.playlists -> if (parent.isEmpty()) playlists.map { listRow(it) } else listTracks(parent)?.map { trackRow(byId.getValue(it), artist) }
         Enums.View.folders -> {
             val under = under(parent)
             if (parent.isNotEmpty() && under.isEmpty()) {
@@ -100,17 +100,17 @@ class Library(val tracks: List<Track>, val services: List<Track> = emptyList(), 
                 subfolders(parent).map { path ->
                     val ts = under(path)
                     LibRow(path.substringAfterLast('/'), ts.size.toLong(), ts[0].id, path)
-                } + own(parent).map { trackRow(it) }
+                } + own(parent).map { trackRow(it, artist) }
             }
         }
-        Enums.View.favorites -> favorites.toList().reversed().mapNotNull { byId[it] }.map { trackRow(it) }
+        Enums.View.favorites -> favorites.toList().reversed().mapNotNull { byId[it] }.map { trackRow(it, artist) }
         Enums.View.genres -> if (parent.isEmpty()) {
             genres().map { g ->
                 val ts = tracks.filter { it.genre == g }
                 LibRow(g, ts.size.toLong(), ts[0].id, g)
             }
         } else {
-            tracks.filter { it.genre == parent }.map { trackRow(it) }.takeIf { it.isNotEmpty() }
+            tracks.filter { it.genre == parent }.map { trackRow(it, artist) }.takeIf { it.isNotEmpty() }
         }
         else -> null
     }

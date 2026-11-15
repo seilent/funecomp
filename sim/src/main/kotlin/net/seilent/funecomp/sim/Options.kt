@@ -477,7 +477,7 @@ class Options(
         if (minor < 15) faults.features = faults.features and Groups.mask("lyricsOffset", "playLog", "genres", "queueAdd", "updSig", "liveRows", "eqStages").inv()
         if (minor < 16) faults.features = faults.features and Groups.mask("svcLogin").inv()
         if (minor < 17) faults.features = faults.features and Groups.mask("imgFocusX", "svcAccount", "appPkg").inv()
-        if (minor < 18) faults.features = faults.features and Groups.mask("cardLog").inv()
+        if (minor < 18) faults.features = faults.features and Groups.mask("cardLog", "trackArtist").inv()
         if (receiver && minor >= 15) faults.features = faults.features or Groups.mask("receiver")
         if (faults.imgSource && minor >= 15) faults.features = faults.features or Groups.mask("imgSource")
     }

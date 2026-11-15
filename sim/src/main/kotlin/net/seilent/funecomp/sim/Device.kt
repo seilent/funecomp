@@ -601,6 +601,8 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     private fun appBit(out: Out?, bit: Int) = out != null && ((linked[out] ?: 0L) ushr bit) and 1L == 1L
 
+    private fun trackArtist(out: Out) = devBit(Feature.trackArtist) && appBit(out, Feature.trackArtist)
+
     private fun slotsFor(out: Out?) = devBit(Feature.eqSlots) && appBit(out, Feature.eqSlots)
 
     private fun stagesFor(out: Out?) = slotsFor(out) && devBit(Feature.eqStages) && appBit(out, Feature.eqStages)
@@ -1805,7 +1807,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         if (!viewServed(view)) return Answer.Fail(Err.badValue, "bad view")
         revCode(b, Tags.LibGet.libRev, Tags.LibGet.snapRev, listView(view), false)?.let { return revFail(it) }
         val parent = b.str(Tags.LibGet.parent) ?: ""
-        val rows = lib.rows(view, parent)?.map { if (v11) it else it.copy(mbid = null) } ?: return Answer.Fail(Err.staleRev, "stale rev")
+        val rows = lib.rows(view, parent, trackArtist(out))?.map { if (v11) it else it.copy(mbid = null) } ?: return Answer.Fail(Err.staleRev, "stale rev")
         val offset = n(b.long(Tags.LibGet.offset), 0)
         if (offset > rows.size) return Answer.Fail(Err.badValue, "offset past end")
         val end = minOf(rows.size, offset + n(b.long(Tags.LibGet.count), 100))

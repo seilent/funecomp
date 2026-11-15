@@ -118,7 +118,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 
-val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin", "svcAccount", "eqSlots", "eqStages", "appPkg", "cardLog")
+val LINK_FEATURES = Groups.mask("artBlock", "artPick", "imgOrigin", "playLog", "imgSource", "liveRows", "svcLogin", "svcAccount", "eqSlots", "eqStages", "appPkg", "trackArtist", "cardLog")
 
 object Remote : Control {
     const val TAG = "Funecomp"

@@ -60,7 +60,6 @@ object Groups {
         "receiver",
         "phoneFiles",
         "imgSource",
-        "trackArtist",
         "libNext",
         "libDelete",
         "scrobWifi",
