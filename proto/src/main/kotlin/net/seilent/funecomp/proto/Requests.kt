@@ -118,6 +118,17 @@ object Req {
         u64(Tags.Action.track, track)
     }
 
+    fun libDelete(track: Long?, album: Long?, count: Long?, snapRev: Long?, bindToken: ByteArray?, bootId: Long?) = tlv {
+        u64(Tags.LibDelete.track, track)
+        u64(Tags.LibDelete.album, album)
+        u32(Tags.LibDelete.count, count)
+        u32(Tags.LibDelete.snapRev, snapRev)
+        bytes(Tags.LibDelete.bindToken, bindToken)
+        u64(Tags.LibDelete.bootId, bootId)
+    }
+
+    fun bindAsk() = tlv {}
+
     fun imgBegin(kind: Int, name: String, mbid: String?, total: Long, crc: Long, w: Int, h: Int, wrongArtist: Boolean? = null, source: String? = null, credit: String? = null, origin: Int? = null, focus: Pair<Int, Int>? = null, full: Boolean? = null) = tlv {
         enum(Tags.ImgBegin.kind, kind)
         str(Tags.ImgBegin.name, name)

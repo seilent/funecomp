@@ -985,6 +985,25 @@ data class QueueOpReply(val added: Long?, val rev: Long?) {
     }
 }
 
+data class LibDeleteReply(val deleted: Long?, val failed: Long?) {
+    fun encode() = tlv {
+        u32(Tags.LibDeleteReply.deleted, deleted)
+        u32(Tags.LibDeleteReply.failed, failed)
+    }
+
+    companion object {
+        fun from(n: Node) = LibDeleteReply(n.long(Tags.LibDeleteReply.deleted), n.long(Tags.LibDeleteReply.failed))
+    }
+}
+
+data class BindAskReply(val bindToken: ByteArray?) {
+    fun encode() = tlv { bytes(Tags.BindAskReply.bindToken, bindToken) }
+
+    companion object {
+        fun from(n: Node) = BindAskReply(n.bytes(Tags.BindAskReply.bindToken))
+    }
+}
+
 data class PlayEntry(
     val seq: Long,
     val startLocalS: Long? = null,

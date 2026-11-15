@@ -828,6 +828,27 @@ class OldPeerTest {
         assertArrayEquals(body("upd_end"), Req.updEnd("9e107d9d372bb6826bd81d3542a419d6"))
         assertArrayEquals(body("volume_percent"), Req.volume(percent = 35))
         assertArrayEquals(body("draft_auto"), Req.draft(Enums.DraftKind.clock, unixS = 1792224000, zoneS = 32400, automatic = true))
+        assertArrayEquals(body("lib_delete_song"), Req.libDelete(201, null, null, 4, VECTOR_TOKEN, VECTOR_BOOT))
+        assertArrayEquals(body("lib_delete_album"), Req.libDelete(null, 201, 12, 4, VECTOR_TOKEN, VECTOR_BOOT))
+        assertArrayEquals(body("bind_ask"), Req.bindAsk())
+    }
+
+    @Test
+    fun libDeleteAndBindAskRepliesDecode() {
+        assertEquals(LibDeleteReply(12, 0), LibDeleteReply.from(Node.decode("LIB_DELETE.reply", body("lib_delete_reply"))))
+        assertEquals(LibDeleteReply(9, 3), LibDeleteReply.from(Node.decode("LIB_DELETE.reply", body("lib_delete_partial"))))
+        assertEquals(LibDeleteReply(1, 0), LibDeleteReply.from(Node.decode("LIB_DELETE.reply", body("lib_delete_song_reply"))))
+        assertArrayEquals(VECTOR_TOKEN, BindAskReply.from(Node.decode("BIND_ASK.reply", body("bind_ask_reply"))).bindToken)
+        assertNull(BindAskReply.from(Node.decode("BIND_ASK.reply", ByteArray(0))).bindToken)
+    }
+
+    @Test
+    fun aBootIdWithTheTopBitSetIsEightBytesAndDecodesEqual() {
+        val boot = java.lang.Long.parseUnsignedLong("fedcba9876543210", 16)
+        val b = Req.libDelete(201, null, null, 4, VECTOR_TOKEN, boot)
+        assertArrayEquals(byteArrayOf(6, 8, 0, 0x10, 0x32, 0x54, 0x76, 0x98.toByte(), 0xba.toByte(), 0xdc.toByte(), 0xfe.toByte()), b.copyOfRange(b.size - 11, b.size))
+        assertEquals(boot, Node.decode("LIB_DELETE", b).long(Tags.LibDelete.bootId))
+        assertEquals(VECTOR_BOOT, Node.decode("LIB_DELETE", body("lib_delete_song")).long(Tags.LibDelete.bootId))
     }
 
     @Test
@@ -842,5 +863,10 @@ class OldPeerTest {
         }
         for ((id, _) in Msg.info) if (id !in Groups.core) assertTrue("ungrouped ${Msg.info.getValue(id).name}", Groups.group(id) != null)
         assertEquals(8, Feature.clockAuto)
+    }
+
+    private companion object {
+        val VECTOR_TOKEN = ByteArray(16) { (0xa0 + it).toByte() }
+        const val VECTOR_BOOT = 6840316954749546503L
     }
 }
