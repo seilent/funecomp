@@ -94,6 +94,8 @@ class SheetState {
     private var itemCase by mutableStateOf<() -> List<Boolean>>({ emptyList() })
     var titleMixed by mutableStateOf(false)
         private set
+    var oneLine by mutableStateOf(false)
+        private set
     val info: List<String> get() = lines()
     val infoValues: List<String> get() = lineValues()
     val infoMixed: List<Boolean> get() = lineMixed()
@@ -118,7 +120,8 @@ class SheetState {
         private set
     var opened by mutableIntStateOf(0)
         private set
-    private var owner: Any? = null
+    var owner: Any? = null
+        private set
     var keep: Keep? = null
         private set
     var page: () -> Any? = { null }
@@ -151,7 +154,7 @@ class SheetState {
         onScrim: (() -> Boolean)? = null,
         guard: Long = 0L,
         pick: (Int) -> Unit,
-    ) = open(title, items, focus, info, onDismiss, owner, infoValues, itemValues, infoMixed, infoDrop, itemMixed, titleMixed, infoLines, keep, accent, onPress, onHold, onScrim, guard) { i, _ -> pick(i) }
+    ): Unit = open(title, items, focus, info, onDismiss, owner, infoValues, itemValues, infoMixed, infoDrop, itemMixed, titleMixed, infoLines, keep, accent, onPress, onHold, onScrim, guard) { i, _ -> pick(i) }
 
     fun open(
         title: String,
@@ -173,6 +176,7 @@ class SheetState {
         onHold: ((i: Int) -> Boolean)? = null,
         onScrim: (() -> Boolean)? = null,
         guard: Long = 0L,
+        oneLine: Boolean = false,
         pick: (Int, Tap) -> Unit,
     ) {
         this.owner = owner
@@ -194,6 +198,7 @@ class SheetState {
         this.lineDrop = infoDrop
         this.itemCase = itemMixed
         this.titleMixed = titleMixed
+        this.oneLine = oneLine
         this.values = itemValues
         this.items = items
         this.focus = focus
@@ -223,6 +228,7 @@ class SheetState {
         this.lineDrop = { emptyList() }
         this.itemCase = { emptyList() }
         this.titleMixed = false
+        this.oneLine = false
         this.values = { emptyList() }
         this.items = listOf("")
         this.focus = 0
@@ -360,8 +366,8 @@ private fun SheetLine(text: String, value: String, layout: TextLayoutResult, h: 
             Modifier.at(ui.px(Tok.edge), top).width(layout.layoutInput.constraints.maxWidth.toFloat().dp()).clipToBounds(),
             style = textStyle(Roles.dialogItem, white(Roles.dialogItem.dim)),
             overflow = TextOverflow.Clip,
-            softWrap = true,
-            maxLines = LINE_MAX,
+            softWrap = layout.layoutInput.softWrap,
+            maxLines = layout.layoutInput.maxLines,
         )
         if (value.isNotEmpty()) SheetValue(value, top + layout.firstBaseline, Tok.settingsValueDim)
     }
@@ -445,8 +451,11 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
     val lineValues = keep.map { state.infoValues.getOrElse(it) { "" } }
     val mixed = keep.map { state.infoMixed.getOrElse(it) { false } }
     val widths = lines.indices.map { slot(lineValues.getOrElse(it) { "" }).roundToInt() }
-    val texts = lines.mapIndexed { i, line -> measurer.wrapped(shown(line, if (mixed.getOrElse(i) { false }) Case.MIXED else Roles.dialogItem.case), itemStyle, widths[i]) }
-    val layouts = texts.mapIndexed { i, t -> measurer.measure(t, itemStyle, overflow = TextOverflow.Clip, softWrap = true, maxLines = LINE_MAX, constraints = Constraints(maxWidth = widths[i])) }
+    val texts = lines.mapIndexed { i, line ->
+        val t = shown(line, if (mixed.getOrElse(i) { false }) Case.MIXED else Roles.dialogItem.case)
+        if (state.oneLine) t else measurer.wrapped(t, itemStyle, widths[i])
+    }
+    val layouts = texts.mapIndexed { i, t -> measurer.measure(t, itemStyle, overflow = TextOverflow.Clip, softWrap = !state.oneLine, maxLines = if (state.oneLine) 1 else LINE_MAX, constraints = Constraints(maxWidth = widths[i])) }
     val heights = layouts.map { pitch + it.getLineBottom(it.lineCount - 1) - it.getLineBottom(0) }
     val wanted = edge + titleH + heights.sum() + state.items.size * pitch + edge
     val panelH = minOf(wanted, screenH)
@@ -501,7 +510,7 @@ fun Sheet(state: SheetState, ime: WindowInsets) {
                             val i = fixed + j
                             SheetLine(texts[i], lineValues.getOrElse(i) { "" }, layouts[i], heights[i], if (i == 0) "sheet.info" else "sheet.info.$i")
                         }
-                        itemsIndexed(state.items) { i, item ->
+                        itemsIndexed(state.items, key = { i, _ -> "item${state.opened}.$i" }) { i, item ->
                             val on = i == state.focus
                             val value = itemValues.getOrElse(i) { "" }
                             val press = rememberPress()

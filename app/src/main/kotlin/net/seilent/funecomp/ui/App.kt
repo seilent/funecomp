@@ -44,8 +44,10 @@ import net.seilent.funecomp.artist.ArtPicks
 import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.state.DeleteAsk
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.HomeShuffle
+import net.seilent.funecomp.state.LibDelete
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.ListPlays
 import net.seilent.funecomp.state.LyricsFetch
@@ -83,6 +85,12 @@ class Shell(
     var stale by mutableStateOf<ListPlays.Tap?>(null)
         private set
     val lists = ListPlays(LIB_PAGE) { stale = it }
+}
+
+private fun deleteKey(p: Page) = when (p) {
+    is Page.Album -> LibDelete.albumPage(p.key)
+    is Page.Artist -> LibDelete.artistPage(p.name)
+    else -> p.toString()
 }
 
 fun homeItems(device: DeviceState, link: LinkView): List<HomeItem> {
@@ -238,6 +246,14 @@ fun App(
                 }
             }
             SvcSheets(ctx, shell, svc, ime.getBottom(density) > 0)
+            val asked = shell.sheet.owner as? DeleteAsk
+            LaunchedEffect(asked, device.hello, device.lib.snap) {
+                if (asked != null && LibDelete.stale(asked, ctx.live())) shell.sheet.closeIf(asked)
+            }
+            val owed = control.deleteOwed
+            LaunchedEffect(owed, device.hello, device.lib.snap, shell.sheet.shown) {
+                if (owed != null) control.deleteExits({ nav.stack.map(::deleteKey) }, { shell.sheet.shown }) { nav.pop() }
+            }
             if (link.phase == Phase.LIVE) libList(device, control, Enums.View.playlists, "")
             val open = nav.stack.filterIsInstance<Page.List>().mapTo(HashSet()) { LibKey(it.view, it.key) }
             SideEffect { (shell.shown.keys - open).forEach { shell.shown.remove(it) } }

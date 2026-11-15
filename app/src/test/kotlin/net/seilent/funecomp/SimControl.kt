@@ -40,9 +40,11 @@ import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Out
 import net.seilent.funecomp.sim.SvcAcct
+import net.seilent.funecomp.state.DeleteAsk
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.Heart
+import net.seilent.funecomp.state.Owed
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.SvcOpens
 import net.seilent.funecomp.artist.Tile
@@ -58,6 +60,7 @@ import net.seilent.funecomp.ui.PickedFile
 import net.seilent.funecomp.ui.Previewed
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.util.concurrent.Executor
 
 internal val NO_UPDATER_FAULTS = listOf("features=${Groups.all and Groups.mask("update", "updSig", "svcLogin", "svcAccount", "appPkg").inv()}")
 
@@ -698,7 +701,87 @@ class SimControl(
         }
     }
 
+    private var refusal: ((String, String) -> Unit)? = null
+    private var link: Any? = Any()
+    private val parked = ArrayList<Triple<Int, Answer.Later, (Session.Result) -> Unit>>()
+    val deleteSent = ArrayList<Pair<String, Node>>()
+    val deleteTimeouts = ArrayList<Long>()
+    val deleteLogs = ArrayList<String>()
+    var holdLists = false
+    val parkedNames: List<String> get() = parked.map { Msg.info.getValue(it.first).name }
+
+    private fun result(type: Int, a: Answer): Session.Result = when (a) {
+        is Answer.Ok -> Session.Result.Ok(Node.decode("${Msg.info.getValue(type).name}.reply", a.payload))
+        is Answer.Fail -> Session.Result.Failed(ErrorReply(a.code, a.text))
+        is Answer.Later -> error("unresolved")
+    }
+
+    private val deleteRequest = BindAsk.Request { session, type, payload, timeoutMs, done ->
+        val name = Msg.info.getValue(type).name
+        sent += name
+        deleteSent += name to Node.decode(name, payload)
+        deleteTimeouts += timeoutMs
+        if (session == null || session !== link) {
+            done(Session.Result.Closed)
+        } else {
+            when (val a = sim.request(type, Node.decode(name, payload), out)) {
+                is Answer.Later -> parked += Triple(type, a, done)
+                else -> if (holdLists && type == Msg.LIB_GET) parked += Triple(type, Answer.Later(0) { a }, done) else {
+                    done(result(type, a))
+                    after(a)
+                }
+            }
+        }
+    }
+
+    val bindAsk = BindAsk(deleteRequest) { deleteLogs += it }
+
+    val deletes = LibDeletes(Executor { it.run() }, deleteRequest, bindAsk, { device }, { refusal }, { it() }, now, log = { deleteLogs += it })
+
+    fun answer(i: Int = 0) {
+        val (type, later, done) = parked.removeAt(i)
+        val a = sim.resolve(later)
+        done(result(type, a))
+        after(a)
+    }
+
+    fun unlink() {
+        link = null
+        sim.unlinked(out)
+        device = device.unlinked()
+        val all = parked.toList()
+        parked.clear()
+        all.forEach {
+            sim.resolve(it.second)
+            it.third(Session.Result.Closed)
+        }
+    }
+
+    fun rehello() {
+        link = Any()
+        sim.linked(out, appFeatures)
+        device = device.withHello(HelloReply.from(Node.decode("HELLO.reply", sim.helloReply(out).encode())), appFeatures)
+        sim.greet(out)
+    }
+
+    override fun refusals(show: ((String, String) -> Unit)?, owner: ((String, String) -> Unit)?) {
+        if (owner == null || refusal === owner) refusal = show
+        if (show != null) deletes.started()
+    }
+
+    override fun deleteTarget(): Pair<String, Any?>? = link?.let { DELETE_KEY to it }
+
+    override val deleteWaiting: Boolean get() = deletes.waiting
+
+    override fun libDelete(ask: DeleteAsk, tap: Tap) = deletes.delete(ask, tap)
+
+    override val deleteOwed: Owed? get() = deletes.owed
+
+    override fun deleteExits(stack: () -> List<String>, sheet: () -> Boolean, pop: () -> Boolean) = deletes.exits(link?.let { DELETE_KEY }, link, LibDeletes.Exits(stack, sheet, pop))
+
     companion object {
+        const val DELETE_KEY = "tcp:127.0.0.1:7700"
+
         val HD650 = """
             Preamp: -6.1 dB
             Filter 1: ON LSC Fc 105 Hz Gain 6.4 dB Q 0.70

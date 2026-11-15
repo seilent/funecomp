@@ -19,6 +19,9 @@ import net.seilent.funecomp.proto.GraphicBand
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.SvcKey
+import net.seilent.funecomp.Tap
+import net.seilent.funecomp.state.DeleteAsk
+import net.seilent.funecomp.state.Owed
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.SvcOpens
 
@@ -176,6 +179,11 @@ interface Control {
     fun svcLogout(service: String, account: String, downloads: Long?, done: (String?) -> Unit) {}
     fun svcReopened() {}
     fun secure(on: Boolean) {}
+    fun deleteTarget(): Pair<String, Any?>? = null
+    val deleteWaiting: Boolean get() = false
+    fun libDelete(ask: DeleteAsk, tap: Tap) {}
+    val deleteOwed: Owed? get() = null
+    fun deleteExits(stack: () -> List<String>, sheet: () -> Boolean, pop: () -> Boolean) {}
 }
 
 const val LIB_PAGE = 100L

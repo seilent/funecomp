@@ -11,6 +11,7 @@ import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.artist.Http
 import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.link.Session
+import net.seilent.funecomp.proto.LibRow
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
@@ -19,6 +20,7 @@ import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
+import net.seilent.funecomp.state.LibDelete
 import net.seilent.funecomp.ui.Phase
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -179,6 +181,39 @@ class HelloTokenTest {
         Remote.stop()
         waitFor { !Remote.bindAsking }
         assertTrue(results.single() is Session.Result.Closed)
+    }
+
+    @Test
+    fun aWaitingDeleteClearsWhenTheLinkStopsAndReadsTheHelloKey() {
+        val (s, spec) = live("bind-ms=60000")
+        waitFor { Remote.device.lib.snap != null }
+        val (store, session) = Remote.deleteTarget()!!
+        assertEquals(spec, store)
+        val t = s.device.lib.tracks.last()
+        val ask = LibDelete.ask(Remote.device, LibRow(t.title, 1, t.id, java.lang.Long.toUnsignedString(t.id)), false, store, session, false)!!
+        Remote.libDelete(ask, tap())
+        waitFor { logs.any { it == "bind ask open" } }
+        assertTrue(Remote.deleteWaiting)
+        Remote.stop()
+        waitFor { !Remote.deleteWaiting && !Remote.bindAsking }
+    }
+
+    @Test
+    fun aRemoteDeleteReadsTheHelloTokenAndToastsThroughTheRefusalSink() {
+        val (s, spec) = live("bind-window", "del-failed=1")
+        waitFor { Remote.device.lib.snap != null && BindTokens.get(BindTokens.key(spec)) != null }
+        val (store, session) = Remote.deleteTarget()!!
+        assertArrayEquals(s.device.bindToken, BindTokens.get(store))
+        val toasts = CopyOnWriteArrayList<Pair<String, String>>()
+        val sink: (String, String) -> Unit = { l, t -> toasts += l to t }
+        Remote.refusals(sink)
+        val t = s.device.lib.tracks.last()
+        val ask = LibDelete.ask(Remote.device, LibRow(t.title, 1, t.id, java.lang.Long.toUnsignedString(t.id)), false, store, session, false)!!
+        Remote.libDelete(ask, tap())
+        waitFor { toasts.isNotEmpty() }
+        assertEquals(listOf("song not deleted" to t.title), toasts)
+        assertTrue(logs.none { it == "bind ask open" })
+        Remote.refusals(null, sink)
     }
 
     @Test

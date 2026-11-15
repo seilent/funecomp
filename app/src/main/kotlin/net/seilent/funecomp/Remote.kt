@@ -90,10 +90,12 @@ import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.ClockSync
+import net.seilent.funecomp.state.DeleteAsk
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LibKey
+import net.seilent.funecomp.state.Owed
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
@@ -260,6 +262,15 @@ object Remote : Control {
     private val binder = BindAsk(sessionRequest) { Log.i(TAG, it) }
     internal val bindAsking: Boolean get() = binder.asking
     internal val session: Session? get() = link?.session
+    internal val deletes = LibDeletes(
+        Executors.newSingleThreadExecutor { Thread(it, "deletes").apply { isDaemon = true } },
+        sessionRequest,
+        binder,
+        { device },
+        { refusalToast.get() },
+        { main.post(it) },
+        log = { Log.i(TAG, it) },
+    )
 
     fun debuggable(context: Context) = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
 
@@ -1484,6 +1495,7 @@ object Remote : Control {
 
     override fun refusals(show: ((String, String) -> Unit)?, owner: ((String, String) -> Unit)?) {
         if (owner == null) refusalToast.set(show) else refusalToast.compareAndSet(owner, show)
+        if (show != null) deletes.started()
     }
 
     private fun playRefused(code: Int?, text: String?) {
@@ -1582,6 +1594,19 @@ object Remote : Control {
     private fun update(f: (DeviceState) -> DeviceState) = synchronized(stateLock) { device = f(device) }
 
     fun bindAsk(key: String, tap: Tap?, session: Session?, done: (Session.Result) -> Unit) = binder.ask(key, tap, session, done)
+
+    override fun deleteTarget(): Pair<String, Any?>? = synchronized(lock) { spec?.let { BindTokens.key(it) to link?.session } }
+
+    override val deleteWaiting: Boolean get() = deletes.waiting
+
+    override fun libDelete(ask: DeleteAsk, tap: Tap) = deletes.delete(ask, tap)
+
+    override val deleteOwed: Owed? get() = deletes.owed
+
+    override fun deleteExits(stack: () -> List<String>, sheet: () -> Boolean, pop: () -> Boolean) {
+        val (store, session) = deleteTarget() ?: (null to null)
+        deletes.exits(store, session, LibDeletes.Exits(stack, sheet, pop))
+    }
 
     private fun listener(gen: Int, dap: String) = object : Link.Listener {
         private val live get() = gen == generation

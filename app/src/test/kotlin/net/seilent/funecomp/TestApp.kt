@@ -23,6 +23,7 @@ class TestApp : Application(), TestLifecycleApplication {
         }
         Remote.resetArtist()
         BindTokens.reset()
+        Remote.deletes.reset()
         CoverBlur.context = Dispatchers.Unconfined
         rearmUiDispatcher()
     }

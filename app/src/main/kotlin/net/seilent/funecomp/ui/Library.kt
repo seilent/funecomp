@@ -32,14 +32,17 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.random.Random
+import net.seilent.funecomp.Tap
 import net.seilent.funecomp.art.Thumbs
 import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.LibRow
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.state.DeleteAsk
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.Heart
+import net.seilent.funecomp.state.LibDelete
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.LibList
 import net.seilent.funecomp.state.ListGone
@@ -77,6 +80,7 @@ private const val SONGS_ADDED = "songs added to now playing"
 private const val OPEN_PLAYLIST = "open playlist"
 private const val UNREADABLE = "playlist not readable"
 private const val REMOVE = "remove"
+private const val DELETE = "delete"
 
 fun musicViews(device: DeviceState) = listOf(Enums.View.albums, Enums.View.artists, Enums.View.playlists, Enums.View.songs) +
     listOfNotNull(Enums.View.genres.takeIf { device.has("genres") }) + listOf(Enums.View.folders)
@@ -289,18 +293,35 @@ private fun listSheet(ctx: Ctx, title: String, view: Int, key: String, count: Lo
     ctx.sheet.open(title, items.map { it.first }) { items[it].second() }
 }
 
+private fun deleteAsk(ctx: Ctx, r: LibRow, album: Boolean): DeleteAsk? {
+    val (store, session) = ctx.control.deleteTarget() ?: return null
+    return LibDelete.ask(ctx.device, r, album, store, session, ctx.control.deleteWaiting)
+}
+
+private fun deleteConfirm(ctx: Ctx, ask: DeleteAsk) {
+    val guard = Tok.motion_dialog.toLong()
+    val pick: (Int, Tap) -> Unit = { i, tap -> if (i == 0) ctx.control.libDelete(ask, tap) }
+    if (ask.album) {
+        ctx.sheet.open("delete album?", listOf("delete album", "keep album"), 1, listOf(ask.name, songs(ask.count ?: 0)), infoMixed = { listOf(true, false) }, owner = ask, guard = guard, oneLine = true, pick = pick)
+    } else {
+        ctx.sheet.open("delete song?", listOf("delete song", "keep song"), 1, listOf(ask.name), infoMixed = { listOf(true) }, owner = ask, guard = guard, oneLine = true, pick = pick)
+    }
+}
+
 private fun songSheet(ctx: Ctx, r: LibRow, play: () -> Unit) {
-    val items = listOf("play", PLAY_NEXT) + if (ctx.device.has("queueAdd")) listOf(ADD_TO_NOW_PLAYING) else emptyList()
-    ctx.sheet.open(r.name ?: "", items) {
-        when (it) {
-            0 -> play()
-            1 -> r.first?.let { id -> queueAdd(ctx, Enums.QueueCmd.playNext, r.name ?: "", null, null, listOf(id)) }
-            2 -> r.first?.let { id -> queueAdd(ctx, Enums.QueueCmd.add, r.name ?: "", null, null, listOf(id)) }
+    val ask = deleteAsk(ctx, r, false)
+    val items = listOf("play", PLAY_NEXT) + (if (ctx.device.has("queueAdd")) listOf(ADD_TO_NOW_PLAYING) else emptyList()) + listOfNotNull(DELETE.takeIf { ask != null })
+    ctx.sheet.open(r.name ?: "", items, owner = ask) {
+        when (items[it]) {
+            "play" -> play()
+            PLAY_NEXT -> r.first?.let { id -> queueAdd(ctx, Enums.QueueCmd.playNext, r.name ?: "", null, null, listOf(id)) }
+            ADD_TO_NOW_PLAYING -> r.first?.let { id -> queueAdd(ctx, Enums.QueueCmd.add, r.name ?: "", null, null, listOf(id)) }
+            DELETE -> ask?.let { deleteConfirm(ctx, it) }
         }
     }
 }
 
-private fun groupSheet(ctx: Ctx, title: String, view: Int, parent: String, count: Long?, artist: LibRow? = null) {
+private fun groupSheet(ctx: Ctx, title: String, view: Int, parent: String, count: Long?, artist: LibRow? = null, delete: DeleteAsk? = null) {
     val add = ctx.device.has("queueAdd")
     val items = buildList<Pair<String, () -> Unit>> {
         add("play" to { playSource(ctx, view, parent, count) })
@@ -310,8 +331,9 @@ private fun groupSheet(ctx: Ctx, title: String, view: Int, parent: String, count
         }
         add("shuffle" to { playSource(ctx, view, parent, count, shuffle = true) })
         if (artist != null) add(PICK_IMAGE to { pickSheet(ctx, PickFor(title, artist.mbid, library = true)) })
+        if (delete != null) add(DELETE to { deleteConfirm(ctx, delete) })
     }
-    ctx.sheet.open(title, items.map { it.first }) { items[it].second() }
+    ctx.sheet.open(title, items.map { it.first }, owner = delete) { items[it].second() }
 }
 
 private fun genreRow(ctx: Ctx, r: LibRow): RowSpec {
@@ -332,7 +354,7 @@ private fun musicRow(ctx: Ctx, view: Int, i: Int, r: LibRow): RowSpec {
             groupSheet(ctx, name, Enums.View.artistAlbums, r.key ?: name, r.count, r)
         }
         Enums.View.albums -> RowSpec(name, songs(r.count ?: 0), countLine = true, tap = { ctx.nav.push(Page.Album(r.key ?: "", name, "")) }) {
-            groupSheet(ctx, name, Enums.View.albumTracks, r.key ?: "", r.count)
+            groupSheet(ctx, name, Enums.View.albumTracks, r.key ?: "", r.count, delete = deleteAsk(ctx, r, true))
         }
         else -> {
             val play = { playAndShow(ctx, view, "", i.toLong()) }
@@ -509,7 +531,7 @@ fun ArtistDetail(ctx: Ctx, page: Page.Artist) {
         Pane(ctx, Enums.View.artistAlbums, page.name, ui.detailRowsTop, ui.detailListX) { _, r, _ ->
             val name = r.name ?: ""
             RowSpec(name, songs(r.count ?: 0), countLine = true, tap = { ctx.nav.push(Page.Album(r.key ?: "", name, page.name)) }) {
-                groupSheet(ctx, name, Enums.View.albumTracks, r.key ?: "", r.count)
+                groupSheet(ctx, name, Enums.View.albumTracks, r.key ?: "", r.count, delete = deleteAsk(ctx, r, true))
             }
         }
     }
