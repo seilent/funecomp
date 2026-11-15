@@ -1,8 +1,10 @@
 package net.seilent.funecomp
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,6 +12,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
@@ -20,10 +23,13 @@ import java.awt.image.BufferedImage
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
+import net.seilent.funecomp.ui.LocalUi
 import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funecomp.ui.Toast
+import net.seilent.funecomp.ui.ToastState
 import net.seilent.funecomp.ui.Ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -48,6 +54,10 @@ class ToastPlaceTest {
     private var link by mutableStateOf(LinkView(Phase.LIVE, "V1", everLive = true))
     private var ime by mutableStateOf(WindowInsets(0.dp))
     private var frameMs = 0L
+    private val toast = ToastState()
+    private var held by mutableStateOf<Pair<String, String>?>(null)
+    private var over by mutableStateOf(false)
+    private var np by mutableStateOf(false)
 
     private val ui get() = Ui.of(box.width, box.height)
     private val rest get() = box.bottom - ui.px(Tok.toastHeight)
@@ -65,6 +75,25 @@ class ToastPlaceTest {
         settle(1000)
         box = rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot
         assertFalse(shell.sheet.shown)
+    }
+
+    private fun alone() {
+        rule.mainClock.autoAdvance = false
+        rule.setContent {
+            BoxWithConstraints(Modifier.requiredSize(411.dp, 960.dp).testTag("place")) {
+                CompositionLocalProvider(LocalUi provides Ui.of(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat())) {
+                    Toast(toast, held, over = over, np = np)
+                }
+            }
+        }
+        settle(100)
+        box = rule.onNodeWithTag("place").fetchSemanticsNode().boundsInRoot
+    }
+
+    private fun drop() {
+        held = "V1" to "connecting"
+        rise()
+        assertTrue(shown())
     }
 
     private fun settle(ms: Long) {
@@ -207,6 +236,63 @@ class ToastPlaceTest {
         settle(500)
         assertTrue(shown())
         assertEquals("held: off the top place", 0f, offTop(), 1f)
+    }
+
+    @Test
+    fun aHeldStripOnNowPlayingStaysAtTheTopThroughASheet() {
+        alone()
+        np = true
+        settle(100)
+        drop()
+        assertEquals("held on now playing: off the top place", 0f, offTop(), 1f)
+        over = true
+        settle(100)
+        over = false
+        settle(100)
+        assertEquals("held on now playing after a sheet: off the top place", 0f, offTop(), 1f)
+    }
+
+    @Test
+    fun aHeldStripSitsAtTheBottomOnHome() {
+        alone()
+        drop()
+        assertEquals("held on home: off the bottom place", 0f, offBottom(), 1f)
+    }
+
+    @Test
+    fun aHeldStripGoesToTheTopWhenNowPlayingOpens() {
+        alone()
+        drop()
+        np = true
+        settle(100)
+        assertTrue(shown())
+        assertEquals("now playing over the held strip: off the top place", 0f, offTop(), 1f)
+    }
+
+    @Test
+    fun aHeldStripGoesBackDownWhenItsSheetCloses() {
+        alone()
+        drop()
+        over = true
+        settle(100)
+        assertEquals("sheet open over the held strip: off the top place", 0f, offTop(), 1f)
+        over = false
+        settle(100)
+        assertTrue(shown())
+        assertEquals("sheet closed: off the bottom place", 0f, offBottom(), 1f)
+    }
+
+    @Test
+    fun aHeldStripDroppedOnNowPlayingGoesDownOnThePop() {
+        alone()
+        np = true
+        settle(100)
+        drop()
+        assertEquals("held on now playing: off the top place", 0f, offTop(), 1f)
+        np = false
+        settle(100)
+        assertTrue(shown())
+        assertEquals("popped to home: off the bottom place", 0f, offBottom(), 1f)
     }
 
     @Test

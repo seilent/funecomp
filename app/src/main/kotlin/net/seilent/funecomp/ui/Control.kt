@@ -40,6 +40,7 @@ data class LinkView(
     val lyrics: LyricSources = LyricSources(),
     val reconnect: Boolean = false,
     val askReconnect: Boolean = false,
+    val bluetoothOff: Boolean = false,
 )
 
 @Immutable

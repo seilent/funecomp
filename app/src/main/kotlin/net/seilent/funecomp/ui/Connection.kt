@@ -56,6 +56,7 @@ fun byeText(reason: Int?) = when (reason) {
 
 fun statusText(link: LinkView) = when {
     !link.permission -> "no permission"
+    link.bluetoothOff -> "bluetooth off"
     link.phase == Phase.LIVE -> "connected"
     link.phase == Phase.CONNECTING -> "connecting"
     link.phase == Phase.STOPPED -> byeText(link.bye)
@@ -79,7 +80,7 @@ private class Line(val title: String, val value: String, val info: Boolean = fal
 private class Choice(val name: String, val address: String?, val value: String = "", val act: () -> Unit = {})
 
 @Composable
-fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
+fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false, phoneAppPath: String? = null) {
     val ui = LocalUi.current
     var focus by rememberSaveable { mutableStateOf("device") }
     val read = { ctx.control.bonded().sortedByDescending { it.companion } }
@@ -129,6 +130,7 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false) {
             }
         })
         add(Line("status", statusText(link), tag = "status", tap = tryAgain))
+        if (phoneAppPath != null && link.bye == Enums.ByeReason.companionOff && link.phase != Phase.LIVE) add(Line(phoneAppPath, "", info = true, tag = "phoneapp", tap = tryAgain))
         val remedy = link.bye == Enums.ByeReason.refused && link.phase != Phase.LIVE
         val hint = link.permission && link.phase != Phase.LIVE && bonded.none { it.companion || it.name == link.device || it.address == link.device }
         if (hint) add(Line(PAIR_HINT, "", info = true, tag = "pairhint"))

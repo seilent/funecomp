@@ -591,12 +591,15 @@ fun Toast(state: ToastState, held: Pair<String, String>? = null, covered: Boolea
     var top by remember { mutableStateOf(true) }
     var risen by remember { mutableStateOf(false) }
     val cover by rememberUpdatedState(covered)
-    val place by rememberUpdatedState(over || np || held != null)
+    val place by rememberUpdatedState(over || np)
     LaunchedEffect(covered) {
         if (covered) risen = true
     }
-    LaunchedEffect(over, held != null) {
-        if (over || held != null) top = true
+    LaunchedEffect(over) {
+        if (over) top = true
+    }
+    LaunchedEffect(held != null, over || np) {
+        if (held != null) top = over || np
     }
     var artist by remember { mutableStateOf(held?.first ?: "") }
     var title by remember { mutableStateOf(held?.second ?: "") }
