@@ -40,6 +40,16 @@ class CardStateTest {
     }
 
     @Test
+    fun skipAndSpeedAreRefusedWithTheCardDownBeforeTheSend() {
+        val down = session().walk(Enums.Card.busy)
+        assertEquals(CardView.REFUSED, down.transportRefusal(Enums.TransportCmd.skip))
+        assertEquals(CardView.REFUSED, down.transportRefusal(Enums.TransportCmd.speed))
+        val ready = session().walk(Enums.Card.ready)
+        assertEquals(null, ready.transportRefusal(Enums.TransportCmd.skip))
+        assertEquals(null, ready.transportRefusal(Enums.TransportCmd.speed))
+    }
+
+    @Test
     fun outToReadyIsAnEdge() {
         assertEquals(listOf(0, 1), edges(Enums.Card.out, Enums.Card.ready))
     }

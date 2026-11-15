@@ -79,6 +79,8 @@ data class Flight(val name: String, val address: String, val paired: Boolean = f
 
 interface Control {
     fun transport(cmd: Int, seekMs: Long? = null, on: Boolean? = null, repeat: Int? = null)
+    fun skip(ms: Int) {}
+    fun speed(pct: Int, done: (Int?, String?) -> Unit = { _, _ -> }) = done(-1, null)
     fun volume(detents: Int)
     fun volumePercent(pct: Int, done: () -> Unit = {}) = done()
     fun libGet(view: Int, parent: String, offset: Long)

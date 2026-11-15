@@ -148,7 +148,7 @@ data class DeviceState(
         return when (cmd) {
             Enums.TransportCmd.toggle, Enums.TransportCmd.play -> CardView.REFUSED.takeUnless { playing || receiver }
             Enums.TransportCmd.next, Enums.TransportCmd.prev -> CardView.REFUSED.takeUnless { receiver && !playing }
-            Enums.TransportCmd.seek, Enums.TransportCmd.shuffle -> CardView.REFUSED
+            Enums.TransportCmd.seek, Enums.TransportCmd.shuffle, Enums.TransportCmd.skip, Enums.TransportCmd.speed -> CardView.REFUSED
             else -> null
         }
     }

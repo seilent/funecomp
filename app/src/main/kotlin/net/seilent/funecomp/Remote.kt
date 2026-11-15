@@ -94,11 +94,13 @@ import net.seilent.funecomp.state.DeleteAsk
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.Heart
+import net.seilent.funecomp.state.LastSent
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.Owed
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.state.Reconnect
+import net.seilent.funecomp.state.SkipQueue
 import net.seilent.funecomp.state.SvcLogins
 import net.seilent.funecomp.state.SvcOpens
 import net.seilent.funecomp.state.Wake
@@ -163,6 +165,8 @@ object Remote : Control {
     @Volatile var svcShown: (() -> Boolean)? = null
     @Volatile var svcFront: ((String) -> Unit)? = null
     @Volatile private var sessions = 0
+    private val skips = SkipQueue()
+    private val lastSent = LastSent()
     private val pickLock = Any()
     private var resolving: HttpRun? = null
     @Volatile private var app: Context? = null
@@ -1289,6 +1293,10 @@ object Remote : Control {
     private fun drop() {
         generation++
         sessions++
+        main.post {
+            skips.closed()
+            lastSent.clear()
+        }
         app?.let {
             PickNotice.clear(it)
             SvcNotice.clear(it)
@@ -1317,6 +1325,32 @@ object Remote : Control {
         if (preRefused(device.transportRefusal(cmd))) return
         val refusable = cmd != Enums.TransportCmd.pause && cmd != Enums.TransportCmd.repeat
         send(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat), "transport ${Enums.TransportCmd.names[cmd]}", done = if (refusable) ::playRefused else ::refused)
+    }
+
+    override fun skip(ms: Int) {
+        if (!device.books || preRefused(device.transportRefusal(Enums.TransportCmd.skip))) return
+        val session = sessions
+        skips.tap(session, ms)?.let { sendSkip(session, it) }
+    }
+
+    private fun sendSkip(session: Int, ms: Int) {
+        send(Msg.TRANSPORT, Req.transport(Enums.TransportCmd.skip, skipMs = ms), "transport skip $ms", done = { code, text ->
+            playRefused(code, text)
+            main.post { skips.replied(session)?.let { next -> if (session == sessions) sendSkip(session, next) else skips.closed() } }
+        })
+    }
+
+    override fun speed(pct: Int, done: (Int?, String?) -> Unit) {
+        if (!device.books || preRefused(device.transportRefusal(Enums.TransportCmd.speed))) return done(-1, null)
+        if (pct == (lastSent.speed ?: device.playback.state.speedPct ?: 100)) return done(null, null)
+        lastSent.sendSpeed(pct)
+        send(Msg.TRANSPORT, Req.transport(Enums.TransportCmd.speed, speedPct = pct), "transport speed $pct", done = { code, text ->
+            playRefused(code, text)
+            main.post {
+                lastSent.speedReplied(pct)
+                done(code, text)
+            }
+        })
     }
 
     override fun volume(detents: Int) = send(Msg.VOLUME, Req.volume(step = detents), "volume step $detents")
@@ -1762,6 +1796,10 @@ object Remote : Control {
                 SvcNotice.clear(it)
             }
             sessions++
+            main.post {
+                skips.closed()
+                lastSent.clear()
+            }
             Svc.dropped(bye == null || bye == Enums.ByeReason.replaced)
             apps.closed(bye)
             offset?.end(false)

@@ -198,6 +198,20 @@ class SimControl(
         req(Msg.TRANSPORT, Req.transport(cmd, seekMs, on, repeat))
     }
 
+    val skips = ArrayList<Int>()
+    val speeds = ArrayList<Int>()
+
+    override fun skip(ms: Int) {
+        skips += ms
+        req(Msg.TRANSPORT, Req.transport(Enums.TransportCmd.skip, skipMs = ms))
+    }
+
+    override fun speed(pct: Int, done: (Int?, String?) -> Unit) {
+        speeds += pct
+        val a = req(Msg.TRANSPORT, Req.transport(Enums.TransportCmd.speed, speedPct = pct)) as? Answer.Fail
+        done(a?.code, a?.text)
+    }
+
     override fun volume(detents: Int) {
         req(Msg.VOLUME, Req.volume(step = detents))
     }

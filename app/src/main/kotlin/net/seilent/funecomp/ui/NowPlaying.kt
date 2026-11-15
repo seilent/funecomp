@@ -42,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.MotionDurationScale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -103,11 +104,20 @@ private const val TOGGLE = 2
 private const val NEXT = 3
 private const val REPEAT = 4
 private const val HEART = 5
-private val ITEM_TAGS = mapOf(SHUFFLE to "np.shuffle", PREV to "np.prev", TOGGLE to "np.toggle", NEXT to "np.nextTrack", REPEAT to "np.repeat")
+private const val SKIP_BACK = 6
+private const val SKIP_AHEAD = 7
+private const val SPEED = 8
+private val ITEM_TAGS = mapOf(SHUFFLE to "np.shuffle", PREV to "np.prev", TOGGLE to "np.toggle", NEXT to "np.nextTrack", REPEAT to "np.repeat", SKIP_BACK to "np.skipBack", SKIP_AHEAD to "np.skipAhead")
+private const val BACK_FACE = "-30"
+private const val AHEAD_FACE = "+30"
+private const val SKIP_MS = 30_000
+private const val SPEED_TITLE = "speed"
 private const val MODE_ON = "lyrics mode on"
 private const val MODE_OFF = "lyrics mode off"
 private const val ARTIST_PHOTO = "artistPhoto"
 private const val WINDOW_MS = (Held.Track.motion_trackHide + Held.Track.motion_trackShow).toLong()
+
+private object SpeedSheet
 
 private data class Seen(val track: NpKey?, val at: Long, val f: Boolean?, val calm: Long, val hand: Boolean = false)
 
@@ -307,6 +317,7 @@ private class Swap(val dir: VariantMotion.Dir, val from: DeviceState, val lyrics
 private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastState, overlay: Overlay, onBack: () -> Unit, onQueue: () -> Unit, active: Boolean, art: BackdropArt?, lyrics: LyricsFetch.Show, live: () -> DeviceState, shell: Shell?, onBackdrop: ((BackdropArt?) -> Unit)?, swap: () -> VariantMotion.Frame?, swapDir: VariantMotion.Dir?, phoneCover: Pair<Long, ImageBitmap>?) {
     val ui = LocalUi.current
     val s = device.playback.state
+    val book = s.book == true
     var now by remember { mutableLongStateOf(SystemClock.elapsedRealtime()) }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val playing = s.playing == true
@@ -528,6 +539,20 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
         idle = true
     }
     val idleAlpha by animateFloatAsState(if (idle) Tok.motion_idleAlpha else 1f, tween(Tok.motion_idleFade.toInt(), easing = Decel), label = "idle")
+    val speedBook = if (device.books && s.book == true && s.speedPct != null) s.album to s.artist else null
+    var speedFor by remember { mutableStateOf<Pair<String?, String?>?>(null) }
+    LaunchedEffect(speedBook, active) {
+        if (speedFor != null && (speedBook != speedFor || !active)) {
+            sheet?.closeIf(SpeedSheet)
+            speedFor = null
+        }
+    }
+    DisposableEffect(sheet) { onDispose { sheet?.closeIf(SpeedSheet) } }
+    fun speedSheet() {
+        val pct = liveNow().playback.state.speedPct ?: return
+        speedFor = speedBook
+        sheet?.open(SPEED_TITLE, SPEED_STEPS.map { speedWord(it) }, SPEED_STEPS.indices.minBy { abs(SPEED_STEPS[it] - pct) }, owner = SpeedSheet) { i -> control.speed(SPEED_STEPS[i]) }
+    }
     var seekFraction by remember { mutableStateOf<Float?>(null) }
 
     val textX = ui.px(ui.npTextX)
@@ -649,12 +674,12 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                                 track?.let { control.art(it, px) }?.let { Image(it, null, Modifier.fillMaxSize().testTag("np.art.image"), contentScale = ContentScale.Crop) }
                             }
                         }
+                        val inset = ui.px(Tok.detailRingInset).roundToInt()
+                        val ring = ui.px(LayoutTok.npRing)
+                        val hx = artX.roundToInt() + artSide.roundToInt() - inset - ring / 2
+                        val hy = ui.npHeartYPx(artY)
                         if (Heart.shown(device.hello, s) && npHeartFits(ui.npArt)) {
                             key(HEART) {
-                                val inset = ui.px(Tok.detailRingInset).roundToInt()
-                                val ring = ui.px(LayoutTok.npRing)
-                                val hx = artX.roundToInt() + artSide.roundToInt() - inset - ring / 2
-                                val hy = ui.npHeartYPx(artY)
                                 val on = Heart.lit(s)
                                 val press = rememberPress()
                                 Box(Modifier.at(hx, hy, 0.5f, 0.5f).alpha(idleAlpha).testTag(if (on) "np.heart.on" else "np.heart.off")) {
@@ -665,6 +690,16 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                                         control.favorite(s) { line, title -> toast.show(line, title) }
                                     }, {}, press),
                                 )
+                            }
+                        }
+                        val speed = s.speedPct
+                        if (device.books && s.book == true && speed != null && npHeartFits(ui.npArt)) {
+                            key(SPEED) {
+                                val press = rememberPress()
+                                Box(Modifier.at(hx, hy, 0.5f, 0.5f)) {
+                                    Ring(LayoutTok.npRing, speedWord(speed), Roles.npRingText, Look.Touch, press = press, tag = "np.speed", stroke = LayoutTok.npRingStroke)
+                                }
+                                Box(Modifier.at(hx, hy, 0.5f, 0.5f).size(ui.npHeartHitPx.dp()).testTag("np.speed").press({ speedSheet() }, {}, press))
                             }
                         }
                     }
@@ -742,11 +777,11 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
             val row = listOf(ui.npRingCenter(0), ui.npTransportX(0), ui.npRingCenter(1), ui.npTransportX(1), ui.npRingCenter(2))
             val edges = listOf(row[0] - (row[1] - row[0]) / 2) + row.zipWithNext { a, b -> (a + b) / 2 } + (row[4] + (row[4] - row[3]) / 2)
             val items = listOfNotNull(
-                SHUFFLE to 0,
+                (if (book) SKIP_BACK to 0 else SHUFFLE to 0).takeIf { !book || device.books },
                 (PREV to 1).takeIf { queued },
                 (TOGGLE to 2).takeIf { queued },
                 (NEXT to 3).takeIf { queued },
-                REPEAT to 4,
+                (if (book) SKIP_AHEAD to 4 else REPEAT to 4).takeIf { !book || device.books },
             )
             items.forEach { (kind, i) ->
                 key(kind) {
@@ -769,6 +804,7 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                             when (kind) {
                                 SHUFFLE -> Ring(LayoutTok.npRing, GlyphName.SHUFFLE, Look.Toggle(s.shuffle == true), press = press, tag = "np.shuffle", stroke = LayoutTok.npRingStroke)
                                 REPEAT -> Ring(LayoutTok.npRing, GlyphName.REPEAT, Look.Toggle(repeat != Enums.Repeat.off), press = press, tag = "np.repeat", stroke = LayoutTok.npRingStroke, one = repeat == Enums.Repeat.one)
+                                SKIP_BACK, SKIP_AHEAD -> Ring(LayoutTok.npRing, if (kind == SKIP_BACK) BACK_FACE else AHEAD_FACE, Roles.npRingText, Look.Touch, press = press, tag = tag, stroke = LayoutTok.npRingStroke)
                                 else -> Ring(ui.npPlayRing, if (playing) GlyphName.PAUSE else GlyphName.PLAY, Look.Touch, Modifier.testTag(if (playing) "np.toggle.pause" else "np.toggle.play"), press = press, tag = "np.toggle")
                             }
                         }
@@ -784,6 +820,8 @@ private fun NowPlayingPage(device: DeviceState, control: Control, toast: ToastSt
                                         }
                                         control.transport(Enums.TransportCmd.repeat, repeat = next)
                                     }
+                                    SKIP_BACK -> control.skip(-SKIP_MS)
+                                    SKIP_AHEAD -> control.skip(SKIP_MS)
                                     else -> control.transport(Enums.TransportCmd.toggle)
                                 }
                             }, press = press),

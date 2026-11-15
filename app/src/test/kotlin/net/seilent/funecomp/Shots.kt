@@ -177,7 +177,7 @@ val SIZES = listOf(
     Size("wm361x343", 361, 343, NO_BARS),
 )
 
-private val NP_SIZES = listOf(
+internal val NP_SIZES = listOf(
     Size("sn411x588", 411, 588, NO_BARS),
     Size("sn411x604", 411, 604, NO_BARS),
 )
