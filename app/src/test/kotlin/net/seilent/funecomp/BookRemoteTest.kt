@@ -27,6 +27,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [35])
@@ -104,6 +105,37 @@ class BookRemoteTest {
         waitFor { sent("TRANSPORT") == 1 }
         quiet()
         assertEquals(1, sent("TRANSPORT"))
+    }
+
+    @Test
+    fun anAnsweredSkipSendsTheTapsSummedBehindIt() {
+        live("bookplay")
+        Remote.skip(30_000)
+        Remote.skip(30_000)
+        Remote.skip(30_000)
+        repeat(2) {
+            val answered = AtomicBoolean()
+            Remote.volumePercent(50) { answered.set(true) }
+            waitFor { answered.get() }
+        }
+        assertEquals(2, sent("TRANSPORT"))
+    }
+
+    @Test
+    fun aRefusedSkipDropsTheTapsBehindItWithOneUsbDacToast() {
+        live("bookplay", "usbdac")
+        val toasts = CopyOnWriteArrayList<String>()
+        Remote.refusals({ line, _ -> toasts += line })
+        Remote.skip(30_000)
+        Remote.skip(30_000)
+        Remote.skip(30_000)
+        repeat(2) {
+            val answered = AtomicBoolean()
+            Remote.volumePercent(50) { answered.set(true) }
+            waitFor { answered.get() }
+        }
+        assertEquals(1, sent("TRANSPORT"))
+        assertEquals(listOf(Remote.USB_DAC), toasts.toList())
     }
 
     @Test

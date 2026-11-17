@@ -1336,7 +1336,7 @@ object Remote : Control {
     private fun sendSkip(session: Int, ms: Int) {
         send(Msg.TRANSPORT, Req.transport(Enums.TransportCmd.skip, skipMs = ms), "transport skip $ms", done = { code, text ->
             playRefused(code, text)
-            main.post { skips.replied(session)?.let { next -> if (session == sessions) sendSkip(session, next) else skips.closed() } }
+            main.post { skips.replied(session)?.let { next -> if (session == sessions && (code == null || code == -1)) sendSkip(session, next) else skips.closed() } }
         })
     }
 
