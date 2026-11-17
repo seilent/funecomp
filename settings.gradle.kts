@@ -23,5 +23,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "funecomp"
-include(":proto", ":state", ":link", ":artist", ":sim", ":app")
+include(":proto", ":state", ":link", ":artist", ":push", ":sim", ":app")
 includeBuild("kit")
