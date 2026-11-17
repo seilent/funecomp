@@ -177,17 +177,20 @@ class DeviceTest {
             assertEquals(b, listOf("dateTime", "companion", "companionPair", "scrobble", "about"), on("system"))
             val power = on("power")
             val settings = Settings.from(out.of(Msg.SETTINGS).single()).text.lines()
+            assertTrue(b, rows.none { it.key == "swapTrackKeys" })
+            assertTrue(b, settings.none { it.startsWith("swapTrackKeys=") })
+            assertEquals(b, listOf("swapTrackKeys"), fail(req(d, Msg.SET, Req.set("swapTrackKeys=on\n"))).refused)
             if (b == "r1") {
-                assertEquals(power.indexOf("screenOffKeys") + 1, power.indexOf("swapTrackKeys"))
-                assertEquals(power.indexOf("swapTrackKeys") + 1, power.indexOf("inlineRemote"))
-                assertTrue("swapTrackKeys=off" in settings)
+                assertEquals(power.indexOf("screenOffKeys") + 1, power.indexOf("fourthKey"))
+                assertEquals(power.indexOf("fourthKey") + 1, power.indexOf("inlineRemote"))
+                assertTrue("fourthKey=play" in settings)
                 val set = Sink()
-                assertEquals(listOf("swapTrackKeys"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("swapTrackKeys=on\n"), set)))).kept)
-                assertTrue("swapTrackKeys=on" in Settings.from(set.of(Msg.SETTINGS).single()).text.lines())
+                assertEquals(listOf("fourthKey"), SetReply.from(Node.decode("SET.reply", ok(req(d, Msg.SET, Req.set("fourthKey=previous\n"), set)))).kept)
+                assertTrue("fourthKey=previous" in Settings.from(set.of(Msg.SETTINGS).single()).text.lines())
             } else {
-                assertTrue(b, rows.none { it.key == "swapTrackKeys" })
-                assertTrue(b, settings.none { it.startsWith("swapTrackKeys=") })
-                assertEquals(b, listOf("swapTrackKeys"), fail(req(d, Msg.SET, Req.set("swapTrackKeys=on\n"))).refused)
+                assertTrue(b, rows.none { it.key == "fourthKey" })
+                assertTrue(b, settings.none { it.startsWith("fourthKey=") })
+                assertEquals(b, listOf("fourthKey"), fail(req(d, Msg.SET, Req.set("fourthKey=previous\n"))).refused)
             }
         }
     }

@@ -170,7 +170,7 @@ class SchemaSyncTest {
             "power|chargeSpeed|choice|CHARGE SPEED|normal,500,300|NORMAL,500 MA,300 MA|-|boardOnly|-",
             "power|lockKnob|toggle|LOCK VOLUME|off,on|OFF,ON|-|-|-",
             "power|screenOffKeys|choice|SCREEN OFF KEYS|all,play,none|ALL,PLAY ONLY,NONE|-|-|-",
-            "power|swapTrackKeys|toggle|SWAP PREV/NEXT|off,on|OFF,ON|-|boardOnly|-",
+            "power|fourthKey|choice|FOURTH KEY|play,previous|PLAY/PAUSE,PREVIOUS|-|boardOnly|-",
             "power|inlineRemote|toggle|IN-LINE REMOTE|off,on|OFF,ON|-|-|-",
             "connect|usbMode|draft|USB MODE|prompt,storage,dock,audio,mtp|PROMPT,STORAGE,DOCK,AUDIO,MTP|-|-|-",
             "connect|usbFeedback|toggle|USB DAC FEEDBACK|off,on|OFF,ON|-|boardOnly|-",

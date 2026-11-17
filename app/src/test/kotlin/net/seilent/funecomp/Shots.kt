@@ -1063,7 +1063,7 @@ val SHOTS = listOf(
     Shot("settings-power", pages = HOME + Page.Settings) { walk("power") },
     Shot("settings-power-r1", board = "r1", pages = HOME + Page.Settings) {
         walk("power")
-        scrollTo("set.swapTrackKeys")
+        scrollTo("set.fourthKey")
     },
     Shot("settings-sleep", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) { power(this) },
     Shot("settings-sleep-v1", board = "v1", pages = HOME + Page.Settings, prep = sleep(45, 61_000)) { power(this) },

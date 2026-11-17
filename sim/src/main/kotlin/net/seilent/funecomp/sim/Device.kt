@@ -217,7 +217,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         "brightness" to whole(tok.settings_brightnessDefault),
         "outputPriority" to "headphones", "outputGain" to "high", "dsdOutput" to "dop", "tube" to "off", "stereoWidth" to "off",
         "led" to "high", "screenLock" to "off", "saverBlur" to "off", "statusVolume" to "off", "navBar" to "off", "navOrder" to "backLeft",
-        "navButton" to "play", "whenIdle" to "powerOff", "chargeLimit" to "off", "chargeSpeed" to "normal", "swapTrackKeys" to "off", "usbFeedback" to "on", "usbOutput" to "headphones",
+        "navButton" to "play", "whenIdle" to "powerOff", "chargeLimit" to "off", "chargeSpeed" to "normal", "fourthKey" to "play", "usbFeedback" to "on", "usbOutput" to "headphones",
         "companion" to if (opts.companion) "on" else "off", "scrobble" to if (devBit(Feature.cardLog)) "card" else "phone", "size" to "standard",
         "bootLogo" to "fune", "streaming" to if (opts.services.isNotEmpty()) "on" else "off", "btAudio" to "on",
     ).apply {
