@@ -1,3 +1,5 @@
+package net.seilent.funecomp.logic
+
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.Plugin

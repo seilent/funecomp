@@ -6,7 +6,7 @@ gradlePlugin {
     plugins {
         create("gen") {
             id = "funecomp.gen"
-            implementationClass = "GenPlugin"
+            implementationClass = "net.seilent.funecomp.logic.GenPlugin"
         }
     }
 }

@@ -1,3 +1,5 @@
+package net.seilent.funecomp.logic
+
 import java.io.File
 import java.security.MessageDigest
 
