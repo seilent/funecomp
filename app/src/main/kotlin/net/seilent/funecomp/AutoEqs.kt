@@ -6,10 +6,10 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
 import android.util.Log
-import net.seilent.funecomp.artist.AutoEqIndex
-import net.seilent.funecomp.artist.AutoEqList
-import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funekit.artist.AutoEqIndex
+import net.seilent.funekit.artist.AutoEqList
+import net.seilent.funekit.artist.UrlHttp
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.Executors
@@ -26,7 +26,7 @@ object AutoEqs {
         val app = c.applicationContext
         context = app
         val version = app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0"
-        index = AutoEqIndex(File(app.filesDir, "autoeq"), UrlHttp(), version)
+        index = AutoEqIndex(File(app.filesDir, "autoeq"), UrlHttp(), Agents.of(version))
     }
 
     fun list(done: (AutoEqList?) -> Unit) = exec.execute {

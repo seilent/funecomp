@@ -43,8 +43,8 @@ class LinkReceiverTest {
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
         shadowOf(adapter).setEnabled(true)
         MediaLink.controls(app, false)
-        Remote.artist(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
-        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
+        Remote.artist(app, net.seilent.funekit.artist.Http { _, _ -> net.seilent.funekit.artist.Response(404, ByteArray(0)) })
+        Lyrics.init(app, net.seilent.funekit.artist.Http { _, _ -> net.seilent.funekit.artist.Response(404, ByteArray(0)) })
     }
 
     @After

@@ -31,9 +31,9 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import com.github.takahirom.roborazzi.captureRoboImage
-import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.sources.ArtSources
 import net.seilent.funecomp.ui.AccentState
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Black
@@ -92,7 +92,7 @@ class AccentOffTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) {
-                App(c.device, LinkView(Phase.LIVE, "V1", everLive = true), c, shell, Sources.COMMONS, {})
+                App(c.device, LinkView(Phase.LIVE, "V1", everLive = true), c, shell, ArtSources.COMMONS, {})
             }
         }
         settle(1000)

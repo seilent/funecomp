@@ -3,11 +3,6 @@ package net.seilent.funecomp
 import net.seilent.funecomp.art.ArtWorker
 import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.art.Pending
-import net.seilent.funecomp.artist.Art
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtPusher
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.link.ImagePush
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
@@ -18,15 +13,24 @@ import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.push.ArtPusher
+import net.seilent.funecomp.push.Origins
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.PhoneLine
 import net.seilent.funecomp.sim.Sim
+import net.seilent.funecomp.sources.ArtSources
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.LIB_PAGE
+import net.seilent.funekit.artist.Art
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.PushLedger
+import net.seilent.funekit.artist.Sweep
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -307,7 +311,7 @@ class ForwardTest {
         val s = session(port)
         val ups = Ups(false, listOf("Artist 020", "Artist 021"), setOf("Artist 020", "Artist 021"))
         val v = Versioned(ups)
-        val f = forward(Lookups(), upgrades = v, version = { v.versions[it] ?: 0 }, blocks = blocks(ArtBlocks(), "tcp:A"))
+        val f = forward(Lookups(), upgrades = v, version = { v.versions[it] ?: 0 }, blocks = blocks(ArtBlocks(ledger = PushLedger()), "tcp:A"))
         f.run(s) { true }
         assertEquals(1, stores().count { it == "Artist 020" })
         ups.open = true
@@ -322,8 +326,8 @@ class ForwardTest {
     fun aReplacedPhotoIsQueuedForEveryOtherDevice() {
         val (_, port) = sim(30)
         val s = session(port)
-        val records = ArtBlocks()
-        records.upgrades("tcp:B")
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.upgrades("tcp:B")
         val ups = Ups(false, listOf("Artist 020"), setOf("Artist 020"))
         val v = Versioned(ups)
         val f = forward(Lookups(), upgrades = v, version = { v.versions[it] ?: 0 }, blocks = blocks(records, "tcp:A"))
@@ -331,16 +335,16 @@ class ForwardTest {
         ups.open = true
         f.run(s) { true }
         assertEquals(2, stores().count { it == "Artist 020" })
-        assertEquals(listOf("Artist 020"), records.upgrades("tcp:B").map { it.name })
-        assertTrue(records.upgrades("tcp:A").isEmpty())
-        assertTrue(records.pushes("tcp:B").isEmpty())
+        assertEquals(listOf("Artist 020"), records.ledger!!.upgrades("tcp:B").map { it.name })
+        assertTrue(records.ledger!!.upgrades("tcp:A").isEmpty())
+        assertTrue(records.ledger!!.pushes("tcp:B").isEmpty())
     }
 
     private fun begins() = synchronized(lines) { lines.filter { it.startsWith("begin name=") } }.map { it.removePrefix("begin name=").substringBefore(" origin=") }
 
     @Test
     fun anotherDeviceGetsAPendingUpgradeOnlyAfterTheCurrentArtistAndOnlyWhenItHoldsTheName() {
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         var dev = "tcp:A"
         val ups = Ups(false, emptyList())
         val bd = Forward.Blocks(records, { dev }, { n, m -> m ?: "name:$n" })
@@ -348,9 +352,9 @@ class ForwardTest {
         val b = session(portB)
         dev = "tcp:B"
         forward(Lookups(), upgrades = ups, blocks = bd).run(b) { true }
-        records.upgraded("Artist 020", "Artist 020", null, 1, "tcp:A")
-        records.upgraded("Artist 025", "Artist 025", null, 1, "tcp:A")
-        records.upgraded("Artist 026", "Artist 026", null, 1, "tcp:A")
+        records.ledger!!.upgraded("Artist 020", "Artist 020", null, 1, "tcp:A")
+        records.ledger!!.upgraded("Artist 025", "Artist 025", null, 1, "tcp:A")
+        records.ledger!!.upgraded("Artist 026", "Artist 026", null, 1, "tcp:A")
         ups.ats["Artist 020"] = 1
         ups.ats["Artist 025"] = 2
         ups.open = true
@@ -360,8 +364,8 @@ class ForwardTest {
         assertEquals("Artist 001", order.first())
         assertTrue(order.indexOf("Artist 020") > order.indexOf("Artist 006"))
         assertEquals(listOf("Artist 020"), stores().filter { it == "Artist 020" })
-        assertTrue(records.upgrades("tcp:B").isEmpty())
-        assertTrue(records.upgrades("tcp:C").none { it.name == "Artist 025" || it.name == "Artist 026" })
+        assertTrue(records.ledger!!.upgrades("tcp:B").isEmpty())
+        assertTrue(records.ledger!!.upgrades("tcp:C").none { it.name == "Artist 025" || it.name == "Artist 026" })
 
         val (_, portC) = sim(10)
         val c = session(portC)
@@ -369,18 +373,18 @@ class ForwardTest {
         synchronized(lines) { lines.clear() }
         forward(Lookups(), sweeping = { false }, upgrades = ups, blocks = bd).run(c) { true }
         assertFalse("Artist 020" in begins())
-        assertTrue(records.upgrades("tcp:C").isEmpty())
+        assertTrue(records.ledger!!.upgrades("tcp:C").isEmpty())
     }
 
     @Test
     fun aPendingUpgradeKeepsThePhoneOrigin() {
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         val ups = Ups(false, emptyList())
         val (_, port) = sim(30, minor = Proto.minor)
         val s = session(port)
         val bd = Forward.Blocks(records, { "tcp:B" }, { n, m -> m ?: "name:$n" })
         forward(Lookups(), upgrades = ups, blocks = bd).run(s) { true }
-        records.upgraded("Artist 020", "Artist 020", null, 1, "tcp:A", Enums.ImgOrigin.phone)
+        records.ledger!!.upgraded("Artist 020", "Artist 020", null, 1, "tcp:A", Origins.of(Enums.ImgOrigin.phone))
         ups.ats["Artist 020"] = 1
         ups.open = true
         synchronized(lines) { lines.clear() }
@@ -390,14 +394,14 @@ class ForwardTest {
 
     @Test
     fun pendingUpgradesStopWhenTheUnmeteredGateCloses() {
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         val ups = Ups(false, emptyList())
         val (_, port) = sim(30)
         val s = session(port)
         val bd = Forward.Blocks(records, { "tcp:B" }, { n, m -> m ?: "name:$n" })
         forward(Lookups(), upgrades = ups, blocks = bd).run(s) { true }
-        records.upgraded("Artist 020", "Artist 020", null, 1, "tcp:A")
-        records.upgraded("Artist 021", "Artist 021", null, 1, "tcp:A")
+        records.ledger!!.upgraded("Artist 020", "Artist 020", null, 1, "tcp:A")
+        records.ledger!!.upgraded("Artist 021", "Artist 021", null, 1, "tcp:A")
         ups.ats["Artist 020"] = 1
         ups.ats["Artist 021"] = 1
         val gated = object : Forward.Upgrades by ups {
@@ -406,7 +410,7 @@ class ForwardTest {
         forward(Lookups(), upgrades = gated, blocks = bd, version = { if (it == "Artist 020" || it == "Artist 021") 1 else 0 }).run(s) { true }
         assertEquals(2, stores().count { it == "Artist 020" })
         assertEquals(1, stores().count { it == "Artist 021" })
-        assertEquals(listOf("Artist 021"), records.upgrades("tcp:B").map { it.name })
+        assertEquals(listOf("Artist 021"), records.ledger!!.upgrades("tcp:B").map { it.name })
     }
 
     @Test
@@ -622,7 +626,7 @@ class ForwardTest {
     fun aBlockDeletesTheNameOnceAndTheNextRunLooksItUpAgain() {
         val (sim, port) = sim(30)
         val s = session(port)
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         forward(Lookups()).run(s) { true }
         records.add(ArtBlocks.Block("mb-002", "mb-002", "test", "x", "", "Artist 002", 1))
         val looked = Lookups()
@@ -644,7 +648,7 @@ class ForwardTest {
         val (simA, portA) = sim(10)
         val a = session(portA)
         forward(Lookups()).run(a) { true }
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.add(ArtBlocks.Block("mb-003", "mb-003", "test", "x", "", "Artist 003", 1))
         forward(Lookups(), sweeping = { false }, missing = { it == "Artist 003" }, blocks = blocks(records, "tcp:A")).run(a) { true }
         assertEquals(listOf("Artist 003"), deleted())
@@ -671,7 +675,7 @@ class ForwardTest {
         val s = session(s0.listen(0))
         forward(Lookups()).run(s) { true }
         assertEquals(3, s0.device.stored.size)
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.add(ArtBlocks.Block("name:x", "mb-m", "test", "x", "", "むと", 1))
         forward(Lookups(), missing = { it != "Other" }, blocks = blocks(records, "tcp:A")).run(s) { true }
         assertEquals(setOf("Muto", "むと"), deleted().toSet())
@@ -683,7 +687,7 @@ class ForwardTest {
     fun anUndoPushesTheNameEvenWithAHeldMarkAndAMissIsDone() {
         val (sim, port) = sim(30)
         val s = session(port)
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         val kept = Kept()
         forward(Lookups(), marks = kept).run(s) { true }
         val block = ArtBlocks.Block("mb-020", "mb-020", "test", "x", "", "Artist 020", 1)
@@ -694,11 +698,11 @@ class ForwardTest {
         val before = stores().count { it == "Artist 020" }
         forward(Lookups(), marks = kept, blocks = blocks(records, "tcp:A")).run(s) { true }
         assertEquals(before + 1, stores().count { it == "Artist 020" })
-        assertTrue(records.pushes("tcp:A").isEmpty())
+        assertTrue(records.ledger!!.pushes("tcp:A").isEmpty())
         records.add(ArtBlocks.Block("mb-021", "mb-021", "test", "x", "", "Artist 021", 2))
         records.remove(records.records().single())
         forward(Lookups(), missing = { it == "Artist 021" }, marks = kept, blocks = blocks(records, "tcp:A")).run(s) { true }
-        assertTrue(records.pushes("tcp:A").isEmpty())
+        assertTrue(records.ledger!!.pushes("tcp:A").isEmpty())
     }
 
     @Test
@@ -711,7 +715,7 @@ class ForwardTest {
         val (sim, port) = sim(30, 1, Options.IMG_CAP, fault)
         val s = session(port)
         forward(Lookups()).run(s) { true }
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.add(ArtBlocks.Block("mb-004", "mb-004", "test", "x", "", "Artist 004", 1))
         val f = forward(Lookups(), missing = { it == "Artist 004" }, blocks = blocks(records, "tcp:A"))
         val n = lists()
@@ -731,7 +735,7 @@ class ForwardTest {
         val s = session(port)
         forward(Lookups(), sweeping = { false }).run(s) { true }
         val current = device.playback.state.artists.first()
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.add(ArtBlocks.Block("x", "x", "test", "x", "", "Nobody", 1))
         val logs = ArrayList<String>()
         val looked = Lookups()
@@ -748,7 +752,7 @@ class ForwardTest {
     fun aCardRefusedListingAtTheDeletesStopsWithGateAndNoFailedLine() {
         val (_, port) = sim(30, 1, Options.IMG_CAP, "fail=IMG_LIST:14:1")
         val s = session(port)
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.add(ArtBlocks.Block("x", "x", "test", "x", "", "Nobody", 1))
         val logs = ArrayList<String>()
         val looked = Lookups()
@@ -789,7 +793,7 @@ class ForwardTest {
         sims += s0
         val s = session(s0.listen(0))
         forward(Lookups()).run(s) { true }
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.add(ArtBlocks.Reject("mb-m", "mb-m", "むと", "むと", 1))
         forward(Lookups(), missing = { true }, blocks = blocks(records, "tcp:A")).run(s) { true }
         assertEquals(listOf("むと"), deleted())
@@ -807,18 +811,18 @@ class ForwardTest {
         val s = session(s0.listen(0))
         forward(Lookups()).run(s) { true }
         assertEquals(setOf("tsuki", "ＴＳＵＫＩ"), s0.device.stored.keys)
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         val keyOf = { n: String, m: String? -> Names.mbid(m) ?: if (Names.fold(n) == "tsuki") dj else "name:${Names.fold(n)}" }
         records.add(ArtBlocks.Block("name:tsuki", null, "youtube", "x", "", "TSUKI", 1))
-        records.addPush("TSUKI", null)
+        records.ledger!!.addPush("TSUKI", null)
         val b = Forward.Blocks(records, { "tcp:A" }, keyOf)
         forward(Lookups(), missing = { it == "TSUKI" }, blocks = b).run(s) { true }
         assertEquals(listOf("TSUKI"), deleted())
         assertEquals(setOf("ＴＳＵＫＩ"), s0.device.stored.keys)
         assertTrue(records.pending("tcp:A").isEmpty())
-        assertTrue(records.pushes("tcp:A").isEmpty())
+        assertTrue(records.ledger!!.pushes("tcp:A").isEmpty())
         val before = stores().count { it == "TSUKI" }
-        records.addPush("TSUKI", null)
+        records.ledger!!.addPush("TSUKI", null)
         forward(Lookups(), blocks = b).run(s) { true }
         assertEquals(before + 1, stores().count { it == "TSUKI" })
         assertEquals(1, deleted().size)
@@ -836,12 +840,12 @@ class ForwardTest {
         forward(Lookups()).run(s) { true }
         assertEquals(setOf("tsuki", "ＴＳＵＫＩ"), s0.device.stored.keys)
         val keyOf = { n: String, m: String? -> Names.mbid(m) ?: "name:${Names.fold(n)}" }
-        val only = ArtBlocks()
+        val only = ArtBlocks(ledger = PushLedger())
         only.add(ArtBlocks.Block(dj, dj, "youtube", "x", "", "TSUKI", 1))
         forward(Lookups(), missing = { true }, blocks = Forward.Blocks(only, { "tcp:A" }, keyOf)).run(s) { true }
         assertEquals(listOf("TSUKI"), deleted())
         forward(Lookups()).run(s) { true }
-        val both = ArtBlocks()
+        val both = ArtBlocks(ledger = PushLedger())
         listOf(dj, "name:tsuki").forEach { both.add(ArtBlocks.Block(it, dj, "youtube", "x", "", "TSUKI", 2)) }
         forward(Lookups(), missing = { true }, blocks = Forward.Blocks(both, { "tcp:B" }, keyOf)).run(s) { true }
         assertEquals(setOf("TSUKI", "ＴＳＵＫＩ"), deleted().drop(1).toSet())
@@ -890,14 +894,14 @@ class ForwardTest {
         val (sim, s) = dropSim()
         seed(s, "Nobody")
         seed(s, "Stranger")
-        val records = ArtBlocks()
-        records.hold("Nobody", null, "tcp:A")
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.hold("Nobody", null, "tcp:A")
         val ups = Ups(false, emptyList())
         val bd = blocks(records, "tcp:A")
         val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         forward(Lookups(), upgrades = ups, blocks = bd, version = { if (it == "Nobody") 1 else 0 }, log = { logs += it }).run(s) { true }
         assertEquals("$logs ${sim.device.begins.toList()}", phone, origins(sim)["Nobody"])
-        records.upgraded("Stranger", "Stranger", null, 1, "tcp:Z")
+        records.ledger!!.upgraded("Stranger", "Stranger", null, 1, "tcp:Z")
         ups.ats["Stranger"] = 1
         ups.open = true
         sim.device.begins.clear()
@@ -909,8 +913,8 @@ class ForwardTest {
     fun anUpgradeRecordSavedAsLibraryByAnOlderAppIsDecidedByTheRowsAtPushTime() {
         val (sim, s) = dropSim()
         seed(s, "Stranger")
-        val records = ArtBlocks()
-        records.upgraded("Stranger", "Stranger", null, 1, "tcp:Z", library)
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.upgraded("Stranger", "Stranger", null, 1, "tcp:Z", Origins.of(library))
         val ups = Ups(true, emptyList())
         ups.ats["Stranger"] = 1
         sim.device.begins.clear()
@@ -925,10 +929,10 @@ class ForwardTest {
             val s = session(port)
             source(sim, src)
             forward(Lookups()).run(s) { true }
-            val records = ArtBlocks()
-            records.upgrades("tcp:Z")
+            val records = ArtBlocks(ledger = PushLedger())
+            records.ledger!!.upgrades("tcp:Z")
             forward(Lookups(), upgrades = Ups(true, emptyList(), setOf("Artist 001")), blocks = blocks(records, "tcp:A")).run(s) { true }
-            assertEquals(if (src == Enums.Source.phone) phone else null, records.upgrades("tcp:Z").single { it.name == "Artist 001" }.origin)
+            assertEquals(if (src == Enums.Source.phone) phone else null, Origins.wire(records.ledger!!.upgrades("tcp:Z").single { it.name == "Artist 001" }.origin))
         }
     }
 
@@ -940,8 +944,8 @@ class ForwardTest {
         sims += s0
         val s = session(s0.listen(0))
         seed(s, "Nobody")
-        val records = ArtBlocks()
-        records.hold("Nobody", null, "tcp:A")
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.hold("Nobody", null, "tcp:A")
         val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A"), version = { if (it == "Nobody") 1 else 0 }, log = { logs += it }).run(s) { true }
         assertEquals("$logs ${s0.device.begins.toList()}", listOf("Nobody" to null), s0.device.begins.toList().filter { it.first == "Nobody" }.drop(1))
@@ -997,11 +1001,11 @@ class ForwardTest {
         sims += s0
         val s = session(s0.listen(0))
         forward(Lookups()).run(s) { true }
-        val records = ArtBlocks()
-        records.addPush("Artist 010", null, phone)
-        records.addPush("Artist 011", null)
-        records.addPush("Nobody", null)
-        records.addPush("ＢｏＡ", null)
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.addPush("Artist 010", null, Origins.of(phone))
+        records.ledger!!.addPush("Artist 011", null)
+        records.ledger!!.addPush("Nobody", null)
+        records.ledger!!.addPush("ＢｏＡ", null)
         s0.device.begins.clear()
         forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
         val o = firstOrigins(s0)
@@ -1009,8 +1013,8 @@ class ForwardTest {
         assertEquals(library, o.getValue("Artist 011"))
         assertEquals(phone, o.getValue("Nobody"))
         assertEquals(phone, o.getValue("ＢｏＡ"))
-        assertTrue(records.pushes("tcp:A").isEmpty())
-        records.addPush("BOA", null)
+        assertTrue(records.ledger!!.pushes("tcp:A").isEmpty())
+        records.ledger!!.addPush("BOA", null)
         forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
         assertEquals(library, firstOrigins(s0).getValue("BOA"))
     }
@@ -1019,14 +1023,14 @@ class ForwardTest {
     fun unreadableRowsLeaveAnOriginlessRecordPending() {
         val (sim, port) = sim(10, Proto.minor, Options.IMG_CAP, "busy=LIB_GET:1000")
         val s = session(port)
-        val records = ArtBlocks()
-        records.addPush("Nobody", null)
-        records.addPush("Somebody", null, phone)
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.addPush("Nobody", null)
+        records.ledger!!.addPush("Somebody", null, Origins.of(phone))
         val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val r = forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A"), log = { logs += it }).run(s) { true }
         assertEquals(ArtPusher.Stop.DONE, r.stop)
         assertTrue("art unblock rows failed" in logs)
-        assertEquals(listOf("Nobody"), records.pushes("tcp:A").map { it.name })
+        assertEquals(listOf("Nobody"), records.ledger!!.pushes("tcp:A").map { it.name })
         val o = firstOrigins(sim)
         assertFalse("Nobody" in o)
         assertEquals(phone, o.getValue("Somebody"))
@@ -1057,8 +1061,8 @@ class ForwardTest {
         listOf("gemma", "むﾄ", "ＢｏＡ", " Lead", "Stranger", "Nobody").forEach { seed(s, it) }
         seed(s, "Phoned", phone)
         seed(s, "Libbed", library)
-        val records = ArtBlocks()
-        records.hold("Nobody", null, "tcp:A")
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.hold("Nobody", null, "tcp:A")
         var tagging = false
         val logs: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val f = forward(Lookups(), sweeping = { tagging }, retagging = { tagging }, missing = ::fill, blocks = blocks(records, "tcp:A"), version = { if (it == "Nobody") 1 else 0 }, log = { logs += it })
@@ -1191,7 +1195,7 @@ class ForwardTest {
         seed(s, "Lib", library)
         seed(s, "Ph", phone)
         seed(s, "Bare")
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         for (n in listOf("Lib", "Ph", "Bare")) records.drop("name:$n", null, n, 1)
         forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
         assertEquals(setOf("Lib", "Ph", "Bare"), deleted().toSet())
@@ -1205,7 +1209,7 @@ class ForwardTest {
         val (_, port) = sim(10, 1, Options.IMG_CAP, "busy=IMG_DEL:1")
         val s = session(port)
         seed(s, "Gone")
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.drop("name:Nobody", null, "Nobody", 1)
         records.drop("name:Gone", null, "Gone", 1)
         forward(Lookups(), sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
@@ -1220,7 +1224,7 @@ class ForwardTest {
     fun aDropOnAKeyThePhoneHoldsIsAppliedWithNoDelete() {
         val (sim, s) = dropSim()
         seed(s, "Held")
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.drop("name:Held", null, "Held", 1)
         val b = Forward.Blocks(records, { "tcp:A" }, { n, m -> m ?: "name:$n" }, { it == "name:Held" })
         forward(Lookups(), sweeping = { false }, blocks = b).run(s) { true }
@@ -1234,7 +1238,7 @@ class ForwardTest {
         val (_, s) = dropSim()
         forward(Lookups()).run(s) { true }
         val now = device.playback.state.artists.first()
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.drop("name:$now", null, now, 1)
         val before = synchronized(lines) { lines.size }
         forward(Lookups(), blocks = blocks(records, "tcp:A")).run(s) { true }
@@ -1266,7 +1270,7 @@ class ForwardTest {
         val (sim, s) = dropSim("Silhouette", "Plain")
         seed(s, "Silhouette")
         seed(s, "Plain")
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         val looked = Lookups()
         val f = Forward(
             { device },
@@ -1301,18 +1305,18 @@ class ForwardTest {
     fun aGatedOrphanHitIsPushedOverTheCopyOnceTheGateOpens() {
         val (sim, s) = dropSim("Orphan")
         assertTrue(ImagePush(s, "Orphan", null, jpeg(240, 320, 3000), 240, 320).run() is ImagePush.Outcome.Done)
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         val looked = Lookups()
         val known: (String, String?) -> Boolean = { n, _ -> n != "Orphan" || "Orphan" in looked.names }
         forward(looked, blocks = blocks(records, "tcp:A"), known = known, gate = { looked.names.lastOrNull() != "Orphan" }).run(s) { true }
         assertEquals(1, looked.names.count { it == "Orphan" })
         assertEquals(1, stores().count { it == "Orphan" })
-        assertEquals(listOf("Orphan"), records.held("tcp:A").map { it.name })
-        assertTrue(records.pushes("tcp:A").isEmpty())
+        assertEquals(listOf("Orphan"), records.ledger!!.held("tcp:A").map { it.name })
+        assertTrue(records.ledger!!.pushes("tcp:A").isEmpty())
         forward(looked, blocks = blocks(records, "tcp:A"), known = known).run(s) { true }
         assertEquals(2, stores().count { it == "Orphan" })
         assertTrue("orphan" in sim.device.stored.keys)
-        assertTrue(records.held("tcp:A").isEmpty())
+        assertTrue(records.ledger!!.held("tcp:A").isEmpty())
     }
 
     @Test
@@ -1329,8 +1333,8 @@ class ForwardTest {
     @Test
     fun anUnblockPushIsALibraryLookup() {
         val (_, s) = dropSim("Ub")
-        val records = ArtBlocks()
-        records.addPush("Ub", null)
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.addPush("Ub", null)
         val looked = Lookups()
         forward(looked, blocks = blocks(records, "tcp:A")).run(s) { true }
         assertTrue(looked.library.any { it.first == "Ub" })
@@ -1342,22 +1346,22 @@ class ForwardTest {
         val (_, s) = dropSim("Ha", "Oa")
         seed(s, "Ha")
         seed(s, "Oa")
-        val records = ArtBlocks()
-        records.hold("Ha", null, "tcp:A")
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.hold("Ha", null, "tcp:A")
         val looked = Lookups()
         forward(looked, blocks = blocks(records, "tcp:A"), known = { n, _ -> n != "Oa" || n in looked.names }).run(s) { true }
         assertEquals(listOf(true), looked.library.filter { it.first == "Ha" }.map { it.second }.distinct())
         assertEquals(listOf(true), looked.library.filter { it.first == "Oa" }.map { it.second }.distinct())
     }
 
-    private class Jump : net.seilent.funecomp.artist.Clock {
+    private class Jump : net.seilent.funekit.artist.Clock {
         @Volatile var t = 1_000_000L
         override fun now() = t
         override fun park(until: Long) {
             if (until > t) t = until
         }
-        override fun condition(): net.seilent.funecomp.artist.Cond = object : net.seilent.funecomp.artist.Cond {
-            override fun await(run: net.seilent.funecomp.artist.HttpRun?, until: Long?, ready: () -> Boolean) {
+        override fun condition(): net.seilent.funekit.artist.Cond = object : net.seilent.funekit.artist.Cond {
+            override fun await(run: net.seilent.funekit.artist.HttpRun?, until: Long?, ready: () -> Boolean) {
                 while (!ready()) {
                     if (until == null || t >= until) return
                     park(until)
@@ -1372,20 +1376,20 @@ class ForwardTest {
         val (_, port) = sim(10)
         val s = session(port)
         val searched: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
-        val http = net.seilent.funecomp.artist.Http { url, _ ->
+        val http = net.seilent.funekit.artist.Http { url, _ ->
             when {
-                url.startsWith("https://musicbrainz.org/ws/2/artist/?query=") -> net.seilent.funecomp.artist.Response(200, "{\"artists\":[]}".toByteArray())
+                url.startsWith("https://musicbrainz.org/ws/2/artist/?query=") -> net.seilent.funekit.artist.Response(200, "{\"artists\":[]}".toByteArray())
                 url.startsWith("https://www.youtube.com/results?") -> {
                     if (!url.endsWith("&hl=en&gl=US")) searched += java.net.URLDecoder.decode(url.substringAfter("search_query=").substringBefore('&'), "UTF-8")
-                    net.seilent.funecomp.artist.Response(200, "<html><script>var ytInitialData = {\"estimatedResults\":\"0\"};</script></html>".toByteArray())
+                    net.seilent.funekit.artist.Response(200, "<html><script>var ytInitialData = {\"estimatedResults\":\"0\"};</script></html>".toByteArray())
                 }
-                else -> net.seilent.funecomp.artist.Response(404, ByteArray(0))
+                else -> net.seilent.funekit.artist.Response(404, ByteArray(0))
             }
         }
         var unmetered = false
-        val a = net.seilent.funecomp.artist.ArtistArt(
-            http, net.seilent.funecomp.artist.Codec { _, _ -> null }, net.seilent.funecomp.artist.ArtCache(tmp.newFolder("art")),
-            { net.seilent.funecomp.artist.Sources.COMMONS.copy(youtube = true) }, "0.1.0", time = Jump(),
+        val a = net.seilent.funekit.artist.ArtistArt(
+            http, net.seilent.funekit.artist.Codec { _, _ -> null }, net.seilent.funekit.artist.ArtCache(tmp.newFolder("art")),
+            { YouTubeArt.with(ArtSources.COMMONS, true) }, Agents.of("0.1.0"), time = Jump(), extensions = listOf(YouTubeArt {}),
         )
         val logged: MutableList<String> = java.util.concurrent.CopyOnWriteArrayList()
         val f = Forward(
@@ -1402,7 +1406,7 @@ class ForwardTest {
             marks = object : Forward.Marks {
                 override fun begin() = a.beginMark()
                 override fun mark(): Any = a.mark()
-                override fun holds(mark: Any) = mark is net.seilent.funecomp.artist.ArtistArt.Mark && a.holds(mark, unmetered)
+                override fun holds(mark: Any) = mark is net.seilent.funekit.artist.ArtistArt.Mark && a.holds(mark, unmetered)
             },
             log = { logged += it },
         )
@@ -1442,8 +1446,8 @@ class ForwardTest {
         val held = listOf("Ha", "Hb", "Hc")
         val (_, s) = dropSim(*held.toTypedArray())
         for (n in held) assertTrue(ImagePush(s, n, null, jpeg(240, 320, 3000), 240, 320).run() is ImagePush.Outcome.Done)
-        val records = ArtBlocks()
-        for (n in held) records.hold(n, null, "tcp:A")
+        val records = ArtBlocks(ledger = PushLedger())
+        for (n in held) records.ledger!!.hold(n, null, "tcp:A")
         val now = device.playback.state.artists.first()
         val before = synchronized(lines) { lines.size }
         forward(Lookups(), blocks = blocks(records, "tcp:A")).run(s) { true }
@@ -1452,7 +1456,7 @@ class ForwardTest {
         val first = after.indexOfFirst { l -> held.any { l.startsWith("stored name=$it ") } }
         assertTrue("$current $first", current >= 0 && first > current)
         assertTrue(held.all { n -> after.any { it.startsWith("stored name=$n ") } })
-        assertTrue(records.held("tcp:A").isEmpty())
+        assertTrue(records.ledger!!.held("tcp:A").isEmpty())
     }
 
     @Test
@@ -1464,24 +1468,24 @@ class ForwardTest {
         ))
         sims += s0
         val s = session(s0.listen(0))
-        val records = ArtBlocks()
-        for (n in held) records.hold(n, null, "tcp:A")
+        val records = ArtBlocks(ledger = PushLedger())
+        for (n in held) records.ledger!!.hold(n, null, "tcp:A")
         val r = forward(Lookups(), blocks = blocks(records, "tcp:A")).run(s) { true }
         assertEquals(ArtPusher.Stop.GATE, r.stop)
-        assertEquals(held, records.held("tcp:A").map { it.name })
+        assertEquals(held, records.ledger!!.held("tcp:A").map { it.name })
         forward(Lookups(), blocks = blocks(records, "tcp:A")).run(s) { true }
-        assertTrue(records.held("tcp:A").isEmpty())
+        assertTrue(records.ledger!!.held("tcp:A").isEmpty())
     }
 
     @Test
     fun anotherDeviceGetsNoneOfTheHeldPushes() {
         val (_, s) = dropSim("Ha")
         seed(s, "Ha")
-        val records = ArtBlocks()
-        records.hold("Ha", null, "tcp:A")
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.hold("Ha", null, "tcp:A")
         forward(Lookups(), blocks = blocks(records, "tcp:B")).run(s) { true }
         assertEquals(1, stores().count { it == "Ha" })
-        assertEquals(listOf("Ha"), records.held("tcp:A").map { it.name })
+        assertEquals(listOf("Ha"), records.ledger!!.held("tcp:A").map { it.name })
     }
 
     @Test
@@ -1502,13 +1506,13 @@ class ForwardTest {
     fun aHeldPushGoesOutWithTheSweepOff() {
         val (sim, s) = dropSim("Ha")
         assertTrue(ImagePush(s, "Ha", null, jpeg(240, 320, 3000), 240, 320).run() is ImagePush.Outcome.Done)
-        val records = ArtBlocks()
-        records.hold("Ha", null, "tcp:A")
+        val records = ArtBlocks(ledger = PushLedger())
+        records.ledger!!.hold("Ha", null, "tcp:A")
         val looked = Lookups()
         forward(looked, sweeping = { false }, blocks = blocks(records, "tcp:A")).run(s) { true }
         assertEquals(2, stores().count { it == "Ha" })
         assertTrue("ha" in sim.device.stored.keys)
-        assertTrue(records.held("tcp:A").isEmpty())
+        assertTrue(records.ledger!!.held("tcp:A").isEmpty())
     }
 
     private val stream = listOf(
@@ -1657,7 +1661,7 @@ class ForwardTest {
     fun anAbortedPhonePushStillLetsTheBlockDeletesRun() {
         val (sim, s) = phoneSim("fail=IMG_BEGIN:${net.seilent.funecomp.proto.gen.Err.noSpace}")
         val p = pending()
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.add(ArtBlocks.Block("x", "x", "test", "x", "", "Nobody", 1))
         phoneForward(Lookups(), p, PushGate.PhoneArtRule.Any, blocks = blocks(records, "tcp:A")).run(s) { true }
         assertEquals(listOf("YOASOBI"), p.list().map { it.name })
@@ -1669,7 +1673,7 @@ class ForwardTest {
     fun anEntryWaitsWhileABlockDeleteOnItsResolvedKeyIsPending() {
         val (sim, s) = phoneSim()
         val p = pending()
-        val records = ArtBlocks()
+        val records = ArtBlocks(ledger = PushLedger())
         records.add(ArtBlocks.Block("mb-y", "mb-y", "test", "x", "", "YOASOBI", 1))
         val b = Forward.Blocks(records, { "tcp:A" }, { n, m -> if (n == "YOASOBI") "mb-y" else m ?: "name:$n" })
         phoneForward(Lookups(), p, PushGate.PhoneArtRule.Any, blocks = b).run(s) { true }

@@ -17,13 +17,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.unit.dp
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.Credit
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.Response
-import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.sources.ArtSources
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
 import net.seilent.funecomp.ui.Control
@@ -35,6 +29,12 @@ import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Role
 import net.seilent.funecomp.ui.Roles
 import kotlin.math.abs
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.Credit
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.Response
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -57,7 +57,7 @@ class ArtBlockUiTest {
 
     private val calls = ArrayList<String>()
     private val entry = ArtCache.Entry("name:むと", "むと", null, "deezer", null, "https://cdn-images.dzcdn.net/images/artist/0d58cfbc90f2e776608bcdc0c45a4711/1000x1000.jpg", 1, sha = "s")
-    private var sources by mutableStateOf(Sources.COMMONS.copy(deezer = true))
+    private var sources by mutableStateOf(ArtSources.COMMONS.copy(deezer = true))
     private var shownBlocked by mutableStateOf<List<ArtBlocks.Record>>(emptyList())
     private val opened = ArrayList<String>()
 

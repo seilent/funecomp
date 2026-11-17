@@ -14,8 +14,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import net.seilent.funecomp.artist.Accounts
-import net.seilent.funecomp.artist.AppPair
+import net.seilent.funekit.artist.Accounts
+import net.seilent.funekit.artist.AppPair
 
 private const val SIGN_OUT = "sign out"
 private const val KEEP_SIGNED_IN = "keep signed in"

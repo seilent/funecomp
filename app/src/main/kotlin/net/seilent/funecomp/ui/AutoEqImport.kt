@@ -31,7 +31,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
-import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
@@ -39,6 +38,7 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.Clamp
+import net.seilent.funekit.artist.AutoEqList
 import net.seilent.funekit.core.AutoEq as AutoEqName
 import net.seilent.funekit.core.Section
 import kotlin.math.roundToInt

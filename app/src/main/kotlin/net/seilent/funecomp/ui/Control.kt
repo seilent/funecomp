@@ -3,18 +3,9 @@ package net.seilent.funecomp.ui
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.unit.IntRect
-import net.seilent.funecomp.artist.Accounts
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.AutoEqIndex
-import net.seilent.funecomp.artist.AutoEqList
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.Offer
-import net.seilent.funecomp.artist.Tile
-import net.seilent.funecomp.artist.YouTube
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import net.seilent.funecomp.Lyrics
 import net.seilent.funecomp.proto.GraphicBand
 import net.seilent.funecomp.proto.Profile
 import net.seilent.funecomp.proto.State
@@ -24,6 +15,16 @@ import net.seilent.funecomp.state.DeleteAsk
 import net.seilent.funecomp.state.Owed
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.SvcOpens
+import net.seilent.funekit.artist.Accounts
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.AutoEqIndex
+import net.seilent.funekit.artist.AutoEqList
+import net.seilent.funekit.artist.BrowseFeed
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.Offer
+import net.seilent.funekit.artist.Tile
 
 enum class Phase { NONE, CONNECTING, LIVE, DOWN, STOPPED }
 
@@ -40,7 +41,7 @@ data class LinkView(
     val battery: Battery? = null,
     val askBattery: Boolean = false,
     val mediaControls: Boolean = true,
-    val lyrics: LyricSources = LyricSources(),
+    val lyrics: LyricSources = Lyrics.DEFAULT,
     val reconnect: Boolean = false,
     val askReconnect: Boolean = false,
     val bluetoothOff: Boolean = false,
@@ -161,7 +162,7 @@ interface Control {
     fun artUsage(done: (Map<String?, ArtCache.Usage>) -> Unit) {}
     fun pickLink(text: String, name: String, done: (Previewed) -> Unit): () -> Unit = {}
     fun pickGallery(done: (Previewed) -> Unit): () -> Unit = {}
-    fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}
+    fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (BrowseFeed.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit = {}
     fun takeTile(t: Tile, done: (Previewed) -> Unit): () -> Unit = {}
     fun browseShown(section: String) {}
     fun pick(target: PickFor, offer: Offer, point: Pair<Int, Int>? = null) {}

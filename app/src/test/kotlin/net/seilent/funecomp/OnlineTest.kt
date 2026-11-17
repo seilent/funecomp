@@ -23,12 +23,8 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
-import net.seilent.funecomp.artist.Accounts
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Wikimedia
+import net.seilent.funecomp.sources.ArtSources
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Control
 import net.seilent.funecomp.ui.LinkView
@@ -54,6 +50,12 @@ import android.view.inputmethod.EditorInfo
 import android.widget.EditText
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import net.seilent.funekit.artist.Accounts
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Wikimedia
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -73,7 +75,7 @@ class OnlineTest {
     @get:Rule
     val rule = createComposeRule()
 
-    private var sources by mutableStateOf(Sources.COMMONS)
+    private var sources by mutableStateOf(ArtSources.COMMONS)
     private var link by mutableStateOf(LinkView(Phase.LIVE, "AP80", everLive = true))
     private val saved = ArrayList<Sources>()
     private val lyrics = ArrayList<Pair<String, Boolean>>()
@@ -171,7 +173,7 @@ class OnlineTest {
 
     @Test
     fun sourceRowsFollowTheLookupOrderWithTheirValues() {
-        sources = Sources.COMMONS.copy(fanartTv = true, deezer = true)
+        sources = ArtSources.COMMONS.copy(fanartTv = true, deezer = true)
         start(listOf(Page.Home, Page.Online()))
         val tops = sources.order.map { bounds("art.src.$it").top }
         assertEquals(tops.sorted(), tops)
@@ -185,7 +187,7 @@ class OnlineTest {
 
     @Test
     fun eachSourceSheetHasOnlyTheMovesThatApply() {
-        sources = Sources.COMMONS.copy(fanartTv = true)
+        sources = ArtSources.COMMONS.copy(fanartTv = true)
         val (_, shell) = start(listOf(Page.Home, Page.Online()))
         tap("art.src.${Wikimedia.SOURCE}")
         assertEquals("commons", shell.sheet.title)
@@ -214,7 +216,7 @@ class OnlineTest {
         assertEquals(emptyList<Sources>(), saved)
         tap("art.src.${Sources.DISCOGS}")
         pick(1)
-        assertEquals(listOf(Sources.COMMONS.copy(discogs = true)), saved)
+        assertEquals(listOf(ArtSources.COMMONS.copy(discogs = true)), saved)
         shows("art.src.${Sources.DISCOGS}", "ON")
     }
 
@@ -226,13 +228,13 @@ class OnlineTest {
         assertEquals(emptyList<Sources>(), saved)
         tap("art.src.${Wikimedia.SOURCE}")
         pick(0)
-        assertEquals(listOf(Sources.NONE), saved)
+        assertEquals(listOf(ArtSources.NONE), saved)
         shows("art.src.${Wikimedia.SOURCE}", "OFF")
         tap("art.src.${Wikimedia.SOURCE}")
         assertEquals(listOf("off", "on", "move down"), shell.sheet.items)
         assertEquals(0, shell.sheet.focus)
         pick(1)
-        assertEquals(listOf(Sources.NONE, Sources.COMMONS), saved)
+        assertEquals(listOf(ArtSources.NONE, ArtSources.COMMONS), saved)
         shows("art.src.${Wikimedia.SOURCE}", "ON")
     }
 
@@ -263,7 +265,7 @@ class OnlineTest {
     }
 
     private fun keyEntry(): EditText {
-        sources = Sources.COMMONS.copy(fanartTv = true)
+        sources = ArtSources.COMMONS.copy(fanartTv = true)
         start(listOf(Page.Home, Page.Online()))
         tap("art.src.${Sources.FANART_TV}")
         pick(4)
@@ -302,7 +304,7 @@ class OnlineTest {
 
     @Test
     fun theFanartKeyEntryIsAPasswordFieldTheKeyboardDoesNotLearn() {
-        sources = Sources.COMMONS.copy(fanartTv = true)
+        sources = ArtSources.COMMONS.copy(fanartTv = true)
         start(listOf(Page.Home, Page.Online()))
         tap("art.src.${Sources.FANART_TV}")
         pick(4)
@@ -332,7 +334,7 @@ class OnlineTest {
 
     @Test
     fun aClosedSecretEntryDropsItsText() {
-        sources = Sources.COMMONS.copy(fanartTv = true)
+        sources = ArtSources.COMMONS.copy(fanartTv = true)
         start(listOf(Page.Home, Page.Online()))
         tap("art.src.${Sources.FANART_TV}")
         pick(4)
@@ -347,7 +349,7 @@ class OnlineTest {
 
     @Test
     fun keySavesTheTrimmedKey() {
-        sources = Sources.COMMONS.copy(fanartTv = true)
+        sources = ArtSources.COMMONS.copy(fanartTv = true)
         start(listOf(Page.Home, Page.Online()))
         tap("art.src.${Sources.FANART_TV}")
         pick(4)
@@ -370,7 +372,7 @@ class OnlineTest {
 
     @Test
     fun theClearRowShowsTheCacheSizeAndClearsOnlyOnClear() {
-        sources = Sources.COMMONS.copy(deezer = true)
+        sources = ArtSources.COMMONS.copy(deezer = true)
         val (c, shell) = start(listOf(Page.Home, Page.Online()), usage = cached)
         shows("art.clear", "12.3 MB")
         tap("art.clear")
@@ -392,7 +394,7 @@ class OnlineTest {
 
     @Test
     fun aLongPressOnASourceOffersToClearItsPhotos() {
-        sources = Sources.COMMONS.copy(deezer = true)
+        sources = ArtSources.COMMONS.copy(deezer = true)
         val (c, shell) = start(listOf(Page.Home, Page.Online()), usage = cached)
         hold("art.src.${Sources.DEEZER}")
         assertEquals("clear deezer?", shell.sheet.title)
@@ -413,11 +415,11 @@ class OnlineTest {
 
     @Test
     fun turningASourceOffWithPhotosAsksAndKeepIsFocused() {
-        sources = Sources.COMMONS.copy(deezer = true)
+        sources = ArtSources.COMMONS.copy(deezer = true)
         val (c, shell) = start(listOf(Page.Home, Page.Online()), usage = cached)
         tap("art.src.${Sources.DEEZER}")
         pick(0)
-        assertEquals(listOf(Sources.COMMONS), saved)
+        assertEquals(listOf(ArtSources.COMMONS), saved)
         assertEquals("clear deezer?", shell.sheet.title)
         assertEquals(1, shell.sheet.focus)
         pick(1)
@@ -439,13 +441,13 @@ class OnlineTest {
     @Test
     fun noClearSheetOpensBeforeTheCountsArrive() {
         holdUsage = true
-        sources = Sources.COMMONS.copy(deezer = true)
+        sources = ArtSources.COMMONS.copy(deezer = true)
         val (c, shell) = start(listOf(Page.Home, Page.Online()), usage = cached)
         hold("art.src.${Sources.DEEZER}")
         assertFalse(shell.sheet.shown)
         tap("art.src.${Sources.DEEZER}")
         pick(0)
-        assertEquals(listOf(Sources.COMMONS), saved)
+        assertEquals(listOf(ArtSources.COMMONS), saved)
         assertFalse(shell.sheet.shown)
         tap("art.clear")
         assertFalse(shell.sheet.shown)
@@ -454,11 +456,11 @@ class OnlineTest {
 
     @Test
     fun turningASourceWithNoPhotosOffAsksNothing() {
-        sources = Sources.COMMONS.copy(discogs = true)
+        sources = ArtSources.COMMONS.copy(discogs = true)
         val (c, shell) = start(listOf(Page.Home, Page.Online()), usage = cached)
         tap("art.src.${Sources.DISCOGS}")
         pick(0)
-        assertEquals(listOf(Sources.COMMONS), saved)
+        assertEquals(listOf(ArtSources.COMMONS), saved)
         assertFalse(shell.sheet.shown)
         assertEquals(emptyList<String?>(), c.cleared)
     }
@@ -512,7 +514,7 @@ class OnlineTest {
 
     @Test
     fun theFanartKeyEntryKeepsItsRowJustAboveThePanel() {
-        sources = Sources.COMMONS.copy(theAudioDb = true, fanartTv = true, deezer = true, order = Sources.order("deezer,commons,theaudiodb"))
+        sources = ArtSources.COMMONS.copy(theAudioDb = true, fanartTv = true, deezer = true, order = ArtSources.order("deezer,commons,theaudiodb"))
         val (_, shell) = start(listOf(Page.Home, Page.Online()), w = 360.dp, h = 640.dp, ime = 256.dp)
         tap("art.src.fanarttv")
         pick(4)
@@ -562,7 +564,7 @@ class OnlineTest {
     @Test
     fun theGatedRootListsOnlineUnderTheStatusAndLiveKeepsThePage() {
         link = LinkView(Phase.CONNECTING, "AP80")
-        sources = Sources.COMMONS.copy(fanartTv = true)
+        sources = ArtSources.COMMONS.copy(fanartTv = true)
         val (_, shell) = start(listOf(Page.Connection), gated = true)
         val status = bounds("conn.status")
         val online = bounds("conn.online")
@@ -604,7 +606,7 @@ class OnlineTest {
         settle(1000)
         assertEquals(top, bounds("art.src.${Sources.DEEZER}").top, 1.5f)
         assertTrue(focusedOn("art.src.${Sources.DEEZER}"))
-        assertFalse(focusedOn("art.src.${Sources.YOUTUBE}"))
+        assertFalse(focusedOn("art.src.${YouTubeArt.SOURCE}"))
     }
 
     @Test

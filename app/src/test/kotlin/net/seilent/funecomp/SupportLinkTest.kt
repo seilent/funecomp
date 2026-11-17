@@ -11,14 +11,14 @@ import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollToNode
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before

@@ -6,8 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.proto.SvcInfo
 import net.seilent.funecomp.proto.SvcKey
 import net.seilent.funecomp.proto.gen.Enums
@@ -18,6 +16,8 @@ import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.sim.SvcAcct
 import net.seilent.funecomp.state.SvcOpens
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

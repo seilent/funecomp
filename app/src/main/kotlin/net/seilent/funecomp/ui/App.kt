@@ -38,12 +38,9 @@ import androidx.compose.ui.platform.ViewConfiguration
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.sources.ArtSources
 import net.seilent.funecomp.state.DeleteAsk
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.HomeShuffle
@@ -51,6 +48,10 @@ import net.seilent.funecomp.state.LibDelete
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.state.ListPlays
 import net.seilent.funecomp.state.LyricsFetch
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.Sources
 
 private const val ACCENT_KEY = "accentHue"
 private const val ACCENT_OFF_KEY = "accentOff"
@@ -114,7 +115,7 @@ fun App(
     link: LinkView,
     control: Control,
     shell: Shell,
-    sources: Sources = Sources(),
+    sources: Sources = ArtSources.DEFAULT,
     onSources: (Sources) -> Unit = {},
     art: BackdropArt? = null,
     credits: List<ArtCache.Entry> = emptyList(),

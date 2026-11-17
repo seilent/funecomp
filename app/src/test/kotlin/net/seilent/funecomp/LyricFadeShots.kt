@@ -21,8 +21,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import com.github.takahirom.roborazzi.captureRoboImage
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.LyricsFetch
@@ -33,6 +31,8 @@ import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.Credit
 import org.junit.After
 import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue

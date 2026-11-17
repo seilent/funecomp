@@ -21,7 +21,6 @@ import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
-import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.LyrOffsetReply
 import net.seilent.funecomp.proto.Node
@@ -41,6 +40,7 @@ import net.seilent.funecomp.ui.Nav
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
+import net.seilent.funekit.artist.ArtCache
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

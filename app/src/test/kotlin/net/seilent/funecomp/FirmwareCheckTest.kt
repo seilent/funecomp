@@ -1,11 +1,11 @@
 package net.seilent.funecomp
 
 import android.content.Context
-import net.seilent.funecomp.artist.Firmware
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.proto.FwStatementBuilder
+import net.seilent.funecomp.push.Firmware
 import net.seilent.funecomp.ui.UNSIGNED_RELEASE
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

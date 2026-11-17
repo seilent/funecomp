@@ -1,12 +1,6 @@
 package net.seilent.funecomp
 
 import net.seilent.funecomp.art.Forward
-import net.seilent.funecomp.artist.Art
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtPusher
-import net.seilent.funecomp.artist.Full
-import net.seilent.funecomp.artist.FullPush
-import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
 import net.seilent.funecomp.proto.Groups
@@ -16,6 +10,9 @@ import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.push.ArtPusher
+import net.seilent.funecomp.push.Full
+import net.seilent.funecomp.push.FullPush
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
@@ -24,6 +21,10 @@ import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.LIB_PAGE
+import net.seilent.funekit.artist.Art
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.PushLedger
+import net.seilent.funekit.artist.Sweep
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -354,7 +355,7 @@ class RepushTest {
         old(port, 7, 8)
         listOf(7, 8).forEach { full(it); cached += name(it) }
         val crc = sim.device.stored.getValue("artist 007").crc
-        val records = ArtBlocks(File(tmp.newFolder(), "artblock.tsv")).apply {
+        val records = ArtBlocks(File(tmp.newFolder(), "artblock.tsv"), ledger = PushLedger()).apply {
             add(ArtBlocks.Block("other", null, "test", "id", "sha", "Other", 1L, crc = crc))
         }
         forward(blocks = Forward.Blocks(records, { "v1" }, { n, _ -> "name:$n" })).run(session(port)) { true }
@@ -502,7 +503,7 @@ class RepushTest {
         val (sim, port) = sim()
         aside(port, 7)
         val crc = sim.device.sources.getValue("artist 007").crc
-        val records = ArtBlocks(File(tmp.newFolder(), "artblock.tsv")).apply {
+        val records = ArtBlocks(File(tmp.newFolder(), "artblock.tsv"), ledger = PushLedger()).apply {
             add(ArtBlocks.Block("other", null, "test", "id", "sha", "Other", 1L, crc = crc))
         }
         forward(blocks = Forward.Blocks(records, { "v1" }, { n, _ -> "name:$n" })).run(session(port)) { true }
@@ -516,7 +517,7 @@ class RepushTest {
         val (sim, port) = sim()
         old(port, 7, 8)
         listOf(7, 8).forEach { full(it); cached += name(it) }
-        val records = ArtBlocks(File(tmp.newFolder(), "artblock.tsv")).apply { upgraded("k:${name(7)}", name(7), null, 5L, "other") }
+        val records = ArtBlocks(File(tmp.newFolder(), "artblock.tsv"), ledger = PushLedger()).apply { ledger!!.upgraded("k:${name(7)}", name(7), null, 5L, "other") }
         val ups = object : Forward.Upgrades {
             override fun due() = emptyList<Pair<String, String?>>()
             override fun run(name: String, mbid: String?, w: Int, h: Int): Forward.Upgraded? = null

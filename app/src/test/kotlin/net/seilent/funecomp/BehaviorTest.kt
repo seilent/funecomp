@@ -43,7 +43,6 @@ import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
 import kotlinx.coroutines.CompletableDeferred
-import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tok
@@ -61,6 +60,7 @@ import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.statusText
+import net.seilent.funekit.artist.AutoEqList
 import net.seilent.funekit.core.Section
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

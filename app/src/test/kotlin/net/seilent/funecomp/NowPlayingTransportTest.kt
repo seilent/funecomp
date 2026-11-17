@@ -24,7 +24,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
-import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
@@ -45,6 +44,7 @@ import net.seilent.funecomp.ui.formatTime
 import net.seilent.funecomp.ui.npArt
 import net.seilent.funecomp.ui.npProgressY
 import net.seilent.funecomp.ui.npTitleBaseline
+import net.seilent.funekit.artist.ArtCache
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

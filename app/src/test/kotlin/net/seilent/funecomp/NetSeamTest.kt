@@ -1,8 +1,8 @@
 package net.seilent.funecomp
 
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
-import net.seilent.funecomp.artist.UrlHttp
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
+import net.seilent.funekit.artist.UrlHttp
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertThrows

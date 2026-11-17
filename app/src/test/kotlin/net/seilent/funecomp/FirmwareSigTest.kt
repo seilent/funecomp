@@ -11,12 +11,10 @@ import android.database.MatrixCursor
 import android.net.Uri
 import android.os.Looper
 import android.provider.OpenableColumns
-import net.seilent.funecomp.artist.Firmware
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.push.Firmware
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Options
@@ -25,6 +23,8 @@ import net.seilent.funecomp.ui.PICK_ONE
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickedFile
 import net.seilent.funecomp.ui.UNSIGNED_FIRMWARE
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals

@@ -1,7 +1,7 @@
 package net.seilent.funecomp
 
-import net.seilent.funecomp.artist.Firmware
 import net.seilent.funecomp.proto.FwStatementBuilder
+import net.seilent.funecomp.push.Firmware
 import java.io.ByteArrayInputStream
 import java.io.InputStream
 import java.util.concurrent.CountDownLatch

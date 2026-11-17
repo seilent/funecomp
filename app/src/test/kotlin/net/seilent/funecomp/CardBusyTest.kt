@@ -6,12 +6,6 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
 import net.seilent.funecomp.art.Thumbs
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.Response
-import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
@@ -24,6 +18,12 @@ import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.Response
+import net.seilent.funekit.artist.Wikimedia
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

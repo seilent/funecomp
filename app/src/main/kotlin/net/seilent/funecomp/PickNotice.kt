@@ -7,9 +7,9 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import java.util.UUID
-import net.seilent.funecomp.artist.Names
 import net.seilent.funecomp.ui.PICK_IMAGE
 import net.seilent.funecomp.ui.PickFor
+import net.seilent.funekit.artist.Names
 
 object PickNotice {
     const val CHANNEL = "pick"

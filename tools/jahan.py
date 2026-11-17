@@ -14,7 +14,7 @@ SOURCES = {
 HAN = [(0x3400, 0x4DBF), (0x4E00, 0x9FFF), (0xF900, 0xFAFF), (0x20000, 0x3FFFF)]
 CP932_JIS = set(range(0x81, 0x85)) | set(range(0x88, 0xA0)) | set(range(0xE0, 0xEB))
 CP932_EXT = {0xED, 0xEE, 0xFA, 0xFB, 0xFC}
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "artist/src/main/kotlin/net/seilent/funecomp/artist/gen/JaHan.kt")
+OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sources/src/main/kotlin/net/seilent/funecomp/sources/gen/JaHan.kt")
 WIDTH = 100
 
 
@@ -139,7 +139,7 @@ def main():
     body = "".join("        \"%s\" +\n" % l for l in lines[:-1]) + "        \"%s\"" % lines[-1]
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     with open(OUT, "w", encoding="utf-8") as f:
-        f.write("package net.seilent.funecomp.artist.gen\n\nobject JaHan {\n    const val SIZE = %d\n\n    const val RANGES =\n%s\n}\n" % (len(cps), body))
+        f.write("package net.seilent.funecomp.sources.gen\n\nobject JaHan {\n    const val SIZE = %d\n\n    const val RANGES =\n%s\n}\n" % (len(cps), body))
     print("wrote %s: %d code points, %d ranges, %d chars" % (OUT, len(cps), text.count(",") + 1, len(text)))
 
 

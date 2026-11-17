@@ -1,11 +1,5 @@
 package net.seilent.funecomp.art
 
-import net.seilent.funecomp.artist.Art
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtPusher
-import net.seilent.funecomp.artist.FullPush
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.proto.ImgEntry
 import net.seilent.funecomp.proto.Req
@@ -14,8 +8,16 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.push.ArtPusher
+import net.seilent.funecomp.push.FullPush
+import net.seilent.funecomp.push.Origins
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LibKey
+import net.seilent.funekit.artist.Art
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.PushLedger
+import net.seilent.funekit.artist.Sweep
 import net.seilent.funekit.core.ArtKey
 import java.io.IOException
 
@@ -80,7 +82,9 @@ class Forward(
         val keyOf: (String, String?) -> String,
         val hit: (String) -> Boolean = { false },
         val open: () -> Boolean = { true },
-    )
+    ) {
+        val ledger: PushLedger = requireNotNull(records.ledger) { "art blocks with no push ledger" }
+    }
 
     interface Marks {
         fun begin()
@@ -202,7 +206,7 @@ class Forward(
             }
             b.records.save()
         }
-        val pushes = b.records.pushes(dev)
+        val pushes = b.ledger.pushes(dev)
         val origins = s.hello?.has("imgOrigin") == true
         var lib: Set<String>? = null
         var skip = false
@@ -219,10 +223,10 @@ class Forward(
                 }
                 lib = got.names()
             }
-            val origin = p.origin ?: lib?.let { if (ArtKey.fold(p.name) in it) Enums.ImgOrigin.library else Enums.ImgOrigin.phone }
+            val origin = Origins.wire(p.origin) ?: lib?.let { if (ArtKey.fold(p.name) in it) Enums.ImgOrigin.library else Enums.ImgOrigin.phone }
             val r = pusher.run(listOf(p.name to p.mbid), origin = origin)
             note(s, "unblock", r)
-            if (p.name in r.pushed || p.name in r.stored || p.name in r.missing) b.records.pushed(p, dev)
+            if (p.name in r.pushed || p.name in r.stored || p.name in r.missing) b.ledger.pushed(p, dev)
             if (r.stop != ArtPusher.Stop.DONE) {
                 b.records.save()
                 return r
@@ -256,9 +260,9 @@ class Forward(
                 bytes += r.bytes
                 if (!r.replaced) continue
                 val dev = blocks?.device()
-                blocks?.records?.let { b ->
-                    b.upgraded(r.key, name, mbid, r.at, null, kept(origin))
-                    b.save()
+                blocks?.let { b ->
+                    b.ledger.upgraded(r.key, name, mbid, r.at, null, Origins.of(kept(origin)))
+                    b.records.save()
                 }
                 if (gate != null) {
                     val names = have ?: known?.takeIf { it.session === s }?.names ?: pusher.listing()?.names ?: return stopped(s)
@@ -269,9 +273,9 @@ class Forward(
                 claim(s, p) { origin }
                 note(s, "upgrade", p)
                 if (p.stop != ArtPusher.Stop.DONE) return p
-                if (dev != null && (name in p.pushed || name in p.stored)) blocks?.records?.let { b ->
-                    b.upgrades(dev).firstOrNull { it.key == r.key }?.let { b.upgradeDone(it, dev) }
-                    b.save()
+                if (dev != null && (name in p.pushed || name in p.stored)) blocks?.let { b ->
+                    b.ledger.upgrades(dev).firstOrNull { it.key == r.key }?.let { b.ledger.upgradeDone(it, dev) }
+                    b.records.save()
                 }
             }
         } finally {
@@ -283,7 +287,7 @@ class Forward(
     private fun pending(s: Session, pusher: ArtPusher, keep: () -> Boolean, u: Upgrades, seen: Set<String>): ArtPusher.Report? {
         val b = blocks ?: return null
         val dev = b.device() ?: return null
-        val list = b.records.upgrades(dev)
+        val list = b.ledger.upgrades(dev)
         if (list.isEmpty()) return null
         val rev = device().lib.dataRev
         val k = known?.takeIf { it.session === s && it.rev == rev } ?: run {
@@ -297,22 +301,22 @@ class Forward(
                 if (!keep()) return ArtPusher.Report(ArtPusher.Stop.PREEMPTED)
                 if (!u.open()) break
                 if (u.at(r.key) != r.at) {
-                    b.records.dropUpgrade(r)
+                    b.ledger.dropUpgrade(r)
                     dirty = true
                     continue
                 }
                 if (r.name in seen || r.name !in k.names) {
-                    b.records.upgradeDone(r, dev)
+                    b.ledger.upgradeDone(r, dev)
                     dirty = true
                     continue
                 }
                 if (!k.budget.room) break
-                val origin = kept(r.origin) ?: libOrigin(s, keep, r.name)
+                val origin = kept(Origins.wire(r.origin)) ?: libOrigin(s, keep, r.name)
                 val p = pusher.run(listOf(r.name to r.mbid), origin = origin)
                 claim(s, p) { origin }
                 note(s, "upgrade", p)
                 if (r.name in p.pushed || r.name in p.stored) {
-                    b.records.upgradeDone(r, dev)
+                    b.ledger.upgradeDone(r, dev)
                     dirty = true
                 }
                 if (p.stop != ArtPusher.Stop.DONE) return p
@@ -329,7 +333,7 @@ class Forward(
     private fun held(s: Session, pusher: ArtPusher, keep: () -> Boolean): ArtPusher.Report? {
         val b = blocks ?: return null
         val dev = b.device() ?: return null
-        val list = b.records.held(dev)
+        val list = b.ledger.held(dev)
         if (list.isEmpty()) return null
         val rev = device().lib.dataRev
         val k = known?.takeIf { it.session === s && it.rev == rev } ?: run {
@@ -357,7 +361,7 @@ class Forward(
             }
             if (!k.budget.room) break
             if (h.name !in k.names) {
-                b.records.released(h)
+                b.ledger.released(h)
                 dirty = true
                 continue
             }
@@ -370,7 +374,7 @@ class Forward(
             failed += r.failed
             k.names += r.stored + r.pushed.keys
             if (h.name in r.pushed || h.name in r.stored || h.name in r.missing) {
-                b.records.released(h)
+                b.ledger.released(h)
                 dirty = true
             }
             if (++count % CREDITS_EVERY == 0) progress()
@@ -728,7 +732,7 @@ class Forward(
             if (orphan) {
                 k.names += r.stored + r.pushed.keys
                 val done = row.name in r.pushed || row.name in r.stored || row.name in r.missing
-                val held = if (done || dev == null) null else blocks?.records?.takeIf { cached(row.name, row.mbid) }
+                val held = if (done || dev == null) null else blocks?.ledger?.takeIf { cached(row.name, row.mbid) }
                 if (held != null && dev != null) {
                     held.hold(row.name, row.mbid, dev)
                     dirty = true

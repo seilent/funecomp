@@ -19,12 +19,10 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.Offer
-import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.sim.Library
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
@@ -35,6 +33,8 @@ import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.Preview
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.Offer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -311,7 +311,7 @@ class PressGlowTest {
 
     @Test
     fun thePickWordGlows() {
-        val offer = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", null, null, "月-Tsuki-", ByteArray(1))
+        val offer = Offer(ArtPicks.IMAGE, YouTubeArt.SOURCE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", null, null, "月-Tsuki-", ByteArray(1))
         start(listOf(Page.Home, Page.Online(), Page.PickPreview(PickFor("Tsuki"), listOf(Preview(offer, ImageBitmap(30, 40))))))
         glows("pick", "pick.label", { tagged("pick.label") })
     }

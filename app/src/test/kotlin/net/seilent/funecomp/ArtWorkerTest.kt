@@ -1,10 +1,10 @@
 package net.seilent.funecomp
 
 import net.seilent.funecomp.art.ArtWorker
-import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
 import net.seilent.funecomp.proto.HelloReply
+import net.seilent.funecomp.push.ArtPusher
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Options
@@ -148,7 +148,7 @@ class ArtWorkerTest {
     fun stopDuringASessionCallEndsWithoutDone() {
         val c = Calls()
         val s = session("no-read")
-        val w = worker(c, s) { it, _ -> ArtPusher(it, { n, _, w, h -> net.seilent.funecomp.artist.Art(ByteArray(1000), w, h, n, null, "test", null) }) { true }.run(listOf("Ado" to null)) }
+        val w = worker(c, s) { it, _ -> ArtPusher(it, { n, _, w, h -> net.seilent.funekit.artist.Art(ByteArray(1000), w, h, n, null, "test", null) }) { true }.run(listOf("Ado" to null)) }
         w.want()
         waitFor { c.push.get() == 1 }
         Thread.sleep(300)
@@ -182,12 +182,12 @@ class ArtWorkerTest {
         val c = Calls()
         val blocked = CountDownLatch(1)
         val forever = CountDownLatch(1)
-        val http = net.seilent.funecomp.artist.Http { _, _ ->
+        val http = net.seilent.funekit.artist.Http { _, _ ->
             blocked.countDown()
             forever.await()
-            net.seilent.funecomp.artist.Response(500, ByteArray(0))
+            net.seilent.funekit.artist.Response(500, ByteArray(0))
         }
-        val api = net.seilent.funecomp.artist.Api(http, "ua", net.seilent.funecomp.artist.RateLimiter(0) { 0 }, {})
+        val api = net.seilent.funekit.artist.Api(http, "ua", net.seilent.funekit.artist.RateLimiter(0) { 0 }, {})
         val w = worker(c, session()) { _, run ->
             if (c.push.get() == 1) api.get("https://example.org/a")
             ArtPusher.Report(if (run.current) ArtPusher.Stop.DONE else ArtPusher.Stop.CLOSED)
@@ -211,13 +211,13 @@ class ArtWorkerTest {
         val c = Calls()
         val calls = AtomicInteger()
         val first = CountDownLatch(1)
-        val http = net.seilent.funecomp.artist.Http { _, _ ->
+        val http = net.seilent.funekit.artist.Http { _, _ ->
             calls.incrementAndGet()
             first.countDown()
             Thread.sleep(300)
-            net.seilent.funecomp.artist.Response(404, ByteArray(0))
+            net.seilent.funekit.artist.Response(404, ByteArray(0))
         }
-        val api = net.seilent.funecomp.artist.Api(http, "ua", net.seilent.funecomp.artist.RateLimiter(0) { 0 }, {})
+        val api = net.seilent.funekit.artist.Api(http, "ua", net.seilent.funekit.artist.RateLimiter(0) { 0 }, {})
         val w = worker(c, session()) { _, _ ->
             try {
                 repeat(10) { api.get("https://example.org/$it") }

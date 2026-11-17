@@ -17,8 +17,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.Credit
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
@@ -27,6 +25,8 @@ import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.Credit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule

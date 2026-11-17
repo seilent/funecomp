@@ -14,10 +14,10 @@ import android.os.Looper
 import android.os.ParcelUuid
 import android.provider.Settings
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.ui.REMEDY
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

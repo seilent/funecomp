@@ -1,7 +1,8 @@
 package net.seilent.funecomp
 
-import net.seilent.funecomp.artist.PickLink
-import net.seilent.funecomp.artist.YouTube
+import net.seilent.funecomp.sources.YouTube
+import net.seilent.funecomp.sources.YouTubeArt
+import net.seilent.funekit.artist.PickLink
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -13,21 +14,21 @@ class PickLinkTest {
     @Test
     fun theLinkTableParsesOnTheDevice() {
         val table = mapOf(
-            "https://www.youtube.com/@tsukiniterasarete" to PickLink.YouTube(yt + "@tsukiniterasarete"),
-            "  https://m.youtube.com/@tsukiniterasarete/videos?x=1 " to PickLink.YouTube(yt + "@tsukiniterasarete"),
-            "http://youtube.com/channel/UCLpqcg79IhmfrSrEC1dvNBw" to PickLink.YouTube(yt + "channel/UCLpqcg79IhmfrSrEC1dvNBw"),
-            "https://www.youtube.com/user/kobasolo" to PickLink.YouTube(yt + "user/kobasolo"),
-            "https://www.youtube.com/c/kobasolo/featured" to PickLink.YouTube(yt + "c/kobasolo"),
-            "https://www.youtube.com/@月" to PickLink.YouTube(yt + "@月"),
+            "https://www.youtube.com/@tsukiniterasarete" to YouTubeArt.Channel(yt + "@tsukiniterasarete"),
+            "  https://m.youtube.com/@tsukiniterasarete/videos?x=1 " to YouTubeArt.Channel(yt + "@tsukiniterasarete"),
+            "http://youtube.com/channel/UCLpqcg79IhmfrSrEC1dvNBw" to YouTubeArt.Channel(yt + "channel/UCLpqcg79IhmfrSrEC1dvNBw"),
+            "https://www.youtube.com/user/kobasolo" to YouTubeArt.Channel(yt + "user/kobasolo"),
+            "https://www.youtube.com/c/kobasolo/featured" to YouTubeArt.Channel(yt + "c/kobasolo"),
+            "https://www.youtube.com/@月" to YouTubeArt.Channel(yt + "@月"),
             "https://www.youtube.com/channel/UCshort" to PickLink.Unsupported,
             "https://www.youtube.com/watch?v=abc" to PickLink.Unsupported,
             "https://youtu.be/@tsukiniterasarete" to PickLink.Unsupported,
-            "https://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
-            "http://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw/releases?si=x" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
-            "https://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw?si=abc" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
-            "https://music.youtube.com/browse/UC368BL46Vr1Y2ZbyWXY-ebw" to PickLink.YouTubeMusic(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
-            "https://music.youtube.com/@tsukiniterasarete" to PickLink.YouTubeMusic(ytm + "@tsukiniterasarete", yt + "@tsukiniterasarete"),
-            "https://music.youtube.com/@月" to PickLink.YouTubeMusic(ytm + "@月", yt + "@月"),
+            "https://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw" to YouTubeArt.Music(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "http://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw/releases?si=x" to YouTubeArt.Music(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "https://music.youtube.com/channel/UC368BL46Vr1Y2ZbyWXY-ebw?si=abc" to YouTubeArt.Music(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "https://music.youtube.com/browse/UC368BL46Vr1Y2ZbyWXY-ebw" to YouTubeArt.Music(ytm + "channel/UC368BL46Vr1Y2ZbyWXY-ebw", yt + "channel/UC368BL46Vr1Y2ZbyWXY-ebw"),
+            "https://music.youtube.com/@tsukiniterasarete" to YouTubeArt.Music(ytm + "@tsukiniterasarete", yt + "@tsukiniterasarete"),
+            "https://music.youtube.com/@月" to YouTubeArt.Music(ytm + "@月", yt + "@月"),
             "https://music.youtube.com/watch?v=qwYhKlY4Tx0" to PickLink.Unsupported,
             "https://music.youtube.com/playlist?list=OLAK5uy_lIP2DkJ3PNan7s1VU1PurL-tKQCDkJBv0" to PickLink.Unsupported,
             "https://music.youtube.com/browse/MPREb_aaaaaaaaaaa" to PickLink.Unsupported,
@@ -46,7 +47,7 @@ class PickLinkTest {
             "TSUKI" to PickLink.Unsupported,
             "https://exa mple.org/a.jpg" to PickLink.Unsupported,
         )
-        for ((text, want) in table) assertEquals(text, want, PickLink.parse(text))
+        for ((text, want) in table) assertEquals(text, want, PickLink.parse(text, listOf(YouTubeArt {})))
     }
 
     @Test

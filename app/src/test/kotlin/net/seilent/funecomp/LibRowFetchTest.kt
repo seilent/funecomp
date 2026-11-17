@@ -7,11 +7,11 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
-import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.Lib
 import net.seilent.funecomp.proto.PageInfo
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.sim.Library
+import net.seilent.funecomp.sources.ArtSources
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.LinkView
 import net.seilent.funecomp.ui.Nav
@@ -43,7 +43,7 @@ class LibRowFetchTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) {
-                App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), c, shell, Sources.COMMONS, {})
+                App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), c, shell, ArtSources.COMMONS, {})
             }
         }
         rule.waitForIdle()

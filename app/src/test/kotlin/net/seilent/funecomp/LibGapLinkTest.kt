@@ -6,8 +6,6 @@ import android.content.Context
 import android.content.Intent
 import android.os.Looper
 import android.os.SystemClock
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.proto.Lib
 import net.seilent.funecomp.proto.PageInfo
@@ -22,6 +20,8 @@ import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.LibKey
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

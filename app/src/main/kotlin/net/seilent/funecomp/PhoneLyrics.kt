@@ -1,13 +1,13 @@
 package net.seilent.funecomp
 
-import net.seilent.funecomp.artist.Lrclib
-import net.seilent.funecomp.artist.LyricChain
-import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.PhoneKey
+import net.seilent.funekit.artist.Lrclib
+import net.seilent.funekit.artist.LyricChain
+import net.seilent.funekit.artist.LyricSources
 import net.seilent.funekit.core.Lrc
 import java.util.zip.CRC32
 

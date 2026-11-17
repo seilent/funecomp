@@ -1,12 +1,12 @@
 package net.seilent.funecomp
 
 import android.content.Context
-import net.seilent.funecomp.artist.Accounts
-import net.seilent.funecomp.artist.AppPair
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Listen
-import net.seilent.funecomp.artist.Response
-import net.seilent.funecomp.artist.ScrobbleQueue
+import net.seilent.funekit.artist.Accounts
+import net.seilent.funekit.artist.AppPair
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Listen
+import net.seilent.funekit.artist.Response
+import net.seilent.funekit.artist.ScrobbleQueue
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

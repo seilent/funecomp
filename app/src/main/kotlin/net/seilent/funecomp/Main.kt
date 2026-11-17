@@ -46,13 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.Lifecycle
 import net.seilent.funecomp.art.GalleryRead
-import net.seilent.funecomp.artist.Accounts
-import net.seilent.funecomp.artist.AppPair
-import net.seilent.funecomp.artist.AutoEqIndex
-import net.seilent.funecomp.artist.AutoEqList
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.sources.ArtSources
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Black
@@ -71,6 +67,12 @@ import net.seilent.funecomp.ui.PickedFile
 import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.debugPages
+import net.seilent.funekit.artist.Accounts
+import net.seilent.funekit.artist.AppPair
+import net.seilent.funekit.artist.AutoEqIndex
+import net.seilent.funekit.artist.AutoEqList
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Wikimedia
 import java.util.UUID
 import java.util.regex.Pattern
 
@@ -85,7 +87,7 @@ class Main : ComponentActivity() {
     private var mediaControls by mutableStateOf(true)
     private var lyricsMode by mutableStateOf(false)
     private var spec by mutableStateOf<String?>(null)
-    private var sources by mutableStateOf(Sources())
+    private var sources by mutableStateOf(ArtSources.DEFAULT)
     internal var shell by mutableStateOf(Shell(Nav(listOf(Page.Connection)), gated = true, front = false))
         private set
     private var name by mutableStateOf<String?>(null)
@@ -679,7 +681,7 @@ class Main : ComponentActivity() {
             if (s.fanartTv != was.fanartTv) e.putBoolean(Sources.FANART_TV, s.fanartTv)
             if (s.fanartTvKey != was.fanartTvKey) e.putString(FANART_KEY, s.fanartTvKey)
             if (s.deezer != was.deezer) e.putBoolean(Sources.DEEZER, s.deezer)
-            if (s.youtube != was.youtube) e.putBoolean(Sources.YOUTUBE, s.youtube)
+            if (YouTubeArt.on(s) != YouTubeArt.on(was)) e.putBoolean(YouTubeArt.SOURCE, YouTubeArt.on(s))
             if (s.commons != was.commons) e.putBoolean(Wikimedia.SOURCE, s.commons)
             if (s.order != was.order) e.putString(ORDER, s.order.joinToString(","))
             e.apply()
@@ -687,19 +689,19 @@ class Main : ComponentActivity() {
 
         fun sources(context: Context): Sources {
             val p = context.getSharedPreferences(ART_PREFS, MODE_PRIVATE)
-            if (p.getInt(Sources.DEFAULTS, 0) < Sources.DEFAULTS_REV) synchronized(upgrade) {
-                val edit = Sources.upgrade(p.all)
-                if (edit.write) p.edit().apply { edit.remove.forEach { remove(it) } }.putInt(Sources.DEFAULTS, Sources.DEFAULTS_REV).commit()
+            if (p.getInt(ArtSources.DEFAULTS, 0) < ArtSources.DEFAULTS_REV) synchronized(upgrade) {
+                val edit = ArtSources.upgrade(p.all)
+                if (edit.write) p.edit().apply { edit.remove.forEach { remove(it) } }.putInt(ArtSources.DEFAULTS, ArtSources.DEFAULTS_REV).commit()
             }
             return Sources(
-                p.getBoolean(Sources.THE_AUDIO_DB, true),
-                p.getBoolean(Sources.DISCOGS, true),
-                p.getBoolean(Sources.FANART_TV, true),
-                p.getString(FANART_KEY, "") ?: "",
-                p.getBoolean(Sources.DEEZER, true),
-                p.getBoolean(Sources.YOUTUBE, true),
-                Sources.order(p.getString(ORDER, null)),
-                p.getBoolean(Wikimedia.SOURCE, true),
+                theAudioDb = p.getBoolean(Sources.THE_AUDIO_DB, true),
+                discogs = p.getBoolean(Sources.DISCOGS, true),
+                fanartTv = p.getBoolean(Sources.FANART_TV, true),
+                fanartTvKey = p.getString(FANART_KEY, "") ?: "",
+                deezer = p.getBoolean(Sources.DEEZER, true),
+                order = ArtSources.order(p.getString(ORDER, null)),
+                commons = p.getBoolean(Wikimedia.SOURCE, true),
+                plugins = mapOf(YouTubeArt.SOURCE to p.getBoolean(YouTubeArt.SOURCE, true)),
             )
         }
     }

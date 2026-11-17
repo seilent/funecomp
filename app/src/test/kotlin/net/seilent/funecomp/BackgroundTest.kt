@@ -12,7 +12,6 @@ import android.net.NetworkCapabilities
 import android.os.Looper
 import net.seilent.funecomp.art.Forward
 import net.seilent.funecomp.art.Thumbs
-import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
@@ -29,6 +28,7 @@ import net.seilent.funecomp.state.LyricsPlan
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.LyricSources
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -64,8 +64,8 @@ class BackgroundTest {
         shadowOf(app).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT, Manifest.permission.POST_NOTIFICATIONS)
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
         MediaLink.controls(app, false)
-        Remote.artist(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
-        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
+        Remote.artist(app, net.seilent.funekit.artist.Http { _, _ -> net.seilent.funekit.artist.Response(404, ByteArray(0)) })
+        Lyrics.init(app, net.seilent.funekit.artist.Http { _, _ -> net.seilent.funekit.artist.Response(404, ByteArray(0)) })
     }
 
     @After
@@ -123,10 +123,10 @@ class BackgroundTest {
         if (sweep != null) e.putInt("sweep", sweep)
         e.commit()
         Remote.resetArtist()
-        Remote.artist(app, net.seilent.funecomp.artist.Http { u, _ ->
+        Remote.artist(app, net.seilent.funekit.artist.Http { u, _ ->
             urls += u
             onUrl(u)
-            net.seilent.funecomp.artist.Response(404, ByteArray(0))
+            net.seilent.funekit.artist.Response(404, ByteArray(0))
         })
         val names = listOf("Now") + List(Forward.QUEUE_AHEAD.toInt()) { "Q" } + swept
         val lib = net.seilent.funecomp.sim.Library(names.mapIndexed { i, n -> net.seilent.funecomp.sim.Track(i + 1L, n, listOf(n), "A$i", n, "T$i", 200_000, "a", "t$i.flac") })
@@ -368,9 +368,9 @@ class BackgroundTest {
     fun lyricsArePutOncePerTrackAcrossADrop() {
         val dir = kotlin.io.path.createTempDirectory("lrc").toFile()
         val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
-        Lyrics.init(app, net.seilent.funecomp.artist.Http { url, _ ->
+        Lyrics.init(app, net.seilent.funekit.artist.Http { url, _ ->
             calls += url
-            net.seilent.funecomp.artist.Response(200, "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}".toByteArray())
+            net.seilent.funekit.artist.Response(200, "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}".toByteArray())
         })
         Lyrics.set(LyricSources.NETEASE, false)
         Lyrics.set(LyricSources.LRCLIB, true)
@@ -404,8 +404,8 @@ class BackgroundTest {
 
     @Test
     fun aRefusedLyricsPutIsNotSentAgain() {
-        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ ->
-            net.seilent.funecomp.artist.Response(200, "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}".toByteArray())
+        Lyrics.init(app, net.seilent.funekit.artist.Http { _, _ ->
+            net.seilent.funekit.artist.Response(200, "{\"syncedLyrics\":\"[00:01.00]line\\n\",\"instrumental\":false}".toByteArray())
         })
         Lyrics.set(LyricSources.NETEASE, false)
         Lyrics.set(LyricSources.LRCLIB, true)
@@ -439,9 +439,9 @@ class BackgroundTest {
     private fun lyricsFrom(body: String, code: Int = 200): MutableList<String> {
         java.io.File(app.filesDir, "lyrics").deleteRecursively()
         val calls = java.util.concurrent.CopyOnWriteArrayList<String>()
-        Lyrics.init(app, net.seilent.funecomp.artist.Http { url, _ ->
+        Lyrics.init(app, net.seilent.funekit.artist.Http { url, _ ->
             calls += url
-            net.seilent.funecomp.artist.Response(code, body.toByteArray())
+            net.seilent.funekit.artist.Response(code, body.toByteArray())
         })
         Lyrics.set(LyricSources.NETEASE, false)
         Lyrics.set(LyricSources.LRCLIB, true)
@@ -458,19 +458,19 @@ class BackgroundTest {
 
     private fun stored() = logs.filter { it.startsWith("stored lrc") }
 
-    private fun neteaseFor(lrclib: (String) -> net.seilent.funecomp.artist.Response, gets: MutableList<String>, posts: MutableList<String>) {
+    private fun neteaseFor(lrclib: (String) -> net.seilent.funekit.artist.Response, gets: MutableList<String>, posts: MutableList<String>) {
         java.io.File(app.filesDir, "lyrics").deleteRecursively()
         val tracks = net.seilent.funecomp.sim.Library.synthetic().tracks
-        Lyrics.init(app, object : net.seilent.funecomp.artist.Http {
-            override fun get(url: String, headers: Map<String, String>): net.seilent.funecomp.artist.Response {
+        Lyrics.init(app, object : net.seilent.funekit.artist.Http {
+            override fun get(url: String, headers: Map<String, String>): net.seilent.funekit.artist.Response {
                 gets += url
                 return lrclib(url)
             }
 
-            override fun post(url: String, headers: Map<String, String>, body: ByteArray): net.seilent.funecomp.artist.Response {
+            override fun post(url: String, headers: Map<String, String>, body: ByteArray): net.seilent.funekit.artist.Response {
                 val form = String(body, Charsets.UTF_8)
                 posts += "$url $form"
-                val json = if (url == net.seilent.funecomp.artist.NetEase.SEARCH) {
+                val json = if (url == net.seilent.funecomp.sources.NetEase.SEARCH) {
                     val q = java.net.URLDecoder.decode(form.substringAfter("s=").substringBefore('&'), "UTF-8")
                     val i = tracks.indexOfFirst { q == it.title || q.startsWith(it.title + " ") }
                     val t = tracks.getOrNull(i)
@@ -478,7 +478,7 @@ class BackgroundTest {
                 } else {
                     "{\"lrc\":{\"lyric\":\"${(1..5).joinToString("\\n") { "[00:0$it.00]ne$it" }}\"},\"code\":200}"
                 }
-                return net.seilent.funecomp.artist.Response(200, json.toByteArray())
+                return net.seilent.funekit.artist.Response(200, json.toByteArray())
             }
         })
         org.robolectric.shadows.ShadowLog.clear()
@@ -501,13 +501,13 @@ class BackgroundTest {
     fun aNeteaseSyncedIsPutWhenLrclibMisses() {
         val gets = java.util.concurrent.CopyOnWriteArrayList<String>()
         val posts = java.util.concurrent.CopyOnWriteArrayList<String>()
-        neteaseFor({ net.seilent.funecomp.artist.Response(404, ByteArray(0)) }, gets, posts)
+        neteaseFor({ net.seilent.funekit.artist.Response(404, ByteArray(0)) }, gets, posts)
         val c = live(sim())
         waitFor(30_000) { stored().size >= 3 }
         Thread.sleep(1500)
         assertTrue(stored().all { it.endsWith("kind=synced") })
         putsMatchStored("netease")
-        assertTrue(posts.any { it.startsWith(net.seilent.funecomp.artist.NetEase.LYRIC) })
+        assertTrue(posts.any { it.startsWith(net.seilent.funecomp.sources.NetEase.LYRIC) })
         Lyrics.set(LyricSources.NETEASE, false)
         c.destroy()
     }
@@ -516,7 +516,7 @@ class BackgroundTest {
     fun turningASourceOnAsksItForTracksAlreadyDone() {
         val gets = java.util.concurrent.CopyOnWriteArrayList<String>()
         val posts = java.util.concurrent.CopyOnWriteArrayList<String>()
-        neteaseFor({ net.seilent.funecomp.artist.Response(404, ByteArray(0)) }, gets, posts)
+        neteaseFor({ net.seilent.funekit.artist.Response(404, ByteArray(0)) }, gets, posts)
         Lyrics.set(LyricSources.NETEASE, false)
         val c = live(sim())
         waitFor(30_000) { gets.size >= 1 + LyricsPlan.AHEAD }
@@ -534,7 +534,7 @@ class BackgroundTest {
     fun aFailingLrclibTripsOnlyItsOwnBreakerAndNeteaseStillPuts() {
         val gets = java.util.concurrent.CopyOnWriteArrayList<String>()
         val posts = java.util.concurrent.CopyOnWriteArrayList<String>()
-        neteaseFor({ net.seilent.funecomp.artist.Response(500, ByteArray(0)) }, gets, posts)
+        neteaseFor({ net.seilent.funekit.artist.Response(500, ByteArray(0)) }, gets, posts)
         val c = live(sim())
         waitFor(60_000) { stored().size >= 1 + LyricsPlan.AHEAD }
         Thread.sleep(1000)
@@ -677,7 +677,7 @@ class BackgroundTest {
 
     private fun uid(i: Int) = java.lang.Long.toUnsignedString(synth[i].id)
 
-    private fun keyOf(t: net.seilent.funecomp.sim.Track, artist: String) = net.seilent.funecomp.artist.Lrclib.Query(t.title, artist, t.album, t.durationMs).key
+    private fun keyOf(t: net.seilent.funecomp.sim.Track, artist: String) = net.seilent.funekit.artist.Lrclib.Query(t.title, artist, t.album, t.durationMs).key
 
     private fun marker(i: Int): java.io.File {
         val t = synth[i]
@@ -1080,8 +1080,8 @@ class BackgroundTest {
     @Test
     fun aMarkerLeftUnderTheOtherKeyNeverDeletesACleanCopy() {
         java.io.File(app.filesDir, "lyrics").deleteRecursively()
-        Lyrics.init(app, net.seilent.funecomp.artist.Http { url, _ ->
-            if ("artist_name=A%2C%20B" in url) net.seilent.funecomp.artist.Response(200, syntheticSyncedBody.toByteArray()) else net.seilent.funecomp.artist.Response(404, ByteArray(0))
+        Lyrics.init(app, net.seilent.funekit.artist.Http { url, _ ->
+            if ("artist_name=A%2C%20B" in url) net.seilent.funekit.artist.Response(200, syntheticSyncedBody.toByteArray()) else net.seilent.funekit.artist.Response(404, ByteArray(0))
         })
         Lyrics.set(LyricSources.NETEASE, false)
         Lyrics.set(LyricSources.LRCLIB, true)
@@ -1213,7 +1213,7 @@ class BackgroundTest {
         val gate = java.util.concurrent.CountDownLatch(1)
         Lyrics.phone { gate.await() }
         org.robolectric.shadows.ShadowLog.clear()
-        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(200, syntheticSyncedBody.toByteArray()) })
+        Lyrics.init(app, net.seilent.funekit.artist.Http { _, _ -> net.seilent.funekit.artist.Response(200, syntheticSyncedBody.toByteArray()) })
         Lyrics.set(LyricSources.NETEASE, false)
         Lyrics.set(LyricSources.LRCLIB, true)
         val c = Robolectric.buildService(LinkService::class.java, startIntent(sim())).create().startCommand(0, 1)
@@ -1225,11 +1225,11 @@ class BackgroundTest {
         assertTrue(all.indexOf("nemix sweep 1 1") in 0 until all.indexOfFirst { it.startsWith("lrc put ") })
         assertEquals("han", dir.resolve("abc.ne.bad").readText().substringAfter('\n'))
         assertFalse(dir.resolve("abc.ne.lrc").exists())
-        assertEquals(net.seilent.funecomp.artist.NeMix.VERSION, app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).getInt("nemix", 0))
+        assertEquals(net.seilent.funecomp.sources.NeMix.VERSION, app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).getInt("nemix", 0))
         c.destroy()
         Lyrics.reset()
         dir.resolve("def.ne.lrc").writeText(mixedBody)
-        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
+        Lyrics.init(app, net.seilent.funekit.artist.Http { _, _ -> net.seilent.funekit.artist.Response(404, ByteArray(0)) })
         Lyrics.phone {}
         Thread.sleep(300)
         assertTrue(dir.resolve("def.ne.lrc").exists())
@@ -1247,7 +1247,7 @@ class BackgroundTest {
             assumeFalse(locked.canRead())
             app.getSharedPreferences("lyrics", Context.MODE_PRIVATE).edit().remove("nemix").commit()
             org.robolectric.shadows.ShadowLog.clear()
-            Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
+            Lyrics.init(app, net.seilent.funekit.artist.Http { _, _ -> net.seilent.funekit.artist.Response(404, ByteArray(0)) })
             val done = java.util.concurrent.CountDownLatch(1)
             Lyrics.phone { done.countDown() }
             assertTrue(done.await(5, TimeUnit.SECONDS))

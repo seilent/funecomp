@@ -10,10 +10,9 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Tile
-import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.sources.ArtSources
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
@@ -25,6 +24,9 @@ import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
+import net.seilent.funekit.artist.BrowseFeed
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Tile
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -46,7 +48,7 @@ class TileFrameTest {
     private fun start() {
         val c = SimControl("ap80")
         val control = object : Control by c {
-            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (BrowseFeed.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 deliver = {
                     sections(listOf(Sources.DEEZER))
                     (0 until TILES).forEach { tile(Sources.DEEZER, BrowseTile(Tile(Sources.DEEZER, "${Sources.DEEZER} $it", ByteArray(1), "https://e/${Sources.DEEZER}/$it.jpg", "${Sources.DEEZER}$it", null), ImageBitmap(8, 8))) }
@@ -59,7 +61,7 @@ class TileFrameTest {
         val shell = Shell(Nav(listOf(Page.Home, Page.NowPlaying, Page.Browse(PickFor("TSUKI")))))
         rule.mainClock.autoAdvance = false
         rule.setUptimeContent {
-            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, Sources.COMMONS.copy(youtube = true)) }
+            Box(Modifier.requiredSize(411.dp, 960.dp)) { App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, YouTubeArt.with(ArtSources.COMMONS, true)) }
         }
         settle(1000)
         deliver()

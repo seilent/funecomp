@@ -11,17 +11,8 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import net.seilent.funecomp.artist.Accounts
-import net.seilent.funecomp.artist.AppPair
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.LastFm
-import net.seilent.funecomp.artist.Listen
-import net.seilent.funecomp.artist.ListenBrainz
-import net.seilent.funecomp.artist.Scrobbler
-import net.seilent.funecomp.artist.Sent
-import net.seilent.funecomp.artist.SignIn
-import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.link.Session
+import net.seilent.funecomp.proto.PlayEntry
 import net.seilent.funecomp.proto.PlayLogReply
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.State
@@ -31,6 +22,17 @@ import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.PlayLogSync
 import net.seilent.funecomp.state.Plays
 import net.seilent.funecomp.ui.ScrobbleView
+import net.seilent.funekit.artist.Accounts
+import net.seilent.funekit.artist.AppPair
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.LastFm
+import net.seilent.funekit.artist.Listen
+import net.seilent.funekit.artist.ListenBrainz
+import net.seilent.funekit.artist.Scrobbler
+import net.seilent.funekit.artist.Sent
+import net.seilent.funekit.artist.SignIn
+import net.seilent.funekit.artist.UrlHttp
+import net.seilent.funekit.core.PlayEntry as LogEntry
 import java.io.File
 import java.io.IOException
 import java.time.ZoneId
@@ -41,6 +43,22 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 class Capture(val base: String, val wrap: (Http) -> Http)
+
+internal fun PlayEntry.logged() = LogEntry(
+    seq = seq,
+    startLocalS = startLocalS,
+    durationMs = durationMs,
+    title = title,
+    artist = artist,
+    artists = artists,
+    mbids = mbids,
+    album = album,
+    albumArtist = albumArtist,
+    trackNo = trackNo,
+    zoneS = zoneS,
+    liveSeen = liveSeen,
+    exposed = exposed,
+)
 
 object Scrobbles {
     private const val PREFS = "scrobble"
@@ -99,7 +117,7 @@ object Scrobbles {
         val net = (http ?: UrlHttp()).let { cap?.wrap?.invoke(it) ?: it }
         exec.execute {
             val s = Scrobbler(
-                d, net, { accounts(app) }, pair, version, reauth = ::expired, dirSync = sync,
+                d, net, { accounts(app) }, pair, Agents.of(version), reauth = ::expired, dirSync = sync,
                 lastFmBase = cap?.let { "${it.base}/2.0/" } ?: LastFm.BASE, listenBrainzBase = cap?.base ?: ListenBrainz.BASE,
                 zone = { zone() }, stop = { waiting.get() > 0 },
             ) { Log.i(Remote.TAG, it) }
@@ -143,7 +161,7 @@ object Scrobbles {
         view = ScrobbleView()
     }
 
-    private fun playLogSync(card: Boolean = false) = PlayLogSync({ scrobbler?.queue?.dap(it) }, card) { Log.i(Remote.TAG, it) }
+    private fun playLogSync(card: Boolean = false) = PlayLogSync({ scrobbler?.queue?.logSeq(it) }, card) { Log.i(Remote.TAG, it) }
 
     internal fun idle() {
         exec.submit {}.get(DRAIN_S, TimeUnit.SECONDS)
@@ -215,7 +233,7 @@ object Scrobbles {
             }
             is PlayLogSync.Store -> {
                 val upTo = try {
-                    scrobbler?.addLog(d.log, d.entries, if (hosted) ZoneOffset.UTC else zone())
+                    scrobbler?.addLog(d.log, d.entries.map { it.logged() }, if (hosted) ZoneOffset.UTC else zone())
                 } catch (e: IOException) {
                     Log.w(Remote.TAG, "playlog store: $e")
                     null

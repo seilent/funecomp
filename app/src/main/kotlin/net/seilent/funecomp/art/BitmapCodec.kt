@@ -6,10 +6,10 @@ import android.graphics.ColorSpace
 import android.graphics.Matrix
 import android.graphics.PointF
 import android.media.FaceDetector
-import net.seilent.funecomp.artist.Codec
-import net.seilent.funecomp.artist.Picture
-import net.seilent.funecomp.artist.Rect
-import net.seilent.funecomp.artist.Size
+import net.seilent.funekit.artist.Codec
+import net.seilent.funekit.artist.Picture
+import net.seilent.funekit.artist.Rect
+import net.seilent.funekit.artist.Size
 import java.io.ByteArrayOutputStream
 
 class BitmapCodec(private val log: (String) -> Unit = {}) : Codec {

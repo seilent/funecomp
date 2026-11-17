@@ -57,6 +57,7 @@ android {
     sourceSets {
         getByName("androidTest") {
             resources.directories += "../kit/core/src/test/resources"
+            resources.directories += "../kit/artist/src/test/resources"
         }
     }
 
@@ -90,8 +91,10 @@ android {
 
 dependencies {
     implementation(project(":link"))
-    implementation(project(":artist"))
+    implementation(project(":push"))
+    implementation(project(":sources"))
     implementation("net.seilent.funekit:core")
+    implementation("net.seilent.funekit:artist")
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)

@@ -15,11 +15,10 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Tile
-import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.sources.ArtSources
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BrowseTile
@@ -32,6 +31,9 @@ import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
+import net.seilent.funekit.artist.BrowseFeed
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Tile
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
@@ -169,7 +171,7 @@ class PressFrameShots {
     }
 
     private fun browsing(c: SimControl): Control = object : Control by c {
-        override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+        override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (BrowseFeed.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
             deliver = {
                 sections(listOf(Sources.DEEZER))
                 (0 until TILES).forEach { tile(Sources.DEEZER, BrowseTile(Tile(Sources.DEEZER, "${Sources.DEEZER} $it", ByteArray(1), "https://e/${Sources.DEEZER}/$it.jpg", "${Sources.DEEZER}$it", null), ImageBitmap(8, 8))) }
@@ -189,7 +191,7 @@ class PressFrameShots {
         val control = if (k.tiles) browsing(c) else c
         rule.mainClock.autoAdvance = false
         rule.setContent {
-            Box(Modifier.requiredSize(411.dp, 960.dp).testTag("frame")) { App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, if (k.tiles) Sources.COMMONS.copy(youtube = true) else Sources()) }
+            Box(Modifier.requiredSize(411.dp, 960.dp).testTag("frame")) { App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, if (k.tiles) YouTubeArt.with(ArtSources.COMMONS, true) else ArtSources.DEFAULT) }
         }
         settle(1000)
         if (k.tiles) {

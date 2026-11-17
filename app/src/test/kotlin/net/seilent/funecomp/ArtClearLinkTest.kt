@@ -8,20 +8,6 @@ import android.content.pm.ApplicationInfo
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Looper
-import net.seilent.funecomp.artist.Art
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.ArtPusher
-import net.seilent.funecomp.artist.Full
-import net.seilent.funecomp.artist.FullPush
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.ImageIds
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.Response
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.TcpTransport
 import net.seilent.funecomp.proto.Groups
@@ -29,12 +15,29 @@ import net.seilent.funecomp.proto.HelloReply
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.Req
 import net.seilent.funecomp.proto.gen.Msg
+import net.seilent.funecomp.push.ArtPusher
+import net.seilent.funecomp.push.Full
+import net.seilent.funecomp.push.FullPush
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
+import net.seilent.funecomp.sources.ArtSources
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.Art
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.ImageIds
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.PushLedger
+import net.seilent.funekit.artist.Response
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Wikimedia
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -123,8 +126,8 @@ class ArtClearLinkTest {
     private fun prefs() = app.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE)
 
     private fun sources(vararg on: String) {
-        val e = prefs().edit().putInt(Sources.DEFAULTS, Sources.DEFAULTS_REV)
-        for (k in listOf(Sources.THE_AUDIO_DB, Sources.DISCOGS, Sources.FANART_TV, Sources.DEEZER, Sources.YOUTUBE, Wikimedia.SOURCE)) e.putBoolean(k, k in on)
+        val e = prefs().edit().putInt(ArtSources.DEFAULTS, ArtSources.DEFAULTS_REV)
+        for (k in listOf(Sources.THE_AUDIO_DB, Sources.DISCOGS, Sources.FANART_TV, Sources.DEEZER, YouTubeArt.SOURCE, Wikimedia.SOURCE)) e.putBoolean(k, k in on)
         e.commit()
     }
 
@@ -141,7 +144,7 @@ class ArtClearLinkTest {
     private fun keep(artist: String = name, source: String = Sources.DEEZER) =
         cache().putHit(ArtCache.Entry("name:${Names.fold(artist)}", artist, null, source, null, "https://e/$artist.jpg", System.currentTimeMillis(), artist), jpeg())
 
-    private fun records() = ArtBlocks(File(app.filesDir, "artblock.tsv")).drops()
+    private fun records() = ArtBlocks(File(app.filesDir, "artblock.tsv"), ledger = PushLedger()).drops()
 
     private fun stored(artist: String) = lines.filter { it.startsWith("stored name=$artist ") }
 

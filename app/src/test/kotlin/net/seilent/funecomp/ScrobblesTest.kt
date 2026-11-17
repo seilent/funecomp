@@ -2,11 +2,6 @@ package net.seilent.funecomp
 
 import android.content.Context
 import android.util.Log
-import net.seilent.funecomp.artist.Accounts
-import net.seilent.funecomp.artist.AppPair
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
-import net.seilent.funecomp.artist.ScrobbleQueue
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.link.Transport
 import net.seilent.funecomp.proto.ErrorReply
@@ -21,6 +16,11 @@ import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funekit.artist.Accounts
+import net.seilent.funekit.artist.AppPair
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
+import net.seilent.funekit.artist.ScrobbleQueue
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -251,7 +251,7 @@ class ScrobblesTest {
     @Test
     fun aSecondYieldWhileAFlushIsPendingPostsNoOther() {
         Scrobbles.reset()
-        ScrobbleQueue(File(app.filesDir, "scrobble")).addLog(0xA1, listOf(exposed()), setOf(Accounts.LISTEN_BRAINZ), ZoneOffset.UTC, at + 86400)
+        ScrobbleQueue(File(app.filesDir, "scrobble")).addLog(0xA1, listOf(exposed().logged()), setOf(Accounts.LISTEN_BRAINZ), ZoneOffset.UTC, at + 86400)
         checking()
         assertTrue(entered.await(5, TimeUnit.SECONDS))
         Scrobbles.state(State(), 0)
@@ -268,7 +268,7 @@ class ScrobblesTest {
     @Test
     fun aQueuedGetReplyStopsTheCheckBetweenReads() {
         Scrobbles.reset()
-        ScrobbleQueue(File(app.filesDir, "scrobble")).addLog(0xA1, listOf(exposed()), setOf(Accounts.LISTEN_BRAINZ), ZoneOffset.UTC, at + 86400)
+        ScrobbleQueue(File(app.filesDir, "scrobble")).addLog(0xA1, listOf(exposed().logged()), setOf(Accounts.LISTEN_BRAINZ), ZoneOffset.UTC, at + 86400)
         down = true
         checking()
         Scrobbles.idle()
@@ -290,7 +290,7 @@ class ScrobblesTest {
     @Test
     fun aQueuedStateStopsTheCheckBetweenReadsAndTheFlushBehindItKeepsItsReads() {
         Scrobbles.reset()
-        ScrobbleQueue(File(app.filesDir, "scrobble")).addLog(0xA1, listOf(exposed()), setOf(Accounts.LISTEN_BRAINZ), ZoneOffset.UTC, at + 86400)
+        ScrobbleQueue(File(app.filesDir, "scrobble")).addLog(0xA1, listOf(exposed().logged()), setOf(Accounts.LISTEN_BRAINZ), ZoneOffset.UTC, at + 86400)
         checking()
         assertTrue(entered.await(5, TimeUnit.SECONDS))
         Scrobbles.state(state(0), 2_000_000_000_000)

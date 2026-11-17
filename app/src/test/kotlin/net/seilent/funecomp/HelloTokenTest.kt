@@ -8,8 +8,6 @@ import android.content.pm.ApplicationInfo
 import android.os.Looper
 import android.os.SystemClock
 import net.seilent.funecomp.art.Thumbs
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.proto.LibRow
 import net.seilent.funecomp.proto.Req
@@ -22,6 +20,8 @@ import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.state.LibDelete
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals

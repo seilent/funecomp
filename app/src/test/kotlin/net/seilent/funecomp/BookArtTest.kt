@@ -1,9 +1,9 @@
 package net.seilent.funecomp
 
 import net.seilent.funecomp.art.Forward
-import net.seilent.funecomp.artist.ArtPusher
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.push.ArtPusher
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

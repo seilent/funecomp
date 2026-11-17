@@ -20,15 +20,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.platform.testTag
 import androidx.lifecycle.compose.LifecycleResumeEffect
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.ArtPusher
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
+import net.seilent.funecomp.push.ArtPusher
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.Sources
 import java.util.Locale
 
 internal const val REMEDY = "settings > system > pair phone app"

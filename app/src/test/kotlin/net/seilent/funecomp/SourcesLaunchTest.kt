@@ -9,7 +9,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.core.app.ActivityScenario
-import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.sources.ArtSources
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -55,7 +55,7 @@ class SourcesLaunchTest {
             .putBoolean("deezer", false).putBoolean("youtube", false).putString("order", "commons,theaudiodb,fanarttv,discogs,youtube,deezer").commit()
         scenario = ActivityScenario.launch(Intent(app, Main::class.java).setAction(Intent.ACTION_MAIN).putExtra(Main.EXTRA_PAGE, "art"))
         rule.waitForIdle()
-        val tops = Sources.ORDER.map { rule.onNodeWithTag("art.src.$it").fetchSemanticsNode().boundsInRoot.top }
+        val tops = ArtSources.ORDER.map { rule.onNodeWithTag("art.src.$it").fetchSemanticsNode().boundsInRoot.top }
         assertEquals(tops.sorted(), tops)
         for (id in listOf("theaudiodb", "youtube", "discogs", "deezer")) shows("art.src.$id", "ON")
         shows("art.src.fanarttv", "NO KEY")

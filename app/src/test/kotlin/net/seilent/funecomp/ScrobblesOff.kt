@@ -1,9 +1,9 @@
 package net.seilent.funecomp
 
 import android.content.Context
-import net.seilent.funecomp.artist.AppPair
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
+import net.seilent.funekit.artist.AppPair
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import org.junit.Assert.assertEquals
 import java.io.IOException
 import java.util.concurrent.atomic.AtomicInteger

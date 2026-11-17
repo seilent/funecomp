@@ -1,12 +1,12 @@
 package net.seilent.funecomp
 
-import net.seilent.funecomp.artist.Lrclib
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.PhoneKey
+import net.seilent.funekit.artist.Lrclib
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.Sweep
 import net.seilent.funekit.core.Lrc
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -372,7 +372,7 @@ class PhoneLyricsTest {
 
     private fun ask(
         durationMs: Long,
-        sources: LyricSources = LyricSources(),
+        sources: LyricSources = LyricSources(lrclib = true, netease = true),
         lrclib: (Lrclib.Query) -> Lrclib.Found? = { null },
         netease: (Lrclib.Query) -> Lrclib.Found? = { null },
     ) = PhoneLyrics.ask(

@@ -48,8 +48,6 @@ import kotlin.math.max
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 import net.seilent.funecomp.art.Thumbs
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.Crop
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
@@ -92,6 +90,8 @@ import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.NpKey
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.Playing
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.Crop
 
 internal const val PIN_LEAD_MS = 200L
 val LocalUptime = staticCompositionLocalOf<() -> Long> { SystemClock::uptimeMillis }

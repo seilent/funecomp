@@ -7,12 +7,6 @@ import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Looper
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.Response
-import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.AppState
 import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.Groups
@@ -30,6 +24,12 @@ import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.AppsView
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.byeText
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.Response
+import net.seilent.funekit.artist.Wikimedia
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

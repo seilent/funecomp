@@ -27,32 +27,6 @@ import net.seilent.funecomp.art.Gallery
 import net.seilent.funecomp.art.Memo
 import net.seilent.funecomp.art.Pending
 import net.seilent.funecomp.art.ThumbWorker
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.ArtCrops
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.ArtPusher
-import net.seilent.funecomp.artist.ArtistArt
-import net.seilent.funecomp.artist.Backdrop
-import net.seilent.funecomp.artist.BrowseFeed
-import net.seilent.funecomp.artist.Clock
-import net.seilent.funecomp.artist.Crop
-import net.seilent.funecomp.artist.FullPush
-import net.seilent.funecomp.artist.GalleryStore
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.HttpRun
-import net.seilent.funecomp.artist.ImageIds
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.Offer
-import net.seilent.funecomp.artist.Offered
-import net.seilent.funecomp.artist.PickLink
-import net.seilent.funecomp.artist.Size
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Sweep
-import net.seilent.funecomp.artist.Targets
-import net.seilent.funecomp.artist.Tile
-import net.seilent.funecomp.artist.UrlHttp
-import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.link.ArtGet
 import net.seilent.funecomp.link.Link
 import net.seilent.funecomp.link.LyrGet
@@ -88,6 +62,11 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.push.ArtPusher
+import net.seilent.funecomp.push.FullPush
+import net.seilent.funecomp.push.FullSource
+import net.seilent.funecomp.push.Origins
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.ClockSync
 import net.seilent.funecomp.state.DeleteAsk
@@ -113,6 +92,29 @@ import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.Preview
 import net.seilent.funecomp.ui.Previewed
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.ArtCrops
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.ArtistArt
+import net.seilent.funekit.artist.Backdrop
+import net.seilent.funekit.artist.BrowseFeed
+import net.seilent.funekit.artist.Clock
+import net.seilent.funekit.artist.Crop
+import net.seilent.funekit.artist.GalleryStore
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.HttpRun
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.Offer
+import net.seilent.funekit.artist.Offered
+import net.seilent.funekit.artist.PickLink
+import net.seilent.funekit.artist.PushLedger
+import net.seilent.funekit.artist.Size
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Sweep
+import net.seilent.funekit.artist.Targets
+import net.seilent.funekit.artist.Tile
+import net.seilent.funekit.artist.UrlHttp
 import java.io.File
 import java.io.IOException
 import java.time.ZoneId
@@ -148,6 +150,7 @@ object Remote : Control {
     private const val TRANSITION_PAD_MS = 1_000L
     private const val OPEN_APP = "open the phone app"
     private val SECRET = Regex("(api_key|key|token|secret)=[^&]*")
+    private val artLog: (String) -> Unit = { Log.w(TAG, it.replace(SECRET, "$1=x")) }
     private val ASK_ERRORS = mapOf(
         Err.badValue to "bad value",
         Err.busy to "busy",
@@ -552,10 +555,10 @@ object Remote : Control {
             val c = context.applicationContext
             val version = c.packageManager.getPackageInfo(c.packageName, 0).versionName ?: "0"
             network(c)
-            val blocks = ArtBlocks(File(c.filesDir, "artblock.tsv")) { Log.w(TAG, it) }
+            val blocks = ArtBlocks(File(c.filesDir, "artblock.tsv"), ledger = PushLedger()) { Log.w(TAG, it) }
             val picks = ArtPicks(File(c.filesDir, "artpick.tsv"), ArtCrops(File(c.filesDir, "artcrop.tsv")) { Log.w(TAG, it) }) { Log.w(TAG, it) }
             targets(c)
-            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, version, online = { online }, blocks = blocks, picks = picks, gallery = GalleryStore(File(c.filesDir, "pickimg")), log = { Log.w(TAG, it.replace(SECRET, "$1=x")) }, browseLog = { Log.i(TAG, it.replace(SECRET, "$1=x")) }, targets = { targets }).also {
+            ArtistArt(http, codec, ArtCache(File(c.filesDir, "art")), { Main.sources(c) }, Agents.of(version), online = { online }, blocks = blocks, picks = picks, gallery = GalleryStore(File(c.filesDir, "pickimg")), log = artLog, browseLog = { Log.i(TAG, it.replace(SECRET, "$1=x")) }, targets = { targets }, extensions = listOf(YouTubeArt(artLog))).also {
                 artist = it
                 showBlocked { blocks.records() }
                 showPicks { picks.list() }
@@ -619,12 +622,14 @@ object Remote : Control {
     private fun crcs(a: ArtistArt, e: ArtCache.Entry, w: Int?, h: Int?): Set<Long> =
         setOfNotNull(if (w != null && h != null) a.renderedCrc(e, w, h) else null, a.pushCrc(e))
 
+    private val ArtistArt.pushes: PushLedger get() = requireNotNull(blocks.ledger) { "art blocks with no push ledger" }
+
     private fun blockArt(e: ArtCache.Entry, crc: Long?, after: () -> Unit = {}) {
         val a = artist ?: return
         val s = a.withSha(e)
-        a.blocks.add(ArtBlocks.Block(s.key, s.mbid, s.source, ImageIds.of(s), s.sha, s.name, System.currentTimeMillis(), crc = crc))
+        a.blocks.add(ArtBlocks.Block(s.key, s.mbid, s.source, a.imageId(s), s.sha, s.name, System.currentTimeMillis(), crc = crc))
         after()
-        Log.i(TAG, "art block ${e.name} ${e.source} ${ImageIds.of(e)}")
+        Log.i(TAG, "art block ${e.name} ${e.source} ${a.imageId(e)}")
         blockedArt(a) { a.forget(e) }
     }
 
@@ -660,7 +665,7 @@ object Remote : Control {
         }
         if (hits.isNotEmpty()) {
             val origin = ArtPusher.origin(st.source)
-            val push = { a.blocks.addPush(name, if (wrong) null else stMbid ?: mbid, origin) }
+            val push = { a.pushes.addPush(name, if (wrong) null else stMbid ?: mbid, Origins.of(origin)) }
             for (e in hits) {
                 if (!wrong && a.picked(e)) {
                     blockPick(e, crc, origin)
@@ -684,10 +689,10 @@ object Remote : Control {
         val p = a.picks.byCache(e.key) ?: return
         val s = a.withSha(e)
         val at = System.currentTimeMillis()
-        p.keys.forEach { k -> a.blocks.add(ArtBlocks.Block(k, p.mbid, s.source, ImageIds.of(s), s.sha, p.name, at, crc = crc)) }
+        p.keys.forEach { k -> a.blocks.add(ArtBlocks.Block(k, p.mbid, s.source, a.imageId(s), s.sha, p.name, at, crc = crc)) }
         a.picks.add(p.copy(kind = ArtPicks.NONE, was = p.kind, failedAt = null))
-        a.blocks.addPush(p.name, p.mbid, origin)
-        Log.i(TAG, "art block pick ${p.name} ${s.source} ${ImageIds.of(s)}")
+        a.pushes.addPush(p.name, p.mbid, Origins.of(origin))
+        Log.i(TAG, "art block pick ${p.name} ${s.source} ${a.imageId(s)}")
         showPicks { a.picks.list() }
         blockedArt(a) {
             a.forget(e.key)
@@ -904,7 +909,7 @@ object Remote : Control {
         return out.asImageBitmap()
     }
 
-    override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+    override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (BrowseFeed.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
         val a = artist ?: run {
             sections(emptyList())
             done(false)
@@ -913,7 +918,7 @@ object Remote : Control {
         val log: (String) -> Unit = { Log.i(TAG, it.replace(SECRET, "$1=x")) }
         val run = HttpRun { log("art browse http $it") }
         val n = AtomicInteger()
-        val pool = Executors.newFixedThreadPool(ArtistArt.BROWSE_WORKERS) { r -> Thread(r, "art-browse-${n.incrementAndGet()}").apply { isDaemon = true } }
+        val pool = Executors.newFixedThreadPool(a.browseWorkers) { r -> Thread(r, "art-browse-${n.incrementAndGet()}").apply { isDaemon = true } }
         run.onCancel { pool.shutdownNow() }
         val out = object : BrowseFeed.Out<ImageBitmap> {
             override fun sections(order: List<String>) = sections(order)
@@ -922,7 +927,7 @@ object Remote : Control {
 
             override fun sectionDone(section: String) = sectionDone(section)
 
-            override fun search(outcome: YouTube.Search) = search(outcome)
+            override fun search(outcome: BrowseFeed.Search) = search(outcome)
 
             override fun done(ok: Boolean) = done(ok)
         }
@@ -980,7 +985,7 @@ object Remote : Control {
                 if (p.source == Sources.GALLERY) a.gallery?.put(it)
                 a.store(p, it)
             }
-            a.blocks.addPush(p.name, mbid, if (target.library) Enums.ImgOrigin.library else target.origin)
+            a.pushes.addPush(p.name, mbid, Origins.of(if (target.library) Enums.ImgOrigin.library else target.origin))
         }
     }
 
@@ -991,7 +996,7 @@ object Remote : Control {
         picked(a) {
             a.picks.remove(p)
             a.forget(p.cacheKey)
-            a.blocks.addPush(p.name, Names.mbid(p.key))
+            a.pushes.addPush(p.name, Names.mbid(p.key))
         }
     }
 
@@ -1209,7 +1214,7 @@ object Remote : Control {
                 override fun at(key: String) = a.hitAt(key)
             },
             { Main.sources(context).anyOn },
-            FullPush(a.full, ::bluetooth) { Log.i(TAG, it) },
+            FullPush(FullSource(a.cache, a.codec, log = artLog) { k -> a.picks.byCache(k)?.let { a.picks.point(it) } }, ::bluetooth) { Log.i(TAG, it) },
             Forward.Refetch(
                 ::refetchData,
                 ::refetchRearm,

@@ -12,9 +12,6 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.Offer
-import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.gen.TokBoard
@@ -28,6 +25,9 @@ import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.Preview
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.Offer
+import net.seilent.funekit.artist.Sources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

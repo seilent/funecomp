@@ -35,20 +35,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
-import net.seilent.funecomp.artist.Accounts
-import net.seilent.funecomp.artist.AppPair
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.ArtistArt
-import net.seilent.funecomp.artist.AutoEqList
-import net.seilent.funecomp.artist.Credit
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.Offer
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Tile
-import net.seilent.funecomp.artist.Wikimedia
-import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.Band
 import net.seilent.funecomp.proto.Eq
 import net.seilent.funecomp.proto.GraphicBand
@@ -62,6 +48,8 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.sim.SvcAcct
+import net.seilent.funecomp.sources.ArtSources
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.DeviceState
@@ -99,6 +87,19 @@ import net.seilent.funecomp.ui.gridHz
 import net.seilent.funecomp.ui.ONLINE_LYRICS
 import net.seilent.funecomp.ui.ONLINE_SCROBBLING
 import net.seilent.funecomp.ui.ONLINE_STREAMING
+import net.seilent.funekit.artist.Accounts
+import net.seilent.funekit.artist.AppPair
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.AutoEqList
+import net.seilent.funekit.artist.BrowseFeed
+import net.seilent.funekit.artist.Credit
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.Offer
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Tile
+import net.seilent.funekit.artist.Wikimedia
 import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
 import org.junit.Rule
@@ -143,7 +144,7 @@ class Shot(
     val artEntry: ArtCache.Entry? = null,
     val wrong: Boolean = false,
     val blocked: List<ArtBlocks.Record> = emptyList(),
-    val sources: Sources = Sources(),
+    val sources: Sources = ArtSources.DEFAULT,
     val minor: Int = Proto.minor,
     val faults: List<String> = emptyList(),
     val cardEq: List<String> = emptyList(),
@@ -284,31 +285,31 @@ private fun tileImage(i: Int): ImageBitmap {
 
 private val TILE_CAPTIONS = listOf(Sources.DISCOGS to "dnb, Jump up") +
     listOf("TSUKI(Billlie)", "TSUKI", "Suki Waterhouse", "Tsuki Nakamura", "Tsukiko Amano", "Billlie", "Tsukisheis", "Tsukimi Runa(CV: Sae Hiratsuka)", "Tsukino Amasato", "La Tsuki").map { Sources.DEEZER to it } +
-    listOf("tuki.(17)", "tsuki ASMR", "月-Tsuki-", "TsukiUraya", "TSUKI TV", "月 / tsuki", "つき⭐︎", "Tsuki", "Tsuki", "tuki. - トピック").map { Sources.YOUTUBE to it }
+    listOf("tuki.(17)", "tsuki ASMR", "月-Tsuki-", "TsukiUraya", "TSUKI TV", "月 / tsuki", "つき⭐︎", "Tsuki", "Tsuki", "tuki. - トピック").map { YouTubeArt.SOURCE to it }
 
 private fun browsed(n: Int, end: Boolean?): (SimControl) -> Unit = { c ->
     c.tiles = TILE_CAPTIONS.take(n).mapIndexed { i, (src, cap) -> BrowseTile(Tile(src, cap, ByteArray(0), "https://example.org/$i.jpg", "$i", null), tileImage(i)) }
     c.browsed = end
     c.browseOrder = BROWSE_ORDER
-    c.browseSection = { if (it.tile.source == Sources.YOUTUBE) ArtistArt.YOUTUBE_SEARCH else it.tile.source }
+    c.browseSection = { if (it.tile.source == YouTubeArt.SOURCE) YouTubeArt.SEARCH else it.tile.source }
 }
 
-private val BROWSE_ORDER = listOf(Sources.THE_AUDIO_DB, Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DISCOGS, Wikimedia.SOURCE, Sources.DEEZER)
+private val BROWSE_ORDER = listOf(Sources.THE_AUDIO_DB, YouTubeArt.SOURCE, YouTubeArt.SEARCH, Sources.DISCOGS, Wikimedia.SOURCE, Sources.DEEZER)
 
 private fun browsedSearch(end: Boolean?): (SimControl) -> Unit = { c ->
     browsed(TILE_CAPTIONS.size, end)(c)
-    c.tiles = c.tiles.filter { it.tile.source == Sources.YOUTUBE }
+    c.tiles = c.tiles.filter { it.tile.source == YouTubeArt.SOURCE }
 }
 
-private val PICK_OFFER = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ=s900-c-k-c0x00ffffff-no-rj", "https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ", null, null, "月-Tsuki-", null)
+private val PICK_OFFER = Offer(ArtPicks.IMAGE, YouTubeArt.SOURCE, "https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ=s900-c-k-c0x00ffffff-no-rj", "https://yt3.googleusercontent.com/0cNMCoNqAuBZzzxAwcjYYKMx_5KCtO0X1UYzzuVwaCP_Mf-EwDeYRZRebd-dvR3eJ_19szDpIQ", null, null, "月-Tsuki-", null)
 
 private val PICKS = listOf(
-    ArtPicks.Pick("name:tsuki", null, "TSUKI", ArtPicks.IMAGE, Sources.YOUTUBE, PICK_OFFER.url, PICK_OFFER.id, "s", null, null, 3),
+    ArtPicks.Pick("name:tsuki", null, "TSUKI", ArtPicks.IMAGE, YouTubeArt.SOURCE, PICK_OFFER.url, PICK_OFFER.id, "s", null, null, 3),
     ArtPicks.Pick("name:むと", null, "むと", ArtPicks.IMAGE, Sources.LINK, "https://example.org/muto.jpg", "https://example.org/muto.jpg", "s", null, null, 2, 5),
-    ArtPicks.Pick("name:空星きらめ", null, "空星きらめ/Sorahoshi Kirame【にじさんじ】", ArtPicks.NONE, Sources.YOUTUBE, "https://yt3.ggpht.com/k=s900", "https://yt3.ggpht.com/k", "s", null, null, 1, null, ArtPicks.IMAGE),
+    ArtPicks.Pick("name:空星きらめ", null, "空星きらめ/Sorahoshi Kirame【にじさんじ】", ArtPicks.NONE, YouTubeArt.SOURCE, "https://yt3.ggpht.com/k=s900", "https://yt3.ggpht.com/k", "s", null, null, 1, null, ArtPicks.IMAGE),
 )
 
-private val PICK_ENTRY = ArtCache.Entry("pick:name:tsuki", "TSUKI", null, Sources.YOUTUBE, null, PICK_OFFER.url, 0, PICK_OFFER.id, "s")
+private val PICK_ENTRY = ArtCache.Entry("pick:name:tsuki", "TSUKI", null, YouTubeArt.SOURCE, null, PICK_OFFER.url, 0, PICK_OFFER.id, "s")
 
 private fun photo(w: Int, h: Int, hue: Float): ByteArray {
     val img = java.awt.image.BufferedImage(w, h, java.awt.image.BufferedImage.TYPE_INT_RGB)
@@ -334,7 +335,7 @@ private fun input(name: String, or: () -> ByteArray): ByteArray = System.getProp
 
 private fun shown(offer: Offer, src: ByteArray) = Preview(offer, Remote.preview(src, 240, 320) { b, _ -> net.seilent.funecomp.art.BitmapCodec().faced(b, 2048) { null } })
 
-private fun ytOffer(title: String, url: String, label: String) = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, url, url.substringBefore('='), null, null, title, null, label)
+private fun ytOffer(title: String, url: String, label: String) = Offer(ArtPicks.IMAGE, YouTubeArt.SOURCE, url, url.substringBefore('='), null, null, title, null, label)
 
 private fun one(src: () -> ByteArray, offer: Offer = PICK_OFFER): (SimControl) -> Unit = { c ->
     tsuki("TSUKI")(c)
@@ -633,7 +634,7 @@ private val BLOCKED: List<ArtBlocks.Record> = (0 until 12).map { i ->
     else ArtBlocks.Block("k$i", null, listOf("deezer", "commons", "theaudiodb")[i % 3], "id$i", "s$i", listOf("むと", "Radiohead", "空星きらめ/Sorahoshi Kirame【にじさんじ】")[i % 3] + " $i", 100L - i)
 }
 
-private val ORDERED = Sources.COMMONS.copy(theAudioDb = true, fanartTv = true, deezer = true, order = Sources.order("deezer,commons,theaudiodb"))
+private val ORDERED = ArtSources.COMMONS.copy(theAudioDb = true, fanartTv = true, deezer = true, order = ArtSources.order("deezer,commons,theaudiodb"))
 
 private val SCROBBLE = ScrobbleView(Accounts(true, "", "", "seilent", "session", true, "token", "seilent"), queued = 3, app = ZEROS)
 private val SCROBBLE_OUT = ScrobbleView(Accounts(true, listenBrainz = true), app = ZEROS)
@@ -659,7 +660,7 @@ private fun Shots.holdRow(tag: String) {
     settle(600)
 }
 
-private val CACHED_SOURCES = Sources.COMMONS.copy(theAudioDb = true, deezer = true)
+private val CACHED_SOURCES = ArtSources.COMMONS.copy(theAudioDb = true, deezer = true)
 
 private fun cached(c: SimControl) {
     c.usage = mapOf(null to ArtCache.Usage(214, 138_400_000), Wikimedia.SOURCE to ArtCache.Usage(31, 22_100_000), Sources.THE_AUDIO_DB to ArtCache.Usage(96, 61_800_000), Sources.DEEZER to ArtCache.Usage(87, 54_500_000))
@@ -1442,8 +1443,8 @@ val SHOTS = listOf(
     Shot("pick-browse-more", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(5, null)),
     Shot("pick-browse", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)),
     Shot("pick-browse-wide", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true), cols = WIDE),
-    Shot("pick-browse-focus", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)) { rule.onNodeWithTag("pick.tile.${ArtistArt.YOUTUBE_SEARCH}.4").performClick() },
-    Shot("pick-confirm-browse", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.taken = Previewed.Ok(listOf(shown(PICK_OFFER, photo(1200, 1200, 0.58f)))) }) { rule.onNodeWithTag("pick.tile.${ArtistArt.YOUTUBE_SEARCH}.4").performClick() },
+    Shot("pick-browse-focus", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(TILE_CAPTIONS.size, true)) { rule.onNodeWithTag("pick.tile.${YouTubeArt.SEARCH}.4").performClick() },
+    Shot("pick-confirm-browse", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.taken = Previewed.Ok(listOf(shown(PICK_OFFER, photo(1200, 1200, 0.58f)))) }) { rule.onNodeWithTag("pick.tile.${YouTubeArt.SEARCH}.4").performClick() },
     Shot("pick-browse-empty", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, true)),
     Shot("pick-browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(0, false)),
     Shot("pick-browse-unavailable-tiles", pages = NP + Page.Browse(PickFor("TSUKI")), prep = browsed(11, false)),
@@ -1463,9 +1464,9 @@ val SHOTS = listOf(
         control!!.browsed = null
         browseType("Tsuki Nakamura", true)
     },
-    Shot("browse-noresults", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.tiles = c.tiles.filter { it.tile.source != Sources.YOUTUBE }; c.searched = YouTube.Search.NoResults }),
-    Shot("browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.tiles = c.tiles.filter { it.tile.source != Sources.YOUTUBE }; c.searched = YouTube.Search.Unavailable() }),
-    Shot("browse-none", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(0, true)(c); c.searched = YouTube.Search.NoResults }),
+    Shot("browse-noresults", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.tiles = c.tiles.filter { it.tile.source != YouTubeArt.SOURCE }; c.searched = BrowseFeed.Search.NoResults }),
+    Shot("browse-unavailable", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, true)(c); c.tiles = c.tiles.filter { it.tile.source != YouTubeArt.SOURCE }; c.searched = BrowseFeed.Search.Unavailable() }),
+    Shot("browse-none", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(0, true)(c); c.searched = BrowseFeed.Search.NoResults }),
     Shot("pick-browse-arriving", pages = NP + Page.Browse(PickFor("TSUKI")), prep = { c -> browsed(TILE_CAPTIONS.size, null)(c); c.tiles = c.tiles.filter { it.tile.source == Sources.DEEZER } }),
     Shot("connection-gated", pages = listOf(Page.Connection), link = GATED, gated = true),
     Shot("online-art", pages = ONLINE),
@@ -1502,7 +1503,7 @@ val SHOTS = listOf(
     Shot("online-lyrics", pages = HOME + Page.Online(ONLINE_LYRICS)),
     Shot("online-lyrics-sheet", pages = HOME + Page.Online(ONLINE_LYRICS)) { tapRow("lyr.src.lrclib") },
     Shot("online-lyrics-sheet-netease", pages = HOME + Page.Online(ONLINE_LYRICS)) { tapRow("lyr.src.netease") },
-    Shot("online-lyrics-off", pages = HOME + Page.Online(ONLINE_LYRICS), link = LinkView(Phase.LIVE, "AP80", everLive = true, lyrics = LyricSources(lrclib = false, order = listOf(LyricSources.NETEASE, LyricSources.LRCLIB)))),
+    Shot("online-lyrics-off", pages = HOME + Page.Online(ONLINE_LYRICS), link = LinkView(Phase.LIVE, "AP80", everLive = true, lyrics = Lyrics.DEFAULT.copy(lrclib = false, order = listOf(LyricSources.NETEASE, LyricSources.LRCLIB)))),
     Shot("online-scrobbling", pages = HOME + Page.Online(ONLINE_SCROBBLING)),
     Shot("online-scrobbling-set", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE),
     Shot("online-scrobbling-failed", pages = HOME + Page.Online(ONLINE_SCROBBLING), scrobble = SCROBBLE_OUT.copy(lastFm = "sign in failed", listenBrainz = "invalid")),
@@ -1628,7 +1629,7 @@ class Shots {
         private set
     private var shell by mutableStateOf(Shell())
     private var board by mutableStateOf<Detected?>(null)
-    private var sources by mutableStateOf(Sources())
+    private var sources by mutableStateOf(ArtSources.DEFAULT)
 
     fun settle(ms: Long) {
         rule.waitForIdle()

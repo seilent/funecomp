@@ -6,9 +6,9 @@ import android.graphics.Canvas
 import android.graphics.ImageDecoder
 import android.net.Uri
 import android.provider.OpenableColumns
-import net.seilent.funecomp.artist.ArtistArt
-import net.seilent.funecomp.artist.Backdrop
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funekit.artist.ArtistArt
+import net.seilent.funekit.artist.Backdrop
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 

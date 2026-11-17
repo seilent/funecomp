@@ -11,17 +11,6 @@ import android.graphics.BitmapFactory
 import androidx.compose.ui.graphics.asAndroidBitmap
 import net.seilent.funecomp.art.BitmapCodec
 import net.seilent.funecomp.art.Gallery
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.Backdrop
-import net.seilent.funecomp.artist.Codec
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Offer
-import net.seilent.funecomp.artist.Picture
-import net.seilent.funecomp.artist.Response
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Tile
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
@@ -30,9 +19,21 @@ import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.sim.Track
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.Previewed
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.Backdrop
+import net.seilent.funekit.artist.Codec
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Offer
+import net.seilent.funekit.artist.Picture
+import net.seilent.funekit.artist.Response
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Tile
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -148,7 +149,7 @@ class ArtPickTest {
 
     private fun deleted(name: String) = lines.count { it == "deleted name=$name" }
 
-    private fun offer() = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, avatar, avatar.substringBefore('='), null, null, "月-Tsuki-", picked)
+    private fun offer() = Offer(ArtPicks.IMAGE, YouTubeArt.SOURCE, avatar, avatar.substringBefore('='), null, null, "月-Tsuki-", picked)
 
     private fun crc(b: ByteArray) = "%08x".format(CRC32().apply { update(b) }.value)
 
@@ -198,7 +199,7 @@ class ArtPickTest {
         assertEquals("ok", s.askBlock(q))
         val r = Remote.blocked.single() as ArtBlocks.Block
         assertEquals("name:tsuki", r.key)
-        assertEquals(Sources.YOUTUBE, r.source)
+        assertEquals(YouTubeArt.SOURCE, r.source)
         waitFor { deleted("TSUKI") == 1 }
         assertEquals(ArtPicks.NONE, Remote.picks.single().kind)
         waitFor { File(app.filesDir, "artblock.tsv").readLines().count { it.startsWith("push\tTSUKI\t") } == 1 && File(app.filesDir, "artblock.tsv").readLines().none { it.startsWith("origin\t") } }

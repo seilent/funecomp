@@ -1,10 +1,14 @@
 package net.seilent.funecomp
 
 import android.content.Context
-import net.seilent.funecomp.artist.Accounts
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.NeMix
-import net.seilent.funecomp.artist.Sources
+import net.seilent.funecomp.sources.ArtSources
+import net.seilent.funecomp.sources.NeMix
+import net.seilent.funecomp.sources.YouTubeArt
+import net.seilent.funekit.artist.Accounts
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.Size
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Targets
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -33,7 +37,16 @@ class PrefsUpgradeTest {
         Firmwares.reset()
     }
 
-    private val upgraded = Sources(false, false, false, "fixturekey", false, false, listOf("deezer", "youtube", "discogs", "fanarttv", "theaudiodb", "commons"))
+    private val upgraded = Sources(
+        theAudioDb = false,
+        discogs = false,
+        fanartTv = false,
+        fanartTvKey = "fixturekey",
+        deezer = false,
+        order = listOf("deezer", "youtube", "discogs", "fanarttv", "theaudiodb", "commons"),
+        commons = true,
+        plugins = mapOf(YouTubeArt.SOURCE to false),
+    )
 
     private fun art() = app.getSharedPreferences(Main.ART_PREFS, Context.MODE_PRIVATE)
 
@@ -48,12 +61,12 @@ class PrefsUpgradeTest {
 
     private fun anOldFullWriteReadsAsTheNewDefaults() {
         load("/srcdefaults/v1/art.xml")
-        assertEquals(Sources(), Main.sources(app))
+        assertEquals(ArtSources.DEFAULT, Main.sources(app))
         assertEquals(mapOf("defaults" to 2, "fanarttvKey" to ""), art().all)
         val file = File(app.dataDir, "shared_prefs/${Main.ART_PREFS}.xml").readText()
         assertTrue(file, file.contains("<int name=\"defaults\" value=\"2\" />"))
         for (k in listOf("theaudiodb", "discogs", "\"fanarttv\"", "deezer", "youtube", "order")) assertFalse(k, file.contains(k))
-        assertEquals(Sources(), Main.sources(app))
+        assertEquals(ArtSources.DEFAULT, Main.sources(app))
     }
 
     private fun anUpgradedStoreReadsBackAsStored() {
@@ -70,9 +83,9 @@ class PrefsUpgradeTest {
         assertFalse(art().getBoolean("commons", true))
         assertFalse(Main.sources(app).commons)
         art().edit().clear().putBoolean("commons", false).putBoolean("deezer", false).commit()
-        assertEquals(Sources(deezer = true, commons = false), Main.sources(app))
+        assertEquals(ArtSources.DEFAULT.copy(deezer = true, commons = false), Main.sources(app))
         art().edit().clear().putInt("defaults", 2).putBoolean("commons", false).commit()
-        assertEquals(Sources(commons = false), Main.sources(app))
+        assertEquals(ArtSources.DEFAULT.copy(commons = false), Main.sources(app))
     }
 
     @Test
@@ -137,13 +150,60 @@ class PrefsUpgradeTest {
     @Test
     fun aToggleOnAFreshInstallWritesOnlyThatKey() {
         val fresh = Main.sources(app)
-        assertEquals(Sources(), fresh)
+        assertEquals(ArtSources.DEFAULT, fresh)
         assertEquals(mapOf("defaults" to 2), art().all)
         Main.writeSources(app, fresh, fresh.copy(discogs = false))
         assertEquals(mapOf("defaults" to 2, "discogs" to false), art().all)
         assertEquals(fresh.copy(discogs = false), Main.sources(app))
         Main.writeSources(app, fresh.copy(discogs = false), fresh.copy(discogs = false).moved("deezer", -1))
         assertEquals(setOf("defaults", "discogs", "order"), art().all.keys)
+    }
+
+    @Test
+    fun aFreshInstallOrdersYouTubeThirdAndOn() {
+        val s = Main.sources(app)
+        assertEquals(listOf("theaudiodb", "fanarttv", "youtube", "discogs", "commons", "deezer"), s.order)
+        assertTrue(YouTubeArt.on(s))
+        assertEquals(listOf("theaudiodb", "youtube", "discogs", "commons", "deezer"), s.ordered)
+    }
+
+    @Test
+    fun theYouTubeFlagIsWrittenUnderItsKey() {
+        val fresh = Main.sources(app)
+        Main.writeSources(app, fresh, YouTubeArt.with(fresh, false))
+        assertEquals(mapOf("defaults" to 2, "youtube" to false), art().all)
+        assertFalse(YouTubeArt.on(Main.sources(app)))
+        assertEquals(YouTubeArt.with(fresh, false), Main.sources(app))
+        Main.writeSources(app, YouTubeArt.with(fresh, false), fresh)
+        assertEquals(mapOf("defaults" to 2, "youtube" to true), art().all)
+    }
+
+    @Test
+    fun anInstalledArtMapReadsAsTheReleaseRead() {
+        art().edit().clear()
+            .putInt("defaults", 2)
+            .putBoolean("theaudiodb", false)
+            .putBoolean("discogs", true)
+            .putBoolean("fanarttv", true)
+            .putString("fanarttvKey", "fixturekey")
+            .putBoolean("deezer", true)
+            .putBoolean("youtube", false)
+            .putBoolean("commons", true)
+            .putString("order", "deezer,commons,theaudiodb")
+            .putString("phoneTarget", "1080x2520")
+            .putString("deviceTargets", "v1=480x640")
+            .putInt("sweep", 2)
+            .putBoolean("barescan", true)
+            .commit()
+        val before = art().all
+        val s = Main.sources(app)
+        val release = ArtSources.DEFAULT.copy(theAudioDb = false, fanartTvKey = "fixturekey", order = listOf("deezer", "commons", "theaudiodb", "fanarttv", "youtube", "discogs"))
+        assertEquals(YouTubeArt.with(release, false), s)
+        assertEquals(listOf("deezer", "commons", "fanarttv", "discogs"), s.ordered)
+        assertEquals(before, art().all)
+        val t = Targets.of(art().getString("phoneTarget", null), art().getString("deviceTargets", null))
+        assertEquals(Size(1080, 2520), t.phone)
+        assertEquals(listOf(Size(480, 640)), t.devices)
     }
 
     @Test
@@ -185,7 +245,7 @@ class PrefsUpgradeTest {
         assertTrue(LyricsMode.on(app))
         assertEquals(mapOf("mode" to true), app.getSharedPreferences(LyricsMode.PREFS, Context.MODE_PRIVATE).all)
         Lyrics.init(app)
-        assertEquals(LyricSources(), Lyrics.sources)
+        assertEquals(Lyrics.DEFAULT, Lyrics.sources)
         val rules = excludes(R.xml.backup_rules) + excludes(R.xml.data_extraction_rules)
         for (section in listOf("full-backup-content", "cloud-backup", "device-transfer")) assertTrue(section, rules.contains("$section sharedpref art.xml"))
         assertTrue(rules.toString(), rules.none { it.endsWith(" ${LyricsMode.PREFS}.xml") })

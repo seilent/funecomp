@@ -59,8 +59,8 @@ class ArtPickAskTest {
         shadowOf(app.getSystemService(BluetoothManager::class.java).adapter).setEnabled(true)
         MediaLink.controls(app, false)
         app.getSharedPreferences(Main.DEVICE_PREFS, Context.MODE_PRIVATE).edit().putBoolean("batteryAsked", true).commit()
-        Remote.artist(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
-        Lyrics.init(app, net.seilent.funecomp.artist.Http { _, _ -> net.seilent.funecomp.artist.Response(404, ByteArray(0)) })
+        Remote.artist(app, net.seilent.funekit.artist.Http { _, _ -> net.seilent.funekit.artist.Response(404, ByteArray(0)) })
+        Lyrics.init(app, net.seilent.funekit.artist.Http { _, _ -> net.seilent.funekit.artist.Response(404, ByteArray(0)) })
     }
 
     @After
@@ -167,7 +167,7 @@ class ArtPickAskTest {
         cold.pause().stop().destroy()
     }
 
-    private fun offer() = net.seilent.funecomp.artist.Offer(net.seilent.funecomp.artist.ArtPicks.IMAGE, net.seilent.funecomp.artist.Sources.YOUTUBE, "https://yt3.googleusercontent.com/a=s900", "https://yt3.googleusercontent.com/a", null, null, "TSUKI", jpeg())
+    private fun offer() = net.seilent.funekit.artist.Offer(net.seilent.funekit.artist.ArtPicks.IMAGE, net.seilent.funecomp.sources.YouTubeArt.SOURCE, "https://yt3.googleusercontent.com/a=s900", "https://yt3.googleusercontent.com/a", null, null, "TSUKI", jpeg())
 
     private fun jpeg(): ByteArray {
         val img = java.awt.image.BufferedImage(600, 800, java.awt.image.BufferedImage.TYPE_INT_RGB)
@@ -264,10 +264,10 @@ class ArtPickAskTest {
     fun aPickOrAnOpenedPickClearsTheNotice() {
         val s = live()
         assertEquals("ok shown=false", ask(s, "TSUKI"))
-        Remote.pick(PickFor("Other"), net.seilent.funecomp.artist.Offer("artist", "musicbrainz", "u", dj, null, dj, "Other", null))
+        Remote.pick(PickFor("Other"), net.seilent.funekit.artist.Offer("artist", "musicbrainz", "u", dj, null, dj, "Other", null))
         waitFor { Remote.picks.isNotEmpty() }
         assertNotNull(notice())
-        Remote.pick(PickFor("tsuki", library = true), net.seilent.funecomp.artist.Offer("artist", "musicbrainz", "u", dj, null, dj, "Tsuki", null))
+        Remote.pick(PickFor("tsuki", library = true), net.seilent.funekit.artist.Offer("artist", "musicbrainz", "u", dj, null, dj, "Tsuki", null))
         assertNull(notice())
         assertEquals("ok shown=false", ask(s, "TSUKI"))
         val a = main(tapped())
@@ -323,9 +323,9 @@ class ArtPickAskTest {
         val n = android.app.Notification.Builder(app, PickNotice.CHANNEL).setSmallIcon(android.R.drawable.stat_sys_data_bluetooth).setContentTitle("TSUKI").build()
         app.getSystemService(NotificationManager::class.java).createNotificationChannel(android.app.NotificationChannel(PickNotice.CHANNEL, "Art pick", NotificationManager.IMPORTANCE_DEFAULT))
         app.getSystemService(NotificationManager::class.java).notify(PickNotice.ID, n)
-        Remote.pick(PickFor("Other"), net.seilent.funecomp.artist.Offer("artist", "musicbrainz", "u", dj, null, dj, "Other", null))
+        Remote.pick(PickFor("Other"), net.seilent.funekit.artist.Offer("artist", "musicbrainz", "u", dj, null, dj, "Other", null))
         assertNotNull(notice())
-        Remote.pick(PickFor("tsuki"), net.seilent.funecomp.artist.Offer("artist", "musicbrainz", "u", dj, null, dj, "Tsuki", null))
+        Remote.pick(PickFor("tsuki"), net.seilent.funekit.artist.Offer("artist", "musicbrainz", "u", dj, null, dj, "Tsuki", null))
         assertNull(notice())
     }
 

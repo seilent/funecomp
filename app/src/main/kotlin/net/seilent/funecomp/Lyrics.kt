@@ -6,25 +6,25 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Lrclib
-import net.seilent.funecomp.artist.LyricChain
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.LyricsFileException
-import net.seilent.funecomp.artist.MemoryStore
-import net.seilent.funecomp.artist.NeMix
-import net.seilent.funecomp.artist.NetEase
-import net.seilent.funecomp.artist.Sweep
-import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.link.LyrGet
 import net.seilent.funecomp.proto.LrcReply
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.sources.NeMix
+import net.seilent.funecomp.sources.NetEase
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.LyricsPlan
 import net.seilent.funecomp.state.PushGate
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Lrclib
+import net.seilent.funekit.artist.LyricChain
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.LyricsFileException
+import net.seilent.funekit.artist.MemoryStore
+import net.seilent.funekit.artist.Sweep
+import net.seilent.funekit.artist.UrlHttp
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
@@ -61,7 +61,9 @@ object Lyrics {
 
     internal val bulkHolds = AtomicInteger()
 
-    var sources by mutableStateOf(LyricSources())
+    val DEFAULT = LyricSources(lrclib = true, netease = true)
+
+    var sources by mutableStateOf(DEFAULT)
         private set
 
     val on: Boolean get() = sources.ordered.isNotEmpty()
@@ -75,7 +77,7 @@ object Lyrics {
         val version = app.packageManager.getPackageInfo(app.packageName, 0).versionName ?: "0"
         val dir = File(app.filesDir, "lyrics")
         val net = http ?: UrlHttp()
-        lrclib = Lrclib(dir, net, version, { sources.lrclib })
+        lrclib = Lrclib(dir, net, Agents.of(version), { sources.lrclib })
         val n = NetEase(dir, net, version, { sources.netease }, log = { Log.i(Remote.TAG, it) })
         netease = n
         if (p.getInt(NEMIX, 0) < NeMix.VERSION) {
@@ -102,7 +104,7 @@ object Lyrics {
         context = null
         lrclib = null
         netease = null
-        sources = LyricSources()
+        sources = DEFAULT
         Remote.phoneLyrics.clear()
         network()
     }

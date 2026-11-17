@@ -5,13 +5,13 @@ import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.Response
 import org.junit.After
 import org.junit.Assert.assertTrue
 import org.junit.Before

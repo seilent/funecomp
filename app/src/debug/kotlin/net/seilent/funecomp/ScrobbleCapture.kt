@@ -6,8 +6,8 @@ import android.content.Context
 import android.database.Cursor
 import android.net.Uri
 import android.util.Log
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import java.io.IOException
 
 class ScrobbleCapture : ContentProvider() {

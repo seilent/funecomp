@@ -51,15 +51,15 @@ import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import net.seilent.funecomp.art.Forward
-import net.seilent.funecomp.artist.ArtPusher
-import net.seilent.funecomp.artist.ArtistArt
-import net.seilent.funecomp.artist.Crop
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.PickLink
-import net.seilent.funecomp.artist.Rect
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.push.ArtPusher
+import net.seilent.funecomp.sources.YouTubeArt
+import net.seilent.funekit.artist.BrowseFeed
+import net.seilent.funekit.artist.Crop
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.PickLink
+import net.seilent.funekit.artist.Rect
+import net.seilent.funekit.artist.Sources
 import kotlin.math.roundToInt
 
 const val PICK_IMAGE = "pick image"
@@ -86,7 +86,7 @@ private const val YOUTUBE_UNAVAILABLE = "youtube search unavailable"
 private const val CANCEL = "cancel"
 private const val STATE_TAG = "pick.state"
 private const val IME_KEY = "ime"
-private const val YOUTUBE_SEARCH = ArtistArt.YOUTUBE_SEARCH
+private const val YOUTUBE_SEARCH = YouTubeArt.SEARCH
 
 internal var browseCols: (Float) -> Int = { Tok.gridCols.toInt() }
 
@@ -236,11 +236,11 @@ class BrowseSession {
         tiles.getOrPut(section) { mutableStateListOf() } += t
     }
 
-    fun searched(outcome: YouTube.Search) {
+    fun searched(outcome: BrowseFeed.Search) {
         search = when (outcome) {
-            is YouTube.Search.Channels -> SearchState.Tiles
-            YouTube.Search.NoResults -> SearchState.NoResults
-            is YouTube.Search.Unavailable -> SearchState.Unavailable
+            is BrowseFeed.Search.Matches -> SearchState.Tiles
+            BrowseFeed.Search.NoResults -> SearchState.NoResults
+            is BrowseFeed.Search.Unavailable -> SearchState.Unavailable
         }
     }
 
@@ -328,8 +328,8 @@ private fun browseItems(s: BrowseSession, cols: Int): List<BrowseItem> = buildLi
     for (section in s.sections) {
         val tiles = s.tiles[section].orEmpty()
         val search = section == YOUTUBE_SEARCH
-        val head = if (search) null else if (section == Sources.YOUTUBE) Sources.YOUTUBE else section
-        val group = if (section == Sources.YOUTUBE) tiles.isNotEmpty() || s.tiles[YOUTUBE_SEARCH].orEmpty().isNotEmpty() || s.search == SearchState.Unavailable else tiles.isNotEmpty()
+        val head = if (search) null else if (section == YouTubeArt.SOURCE) YouTubeArt.SOURCE else section
+        val group = if (section == YouTubeArt.SOURCE) tiles.isNotEmpty() || s.tiles[YOUTUBE_SEARCH].orEmpty().isNotEmpty() || s.search == SearchState.Unavailable else tiles.isNotEmpty()
         if (head != null && group) {
             if (isNotEmpty()) add(BrowseItem.Gap(head))
             add(BrowseItem.Head(head))

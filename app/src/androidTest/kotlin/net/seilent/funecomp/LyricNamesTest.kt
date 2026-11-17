@@ -1,6 +1,6 @@
 package net.seilent.funecomp
 
-import net.seilent.funecomp.artist.LyricNames
+import net.seilent.funekit.artist.LyricNames
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -21,7 +21,7 @@ class LyricNamesTest {
 
     @Test
     fun coverTagsCleanOnTheDeviceAsOnTheJvm() {
-        val rows = javaClass.getResourceAsStream("/lyc-clean.tsv")!!.use { String(it.readBytes(), Charsets.UTF_8) }
+        val rows = javaClass.getResourceAsStream("/lyrics/lyc-clean.tsv")!!.use { String(it.readBytes(), Charsets.UTF_8) }
             .lineSequence().filter { it.isNotBlank() }.map { it.split('\t') }.toList()
         assertEquals(958, rows.size)
         for (r in rows) {

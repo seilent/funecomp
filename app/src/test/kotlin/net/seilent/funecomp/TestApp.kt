@@ -5,8 +5,8 @@ import android.os.Handler
 import android.view.Choreographer
 import androidx.compose.ui.platform.AndroidUiDispatcher
 import kotlinx.coroutines.Dispatchers
-import net.seilent.funecomp.artist.UrlHttp
 import net.seilent.funecomp.ui.CoverBlur
+import net.seilent.funekit.artist.UrlHttp
 import org.robolectric.TestLifecycleApplication
 import java.io.IOException
 import java.lang.reflect.Method

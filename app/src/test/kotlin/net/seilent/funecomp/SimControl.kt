@@ -9,9 +9,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import kotlinx.coroutines.CompletableDeferred
 import net.seilent.funecomp.art.Thumbs
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.AutoEqIndex
-import net.seilent.funecomp.artist.AutoEqList
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.proto.ArtGetReply
 import net.seilent.funecomp.proto.DraftReply
@@ -47,8 +44,6 @@ import net.seilent.funecomp.state.Heart
 import net.seilent.funecomp.state.Owed
 import net.seilent.funecomp.state.PhoneKey
 import net.seilent.funecomp.state.SvcOpens
-import net.seilent.funecomp.artist.Tile
-import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.ui.Bonded
 import net.seilent.funecomp.ui.BrowseTile
 import net.seilent.funecomp.ui.Control
@@ -58,6 +53,11 @@ import net.seilent.funecomp.ui.LIB_PAGE
 import net.seilent.funecomp.ui.OffsetEdit
 import net.seilent.funecomp.ui.PickedFile
 import net.seilent.funecomp.ui.Previewed
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.AutoEqIndex
+import net.seilent.funekit.artist.AutoEqList
+import net.seilent.funekit.artist.BrowseFeed
+import net.seilent.funekit.artist.Tile
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.Executor
@@ -639,13 +639,13 @@ class SimControl(
     var tiles: List<BrowseTile> = emptyList()
     var browsed: Boolean? = null
     var browseOrder: List<String>? = null
-    var searched: YouTube.Search? = null
+    var searched: BrowseFeed.Search? = null
     var browseSection: (BrowseTile) -> String = { it.tile.source }
     var previewed: Previewed? = null
     var gallery: Previewed? = null
     var taken: Previewed? = null
 
-    override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+    override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (BrowseFeed.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
         val order = browseOrder ?: tiles.map(browseSection).distinct()
         sections(order)
         tiles.forEach { tile(browseSection(it), it) }
@@ -818,7 +818,7 @@ class SimControl(
             Filter 10: ON PK Fc 5332 Hz Gain -1.1 dB Q 5.75
         """.trimIndent()
 
-        private val INDEX by lazy { File("../artist/src/test/resources/autoeq/index.md").readText() }
+        private val INDEX by lazy { File("../kit/artist/src/test/resources/autoeq/index.md").readText() }
 
         val FULL: AutoEqList by lazy { AutoEqList.build(AutoEqIndex.parse(INDEX)) }
 

@@ -1,6 +1,6 @@
 package net.seilent.funecomp
 
-import net.seilent.funecomp.artist.NetEase
+import net.seilent.funecomp.sources.NetEase
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

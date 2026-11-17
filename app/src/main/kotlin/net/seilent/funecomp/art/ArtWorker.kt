@@ -1,9 +1,9 @@
 package net.seilent.funecomp.art
 
-import net.seilent.funecomp.artist.ArtPusher
-import net.seilent.funecomp.artist.HttpRun
 import net.seilent.funecomp.link.Session
 import net.seilent.funecomp.proto.gen.Proto
+import net.seilent.funecomp.push.ArtPusher
+import net.seilent.funekit.artist.HttpRun
 
 class ArtWorker(
     private val session: () -> Session?,

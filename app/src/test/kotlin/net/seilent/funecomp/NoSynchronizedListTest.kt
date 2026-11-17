@@ -15,7 +15,7 @@ class NoSynchronizedListTest {
         val sources = root!!.listFiles { f -> f.isDirectory }!!.flatMap { m ->
             File(m, "src/test/kotlin").walkTopDown().filter { it.isFile && it.extension == "kt" }.map { m to it }.toList()
         }
-        assertTrue("no test sources under $root", sources.any { it.first.name == "app" } && sources.any { it.first.name == "artist" })
+        assertTrue("no test sources under $root", sources.any { it.first.name == "app" } && sources.any { it.first.name == "push" } && sources.any { it.first.name == "sources" })
         val hits = sources.filter { banned in it.second.readText() }.map { "${it.first.name}/${it.second.name}" }
         assertEquals(emptyList<String>(), hits.sorted())
     }

@@ -12,9 +12,6 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
-import net.seilent.funecomp.artist.Accounts
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.SvcInfo
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Proto
@@ -46,6 +43,9 @@ import net.seilent.funecomp.ui.loginSheet
 import net.seilent.funecomp.ui.pickSheet
 import net.seilent.funecomp.ui.keysSheet
 import net.seilent.funecomp.ui.serviceSheet
+import net.seilent.funekit.artist.Accounts
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.Sources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule

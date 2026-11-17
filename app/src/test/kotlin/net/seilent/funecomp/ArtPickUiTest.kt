@@ -30,21 +30,14 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.ArtistArt
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.Offer
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Tile
-import net.seilent.funecomp.artist.Wikimedia
-import net.seilent.funecomp.artist.YouTube
 import net.seilent.funecomp.proto.Node
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.sim.Library
 import net.seilent.funecomp.sim.Track
+import net.seilent.funecomp.sources.ArtSources
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
@@ -61,6 +54,14 @@ import net.seilent.funecomp.ui.Previewed
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.VariantMotion
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.BrowseFeed
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.Offer
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Tile
+import net.seilent.funekit.artist.Wikimedia
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -90,8 +91,8 @@ class ArtPickUiTest {
     private var browsePx = 0
     private var sectionDone: ((String) -> Unit)? = null
     private var ended: ((Boolean) -> Unit)? = null
-    private var searched: ((YouTube.Search) -> Unit)? = null
-    private val offer = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", null, null, "月-Tsuki-", ByteArray(1))
+    private var searched: ((BrowseFeed.Search) -> Unit)? = null
+    private val offer = Offer(ArtPicks.IMAGE, YouTubeArt.SOURCE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", null, null, "月-Tsuki-", ByteArray(1))
     private val lib = Library(listOf(Track(1, "TSUKI, Other", listOf("TSUKI", "Other"), "A", "TSUKI", "Song", 200_000, "a", "a.flac", listOf("", dj))))
 
     private var shownPicks by mutableStateOf<List<ArtPicks.Pick>>(emptyList())
@@ -112,7 +113,7 @@ class ArtPickUiTest {
                 return { calls += "cancel gallery" }
             }
 
-            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (BrowseFeed.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name $mbid"
                 browsePx = px
                 this@ArtPickUiTest.tile = tile
@@ -146,7 +147,7 @@ class ArtPickUiTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) {
-                App(c.device, LinkView(link, "AP80", everLive = true), control, shell, Sources.COMMONS.copy(youtube = true), art = art, picks = shownPicks, galleryMissing = missing)
+                App(c.device, LinkView(link, "AP80", everLive = true), control, shell, YouTubeArt.with(ArtSources.COMMONS, true), art = art, picks = shownPicks, galleryMissing = missing)
             }
         }
         settle(1000)
@@ -170,7 +171,7 @@ class ArtPickUiTest {
     }
 
     private fun pick(name: String, kind: String = ArtPicks.IMAGE, failedAt: Long? = null, at: Long = 1) =
-        ArtPicks.Pick("name:${name.lowercase()}", null, name, kind, Sources.YOUTUBE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", "", null, null, at, failedAt)
+        ArtPicks.Pick("name:${name.lowercase()}", null, name, kind, YouTubeArt.SOURCE, "https://yt3.ggpht.com/a=s900", "https://yt3.ggpht.com/a", "", null, null, at, failedAt)
 
     private fun tiles(n: Int, source: String = Sources.DEEZER, from: Int = 0) = (from until from + n).map { BrowseTile(Tile(source, "$source $it", ByteArray(1), "https://e/$source/$it.jpg", "$source$it", null), ImageBitmap(8, 8)) }
 
@@ -193,7 +194,7 @@ class ArtPickUiTest {
     @Test
     fun aPickedImageSheetOffersPickAndUndo() {
         val p = pick("TSUKI")
-        val e = ArtCache.Entry(p.cacheKey, "TSUKI", null, Sources.YOUTUBE, null, "u", 1)
+        val e = ArtCache.Entry(p.cacheKey, "TSUKI", null, YouTubeArt.SOURCE, null, "u", 1)
         val (shell, _) = start(listOf(Page.Home, Page.NowPlaying), BackdropArt(ImageBitmap(8, 8), null, e), listOf(p))
         hold("np.backdrop")
         assertEquals(listOf("pick image", "undo pick"), shell.sheet.items)
@@ -334,8 +335,8 @@ class ArtPickUiTest {
     @Test
     fun twoImagesShowOneAtATimeWithTheirSource() {
         val (shell, _) = start(listOf(Page.Home, Page.NowPlaying))
-        val www = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.ggpht.com/b=s900", "https://yt3.ggpht.com/b", null, null, "月-Tsuki-", ByteArray(1))
-        val music = Offer(ArtPicks.IMAGE, Sources.YOUTUBE, "https://yt3.ggpht.com/a=s1600-rj", "https://yt3.ggpht.com/a", null, null, "月-Tsuki-", ByteArray(1), "youtube music")
+        val www = Offer(ArtPicks.IMAGE, YouTubeArt.SOURCE, "https://yt3.ggpht.com/b=s900", "https://yt3.ggpht.com/b", null, null, "月-Tsuki-", ByteArray(1))
+        val music = Offer(ArtPicks.IMAGE, YouTubeArt.SOURCE, "https://yt3.ggpht.com/a=s1600-rj", "https://yt3.ggpht.com/a", null, null, "月-Tsuki-", ByteArray(1), "youtube music")
         offered = ok(music, www)
         paste(shell)
         previewing(shell, 2)
@@ -590,7 +591,7 @@ class ArtPickUiTest {
         var shown by mutableStateOf(true)
         val c = SimControl("ap80", lib)
         val control = object : Control by c {
-            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (BrowseFeed.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name"
                 return { calls += "cancel $name" }
             }
@@ -599,7 +600,7 @@ class ArtPickUiTest {
         rule.setContent {
             Box(Modifier.requiredSize(411.dp, 960.dp)) {
                 val shell = remember(nav) { Shell(nav) }
-                if (shown) App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, Sources.COMMONS)
+                if (shown) App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, ArtSources.COMMONS)
             }
         }
         settle(1000)
@@ -619,7 +620,7 @@ class ArtPickUiTest {
         val shell = Shell(Nav(listOf(Page.Home, Page.NowPlaying, Page.Browse(target))))
         val c = SimControl("ap80", lib)
         val control = object : Control by c {
-            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (YouTube.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
+            override fun browse(name: String, mbid: String?, px: Int, sections: (List<String>) -> Unit, tile: (String, BrowseTile) -> Unit, sectionDone: (String) -> Unit, search: (BrowseFeed.Search) -> Unit, done: (Boolean) -> Unit): () -> Unit {
                 calls += "browse $name"
                 this@ArtPickUiTest.tile = tile
                 this@ArtPickUiTest.sections = sections
@@ -634,7 +635,7 @@ class ArtPickUiTest {
         rule.mainClock.autoAdvance = false
         rule.setContent {
             Box(Modifier.requiredSize(w.dp, 960.dp)) {
-                App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, Sources.COMMONS)
+                App(c.device, LinkView(Phase.LIVE, "AP80", everLive = true), control, shell, ArtSources.COMMONS)
             }
         }
         settle(1000)
@@ -658,7 +659,7 @@ class ArtPickUiTest {
         ended!!(false)
         settle(300)
         rule.onNodeWithTag("pick.state").assertExists()
-        tiles(1).forEach { deliver(it, order = listOf(Sources.DEEZER, Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH)) }
+        tiles(1).forEach { deliver(it, order = listOf(Sources.DEEZER, YouTubeArt.SOURCE, YouTubeArt.SEARCH)) }
         ended!!(false)
         settle(300)
         rule.onNodeWithTag("pick.tile.deezer.0").assertExists()
@@ -853,18 +854,18 @@ class ArtPickUiTest {
 
     @Test
     fun theSearchSitsUnderTheOneYouTubeHeadingWithItsLine() {
-        browsePage(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DEEZER))
-        put(ArtistArt.YOUTUBE_SEARCH, 2)
+        browsePage(listOf(YouTubeArt.SOURCE, YouTubeArt.SEARCH, Sources.DEEZER))
+        put(YouTubeArt.SEARCH, 2)
         rule.onNodeWithTag("pick.head.youtube").assertExists()
-        rule.onNodeWithTag("pick.head.${ArtistArt.YOUTUBE_SEARCH}").assertDoesNotExist()
-        assertTrue(top("pick.head.youtube") < top("pick.tile.${ArtistArt.YOUTUBE_SEARCH}.0"))
-        put(Sources.YOUTUBE, 1)
-        assertTrue(top("pick.tile.youtube.0") < top("pick.tile.${ArtistArt.YOUTUBE_SEARCH}.0"))
+        rule.onNodeWithTag("pick.head.${YouTubeArt.SEARCH}").assertDoesNotExist()
+        assertTrue(top("pick.head.youtube") < top("pick.tile.${YouTubeArt.SEARCH}.0"))
+        put(YouTubeArt.SOURCE, 1)
+        assertTrue(top("pick.tile.youtube.0") < top("pick.tile.${YouTubeArt.SEARCH}.0"))
     }
 
     @Test
     fun aFailedSearchPutsItsLineUnderTheYouTubeHeading() {
-        browsePage(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DEEZER))
+        browsePage(listOf(YouTubeArt.SOURCE, YouTubeArt.SEARCH, Sources.DEEZER))
         put(Sources.DEEZER, 3)
         ended!!(false)
         settle(300)
@@ -878,7 +879,7 @@ class ArtPickUiTest {
     @Test
     fun aRunThatFailsBeforeTheSearchReportsShowsTheUnavailableLine() {
         start(listOf(Page.Home, Page.Browse(PickFor("TSUKI"))))
-        sections!!(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH))
+        sections!!(listOf(YouTubeArt.SOURCE, YouTubeArt.SEARCH))
         ended!!(false)
         settle(300)
         rule.onNodeWithText("youtube search unavailable", useUnmergedTree = true).assertExists()
@@ -886,9 +887,9 @@ class ArtPickUiTest {
 
     @Test
     fun aSearchWithNoResultsShowsNoUnavailableLine() {
-        browsePage(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH, Sources.DEEZER))
+        browsePage(listOf(YouTubeArt.SOURCE, YouTubeArt.SEARCH, Sources.DEEZER))
         put(Sources.DEEZER, 3)
-        searched!!(YouTube.Search.NoResults)
+        searched!!(BrowseFeed.Search.NoResults)
         ended!!(true)
         settle(300)
         rule.onNodeWithText("youtube search unavailable", useUnmergedTree = true).assertDoesNotExist()
@@ -898,8 +899,8 @@ class ArtPickUiTest {
     @Test
     fun withNoTilesNoResultsIsNoImages() {
         start(listOf(Page.Home, Page.Browse(PickFor("TSUKI"))))
-        sections!!(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH))
-        searched!!(YouTube.Search.NoResults)
+        sections!!(listOf(YouTubeArt.SOURCE, YouTubeArt.SEARCH))
+        searched!!(BrowseFeed.Search.NoResults)
         ended!!(true)
         settle(300)
         rule.onNodeWithText("no images", useUnmergedTree = true).assertExists()
@@ -909,8 +910,8 @@ class ArtPickUiTest {
     @Test
     fun withNoTilesAnUnavailableSearchKeepsItsLine() {
         start(listOf(Page.Home, Page.Browse(PickFor("TSUKI"))))
-        sections!!(listOf(Sources.YOUTUBE, ArtistArt.YOUTUBE_SEARCH))
-        searched!!(YouTube.Search.Unavailable())
+        sections!!(listOf(YouTubeArt.SOURCE, YouTubeArt.SEARCH))
+        searched!!(BrowseFeed.Search.Unavailable())
         ended!!(true)
         settle(300)
         rule.onNodeWithText("youtube search unavailable", useUnmergedTree = true).assertExists()
@@ -1049,18 +1050,18 @@ class ArtPickUiTest {
         search("Suisei Channel")
         search("suisei  CHANNEL")
         assertEquals(1, browses().size)
-        searched!!(YouTube.Search.Channels(emptyList()))
+        searched!!(BrowseFeed.Search.Matches(emptyList<Any>()))
         ended!!(true)
         settle(300)
         search("Suisei Channel")
         assertEquals(1, browses().size)
         search("Hoshimachi Suisei")
-        searched!!(YouTube.Search.NoResults)
+        searched!!(BrowseFeed.Search.NoResults)
         ended!!(true)
         settle(300)
         search("Hoshimachi Suisei")
         assertEquals(2, browses().size)
-        searched!!(YouTube.Search.Unavailable())
+        searched!!(BrowseFeed.Search.Unavailable())
         ended!!(true)
         settle(300)
         rule.onNodeWithText("youtube search unavailable").assertExists()

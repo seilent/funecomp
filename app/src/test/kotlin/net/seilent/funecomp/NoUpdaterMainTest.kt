@@ -10,8 +10,6 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Looper
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Response
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.sim.Board
 import net.seilent.funecomp.sim.Faults
@@ -19,6 +17,8 @@ import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.ui.Page
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame

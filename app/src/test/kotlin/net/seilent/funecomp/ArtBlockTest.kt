@@ -5,12 +5,6 @@ import android.bluetooth.BluetoothManager
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.os.Looper
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.Http
-import net.seilent.funecomp.artist.Names
-import net.seilent.funecomp.artist.Response
-import net.seilent.funecomp.artist.Wikimedia
 import net.seilent.funecomp.proto.ArtBlock
 import net.seilent.funecomp.proto.FwStatementBuilder
 import net.seilent.funecomp.proto.Node
@@ -24,6 +18,13 @@ import net.seilent.funecomp.sim.Options
 import net.seilent.funecomp.sim.Sim
 import net.seilent.funecomp.sim.Track
 import net.seilent.funecomp.ui.Phase
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Names
+import net.seilent.funekit.artist.PushLedger
+import net.seilent.funekit.artist.Response
+import net.seilent.funekit.artist.Wikimedia
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -107,7 +108,7 @@ class ArtBlockTest {
     @Test
     fun aBlockedBackdropIsNotShownAgain() {
         val name = net.seilent.funecomp.sim.Library.synthetic().tracks.first().artists.first()
-        val key = "name:${net.seilent.funecomp.artist.Names.fold(name)}"
+        val key = "name:${net.seilent.funekit.artist.Names.fold(name)}"
         ArtCache(File(app.filesDir, "art")).putHit(ArtCache.Entry(key, name, null, Wikimedia.SOURCE, null, "https://upload.wikimedia.org/a.jpg", 1, "File:A.jpg"), jpeg())
         Remote.artist(app, http)
         val s = Sim(Options(Board.of("v1")))
@@ -135,7 +136,7 @@ class ArtBlockTest {
     @Test
     fun aBlockLandingDuringTheBackdropDecodeIsNotShown() {
         val name = net.seilent.funecomp.sim.Library.synthetic().tracks.first().artists.first()
-        val key = "name:${net.seilent.funecomp.artist.Names.fold(name)}"
+        val key = "name:${net.seilent.funekit.artist.Names.fold(name)}"
         val cache = ArtCache(File(app.filesDir, "art"))
         cache.putHit(ArtCache.Entry(key, name, null, Wikimedia.SOURCE, null, "https://upload.wikimedia.org/a.jpg", 1, "File:A.jpg"), jpeg())
         val e = cache.hit(key)!!
@@ -258,7 +259,7 @@ class ArtBlockTest {
         return c.hit(key)!!
     }
 
-    private fun records(vararg r: ArtBlocks.Record) = ArtBlocks(File(app.filesDir, "artblock.tsv")).apply {
+    private fun records(vararg r: ArtBlocks.Record) = ArtBlocks(File(app.filesDir, "artblock.tsv"), ledger = PushLedger()).apply {
         r.forEach { add(it) }
         save()
     }
@@ -470,7 +471,7 @@ class ArtBlockTest {
         link(s.listen(0))
         waitFor(10_000) { ShadowLog.getLogsForTag(Remote.TAG).any { it.msg.startsWith("art current ") } }
         waitFor(10_000) { Remote.artIdle }
-        a.blocks.addPush(tag, null)
+        a.blocks.ledger!!.addPush(tag, null)
         a.blocks.save()
         prefs.edit().putBoolean("youtube", true).commit()
         Remote.reordered()
@@ -680,7 +681,7 @@ class ArtBlockTest {
         Remote.wrongArtist(reject)
         waitFor { a.hitAt(block.key) == null && a.hitAt(reject.key) == null }
         assertTrue(dir.list()!!.none { it.endsWith(".src") || it.endsWith(".jpg") })
-        val kept = ArtBlocks(File(app.filesDir, "artblock.tsv")).records()
+        val kept = ArtBlocks(File(app.filesDir, "artblock.tsv"), ledger = PushLedger()).records()
         assertTrue(kept.any { it is ArtBlocks.Block && it.key == block.key })
         assertTrue(kept.any { it is ArtBlocks.Reject && it.key == reject.key })
         assertEquals(2, Remote.blocked.size)

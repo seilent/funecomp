@@ -1,7 +1,7 @@
 package net.seilent.funecomp
 
-import net.seilent.funecomp.artist.NeMix
-import net.seilent.funecomp.artist.gen.JaHan
+import net.seilent.funecomp.sources.NeMix
+import net.seilent.funecomp.sources.gen.JaHan
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

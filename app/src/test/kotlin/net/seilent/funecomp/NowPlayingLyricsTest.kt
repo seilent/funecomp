@@ -44,7 +44,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.test.espresso.Espresso
 import kotlin.math.ln
 import kotlin.math.roundToInt
-import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Tok
@@ -63,6 +62,7 @@ import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LyricsFetch
+import net.seilent.funekit.artist.ArtCache
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

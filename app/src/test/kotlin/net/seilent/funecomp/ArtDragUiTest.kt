@@ -25,10 +25,6 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.Crop
-import net.seilent.funecomp.artist.Offer
-import net.seilent.funecomp.artist.Sources
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.BackdropArt
@@ -41,6 +37,10 @@ import net.seilent.funecomp.ui.PickFor
 import net.seilent.funecomp.ui.Preview
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.Crop
+import net.seilent.funekit.artist.Offer
+import net.seilent.funekit.artist.Sources
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -134,7 +134,7 @@ class ArtDragUiTest {
         val win = p.window!!
         drag(across(-100f))
         val x = win.left + 100f / scale(win)
-        val want = Crop.point(1920, 1080, net.seilent.funecomp.artist.Rect(x.toInt(), 0, win.width, win.height), null)
+        val want = Crop.point(1920, 1080, net.seilent.funekit.artist.Rect(x.toInt(), 0, win.width, win.height), null)
         val got = picked()
         assertTrue("$want $got", near(want, got))
     }
@@ -148,7 +148,7 @@ class ArtDragUiTest {
         val win = p.window!!
         drag(across(-300f))
         val x = win.left + 300f / scale(win)
-        val want = Crop.point(1920, 1080, net.seilent.funecomp.artist.Rect(x.toInt(), 0, win.width, win.height), null)
+        val want = Crop.point(1920, 1080, net.seilent.funekit.artist.Rect(x.toInt(), 0, win.width, win.height), null)
         val got = picked()
         assertTrue("$want $got", near(want, got))
     }

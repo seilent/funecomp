@@ -24,7 +24,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import net.seilent.funecomp.artist.ArtCache
 import net.seilent.funecomp.proto.LyrLine
 import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.state.LyricsFetch
@@ -41,6 +40,7 @@ import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.npArtistBaseline
 import net.seilent.funecomp.ui.npTextX
+import net.seilent.funekit.artist.ArtCache
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

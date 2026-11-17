@@ -16,14 +16,16 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import net.seilent.funecomp.artist.ArtBlocks
-import net.seilent.funecomp.artist.ArtCache
-import net.seilent.funecomp.artist.ArtPicks
-import net.seilent.funecomp.artist.LyricSources
-import net.seilent.funecomp.artist.Sources
-import net.seilent.funecomp.artist.Wikimedia
+import net.seilent.funecomp.Lyrics
 import net.seilent.funecomp.proto.gen.Tok
+import net.seilent.funecomp.sources.YouTubeArt
 import net.seilent.funecomp.state.DeviceState
+import net.seilent.funekit.artist.ArtBlocks
+import net.seilent.funekit.artist.ArtCache
+import net.seilent.funekit.artist.ArtPicks
+import net.seilent.funekit.artist.LyricSources
+import net.seilent.funekit.artist.Sources
+import net.seilent.funekit.artist.Wikimedia
 
 val ONLINE_PIVOTS = listOf("art", "lyrics", "scrobbling")
 
@@ -65,7 +67,7 @@ private fun Sources.on(id: String): Boolean? = when (id) {
     Sources.THE_AUDIO_DB -> theAudioDb
     Sources.DISCOGS -> discogs
     Sources.FANART_TV -> fanartTv
-    Sources.YOUTUBE -> youtube
+    YouTubeArt.SOURCE -> YouTubeArt.on(this)
     Sources.DEEZER -> deezer
     Wikimedia.SOURCE -> commons
     else -> null
@@ -75,7 +77,7 @@ private fun Sources.with(id: String, v: Boolean): Sources = when (id) {
     Sources.THE_AUDIO_DB -> copy(theAudioDb = v)
     Sources.DISCOGS -> copy(discogs = v)
     Sources.FANART_TV -> copy(fanartTv = v)
-    Sources.YOUTUBE -> copy(youtube = v)
+    YouTubeArt.SOURCE -> YouTubeArt.with(this, v)
     Sources.DEEZER -> copy(deezer = v)
     Wikimedia.SOURCE -> copy(commons = v)
     else -> this
@@ -108,7 +110,7 @@ fun OnlinePage(
     blocked: List<ArtBlocks.Record> = emptyList(),
     picks: List<ArtPicks.Pick> = emptyList(),
     scrobble: ScrobbleView = ScrobbleView(),
-    lyrics: LyricSources = LyricSources(),
+    lyrics: LyricSources = Lyrics.DEFAULT,
     labels: Boolean = true,
     keys: KeysFlow = KeysFlow(),
     held: Set<String> = emptySet(),
