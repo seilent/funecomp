@@ -13,6 +13,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
+import java.io.File
 import java.io.IOException
 
 class FirmwareTest {
@@ -239,6 +240,28 @@ class FirmwareTest {
         val before = net.calls.count { it.url == r.asset.url }
         assertEquals("no checksum in release", runCatching { f.download(none) }.exceptionOrNull()?.message)
         assertEquals(before, net.calls.count { it.url == r.asset.url })
+    }
+
+    @Test
+    fun aServerSendingPastTheListedSizeIsStoppedAndThePartDeleted() {
+        val net = Net(list(release("v0.4.0", "2026-10-27T00:00:00Z", asset("v0.4.0", "v1.upt", v1, size = 50_000))))
+        val f = fw(net)
+        val r = found(f.check("v1", "v0.3.0", false)).release
+        assertEquals(50_000L, r.asset.size)
+        val e = runCatching { f.download(r) }.exceptionOrNull()
+        assertTrue("$e", e is IOException && e.message!!.startsWith("download over size"))
+        assertTrue("${net.served}", net.served <= 50_000 + 4096)
+        assertEquals(0L, f.downloaded(r))
+        assertFalse(f.file(r).exists())
+    }
+
+    @Test
+    fun aReleaseListOverTheCapIsNeitherStoredNorParsed() {
+        val net = Net(Response(200, "[${" ".repeat(Firmware.MAX_LIST)}]".toByteArray(), mapOf("etag" to "W/\"e1\"")))
+        val f = fw(net)
+        assertTrue(runCatching { f.check("v1", "v0.3.0", false) }.exceptionOrNull() is IOException)
+        assertFalse(File(tmp.root, Firmware.RELEASES).exists())
+        assertFalse(File(tmp.root, Firmware.ETAG).exists())
     }
 
     @Test

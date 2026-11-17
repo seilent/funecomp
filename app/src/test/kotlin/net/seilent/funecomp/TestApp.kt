@@ -6,6 +6,8 @@ import android.view.Choreographer
 import androidx.compose.ui.platform.AndroidUiDispatcher
 import kotlinx.coroutines.Dispatchers
 import net.seilent.funecomp.ui.CoverBlur
+import net.seilent.funekit.artist.Http
+import net.seilent.funekit.artist.Response
 import net.seilent.funekit.artist.UrlHttp
 import org.robolectric.TestLifecycleApplication
 import java.io.IOException
@@ -22,6 +24,7 @@ class TestApp : Application(), TestLifecycleApplication {
             throw IOException("tests never reach the network: $it")
         }
         Remote.resetArtist()
+        Updates.init(this, Http { _, _ -> Response(404, ByteArray(0)) })
         BindTokens.reset()
         Remote.deletes.reset()
         CoverBlur.context = Dispatchers.Unconfined
@@ -31,6 +34,7 @@ class TestApp : Application(), TestLifecycleApplication {
     override fun prepareTest(test: Any) {}
 
     override fun afterTest(method: Method) {
+        Updates.idle()
         if (blocked.isNotEmpty()) throw AssertionError("${method.name} opened the network: ${blocked.distinct()}")
     }
 

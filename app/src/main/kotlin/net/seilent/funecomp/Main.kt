@@ -318,6 +318,19 @@ class Main : ComponentActivity() {
 
         override fun appStop() = Remote.apps.stop()
 
+        override fun updateCheck() = Updates.check()
+
+        override fun updateInstall() {
+            if (packageManager.canRequestPackageInstalls()) return Updates.install()
+            Updates.allow()
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            } catch (_: ActivityNotFoundException) {
+            }
+        }
+
+        override fun updateCancel() = Updates.cancel()
+
         override fun firmwareFile(done: (PickedFile) -> Unit) {
             firmwarePicked = done
             try {
@@ -373,6 +386,7 @@ class Main : ComponentActivity() {
         if (launch) {
             pickFrom(intent)
             svcFrom(intent)
+            updateFrom(intent)
         }
         setContent {
             Box(Modifier.fillMaxSize().background(Black)) {
@@ -383,7 +397,7 @@ class Main : ComponentActivity() {
                         startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(e.credit?.page ?: return@App)))
                     } catch (_: ActivityNotFoundException) {
                     }
-                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing, svc = Svc.view, apps = Remote.apps.view, liveDevice = { Remote.device }, detected = Remote.boards.prompt)
+                }, Scrobbles.view, Firmwares.view, Remote.blocked, Remote.dapLyrics.show, Remote.picks, galleryMissing = Remote.galleryMissing, svc = Svc.view, apps = Remote.apps.view, liveDevice = { Remote.device }, detected = Remote.boards.prompt, update = Updates.view)
             }
         }
     }
@@ -403,10 +417,11 @@ class Main : ComponentActivity() {
             val signIn = intent.action == ACTION_SIGN_IN
             if (!signIn) Remote.cancelPick()
             shell.sheet.close(dismissed = false)
-            if (!signIn) shell.nav.reset(listOf(Page.Home, Page.NowPlaying))
+            if (!signIn) shell.nav.reset(if (intent.action == ACTION_UPDATE) listOf(Page.Home) else listOf(Page.Home, Page.NowPlaying))
         }
         pickFrom(intent)
         svcFrom(intent)
+        updateFrom(intent)
         launch = true
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) launched()
     }
@@ -426,6 +441,7 @@ class Main : ComponentActivity() {
         scanAsk = checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED && !prefs().getBoolean(SCAN_ASKED, false)
         if (scanAsk) prefs().edit().putBoolean(SCAN_ASKED, true).apply()
         launched()
+        Updates.due(chance = true)
         if (deferred) startLink()
         if (scanAsk) {
             scanAsk = false
@@ -439,11 +455,19 @@ class Main : ComponentActivity() {
         battery = readBattery()
         Scrobbles.resumed()
         shell.front = true
+        Updates.front = {
+            try {
+                startActivity(it)
+            } catch (_: ActivityNotFoundException) {
+            }
+        }
+        Updates.resumed(packageManager.canRequestPackageInstalls())
     }
 
     override fun onPause() {
         super.onPause()
         shell.front = false
+        Updates.front = null
         Remote.svcAway()
     }
 
@@ -569,6 +593,15 @@ class Main : ComponentActivity() {
         shell.pick = PickFor(name, intent.getStringExtra(EXTRA_PICK_MBID), origin = intent.getIntExtra(EXTRA_PICK_ORIGIN, -1).takeIf { it >= 0 })
     }
 
+    private fun updateFrom(intent: Intent?) {
+        if (intent?.action != ACTION_UPDATE) return
+        if (shell.gated) {
+            shell.sheet.close(dismissed = false)
+            shell.nav.reset(listOf(Page.Connection))
+        }
+        shell.nav.push(Page.Update)
+    }
+
     private fun svcFrom(intent: Intent?) {
         if (intent?.action != ACTION_SIGN_IN || !SvcNotice.take(this, intent.getStringExtra(EXTRA_SIGN_IN_NONCE))) return
         Remote.svcUnseen()
@@ -633,6 +666,7 @@ class Main : ComponentActivity() {
         const val EXTRA_PICK_ORIGIN = "pickOrigin"
         const val ACTION_SIGN_IN = "net.seilent.funecomp.SIGN_IN"
         const val EXTRA_SIGN_IN_NONCE = "signInNonce"
+        const val ACTION_UPDATE = "net.seilent.funecomp.UPDATE"
         private const val BATTERY_ASKED = "batteryAsked"
         const val PREFS = "link"
         const val DEVICE_PREFS = "device"
@@ -654,6 +688,7 @@ class Main : ComponentActivity() {
             AutoEqs.init(c)
             Firmwares.init(c)
             Remote.apps.init(c)
+            Updates.init(c)
             Remote.logExit(c)
         }
 
@@ -671,7 +706,7 @@ class Main : ComponentActivity() {
 
         fun opens(intent: Intent?, debuggable: Boolean, linked: Boolean = false): Boolean {
             if (intent == null || intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY != 0) return false
-            return intent.action == Intent.ACTION_MAIN || intent.action == ACTION_OPEN || (linked && (intent.action == ACTION_PICK_ART || intent.action == ACTION_SIGN_IN)) || (debuggable && intent.hasExtra(EXTRA_LINK))
+            return intent.action == Intent.ACTION_MAIN || intent.action == ACTION_OPEN || intent.action == ACTION_UPDATE || (linked && (intent.action == ACTION_PICK_ART || intent.action == ACTION_SIGN_IN)) || (debuggable && intent.hasExtra(EXTRA_LINK))
         }
 
         internal fun writeSources(context: Context, was: Sources, s: Sources) {

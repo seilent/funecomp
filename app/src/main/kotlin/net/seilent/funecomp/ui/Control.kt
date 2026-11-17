@@ -155,6 +155,9 @@ interface Control {
     fun appFile() {}
     fun appSend() {}
     fun appStop() {}
+    fun updateCheck() {}
+    fun updateInstall() {}
+    fun updateCancel() {}
     fun blockArt(e: ArtCache.Entry) {}
     fun wrongArtist(e: ArtCache.Entry) {}
     fun unblock(r: ArtBlocks.Record) {}

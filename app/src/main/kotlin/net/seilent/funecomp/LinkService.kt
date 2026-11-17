@@ -52,7 +52,10 @@ class LinkService : Service() {
                     BluetoothAdapter.STATE_OFF -> Remote.bluetooth(false)
                     BluetoothAdapter.STATE_ON -> Remote.bluetooth(true)
                 }
-                Intent.ACTION_SCREEN_ON -> Remote.kick("screen")
+                Intent.ACTION_SCREEN_ON -> {
+                    Remote.kick("screen")
+                    Updates.due()
+                }
                 Intent.ACTION_TIME_CHANGED -> Remote.clockChanged("time")
                 Intent.ACTION_TIMEZONE_CHANGED -> Remote.clockChanged("zone")
                 ACTION_ALARM -> Remote.kick("alarm")
@@ -141,6 +144,7 @@ class LinkService : Service() {
             return START_NOT_STICKY
         }
         Main.init(this)
+        Updates.due(chance = true)
         val spec = intent?.getStringExtra(Main.EXTRA_LINK)
         address = spec?.takeIf { it.startsWith(RFCOMM) }?.removePrefix(RFCOMM)
         address?.let { sink(it) }

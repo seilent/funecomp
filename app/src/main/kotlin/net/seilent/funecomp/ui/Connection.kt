@@ -81,7 +81,7 @@ private class Line(val title: String, val value: String, val info: Boolean = fal
 private class Choice(val name: String, val address: String?, val value: String = "", val act: () -> Unit = {})
 
 @Composable
-fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false, phoneAppPath: String? = null) {
+fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false, phoneAppPath: String? = null, update: UpdateView = UpdateView()) {
     val ui = LocalUi.current
     var focus by rememberSaveable { mutableStateOf("device") }
     val read = { ctx.control.bonded().sortedByDescending { it.companion } }
@@ -141,6 +141,7 @@ fun ConnectionPage(ctx: Ctx, link: LinkView, gated: Boolean = false, phoneAppPat
         link.battery?.let { add(Line("background", it.word, tag = "background") { ctx.control.allowBackground() }) }
         add(Line("media controls", if (link.mediaControls) ON else OFF, tag = "media") { i -> onOffSheet(ctx, "phone media controls", link.mediaControls, keep(i)) { ctx.control.mediaControls(it) } })
         add(Line("auto reconnect", if (link.reconnect) ON else OFF, tag = "reconnect") { i -> onOffSheet(ctx, "reconnect on update", link.reconnect, keep(i)) { ctx.control.reconnect(it) } })
+        add(Line(UPDATE_APP, updateText(update), tag = "update") { ctx.nav.push(Page.Update) })
         if (link.phase != Phase.NONE) add(Line("disconnect", "", tag = "disconnect") { ctx.control.disconnect() })
     }
     val at = lines.indexOfFirst { it.tag == focus }.coerceAtLeast(0)

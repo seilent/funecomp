@@ -456,7 +456,7 @@ object Firmwares {
         }
     }
 
-    private fun percent(have: Long, size: Long) = "${if (size > 0) (have * 100 / size).coerceIn(0, 100) else 0}%"
+    internal fun percent(have: Long, size: Long) = "${if (size > 0) (have * 100 / size).coerceIn(0, 100) else 0}%"
 
     private fun prefs(c: Context) = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }

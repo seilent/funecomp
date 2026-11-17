@@ -30,6 +30,7 @@ class FirmwareRefused(message: String) : IOException(message)
 object Releases {
     private val VERSION = Regex("^v?([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:-([0-9]+)-g[0-9a-f]+)?$")
     private val HEX64 = Regex("\\b[0-9a-fA-F]{64}\\b")
+    private val APP_VERSION = Regex("^v?[0-9]+\\.[0-9]+\\.[0-9]+")
 
     fun assetName(board: String?): String? = when (board) {
         "v1" -> "v1.upt"
@@ -43,30 +44,42 @@ object Releases {
 
     private fun digest(a: J) = a["digest"].str?.takeIf { it.startsWith("sha256:") }?.removePrefix("sha256:")?.lowercase()
 
+    private fun https(a: J?) = a?.get("browser_download_url")?.str?.takeIf { it.startsWith("https://") }
+
+    private fun release(r: J, name: (String) -> String, prereleases: Boolean, signed: Boolean): Release? {
+        if (r["draft"].bool == true) return null
+        val pre = r["prerelease"].bool == true
+        if (pre && !prereleases) return null
+        val tag = r["tag_name"].str ?: return null
+        val at = r["published_at"].str ?: return null
+        val n = name(tag)
+        val assets = r["assets"].list
+        val a = assets.firstOrNull { it["name"].str == n } ?: return null
+        val url = https(a) ?: return null
+        val size = a["size"].long ?: return null
+        val sha = https(assets.firstOrNull { it["name"].str == "$n.sha256" })
+        val s = assets.firstOrNull { it["name"].str == "$n.sig" }
+        val sigUrl = https(s)
+        if (signed && sigUrl == null) return null
+        return Release(tag, pre, at, Asset(n, size, url, digest(a), sha, sigUrl, s?.get("size")?.long, s?.let { digest(it) }))
+    }
+
     fun pick(json: J, board: String?, prereleases: Boolean, signed: Boolean = false): Release? {
         val name = assetName(board) ?: return null
-        return json.list.mapNotNull { r ->
-            if (r["draft"].bool == true) return@mapNotNull null
-            val pre = r["prerelease"].bool == true
-            if (pre && !prereleases) return@mapNotNull null
-            val tag = r["tag_name"].str ?: return@mapNotNull null
-            val at = r["published_at"].str ?: return@mapNotNull null
-            val assets = r["assets"].list
-            val a = assets.firstOrNull { it["name"].str == name } ?: return@mapNotNull null
-            val url = a["browser_download_url"].str ?: return@mapNotNull null
-            val size = a["size"].long ?: return@mapNotNull null
-            val sha = assets.firstOrNull { it["name"].str == "$name.sha256" }?.get("browser_download_url")?.str
-            val s = assets.firstOrNull { it["name"].str == "$name.sig" }
-            val sigUrl = s?.get("browser_download_url")?.str
-            if (signed && sigUrl == null) return@mapNotNull null
-            Release(tag, pre, at, Asset(name, size, url, digest(a), sha, sigUrl, s?.get("size")?.long, s?.let { digest(it) }))
-        }.maxByOrNull { it.publishedAt }
+        return json.list.mapNotNull { release(it, { name }, prereleases, signed) }.maxByOrNull { it.publishedAt }
     }
+
+    fun appAsset(tag: String) = "funecomp-$tag.apk"
+
+    fun app(json: J): Release? = json.list.mapNotNull { r -> release(r, { appAsset(it) }, prereleases = true, signed = false)?.takeIf { version(it.tag) != null } }
+        .reduceOrNull { a, b -> if (newer(b.tag, a.tag) == true) b else a }
 
     fun version(v: String?): List<Int>? {
         val m = VERSION.find(v?.trim() ?: return null) ?: return null
         return (1..4).map { m.groupValues[it].ifEmpty { "0" }.toInt() }
     }
+
+    fun appVersion(name: String?): String? = APP_VERSION.find(name?.trim() ?: return null)?.value
 
     fun newer(tag: String, device: String?): Boolean? {
         val t = version(tag) ?: return null
@@ -82,6 +95,7 @@ class Firmware(
     private val dir: File,
     private val http: Http,
     version: String,
+    private val url: String = URL,
 ) {
     sealed interface Check {
         data class Found(val release: Release, val newer: Boolean?) : Check
@@ -94,28 +108,33 @@ class Firmware(
 
     private val ua = "funecomp/$version (https://github.com/seilent/funecomp)"
 
-    @Synchronized
-    fun check(board: String?, device: String?, prereleases: Boolean, signed: Boolean = false): Check {
+    private inline fun releases(refused: (Check) -> Nothing): J {
         val body = File(dir, RELEASES)
         val etag = File(dir, ETAG)
         val headers = HashMap(mapOf("User-Agent" to ua, "Accept" to "application/vnd.github+json"))
         if (body.isFile && etag.isFile) headers["If-None-Match"] = etag.readText().trim()
-        val r = http.get(URL, headers)
+        val r = http.get(url, headers)
+        if (r.body.size > MAX_LIST) throw IOException("release list over $MAX_LIST bytes: $url")
         val text = when {
             r.code == 200 -> r.text.also {
                 save(body, it)
                 r.headers["etag"]?.let { e -> save(etag, e) } ?: etag.delete()
             }
             r.code == 304 && body.isFile -> body.readText()
-            r.code == 404 -> return Check.NoPublic
-            r.code == 403 || r.code == 429 -> return Check.RateLimited
-            else -> throw IOException("http ${r.code}: $URL")
+            r.code == 404 -> refused(Check.NoPublic)
+            r.code == 403 || r.code == 429 -> refused(Check.RateLimited)
+            else -> throw IOException("http ${r.code}: $url")
         }
-        val json = try {
+        return try {
             J.parse(text)
         } catch (e: IllegalArgumentException) {
-            throw IOException("${e.message}: $URL")
+            throw IOException("${e.message}: $url")
         }
+    }
+
+    @Synchronized
+    fun check(board: String?, device: String?, prereleases: Boolean, signed: Boolean = false): Check {
+        val json = releases { return it }
         val rel = Releases.pick(json, board, prereleases, signed) ?: return when {
             !prereleases && Releases.pick(json, board, true, signed) != null -> Check.OnlyPre
             signed && Releases.pick(json, board, true) != null -> Check.Unsigned
@@ -123,6 +142,13 @@ class Firmware(
             else -> Check.NoAsset
         }
         return Check.Found(rel, Releases.newer(rel.tag, device))
+    }
+
+    @Synchronized
+    fun app(installed: String?): Check {
+        val json = releases { return it }
+        val rel = Releases.app(json) ?: return Check.NoAsset
+        return Check.Found(rel, Releases.newer(rel.tag, Releases.appVersion(installed)))
     }
 
     fun file(rel: Release) = File(dir, "${rel.tag}/${rel.asset.name}")
@@ -186,7 +212,7 @@ class Firmware(
                     o.write(buf, 0, n)
                     have += n
                     progress(have, size)
-                    true
+                    have <= size
                 }
                 if (r.code == 416) part.delete()
                 if (r.code != 200 && r.code != 206) throw IOException("http ${r.code}: ${rel.asset.url}")
@@ -194,10 +220,12 @@ class Firmware(
                 out?.close()
             }
         }
-        if (part.length() != size) {
-            if (part.length() > size) part.delete()
-            throw IOException("short download ${part.length()} of $size")
+        val n = part.length()
+        if (n > size) {
+            part.delete()
+            throw IOException("download over size $n of $size")
         }
+        if (n != size) throw IOException("short download $n of $size")
         val got = sums(part)
         if (got.sha256 != want) {
             part.delete()
@@ -267,9 +295,11 @@ class Firmware(
 
     companion object {
         const val URL = "https://api.github.com/repos/seilent/funeos/releases?per_page=10"
+        const val APP_URL = "https://api.github.com/repos/seilent/funecomp/releases?per_page=10"
         const val RELEASES = "releases.json"
         const val ETAG = "releases.etag"
         const val PART = ".part"
+        const val MAX_LIST = 2 shl 20
         const val BAD_SIG = "bad signature file"
 
         private fun hex(b: ByteArray) = b.joinToString("") { "%02x".format(it) }
