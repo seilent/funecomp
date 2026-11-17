@@ -1,4 +1,5 @@
 pluginManagement {
+    includeBuild("kit/build-logic") { name = "funekit-logic" }
     includeBuild("build-logic")
     repositories {
         google {
@@ -23,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "funecomp"
 include(":proto", ":state", ":link", ":artist", ":sim", ":app")
+includeBuild("kit")

@@ -36,6 +36,8 @@ Android 12 or newer.
 
 ## Build
 
+Clone with `git clone --recurse-submodules` and set `ANDROID_HOME`: the shared kit is the `kit/` submodule ([funekit](https://github.com/seilent/funekit)).
+
 ```
 ./gradlew assembleRelease
 ```
