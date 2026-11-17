@@ -30,8 +30,8 @@ class BookSimTest {
     private var t = 1000L
     private val noBit = Groups.all and Groups.mask("books").inv()
 
-    private fun device(vararg faults: String, minor: Int = 21, lib: Library = Library.synthetic(), receiver: Boolean = false) =
-        Device(Options(Board.of("v1"), Faults(faults.toList()), minor = minor, receiver = receiver), lib) { t }
+    private fun device(vararg faults: String, minor: Int = 21, lib: Library = Library.synthetic(), receiver: Boolean = false, phone: List<PhoneLine> = emptyList()) =
+        Device(Options(Board.of("v1"), Faults(faults.toList()), minor = minor, receiver = receiver, phone = phone), lib) { t }
 
     private fun peer(d: Device, mask: Long = Groups.all) = Sink().also {
         d.linked(it, mask)
@@ -54,6 +54,8 @@ class BookSimTest {
     private fun chapters(n: IntProgression) = n.map { Library.BOOK_FIRST + it }
 
     private fun code(a: Answer) = (a as? Answer.Fail)?.code
+
+    private fun refusal(a: Answer) = (a as Answer.Fail).let { it.code to it.text }
 
     private fun spot(s: State) = s.slot to s.positionMs
 
@@ -311,6 +313,23 @@ class BookSimTest {
     }
 
     @Test
+    fun aSkipPastAChapterAtTheLastEntryOutsideABookQueueIsRefusedAndRepeatAllWraps() {
+        val d = device("book")
+        val out = peer(d)
+        assertTrue(req(d, out, Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.add, tracks = chapters(2..2))) is Answer.Ok)
+        val at = d.lib.tracks.size.toLong()
+        assertTrue(req(d, out, Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.playAt, state(d, out).queueRev, slot = at)) is Answer.Ok)
+        t += 10_000
+        assertEquals(Err.refused to "refused", refusal(skip(d, out, 3_600_000)))
+        val s = state(d, out)
+        assertEquals(at to 10_000L, spot(s))
+        assertEquals(true, s.playing)
+        assertTrue(req(d, out, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.repeat, repeat = Enums.Repeat.all)) is Answer.Ok)
+        assertTrue(skip(d, out, 3_600_000) is Answer.Ok)
+        assertEquals(0L to 0L, spot(state(d, out)))
+    }
+
+    @Test
     fun aClearEndsTheBookQueue() {
         val d = device("bookplay")
         val out = peer(d)
@@ -318,6 +337,47 @@ class BookSimTest {
         assertTrue(req(d, out, Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.playNext, state(d, out).queueRev, tracks = chapters(2..3))) is Answer.Ok)
         assertTrue(req(d, out, Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.playAt, state(d, out).queueRev, slot = 0)) is Answer.Ok)
         assertTrue(req(d, out, Msg.TRANSPORT, Req.transport(Enums.TransportCmd.shuffle, on = true)) is Answer.Ok)
+    }
+
+    @Test
+    fun aQueueClearClearsEndOfTrack() {
+        val d = device("bookplay")
+        val out = peer(d)
+        assertTrue(end(d, out) is Answer.Ok)
+        assertTrue(req(d, out, Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.clear, state(d, out).queueRev)) is Answer.Ok)
+        assertNull(state(d, out).sleepEnd)
+    }
+
+    @Test
+    fun removingTheLastEntryClearsEndOfTrackAtTheNextTick() {
+        val d = device()
+        val out = peer(d)
+        assertTrue(play(d, out, listOf(d.lib.tracks[0].id)) is Answer.Ok)
+        assertTrue(end(d, out) is Answer.Ok)
+        assertTrue(req(d, out, Msg.QUEUE_OP, Req.queueOp(Enums.QueueCmd.remove, state(d, out).queueRev, slot = 0)) is Answer.Ok)
+        d.tick(out)
+        assertNull(state(d, out).sleepEnd)
+    }
+
+    @Test
+    fun anEndOfTrackArmUnderAPhoneStreamIsRefusedAndTakenOnceTheStreamEnds() {
+        val d = device("bookplay", phone = listOf(PhoneLine("Idol", "YOASOBI", "", 10_000, 0, true)))
+        val out = peer(d)
+        assertEquals(Err.refused to "refused", refusal(end(d, out)))
+        t += 10_000
+        d.tick(out)
+        assertTrue(end(d, out) is Answer.Ok)
+        assertEquals(true, state(d, out).sleepEnd)
+    }
+
+    @Test
+    fun withAPhoneStreamCurrentSkipAndSpeedAreRefused() {
+        for (rx in listOf(false, true)) {
+            val d = device("bookplay", receiver = rx, phone = listOf(PhoneLine("Idol", "YOASOBI", "", 213_000, 0, true)))
+            val out = peer(d)
+            assertEquals(Err.refused to "refused", refusal(skip(d, out, 30_000)))
+            assertEquals(Err.refused to "refused", refusal(speed(d, out, 125)))
+        }
     }
 
     @Test
@@ -428,8 +488,8 @@ class BookSimTest {
         val dac = device("bookplay", "usbdac")
         val p = peer(dac)
         assertEquals(Err.refused, code(end(dac, p)))
-        assertEquals(Err.refused, code(skip(dac, p, 30_000)))
-        assertEquals(Err.refused, code(speed(dac, p, 125)))
+        assertEquals(Err.refused to "usb dac", refusal(skip(dac, p, 30_000)))
+        assertEquals(Err.refused to "usb dac", refusal(speed(dac, p, 125)))
         assertEquals(150, state(dac, p).speedPct)
         val rx = device("bookplay", receiver = true)
         val o = peer(rx)

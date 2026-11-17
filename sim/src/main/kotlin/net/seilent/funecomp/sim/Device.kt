@@ -799,6 +799,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
 
     fun tick(out: Out) = synchronized(lock) {
         follow()
+        if (queue.isEmpty()) sleepEnd = false
         btEdge()
         cardEdge()
         cardPush(out)
@@ -1398,8 +1399,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             }
             Enums.TransportCmd.skip -> {
                 val ms = b.int(Tags.Transport.skipMs)?.takeIf { it in -SKIP_MAX_MS..SKIP_MAX_MS } ?: return Answer.Fail(Err.badValue, "bad value")
-                if (!chapter()) return Answer.Fail(Err.refused, "refused")
-                skip(ms)
+                if (!chapter() || !skip(ms)) return Answer.Fail(Err.refused, "refused")
             }
             Enums.TransportCmd.speed -> {
                 val pct = b.int(Tags.Transport.speedPct)?.takeIf { it in BOOK_SPEEDS } ?: return Answer.Fail(Err.badValue, "bad value")
@@ -1414,12 +1414,13 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         return changed()
     }
 
-    private fun skip(ms: Int) {
+    private fun skip(ms: Int): Boolean {
         if (!bookEntry()) {
             val t = lib.byId.getValue(queue[slot])
             val at = positionMs + ms
+            if (at >= t.durationMs && slot == queue.lastIndex && repeat != Enums.Repeat.all) return false
             if (at >= t.durationMs) advance(1, auto = false) else positionMs = at.coerceAtLeast(0)
-            return
+            return true
         }
         var at = positionMs + ms
         val from = slot
@@ -1436,7 +1437,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             } else if (at >= t.durationMs) {
                 if (!sameBook(lib.byId[queue.getOrNull(slot + 1)], t)) {
                     ended()
-                    return
+                    return true
                 }
                 at -= t.durationMs
                 slot++
@@ -1446,6 +1447,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
         }
         positionMs = at
         if (slot != from) playFresh = true
+        return true
     }
 
     private val steps: IntArray = IntArray(101).also { t ->
@@ -1628,7 +1630,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Enums.DraftKind.sleep -> {
                 if (b.bool(Tags.Draft.sleepEnd) == true) {
                     if (b.long(Tags.Draft.minutes) != null) return Answer.Fail(Err.badValue, "bad value")
-                    if (lib.byId[queue.getOrNull(slot)] == null || stream.receiver || faults.usbDac) return Answer.Fail(Err.refused, "refused")
+                    if (lib.byId[queue.getOrNull(slot)] == null || stream.receiver || stream.current() != null || faults.usbDac) return Answer.Fail(Err.refused, "refused")
                     sleepEnd = true
                     sleepLeftS = 0
                 } else {
@@ -1943,6 +1945,7 @@ class Device(private val opts: Options, lib: Library, private val clock: () -> L
             Enums.QueueCmd.clear -> {
                 queue.clear()
                 bookPlay = false
+                sleepEnd = false
                 slot = 0
                 playing = false
                 stopped = true

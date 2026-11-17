@@ -220,6 +220,7 @@ class Phone(private val opts: Options, private val clock: () -> Long) {
             } else {
                 step(-1, auto = false)
             }
+            Enums.TransportCmd.skip, Enums.TransportCmd.speed -> return Answer.Fail(Err.refused, "refused")
             else -> return Answer.Fail(Err.refused, "")
         }
         return Answer.Ok(state = true)
