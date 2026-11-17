@@ -35,7 +35,7 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.testTag
 import net.seilent.funecomp.proto.gen.Tok
-import net.seilent.funecomp.state.Section
+import net.seilent.funekit.core.Section
 import kotlin.math.max
 import kotlin.math.roundToInt
 

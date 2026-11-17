@@ -14,9 +14,9 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
-import net.seilent.funecomp.state.ArtKey
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.LibKey
+import net.seilent.funekit.core.ArtKey
 import java.io.IOException
 
 class Forward(

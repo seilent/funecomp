@@ -2,7 +2,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("org.jetbrains.kotlin.jvm")
-    `java-test-fixtures`
 }
 
 java {
@@ -16,10 +15,10 @@ kotlin {
 
 dependencies {
     api(project(":proto"))
+    testImplementation("net.seilent.funekit:core")
     testImplementation(libs.junit)
 }
 
 tasks.test {
-    inputs.file(rootProject.file("app/src/androidTest/resources/lrc-cases.tsv")).withPropertyName("lrcCases").withPathSensitivity(PathSensitivity.RELATIVE)
     inputs.file(rootProject.file("app/src/androidTest/resources/svc-cases.tsv")).withPropertyName("svcCases").withPathSensitivity(PathSensitivity.RELATIVE)
 }

@@ -15,6 +15,7 @@ kotlin {
 
 dependencies {
     api(project(":link"))
+    implementation("net.seilent.funekit:core")
     testImplementation(project(":sim"))
     testImplementation(testFixtures(project(":proto")))
     testImplementation(libs.junit)

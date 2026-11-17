@@ -1,6 +1,6 @@
 package net.seilent.funecomp.artist
 
-import net.seilent.funecomp.state.Section
+import net.seilent.funekit.core.Section
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

@@ -49,7 +49,6 @@ import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.LibKey
-import net.seilent.funecomp.state.Section
 import net.seilent.funecomp.ui.App
 import net.seilent.funecomp.ui.Battery
 import net.seilent.funecomp.ui.Bonded
@@ -62,6 +61,7 @@ import net.seilent.funecomp.ui.Phase
 import net.seilent.funecomp.ui.Shell
 import net.seilent.funecomp.ui.Ui
 import net.seilent.funecomp.ui.statusText
+import net.seilent.funekit.core.Section
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals

@@ -17,27 +17,20 @@ tokens=$(old tokens)
 
 show() { git -C "$funeos" show "$1:$2" > "$dst/$3"; }
 
-lrc=$root/state/src/test/resources/lrc/SOURCE
-
 lrc_check() {
-    local bad=0 path want got
-    while read -r path want; do
-        [ "$path" = commit ] && continue
-        if ! git -C "$funeos" cat-file -e "$1:$path" 2>/dev/null; then
-            echo "pin.sh: $path is missing at $1, the Lrc port source ($(sed -n 's/^commit //p' "$lrc")) has it" >&2
-            bad=1
-            continue
-        fi
-        got=$(git -C "$funeos" show "$1:$path" | sha256sum | cut -d' ' -f1)
-        if [ "$got" != "$want" ]; then
-            echo "pin.sh: $path at $1 differs from the Lrc port source ($(sed -n 's/^commit //p' "$lrc"))" >&2
-            bad=1
-        fi
-    done < "$lrc"
-    if [ $bad -ne 0 ]; then
-        echo "pin.sh: review state/src/main/kotlin/net/seilent/funecomp/state/Lrc.kt against it, then update $lrc" >&2
-        exit 1
-    fi
+    local rc=0
+    FUNEOS="$(cd "$funeos" && pwd)" "$root/kit/tools/funeos-sync.sh" lrc "$1" --source "$root/kit/core/src/test/resources/lrc/SOURCE" || rc=$?
+    case $rc in
+        0) ;;
+        1)
+            echo "pin.sh: the funeOS lrc sources at $1 differ from the kit's lrc SOURCE; the Lrc port is the kit's" >&2
+            exit 1
+            ;;
+        *)
+            echo "pin.sh: the kit's lrc check failed with rc $rc at $1" >&2
+            exit "$rc"
+            ;;
+    esac
 }
 
 case "${1:-}" in

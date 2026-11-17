@@ -17,8 +17,9 @@ kotlin {
 dependencies {
     implementation(project(":proto"))
     implementation(project(":state"))
+    implementation("net.seilent.funekit:core")
     testImplementation(testFixtures(project(":proto")))
-    testImplementation(testFixtures(project(":state")))
+    testImplementation(testFixtures("net.seilent.funekit:core"))
     testImplementation(libs.junit)
 }
 

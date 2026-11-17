@@ -1,6 +1,6 @@
 package net.seilent.funecomp.artist
 
-import net.seilent.funecomp.state.Section
+import net.seilent.funekit.core.Section
 import java.text.Normalizer
 import java.util.Locale
 

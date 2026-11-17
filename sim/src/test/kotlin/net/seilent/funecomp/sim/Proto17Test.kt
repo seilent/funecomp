@@ -11,8 +11,8 @@ import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Msg
 import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.lyricsCrc
-import net.seilent.funecomp.state.Lrc
-import net.seilent.funecomp.state.LrcCases
+import net.seilent.funekit.core.Lrc
+import net.seilent.funekit.core.LrcCases
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

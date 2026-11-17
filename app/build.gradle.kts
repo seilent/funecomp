@@ -54,6 +54,12 @@ android {
         }
     }
 
+    sourceSets {
+        getByName("androidTest") {
+            resources.directories += "../kit/core/src/test/resources"
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -85,6 +91,7 @@ android {
 dependencies {
     implementation(project(":link"))
     implementation(project(":artist"))
+    implementation("net.seilent.funekit:core")
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.foundation)

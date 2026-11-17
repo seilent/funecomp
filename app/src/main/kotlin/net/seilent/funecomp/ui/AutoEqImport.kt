@@ -39,7 +39,8 @@ import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.AutoEqResult
 import net.seilent.funecomp.state.Clamp
-import net.seilent.funecomp.state.Section
+import net.seilent.funekit.core.AutoEq as AutoEqName
+import net.seilent.funekit.core.Section
 import kotlin.math.roundToInt
 
 private const val TITLE = "import autoeq"
@@ -82,13 +83,13 @@ fun autoEqLines(r: AutoEqResult, presets: Boolean): List<String> = when (r) {
         add("preamp ${signed(eq.preamp.toFloat(), false)} db")
         add(if (eq.filters.size == 1) "1 band" else "${eq.filters.size} bands")
         eq.clamps.forEach { add(clampText(it)) }
-        if (!AutoEq.validName(eq.name)) add("invalid name")
+        if (!AutoEqName.validName(eq.name)) add("invalid name")
         if (!presets) add(NO_PRESETS)
     }
 }
 
 fun autoEqImport(ctx: Ctx, slot: String, owner: Any) = ctx.sheet.open(TITLE, listOf(FILE, SEARCH), owner = owner) { i ->
-    if (i == 0) ctx.control.eqFile { name, text -> autoEqConfirm(ctx, slot, AutoEq.name(name), text, owner) } else ctx.nav.push(Page.AutoEq(slot))
+    if (i == 0) ctx.control.eqFile { name, text -> autoEqConfirm(ctx, slot, AutoEqName.name(name), text, owner) } else ctx.nav.push(Page.AutoEq(slot))
 }
 
 @Composable
@@ -155,7 +156,7 @@ fun AutoEqPage(ctx: Ctx, page: Page.AutoEq, ime: WindowInsets) {
                                 val e = item.row.entry
                                 ListRow(e.name, Modifier.testTag("aeq.row.${e.name}"), e.source, focused = focus == item.key, onTap = {
                                     focus = item.key
-                                    ctx.control.autoEqProfile(e) { text -> autoEqConfirm(ctx, page.slot, AutoEq.name(e.name), text, token) }
+                                    ctx.control.autoEqProfile(e) { text -> autoEqConfirm(ctx, page.slot, AutoEqName.name(e.name), text, token) }
                                 })
                             }
                         }
@@ -196,7 +197,7 @@ private fun DividerRow(letter: Int, onTap: () -> Unit) {
 fun autoEqConfirm(ctx: Ctx, slot: String, name: String, text: String?, owner: Any) {
     val r = if (text == null) AutoEqResult.Refused("not readable") else AutoEq.parse(text, name)
     val presets = ctx.device.has("eqPresets")
-    val eq = (r as? AutoEqResult.Ok)?.eq?.takeIf { presets && AutoEq.validName(it.name) }
+    val eq = (r as? AutoEqResult.Ok)?.eq?.takeIf { presets && AutoEqName.validName(it.name) }
     if (eq == null) {
         ctx.sheet.open(name.ifEmpty { TITLE }, listOf(CANCEL), info = autoEqLines(r, presets), owner = owner, titleMixed = name.isNotEmpty()) {}
         return
@@ -222,8 +223,8 @@ private fun imported(ctx: Ctx) {
 }
 
 private fun clash(ctx: Ctx, slot: String, name: String, ints: Profile, owner: Any) {
-    val fold = AutoEq.foldKey(name)
-    val hit = ctx.device.eq[slot]?.names.orEmpty().firstOrNull { AutoEq.foldKey(it.name ?: "") == fold }
+    val fold = AutoEqName.foldKey(name)
+    val hit = ctx.device.eq[slot]?.names.orEmpty().firstOrNull { AutoEqName.foldKey(it.name ?: "") == fold }
     when {
         hit == null -> ctx.toast.show(NOT_SAVED, NAME_TAKEN)
         hit.preset == true -> ctx.sheet.open(REPLACE_TITLE, listOf(REPLACE, KEEP), 1, listOf(name), owner = owner, infoMixed = { listOf(true) }) { if (it == 0) savePreset(ctx, slot, name, ints, true, owner) }
@@ -234,7 +235,7 @@ private fun clash(ctx: Ctx, slot: String, name: String, ints: Profile, owner: An
             } else {
                 ctx.sheet.openEntry(SAVE_PRESET, owner) {
                     TextEntry(name) { text ->
-                        if (!AutoEq.validName(text)) {
+                        if (!AutoEqName.validName(text)) {
                             ctx.toast.show(SAVE_PRESET, NAME_NOT_ALLOWED)
                         } else {
                             ctx.sheet.close()

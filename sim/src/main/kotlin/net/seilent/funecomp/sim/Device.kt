@@ -54,11 +54,11 @@ import net.seilent.funecomp.proto.gen.Proto
 import net.seilent.funecomp.proto.gen.Tags
 import net.seilent.funecomp.proto.gen.Tok
 import net.seilent.funecomp.proto.gen.TokBoard
-import net.seilent.funecomp.state.ArtKey
-import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.CardView
 import net.seilent.funecomp.state.EqSlots
-import net.seilent.funecomp.state.Lrc
+import net.seilent.funekit.core.ArtKey
+import net.seilent.funekit.core.AutoEq
+import net.seilent.funekit.core.Lrc
 import java.awt.RenderingHints
 import java.awt.image.BufferedImage
 import java.io.ByteArrayInputStream

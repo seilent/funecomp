@@ -1,12 +1,12 @@
 package net.seilent.funecomp
 
-import net.seilent.funecomp.state.Lrc
+import net.seilent.funekit.core.Lrc
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LrcUnicodeTest {
-    private fun rows() = javaClass.getResourceAsStream("/lrc-cases.tsv")!!.use { String(it.readBytes(), Charsets.UTF_8) }
+    private fun rows() = javaClass.getResourceAsStream("/lrc/lrc-cases.tsv")!!.use { String(it.readBytes(), Charsets.UTF_8) }
         .lineSequence().filter { it.isNotBlank() }.map { it.split('\t') }.toList()
 
     private fun hex(b: ByteArray) = b.joinToString("") { "%02x".format(it) }

@@ -63,7 +63,6 @@ import net.seilent.funecomp.proto.gen.Enums
 import net.seilent.funecomp.proto.gen.Err
 import net.seilent.funecomp.proto.gen.Tok
 import kotlinx.coroutines.delay
-import net.seilent.funecomp.state.AutoEq
 import net.seilent.funecomp.state.DeviceState
 import net.seilent.funecomp.state.EqDefault
 import net.seilent.funecomp.state.EqForm
@@ -71,7 +70,8 @@ import net.seilent.funecomp.state.EqSlots
 import net.seilent.funecomp.state.EqStage
 import net.seilent.funecomp.state.Playing
 import net.seilent.funecomp.state.Rows as RowRules
-import net.seilent.funecomp.state.SleepLeft
+import net.seilent.funekit.core.AutoEq
+import net.seilent.funekit.core.SleepLeft
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.pow

@@ -22,10 +22,7 @@ object AutoEq {
     const val FIELD_FC = "fc"
     const val FIELD_GAIN = "gain"
     const val FIELD_Q = "q"
-    private const val NAME_MAX_BYTES = 64
     private const val KIB = 1024
-    private val SUFFIXES = listOf(" ParametricEQ", " GraphicEQ")
-    private val RESERVED = setOf("off", "flat", "custom")
     private val TYPES = mapOf("PK" to Enums.BandType.peak, "LSC" to Enums.BandType.lowShelf, "HSC" to Enums.BandType.highShelf)
     private val NUM = "([-+]?[0-9]+(?:[.,][0-9]+)?)"
     private val PREAMP_LINE = Regex("^Preamp\\s*:\\s*$NUM\\s*dB", RegexOption.IGNORE_CASE)
@@ -33,24 +30,6 @@ object AutoEq {
     private val FC = Regex("\\bFc\\s+$NUM\\s*Hz", RegexOption.IGNORE_CASE)
     private val GAIN = Regex("\\bGain\\s+$NUM\\s*dB", RegexOption.IGNORE_CASE)
     private val Q = Regex("\\bQ\\s+$NUM", RegexOption.IGNORE_CASE)
-
-    fun name(file: String): String {
-        var n = file.trim()
-        if (n.endsWith(".txt", ignoreCase = true)) n = n.dropLast(4)
-        SUFFIXES.forEach { if (n.endsWith(it)) n = n.removeSuffix(it) }
-        return n.trim()
-    }
-
-    fun validName(n: String): Boolean {
-        val bytes = n.toByteArray(Charsets.UTF_8)
-        if (bytes.isEmpty() || bytes.size > NAME_MAX_BYTES) return false
-        if (bytes.any { (it.toInt() and 0xff) < 0x20 || it.toInt() == 0x7f }) return false
-        if ('/' in n || n.startsWith('.') || n.startsWith(' ') || n.endsWith(' ')) return false
-        if (SUFFIXES.any { n.endsWith(it) }) return false
-        return foldKey(n) !in RESERVED
-    }
-
-    fun foldKey(n: String) = buildString { n.forEach { append(if (it in 'A'..'Z') it + ('a' - 'A') else it) } }
 
     fun profile(eq: EqImport): Profile {
         fun r(v: Double, k: Int) = (v * k + if (v < 0) -0.5 else 0.5).toInt()

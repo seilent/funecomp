@@ -5,9 +5,9 @@ import net.seilent.funecomp.artist.LyricSources
 import net.seilent.funecomp.artist.Sweep
 import net.seilent.funecomp.proto.State
 import net.seilent.funecomp.proto.gen.Enums
-import net.seilent.funecomp.state.Lrc
 import net.seilent.funecomp.state.LyricsFetch
 import net.seilent.funecomp.state.PhoneKey
+import net.seilent.funekit.core.Lrc
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

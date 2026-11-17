@@ -1,7 +1,6 @@
 package net.seilent.funecomp
 
 import net.seilent.funecomp.proto.gen.Tok
-import net.seilent.funecomp.state.Section
 import net.seilent.funecomp.ui.JUMP_EXIT
 import net.seilent.funecomp.ui.JUMP_NONE
 import net.seilent.funecomp.ui.JUMP_SEARCH
@@ -10,6 +9,7 @@ import net.seilent.funecomp.ui.LayoutTok
 import net.seilent.funecomp.ui.Roles
 import net.seilent.funecomp.ui.Shape
 import net.seilent.funecomp.ui.Ui
+import net.seilent.funekit.core.Section
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test

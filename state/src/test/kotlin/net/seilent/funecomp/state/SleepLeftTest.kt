@@ -1,6 +1,7 @@
 package net.seilent.funecomp.state
 
 import net.seilent.funecomp.proto.State
+import net.seilent.funekit.core.SleepLeft as SleepMinutes
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -12,14 +13,14 @@ class SleepLeftTest {
     fun countsDownFromReceivedAtAndRoundsUp() {
         val p = timer(1800)
         assertEquals(1_800_000L, SleepLeft.leftMs(p, null, 1000))
-        assertEquals(30, SleepLeft.minutes(SleepLeft.leftMs(p, null, 1000)))
-        assertEquals(30, SleepLeft.minutes(SleepLeft.leftMs(p, null, 1001)))
+        assertEquals(30, SleepMinutes.minutes(SleepLeft.leftMs(p, null, 1000)))
+        assertEquals(30, SleepMinutes.minutes(SleepLeft.leftMs(p, null, 1001)))
         assertEquals(1_740_000L, SleepLeft.leftMs(p, null, 61_000))
-        assertEquals(29, SleepLeft.minutes(SleepLeft.leftMs(p, null, 61_000)))
-        assertEquals(29, SleepLeft.minutes(SleepLeft.leftMs(p, null, 61_001)))
+        assertEquals(29, SleepMinutes.minutes(SleepLeft.leftMs(p, null, 61_000)))
+        assertEquals(29, SleepMinutes.minutes(SleepLeft.leftMs(p, null, 61_001)))
         assertEquals(0L, SleepLeft.leftMs(p, null, 1_801_000))
         assertEquals(0L, SleepLeft.leftMs(p, null, 2_000_000))
-        assertEquals(0, SleepLeft.minutes(0))
+        assertEquals(0, SleepMinutes.minutes(0))
     }
 
     @Test
@@ -40,13 +41,6 @@ class SleepLeftTest {
         assertEquals(0L, SleepLeft.leftMs(timer(null), null, 1000))
         assertEquals(0L, SleepLeft.leftMs(timer(0), null, 1000))
         assertEquals(0L, DeviceState().sleepLeftMs(1000))
-    }
-
-    @Test
-    fun nextDropIsWhenTheRoundedMinuteChanges() {
-        assertEquals(60_000L, SleepLeft.nextDropMs(1_800_000))
-        assertEquals(1L, SleepLeft.nextDropMs(1_740_001))
-        assertEquals(59_999L, SleepLeft.nextDropMs(59_999))
     }
 
     @Test
