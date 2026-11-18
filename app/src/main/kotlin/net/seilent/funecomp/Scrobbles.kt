@@ -164,7 +164,9 @@ object Scrobbles {
     private fun playLogSync(card: Boolean = false) = PlayLogSync({ scrobbler?.queue?.logSeq(it) }, card) { Log.i(Remote.TAG, it) }
 
     internal fun idle() {
-        exec.submit {}.get(DRAIN_S, TimeUnit.SECONDS)
+        do {
+            val queued = exec.submit<Boolean> { again.get() }.get(DRAIN_S, TimeUnit.SECONDS)
+        } while (queued)
     }
 
     fun session(clocked: Boolean) = exec.execute { plays?.session(clocked) }
